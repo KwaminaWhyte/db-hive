@@ -543,15 +543,39 @@ pub async fn get_tables(
 - Visual icons (green for tables, blue for views)
 - Inspired by Beekeeper Studio design patterns
 
-**Week 13: Table Inspector** (TODO: Next to implement)
+**Week 13: Table Inspector** ✅ COMPLETED
 
-- [ ] Show table metadata on click:
-  - Columns (name, type, nullable, default, primary key)
-  - Indexes and constraints
-  - Foreign key relationships
-- [ ] Add tabs for different views (Columns / Indexes / Relations / Data)
-- [ ] Display sample data preview (first 50 rows)
-- [ ] Show table statistics (row count, size)
+- [x] Created TableInspector component with tabbed interface ✅
+- [x] Show table metadata on click: ✅
+  - Columns (name, type, nullable, default, primary key) ✅
+  - Indexes and constraints ✅
+  - Visual indicators (key icons, badges for constraints) ✅
+- [x] Add tabs for different views (Columns / Indexes / Data) ✅
+- [x] Display sample data preview (first 50 rows) ✅
+- [x] Integrated with SchemaExplorer (click table to inspect) ✅
+
+**Implementation Details:**
+- Created `TableInspector.tsx` with three tabs:
+  - **Columns Tab**: Displays all column metadata with badges for types and constraints
+    - Primary key indicator with key icon
+    - Nullable/NOT NULL badges
+    - Data type badges
+    - Default value display
+  - **Indexes Tab**: Shows all indexes with type indicators
+    - PRIMARY, UNIQUE, and INDEX badges
+    - Column list for each index
+  - **Data Tab**: Sample data preview with lazy loading
+    - Loads first 50 rows on tab activation
+    - NULL value indicators
+    - JSON formatting for complex objects
+    - Row count display
+- Uses shadcn/ui Table, Badge, Tabs, and ScrollArea components
+- Refresh button to reload schema and data
+- Close button to return to table list
+- Comprehensive error handling and loading states
+
+- [ ] Show table statistics (row count, size) (TODO: Future enhancement)
+- [ ] Show foreign key relationships (TODO: Future enhancement)
 
 **Week 14: Quick Actions & Enhancements** (TODO: Future)
 

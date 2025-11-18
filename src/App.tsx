@@ -15,6 +15,9 @@ function App() {
   const [activeConnectionId, setActiveConnectionId] = useState<string | null>(
     null
   );
+  const [activeConnectionProfile, setActiveConnectionProfile] = useState<
+    ConnectionProfile | undefined
+  >(undefined);
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<string>("connections");
 
@@ -33,8 +36,9 @@ function App() {
   };
 
   // Handle successful connection
-  const handleConnected = (connectionId: string) => {
+  const handleConnected = (connectionId: string, profile: ConnectionProfile) => {
     setActiveConnectionId(connectionId);
+    setActiveConnectionProfile(profile);
     // Switch to query editor tab
     setActiveTab("query");
   };
@@ -42,6 +46,7 @@ function App() {
   // Handle disconnect
   const handleDisconnect = () => {
     setActiveConnectionId(null);
+    setActiveConnectionProfile(undefined);
     // Switch back to connections tab
     setActiveTab("connections");
   };
@@ -69,9 +74,10 @@ function App() {
 
       {/* Left Sidebar - Connection List or Schema Explorer */}
       <div className="w-80 border-r overflow-y-auto">
-        {activeConnectionId ? (
+        {activeConnectionId && activeConnectionProfile ? (
           <SchemaExplorer
             connectionId={activeConnectionId}
+            connectionProfile={activeConnectionProfile}
             onDisconnect={handleDisconnect}
           />
         ) : (
@@ -86,21 +92,32 @@ function App() {
 
       {/* Main Content Area - Tabs */}
       <div className="flex-1 overflow-hidden">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
-          <div className="border-b px-4">
-            <TabsList>
-              <TabsTrigger value="query">Query Editor</TabsTrigger>
-              <TabsTrigger value="connections">Connections</TabsTrigger>
-            </TabsList>
+        {activeConnectionId ? (
+          // When connected, only show Query Editor
+          <div className="h-full">
+            <QueryPanel
+              connectionId={activeConnectionId}
+              onExecuteQuery={executeQuery}
+            />
           </div>
+        ) : (
+          // When not connected, show tabs for Connections and Query Editor
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
+            <div className="border-b px-4">
+              <TabsList>
+                <TabsTrigger value="connections">Connections</TabsTrigger>
+                <TabsTrigger value="query">Query Editor</TabsTrigger>
+              </TabsList>
+            </div>
 
-          <TabsContent value="query" className="h-[calc(100%-3rem)] m-0">
-            {activeConnectionId ? (
-              <QueryPanel
-                connectionId={activeConnectionId}
-                onExecuteQuery={executeQuery}
+            <TabsContent value="connections" className="h-[calc(100%-3rem)] m-0 overflow-y-auto">
+              <ConnectionForm
+                profile={selectedProfile}
+                onSuccess={handleProfileSaved}
               />
-            ) : (
+            </TabsContent>
+
+            <TabsContent value="query" className="h-[calc(100%-3rem)] m-0">
               <div className="flex items-center justify-center h-full text-muted-foreground">
                 <div className="text-center space-y-2">
                   <p className="text-lg">No active connection</p>
@@ -109,16 +126,9 @@ function App() {
                   </p>
                 </div>
               </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="connections" className="h-[calc(100%-3rem)] m-0 overflow-y-auto">
-            <ConnectionForm
-              profile={selectedProfile}
-              onSuccess={handleProfileSaved}
-            />
-          </TabsContent>
-        </Tabs>
+            </TabsContent>
+          </Tabs>
+        )}
       </div>
     </div>
   );

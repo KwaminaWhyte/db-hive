@@ -1,19 +1,16 @@
-import { FC, useState, useEffect } from 'react';
-import { invoke } from '@tauri-apps/api/core';
-import {
-  ConnectionProfile,
-  getDriverDisplayName,
-} from '../types/database';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { FC, useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { ConnectionProfile, getDriverDisplayName } from "../types/database";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +18,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog';
+} from "@/components/ui/dialog";
+import { Pencil, Trash } from "lucide-react";
 
 interface ConnectionListProps {
   /** Callback when a profile is selected for editing */
@@ -29,7 +27,7 @@ interface ConnectionListProps {
   /** Callback when profiles list changes */
   onProfilesChange?: () => void;
   /** Callback when successfully connected to a database */
-  onConnected?: (connectionId: string) => void;
+  onConnected?: (connectionId: string, profile: ConnectionProfile) => void;
 }
 
 export const ConnectionList: FC<ConnectionListProps> = ({
@@ -49,7 +47,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     profileId: string;
     profileName: string;
   } | null>(null);
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState("");
 
   // Load profiles on mount
   useEffect(() => {
@@ -63,14 +61,13 @@ export const ConnectionList: FC<ConnectionListProps> = ({
 
     try {
       const result = await invoke<ConnectionProfile[]>(
-        'list_connection_profiles'
+        "list_connection_profiles"
       );
       setProfiles(result);
     } catch (err) {
       // Handle error - could be string or DbError object
-      const errorMessage = typeof err === 'string'
-        ? err
-        : (err as any)?.message || String(err);
+      const errorMessage =
+        typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Failed to load profiles: ${errorMessage}`);
     } finally {
       setLoading(false);
@@ -83,33 +80,38 @@ export const ConnectionList: FC<ConnectionListProps> = ({
       profileId: profile.id,
       profileName: profile.name,
     });
-    setPassword('');
+    setPassword("");
   };
 
   // Handle connect with password
   const handleConnect = async () => {
     if (!passwordPrompt) return;
 
+    const profile = profiles.find((p) => p.id === passwordPrompt.profileId);
+    if (!profile) {
+      setError("Profile not found");
+      return;
+    }
+
     setConnectingId(passwordPrompt.profileId);
     setError(null);
 
     try {
-      const connectionId = await invoke<string>('connect_to_database', {
+      const connectionId = await invoke<string>("connect_to_database", {
         profileId: passwordPrompt.profileId,
         password,
       });
 
       // Success - close password prompt
       setPasswordPrompt(null);
-      setPassword('');
+      setPassword("");
 
-      // Notify parent component
-      onConnected?.(connectionId);
+      // Notify parent component with connection ID and profile
+      onConnected?.(connectionId, profile);
     } catch (err) {
       // Handle error - could be string or DbError object
-      const errorMessage = typeof err === 'string'
-        ? err
-        : (err as any)?.message || String(err);
+      const errorMessage =
+        typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Failed to connect: ${errorMessage}`);
     } finally {
       setConnectingId(null);
@@ -131,7 +133,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     setError(null);
 
     try {
-      await invoke('delete_connection_profile', {
+      await invoke("delete_connection_profile", {
         profileId: deletePrompt.profileId,
       });
       await loadProfiles();
@@ -139,9 +141,8 @@ export const ConnectionList: FC<ConnectionListProps> = ({
       setDeletePrompt(null);
     } catch (err) {
       // Handle error - could be string or DbError object
-      const errorMessage = typeof err === 'string'
-        ? err
-        : (err as any)?.message || String(err);
+      const errorMessage =
+        typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Failed to delete profile: ${errorMessage}`);
     }
   };
@@ -198,7 +199,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                 <CardTitle className="text-lg">{profile.name}</CardTitle>
                 <CardDescription className="space-y-1 text-xs">
                   <div>
-                    <span className="font-medium">Driver:</span>{' '}
+                    <span className="font-medium">Driver:</span>{" "}
                     {getDriverDisplayName(profile.driver)}
                   </div>
                   <div>
@@ -206,12 +207,12 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                     {profile.port}
                   </div>
                   <div>
-                    <span className="font-medium">Username:</span>{' '}
+                    <span className="font-medium">Username:</span>{" "}
                     {profile.username}
                   </div>
                   {profile.database && (
                     <div>
-                      <span className="font-medium">Database:</span>{' '}
+                      <span className="font-medium">Database:</span>{" "}
                       {profile.database}
                     </div>
                   )}
@@ -223,24 +224,20 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                     onClick={() => handleConnectClick(profile)}
                     disabled={connectingId !== null}
                     className="flex-1"
+                    color="success"
                   >
-                    {connectingId === profile.id ? 'Connecting...' : 'Connect'}
+                    {connectingId === profile.id ? "Connecting..." : "Connect"}
                   </Button>
 
-                  <Button
-                    variant="ghost"
-                    onClick={() => onEdit?.(profile)}
-                    className="flex-1"
-                  >
-                    Edit
+                  <Button variant="ghost" onClick={() => onEdit?.(profile)}>
+                    <Pencil />
                   </Button>
 
                   <Button
                     variant="destructive"
                     onClick={() => handleDeleteClick(profile)}
-                    className="flex-1"
                   >
-                    Delete
+                    <Trash />
                   </Button>
                 </div>
               </CardContent>
@@ -270,7 +267,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                if (e.key === "Enter") {
                   handleConnect();
                 }
               }}
@@ -280,17 +277,14 @@ export const ConnectionList: FC<ConnectionListProps> = ({
           </div>
 
           <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setPasswordPrompt(null)}
-            >
+            <Button variant="outline" onClick={() => setPasswordPrompt(null)}>
               Cancel
             </Button>
             <Button
               onClick={handleConnect}
               disabled={!password || connectingId !== null}
             >
-              {connectingId ? 'Connecting...' : 'Connect'}
+              {connectingId ? "Connecting..." : "Connect"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -10,66 +10,73 @@ import {
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Loader2, Database, Table2, Eye, LogOut, ChevronRight } from "lucide-react";
-import { DatabaseInfo, TableInfo } from "@/types";
+import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
+import { TableInspector } from "./TableInspector";
 
 interface SchemaExplorerProps {
   connectionId: string;
+  connectionProfile: ConnectionProfile;
   onDisconnect: () => void;
 }
 
 export function SchemaExplorer({
   connectionId,
+  connectionProfile,
   onDisconnect,
 }: SchemaExplorerProps) {
-  const [databases, setDatabases] = useState<DatabaseInfo[]>([]);
-  const [selectedDatabase, setSelectedDatabase] = useState<string>("");
+  const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
+  const [selectedSchema, setSelectedSchema] = useState<string>("public");
   const [tables, setTables] = useState<TableInfo[]>([]);
-  const [loadingDatabases, setLoadingDatabases] = useState(true);
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [loadingSchemas, setLoadingSchemas] = useState(true);
   const [loadingTables, setLoadingTables] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch databases on component mount
+  // Get the connected database name from the connection profile
+  const connectedDatabase = connectionProfile.database || "postgres";
+
+  // Fetch schemas on component mount
   useEffect(() => {
-    fetchDatabases();
+    fetchSchemas();
   }, [connectionId]);
 
-  // Fetch tables when database is selected
+  // Fetch tables when schema is selected
   useEffect(() => {
-    if (selectedDatabase) {
-      fetchTables(selectedDatabase);
+    if (selectedSchema) {
+      fetchTables(selectedSchema);
     }
-  }, [selectedDatabase]);
+  }, [selectedSchema]);
 
-  const fetchDatabases = async () => {
-    setLoadingDatabases(true);
+  const fetchSchemas = async () => {
+    setLoadingSchemas(true);
     setError(null);
     try {
-      const dbs = await invoke<DatabaseInfo[]>("get_databases", {
+      const schemasData = await invoke<SchemaInfo[]>("get_schemas", {
         connectionId,
+        database: connectedDatabase,
       });
-      setDatabases(dbs);
+      setSchemas(schemasData);
 
-      // Auto-select first database
-      if (dbs.length > 0) {
-        setSelectedDatabase(dbs[0].name);
+      // Auto-select "public" schema if it exists, otherwise select the first one
+      const publicSchema = schemasData.find((s) => s.name === "public");
+      if (publicSchema) {
+        setSelectedSchema("public");
+      } else if (schemasData.length > 0) {
+        setSelectedSchema(schemasData[0].name);
       }
     } catch (err) {
       const errorMessage =
         typeof err === "string" ? err : (err as any)?.message || String(err);
-      setError(`Failed to load databases: ${errorMessage}`);
+      setError(`Failed to load schemas: ${errorMessage}`);
     } finally {
-      setLoadingDatabases(false);
+      setLoadingSchemas(false);
     }
   };
 
-  const fetchTables = async (_database: string) => {
+  const fetchTables = async (schema: string) => {
     setLoadingTables(true);
     setError(null);
     try {
-      // For PostgreSQL, we need to specify a schema
-      // Default to "public" schema for now
-      // TODO: Add schema selection UI for databases that support schemas
-      const schema = "public";
       const tablesData = await invoke<TableInfo[]>("get_tables", {
         connectionId,
         schema,
@@ -103,6 +110,20 @@ export function SchemaExplorer({
     return <Table2 className="h-4 w-4 text-green-500" />;
   };
 
+  // If a table is selected, show the TableInspector
+  if (selectedTable) {
+    return (
+      <div className="h-full">
+        <TableInspector
+          connectionId={connectionId}
+          schema={selectedSchema}
+          tableName={selectedTable}
+          onClose={() => setSelectedTable(null)}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col">
       {/* Header with Disconnect Button */}
@@ -118,29 +139,38 @@ export function SchemaExplorer({
           </Button>
         </div>
 
-        {/* Database Selector */}
-        {loadingDatabases ? (
+        {/* Connected Database (read-only) */}
+        <div className="mb-3">
+          <div className="text-xs text-muted-foreground mb-1">Database</div>
+          <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
+            <Database className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">{connectedDatabase}</span>
+          </div>
+        </div>
+
+        {/* Schema Selector */}
+        {loadingSchemas ? (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        ) : databases.length > 0 ? (
-          <Select value={selectedDatabase} onValueChange={setSelectedDatabase}>
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select a database" />
-            </SelectTrigger>
-            <SelectContent>
-              {databases.map((db) => (
-                <SelectItem key={db.name} value={db.name}>
-                  <div className="flex items-center gap-2">
-                    <Database className="h-4 w-4" />
-                    <span>{db.name}</span>
-                  </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        ) : schemas.length > 0 ? (
+          <div>
+            <div className="text-xs text-muted-foreground mb-1">Schema</div>
+            <Select value={selectedSchema} onValueChange={setSelectedSchema}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select a schema" />
+              </SelectTrigger>
+              <SelectContent>
+                {schemas.map((schema) => (
+                  <SelectItem key={schema.name} value={schema.name}>
+                    {schema.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         ) : (
-          <p className="text-sm text-muted-foreground">No databases found</p>
+          <p className="text-sm text-muted-foreground">No schemas found</p>
         )}
       </div>
 
@@ -166,10 +196,7 @@ export function SchemaExplorer({
                     <button
                       key={`${table.schema}.${table.name}`}
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left group"
-                      onClick={() => {
-                        // TODO: Handle table click - could populate SQL editor
-                        console.log("Selected table:", table);
-                      }}
+                      onClick={() => setSelectedTable(table.name)}
                     >
                       {getTableIcon(table.tableType)}
                       <span className="flex-1 text-sm">{table.name}</span>
@@ -183,13 +210,13 @@ export function SchemaExplorer({
                     </button>
                   ))}
                 </div>
-              ) : selectedDatabase ? (
+              ) : selectedSchema ? (
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  No tables found in this database
+                  No tables found in this schema
                 </p>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  Select a database to view tables
+                  Select a schema to view tables
                 </p>
               )}
             </div>
