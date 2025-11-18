@@ -359,6 +359,13 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
               onChange={handleChange}
               placeholder="mydb"
             />
+            <p className="text-xs text-muted-foreground">
+              The specific database to connect to. Leave empty to connect to the default database.
+              <br />
+              <span className="font-medium text-yellow-600 dark:text-yellow-500">
+                Note: After connecting, you can only view tables from this database. To switch databases, edit this field and reconnect.
+              </span>
+            </p>
           </div>
 
           {/* SSL Mode */}
