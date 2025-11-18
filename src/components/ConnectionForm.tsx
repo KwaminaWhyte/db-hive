@@ -9,6 +9,23 @@ import {
   getDefaultPort,
   getDriverDisplayName,
 } from '../types/database';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
 interface ConnectionFormProps {
   /** Existing profile to edit, or undefined for new profile */
@@ -208,218 +225,193 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   };
 
   return (
-    <div style={{ padding: '20px', border: '1px solid #ccc', borderRadius: '8px' }}>
-      <h2>{profile ? 'Edit Connection' : 'New Connection'}</h2>
-
-      <form onSubmit={handleSave}>
-        {/* Connection Name */}
-        <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="name" style={{ display: 'block', marginBottom: '5px' }}>
-            Connection Name *
-          </label>
-          <input
-            type="text"
-            id="name"
-            name="name"
-            value={formData.name || ''}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '8px', fontSize: '14px' }}
-            placeholder="My Database"
-            required
-          />
-        </div>
-
-        {/* Database Driver */}
-        <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="driver" style={{ display: 'block', marginBottom: '5px' }}>
-            Database Driver *
-          </label>
-          <select
-            id="driver"
-            name="driver"
-            value={formData.driver || 'Postgres'}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '8px', fontSize: '14px' }}
-            required
-          >
-            {drivers.map((driver) => (
-              <option key={driver} value={driver}>
-                {getDriverDisplayName(driver)}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Host */}
-        <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="host" style={{ display: 'block', marginBottom: '5px' }}>
-            Host *
-          </label>
-          <input
-            type="text"
-            id="host"
-            name="host"
-            value={formData.host || ''}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '8px', fontSize: '14px' }}
-            placeholder="localhost"
-            required
-          />
-        </div>
-
-        {/* Port */}
-        <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="port" style={{ display: 'block', marginBottom: '5px' }}>
-            Port *
-          </label>
-          <input
-            type="number"
-            id="port"
-            name="port"
-            value={formData.port || 0}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '8px', fontSize: '14px' }}
-            min="0"
-            max="65535"
-            required
-          />
-        </div>
-
-        {/* Username */}
-        <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="username" style={{ display: 'block', marginBottom: '5px' }}>
-            Username *
-          </label>
-          <input
-            type="text"
-            id="username"
-            name="username"
-            value={formData.username || ''}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '8px', fontSize: '14px' }}
-            placeholder="postgres"
-            required
-          />
-        </div>
-
-        {/* Password */}
-        <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="password" style={{ display: 'block', marginBottom: '5px' }}>
-            Password
-          </label>
-          <input
-            type="password"
-            id="password"
-            name="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            style={{ width: '100%', padding: '8px', fontSize: '14px' }}
-            placeholder="••••••••"
-          />
-        </div>
-
-        {/* Database */}
-        <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="database" style={{ display: 'block', marginBottom: '5px' }}>
-            Database (optional)
-          </label>
-          <input
-            type="text"
-            id="database"
-            name="database"
-            value={formData.database || ''}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '8px', fontSize: '14px' }}
-            placeholder="mydb"
-          />
-        </div>
-
-        {/* SSL Mode */}
-        <div style={{ marginBottom: '15px' }}>
-          <label htmlFor="sslMode" style={{ display: 'block', marginBottom: '5px' }}>
-            SSL Mode
-          </label>
-          <select
-            id="sslMode"
-            name="sslMode"
-            value={formData.sslMode || 'Prefer'}
-            onChange={handleChange}
-            style={{ width: '100%', padding: '8px', fontSize: '14px' }}
-          >
-            {sslModes.map((mode) => (
-              <option key={mode} value={mode}>
-                {mode}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Error Message */}
-        {error && (
-          <div
-            style={{
-              marginBottom: '15px',
-              padding: '10px',
-              backgroundColor: '#fee',
-              color: '#c33',
-              borderRadius: '4px',
-            }}
-          >
-            {error}
+    <Card className="m-6">
+      <CardHeader>
+        <CardTitle>{profile ? 'Edit Connection' : 'New Connection'}</CardTitle>
+        <CardDescription>
+          {profile
+            ? 'Update your database connection settings'
+            : 'Configure a new database connection'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSave} className="space-y-4">
+          {/* Connection Name */}
+          <div className="space-y-2">
+            <Label htmlFor="name">
+              Connection Name <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              type="text"
+              id="name"
+              name="name"
+              value={formData.name || ''}
+              onChange={handleChange}
+              placeholder="My Database"
+              required
+            />
           </div>
-        )}
 
-        {/* Success Message */}
-        {testStatus && (
-          <div
-            style={{
-              marginBottom: '15px',
-              padding: '10px',
-              backgroundColor: '#efe',
-              color: '#3a3',
-              borderRadius: '4px',
-            }}
-          >
-            {testStatus}
+          {/* Database Driver */}
+          <div className="space-y-2">
+            <Label htmlFor="driver">
+              Database Driver <span className="text-destructive">*</span>
+            </Label>
+            <Select
+              value={formData.driver || 'Postgres'}
+              onValueChange={(value) =>
+                handleChange({
+                  target: { name: 'driver', value },
+                } as ChangeEvent<HTMLSelectElement>)
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select database type" />
+              </SelectTrigger>
+              <SelectContent>
+                {drivers.map((driver) => (
+                  <SelectItem key={driver} value={driver}>
+                    {getDriverDisplayName(driver)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
-        )}
 
-        {/* Buttons */}
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <button
-            type="button"
-            onClick={handleTestConnection}
-            disabled={loading}
-            style={{
-              padding: '10px 20px',
-              fontSize: '14px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              backgroundColor: '#4a90e2',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-            }}
-          >
-            {loading ? 'Testing...' : 'Test Connection'}
-          </button>
+          {/* Host and Port - Side by side */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2 space-y-2">
+              <Label htmlFor="host">
+                Host <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                type="text"
+                id="host"
+                name="host"
+                value={formData.host || ''}
+                onChange={handleChange}
+                placeholder="localhost"
+                required
+              />
+            </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              padding: '10px 20px',
-              fontSize: '14px',
-              cursor: loading ? 'not-allowed' : 'pointer',
-              backgroundColor: '#5cb85c',
-              color: 'white',
-              border: 'none',
-              borderRadius: '4px',
-            }}
-          >
-            {loading ? 'Saving...' : 'Save'}
-          </button>
-        </div>
-      </form>
-    </div>
+            <div className="space-y-2">
+              <Label htmlFor="port">
+                Port <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                type="number"
+                id="port"
+                name="port"
+                value={formData.port || 0}
+                onChange={handleChange}
+                min="0"
+                max="65535"
+                required
+              />
+            </div>
+          </div>
+
+          {/* Username */}
+          <div className="space-y-2">
+            <Label htmlFor="username">
+              Username <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              type="text"
+              id="username"
+              name="username"
+              value={formData.username || ''}
+              onChange={handleChange}
+              placeholder="postgres"
+              required
+            />
+          </div>
+
+          {/* Password */}
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <Input
+              type="password"
+              id="password"
+              name="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+            />
+          </div>
+
+          {/* Database */}
+          <div className="space-y-2">
+            <Label htmlFor="database">
+              Database <span className="text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              type="text"
+              id="database"
+              name="database"
+              value={formData.database || ''}
+              onChange={handleChange}
+              placeholder="mydb"
+            />
+          </div>
+
+          {/* SSL Mode */}
+          <div className="space-y-2">
+            <Label htmlFor="sslMode">SSL Mode</Label>
+            <Select
+              value={formData.sslMode || 'Prefer'}
+              onValueChange={(value) =>
+                handleChange({
+                  target: { name: 'sslMode', value },
+                } as ChangeEvent<HTMLSelectElement>)
+              }
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select SSL mode" />
+              </SelectTrigger>
+              <SelectContent>
+                {sslModes.map((mode) => (
+                  <SelectItem key={mode} value={mode}>
+                    {mode}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20">
+              {error}
+            </div>
+          )}
+
+          {/* Success Message */}
+          {testStatus && (
+            <div className="rounded-md bg-green-50 dark:bg-green-950/20 p-3 text-sm text-green-600 dark:text-green-400 border border-green-200 dark:border-green-900">
+              {testStatus}
+            </div>
+          )}
+
+          {/* Buttons */}
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleTestConnection}
+              disabled={loading}
+              className="flex-1"
+            >
+              {loading ? 'Testing...' : 'Test Connection'}
+            </Button>
+
+            <Button type="submit" disabled={loading} className="flex-1">
+              {loading ? 'Saving...' : 'Save'}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 };

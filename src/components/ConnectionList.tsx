@@ -5,6 +5,24 @@ import {
   DbError,
   getDriverDisplayName,
 } from '../types/database';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface ConnectionListProps {
   /** Callback when a profile is selected for editing */
@@ -22,6 +40,10 @@ export const ConnectionList: FC<ConnectionListProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
   const [passwordPrompt, setPasswordPrompt] = useState<{
+    profileId: string;
+    profileName: string;
+  } | null>(null);
+  const [deletePrompt, setDeletePrompt] = useState<{
     profileId: string;
     profileName: string;
   } | null>(null);
@@ -84,22 +106,27 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     }
   };
 
-  // Handle delete
-  const handleDelete = async (profileId: string, profileName: string) => {
-    if (
-      !confirm(
-        `Are you sure you want to delete the connection "${profileName}"?`
-      )
-    ) {
-      return;
-    }
+  // Handle delete button click
+  const handleDeleteClick = (profile: ConnectionProfile) => {
+    setDeletePrompt({
+      profileId: profile.id,
+      profileName: profile.name,
+    });
+  };
+
+  // Handle delete confirmation
+  const handleDeleteConfirm = async () => {
+    if (!deletePrompt) return;
 
     setError(null);
 
     try {
-      await invoke('delete_connection_profile', { profileId });
+      await invoke('delete_connection_profile', {
+        profileId: deletePrompt.profileId,
+      });
       await loadProfiles();
       onProfilesChange?.();
+      setDeletePrompt(null);
     } catch (err) {
       const dbError = err as DbError;
       setError(`Failed to delete profile: ${dbError.message}`);
@@ -108,242 +135,178 @@ export const ConnectionList: FC<ConnectionListProps> = ({
 
   if (loading) {
     return (
-      <div style={{ padding: '20px' }}>
-        <h2>Connections</h2>
-        <p>Loading...</p>
-      </div>
+      <Card className="m-6">
+        <CardHeader>
+          <CardTitle>Connections</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-muted-foreground">Loading...</p>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div style={{ padding: '20px' }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '20px',
-        }}
-      >
-        <h2>Connections</h2>
-        <button
-          onClick={loadProfiles}
-          style={{
-            padding: '8px 16px',
-            fontSize: '14px',
-            cursor: 'pointer',
-            backgroundColor: '#6c757d',
-            color: 'white',
-            border: 'none',
-            borderRadius: '4px',
-          }}
-        >
+    <div className="p-6 space-y-4">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold">Connections</h2>
+          <p className="text-sm text-muted-foreground">
+            Manage your database connections
+          </p>
+        </div>
+        <Button variant="outline" onClick={loadProfiles}>
           Refresh
-        </button>
+        </Button>
       </div>
 
       {error && (
-        <div
-          style={{
-            marginBottom: '15px',
-            padding: '10px',
-            backgroundColor: '#fee',
-            color: '#c33',
-            borderRadius: '4px',
-          }}
-        >
+        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive border border-destructive/20">
           {error}
         </div>
       )}
 
       {profiles.length === 0 ? (
-        <p style={{ color: '#666' }}>
-          No connections yet. Create one using the form on the right.
-        </p>
+        <Card>
+          <CardContent className="pt-6">
+            <p className="text-muted-foreground text-center">
+              No connections yet. Create one using the form on the right.
+            </p>
+          </CardContent>
+        </Card>
       ) : (
-        <div>
+        <div className="space-y-3">
           {profiles.map((profile) => (
-            <div
+            <Card
               key={profile.id}
-              style={{
-                marginBottom: '15px',
-                padding: '15px',
-                border: '1px solid #ddd',
-                borderRadius: '8px',
-                backgroundColor: '#f9f9f9',
-              }}
+              className="hover:shadow-md transition-shadow"
             >
-              <div style={{ marginBottom: '10px' }}>
-                <h3 style={{ margin: '0 0 5px 0', fontSize: '18px' }}>
-                  {profile.name}
-                </h3>
-                <div style={{ fontSize: '14px', color: '#666' }}>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">{profile.name}</CardTitle>
+                <CardDescription className="space-y-1 text-xs">
                   <div>
-                    <strong>Driver:</strong> {getDriverDisplayName(profile.driver)}
+                    <span className="font-medium">Driver:</span>{' '}
+                    {getDriverDisplayName(profile.driver)}
                   </div>
                   <div>
-                    <strong>Host:</strong> {profile.host}:{profile.port}
+                    <span className="font-medium">Host:</span> {profile.host}:
+                    {profile.port}
                   </div>
                   <div>
-                    <strong>Username:</strong> {profile.username}
+                    <span className="font-medium">Username:</span>{' '}
+                    {profile.username}
                   </div>
                   {profile.database && (
                     <div>
-                      <strong>Database:</strong> {profile.database}
+                      <span className="font-medium">Database:</span>{' '}
+                      {profile.database}
                     </div>
                   )}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2">
+                  <Button
+                    onClick={() => handleConnectClick(profile)}
+                    disabled={connectingId !== null}
+                    className="flex-1"
+                  >
+                    {connectingId === profile.id ? 'Connecting...' : 'Connect'}
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    onClick={() => onEdit?.(profile)}
+                    className="flex-1"
+                  >
+                    Edit
+                  </Button>
+
+                  <Button
+                    variant="destructive"
+                    onClick={() => handleDeleteClick(profile)}
+                    className="flex-1"
+                  >
+                    Delete
+                  </Button>
                 </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button
-                  onClick={() => handleConnectClick(profile)}
-                  disabled={connectingId !== null}
-                  style={{
-                    padding: '8px 16px',
-                    fontSize: '14px',
-                    cursor:
-                      connectingId !== null ? 'not-allowed' : 'pointer',
-                    backgroundColor: '#28a745',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                  }}
-                >
-                  {connectingId === profile.id ? 'Connecting...' : 'Connect'}
-                </button>
-
-                <button
-                  onClick={() => onEdit?.(profile)}
-                  style={{
-                    padding: '8px 16px',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    backgroundColor: '#ffc107',
-                    color: '#333',
-                    border: 'none',
-                    borderRadius: '4px',
-                  }}
-                >
-                  Edit
-                </button>
-
-                <button
-                  onClick={() => handleDelete(profile.id, profile.name)}
-                  style={{
-                    padding: '8px 16px',
-                    fontSize: '14px',
-                    cursor: 'pointer',
-                    backgroundColor: '#dc3545',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '4px',
-                  }}
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}
 
-      {/* Password Prompt Modal */}
-      {passwordPrompt && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-          }}
-          onClick={() => setPasswordPrompt(null)}
-        >
-          <div
-            style={{
-              backgroundColor: 'white',
-              padding: '30px',
-              borderRadius: '8px',
-              minWidth: '400px',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 style={{ marginTop: 0 }}>
-              Connect to {passwordPrompt.profileName}
-            </h3>
+      {/* Password Prompt Dialog */}
+      <Dialog
+        open={!!passwordPrompt}
+        onOpenChange={(open) => !open && setPasswordPrompt(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Connect to {passwordPrompt?.profileName}</DialogTitle>
+            <DialogDescription>
+              Enter the password to connect to this database.
+            </DialogDescription>
+          </DialogHeader>
 
-            <div style={{ marginBottom: '20px' }}>
-              <label
-                htmlFor="connect-password"
-                style={{ display: 'block', marginBottom: '5px' }}
-              >
-                Password:
-              </label>
-              <input
-                type="password"
-                id="connect-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleConnect();
-                  }
-                }}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  fontSize: '14px',
-                  boxSizing: 'border-box',
-                }}
-                placeholder="Enter password"
-                autoFocus
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setPasswordPrompt(null)}
-                style={{
-                  padding: '8px 16px',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  backgroundColor: '#6c757d',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                }}
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={handleConnect}
-                disabled={!password || connectingId !== null}
-                style={{
-                  padding: '8px 16px',
-                  fontSize: '14px',
-                  cursor:
-                    !password || connectingId !== null
-                      ? 'not-allowed'
-                      : 'pointer',
-                  backgroundColor: '#28a745',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '4px',
-                }}
-              >
-                {connectingId ? 'Connecting...' : 'Connect'}
-              </button>
-            </div>
+          <div className="space-y-2 py-4">
+            <Label htmlFor="connect-password">Password</Label>
+            <Input
+              type="password"
+              id="connect-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  handleConnect();
+                }
+              }}
+              placeholder="Enter password"
+              autoFocus
+            />
           </div>
-        </div>
-      )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPasswordPrompt(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConnect}
+              disabled={!password || connectingId !== null}
+            >
+              {connectingId ? 'Connecting...' : 'Connect'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!deletePrompt}
+        onOpenChange={(open) => !open && setDeletePrompt(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Connection</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{deletePrompt?.profileName}"?
+              This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletePrompt(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

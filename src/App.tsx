@@ -24,15 +24,9 @@ function App() {
   };
 
   return (
-    <div style={{ display: "flex", height: "100vh" }}>
+    <div className="flex h-screen w-full bg-background">
       {/* Left Side - Connection List */}
-      <div
-        style={{
-          width: "40%",
-          borderRight: "1px solid #ccc",
-          overflowY: "auto",
-        }}
-      >
+      <div className="w-2/5 border-r overflow-y-auto">
         <ConnectionList
           key={refreshKey}
           onEdit={handleEdit}
@@ -41,12 +35,7 @@ function App() {
       </div>
 
       {/* Right Side - Connection Form */}
-      <div
-        style={{
-          width: "60%",
-          overflowY: "auto",
-        }}
-      >
+      <div className="w-3/5 overflow-y-auto">
         <ConnectionForm
           profile={selectedProfile}
           onSuccess={handleProfileSaved}
