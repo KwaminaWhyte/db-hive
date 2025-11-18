@@ -62,6 +62,7 @@ impl SchemaInfo {
 ///
 /// Represents a table or view within a schema.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct TableInfo {
     /// Table name
     pub name: String,
@@ -113,6 +114,7 @@ impl TableInfo {
 ///
 /// Represents a column within a table, including its data type and constraints.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct ColumnInfo {
     /// Column name
     pub name: String,
@@ -164,6 +166,7 @@ impl ColumnInfo {
 ///
 /// Represents an index on a table.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
 pub struct IndexInfo {
     /// Index name
     pub name: String,

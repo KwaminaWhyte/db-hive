@@ -47,6 +47,7 @@ impl Default for SslMode {
 /// This is commonly used for databases that are not directly accessible
 /// over the network but can be reached through an SSH bastion host.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SshConfig {
     /// SSH server hostname or IP address
     pub host: String,
@@ -66,6 +67,7 @@ pub struct SshConfig {
 /// Represents a saved database connection with all necessary configuration.
 /// Passwords are not stored directly but referenced via a keyring key for security.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectionProfile {
     /// Unique identifier for this connection profile
     pub id: String,

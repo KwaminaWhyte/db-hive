@@ -44,6 +44,7 @@ pub struct ConnectionOptions {
 /// For SELECT queries, rows will contain data.
 /// For INSERT/UPDATE/DELETE queries, rows_affected will contain the count.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct QueryResult {
     /// Column names in the result set
     pub columns: Vec<String>,
