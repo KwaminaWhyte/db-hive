@@ -5,7 +5,6 @@ import {
   DbDriver,
   SslMode,
   ConnectionStatus,
-  DbError,
   getDefaultPort,
   getDriverDisplayName,
 } from '../types/database';
@@ -159,8 +158,11 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         setTestStatus('Connection failed');
       }
     } catch (err) {
-      const dbError = err as DbError;
-      setError(`Connection test failed: ${dbError.message}`);
+      // Handle error - could be string or DbError object
+      const errorMessage = typeof err === 'string'
+        ? err
+        : (err as any)?.message || String(err);
+      setError(`Connection test failed: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -217,8 +219,11 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         setPassword('');
       }
     } catch (err) {
-      const dbError = err as DbError;
-      setError(`Failed to save profile: ${dbError.message}`);
+      // Handle error - could be string or DbError object
+      const errorMessage = typeof err === 'string'
+        ? err
+        : (err as any)?.message || String(err);
+      setError(`Failed to save profile: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

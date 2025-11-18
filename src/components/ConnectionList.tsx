@@ -2,7 +2,6 @@ import { FC, useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   ConnectionProfile,
-  DbError,
   getDriverDisplayName,
 } from '../types/database';
 import { Button } from '@/components/ui/button';
@@ -68,8 +67,11 @@ export const ConnectionList: FC<ConnectionListProps> = ({
       );
       setProfiles(result);
     } catch (err) {
-      const dbError = err as DbError;
-      setError(`Failed to load profiles: ${dbError.message}`);
+      // Handle error - could be string or DbError object
+      const errorMessage = typeof err === 'string'
+        ? err
+        : (err as any)?.message || String(err);
+      setError(`Failed to load profiles: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
@@ -104,8 +106,11 @@ export const ConnectionList: FC<ConnectionListProps> = ({
       // Notify parent component
       onConnected?.(connectionId);
     } catch (err) {
-      const dbError = err as DbError;
-      setError(`Failed to connect: ${dbError.message}`);
+      // Handle error - could be string or DbError object
+      const errorMessage = typeof err === 'string'
+        ? err
+        : (err as any)?.message || String(err);
+      setError(`Failed to connect: ${errorMessage}`);
     } finally {
       setConnectingId(null);
     }
@@ -133,8 +138,11 @@ export const ConnectionList: FC<ConnectionListProps> = ({
       onProfilesChange?.();
       setDeletePrompt(null);
     } catch (err) {
-      const dbError = err as DbError;
-      setError(`Failed to delete profile: ${dbError.message}`);
+      // Handle error - could be string or DbError object
+      const errorMessage = typeof err === 'string'
+        ? err
+        : (err as any)?.message || String(err);
+      setError(`Failed to delete profile: ${errorMessage}`);
     }
   };
 
