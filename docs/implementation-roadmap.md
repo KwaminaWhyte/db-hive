@@ -555,7 +555,12 @@ pub async fn get_tables(
 - [x] Integrated with SchemaExplorer (click table to inspect) ✅
 
 **Implementation Details:**
-- Created `TableInspector.tsx` with three tabs:
+- Created `TableInspector.tsx` with three tabs (ordered as Data, Columns, Indexes):
+  - **Data Tab**: Sample data preview with lazy loading (first tab, default)
+    - Loads first 50 rows on tab activation
+    - NULL value indicators
+    - JSON formatting for complex objects
+    - Row count display
   - **Columns Tab**: Displays all column metadata with badges for types and constraints
     - Primary key indicator with key icon
     - Nullable/NOT NULL badges
@@ -564,14 +569,12 @@ pub async fn get_tables(
   - **Indexes Tab**: Shows all indexes with type indicators
     - PRIMARY, UNIQUE, and INDEX badges
     - Column list for each index
-  - **Data Tab**: Sample data preview with lazy loading
-    - Loads first 50 rows on tab activation
-    - NULL value indicators
-    - JSON formatting for complex objects
-    - Row count display
+- Layout: Shows in main content area (right side) when table is clicked
+  - Left sidebar: SchemaExplorer remains visible
+  - Right side: TableInspector replaces QueryPanel
+  - Close button returns to QueryPanel
 - Uses shadcn/ui Table, Badge, Tabs, and ScrollArea components
 - Refresh button to reload schema and data
-- Close button to return to table list
 - Comprehensive error handling and loading states
 
 - [ ] Show table statistics (row count, size) (TODO: Future enhancement)

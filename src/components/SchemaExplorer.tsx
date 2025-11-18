@@ -18,23 +18,23 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
-import { TableInspector } from "./TableInspector";
 
 interface SchemaExplorerProps {
   connectionId: string;
   connectionProfile: ConnectionProfile;
   onDisconnect: () => void;
+  onTableSelect: (schema: string, tableName: string) => void;
 }
 
 export function SchemaExplorer({
   connectionId,
   connectionProfile,
   onDisconnect,
+  onTableSelect,
 }: SchemaExplorerProps) {
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("public");
   const [tables, setTables] = useState<TableInfo[]>([]);
-  const [selectedTable, setSelectedTable] = useState<string | null>(null);
   const [databases, setDatabases] = useState<string[]>([]);
   const [loadingDatabases, setLoadingDatabases] = useState(true);
   const [loadingSchemas, setLoadingSchemas] = useState(true);
@@ -134,20 +134,6 @@ export function SchemaExplorer({
     }
     return <Table2 className="h-4 w-4 text-green-500" />;
   };
-
-  // If a table is selected, show the TableInspector
-  if (selectedTable) {
-    return (
-      <div className="h-full">
-        <TableInspector
-          connectionId={connectionId}
-          schema={selectedSchema}
-          tableName={selectedTable}
-          onClose={() => setSelectedTable(null)}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="h-full flex flex-col">
@@ -256,7 +242,7 @@ export function SchemaExplorer({
                     <button
                       key={`${table.schema}.${table.name}`}
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left group"
-                      onClick={() => setSelectedTable(table.name)}
+                      onClick={() => onTableSelect(selectedSchema, table.name)}
                     >
                       {getTableIcon(table.tableType)}
                       <span className="flex-1 text-sm">{table.name}</span>

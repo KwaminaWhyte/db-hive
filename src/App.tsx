@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ConnectionForm } from "./components/ConnectionForm";
 import { ConnectionList } from "./components/ConnectionList";
 import { SchemaExplorer } from "./components/SchemaExplorer";
+import { TableInspector } from "./components/TableInspector";
 import { QueryPanel } from "./components/QueryPanel";
 import { ModeToggle } from "./components/mode-toggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,6 +19,10 @@ function App() {
   const [activeConnectionProfile, setActiveConnectionProfile] = useState<
     ConnectionProfile | undefined
   >(undefined);
+  const [selectedTable, setSelectedTable] = useState<{
+    schema: string;
+    tableName: string;
+  } | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<string>("connections");
 
@@ -47,8 +52,14 @@ function App() {
   const handleDisconnect = () => {
     setActiveConnectionId(null);
     setActiveConnectionProfile(undefined);
+    setSelectedTable(null);
     // Switch back to connections tab
     setActiveTab("connections");
+  };
+
+  // Handle table selection
+  const handleTableSelect = (schema: string, tableName: string) => {
+    setSelectedTable({ schema, tableName });
   };
 
   // Execute query via Tauri command
@@ -79,6 +90,7 @@ function App() {
             connectionId={activeConnectionId}
             connectionProfile={activeConnectionProfile}
             onDisconnect={handleDisconnect}
+            onTableSelect={handleTableSelect}
           />
         ) : (
           <ConnectionList
@@ -93,12 +105,21 @@ function App() {
       {/* Main Content Area - Tabs */}
       <div className="flex-1 overflow-hidden">
         {activeConnectionId ? (
-          // When connected, only show Query Editor
+          // When connected, show TableInspector or Query Editor
           <div className="h-full">
-            <QueryPanel
-              connectionId={activeConnectionId}
-              onExecuteQuery={executeQuery}
-            />
+            {selectedTable ? (
+              <TableInspector
+                connectionId={activeConnectionId}
+                schema={selectedTable.schema}
+                tableName={selectedTable.tableName}
+                onClose={() => setSelectedTable(null)}
+              />
+            ) : (
+              <QueryPanel
+                connectionId={activeConnectionId}
+                onExecuteQuery={executeQuery}
+              />
+            )}
           </div>
         ) : (
           // When not connected, show tabs for Connections and Query Editor

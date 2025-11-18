@@ -42,7 +42,7 @@ export function TableInspector({
   const [loading, setLoading] = useState(true);
   const [loadingSampleData, setLoadingSampleData] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("columns");
+  const [activeTab, setActiveTab] = useState("data");
 
   useEffect(() => {
     fetchTableSchema();
@@ -166,15 +166,70 @@ export function TableInspector({
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
         <div className="border-b px-4">
           <TabsList>
+            <TabsTrigger value="data">Data</TabsTrigger>
             <TabsTrigger value="columns">
               Columns ({tableSchema.columns.length})
             </TabsTrigger>
             <TabsTrigger value="indexes">
               Indexes ({tableSchema.indexes.length})
             </TabsTrigger>
-            <TabsTrigger value="data">Data</TabsTrigger>
           </TabsList>
         </div>
+
+        {/* Data Tab */}
+        <TabsContent value="data" className="flex-1 m-0">
+          {loadingSampleData ? (
+            <div className="flex items-center justify-center h-full">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : sampleData ? (
+            <ScrollArea className="h-full">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {sampleData.columns.map((col) => (
+                      <TableHead key={col}>{col}</TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sampleData.rows.map((row, rowIndex) => (
+                    <TableRow key={rowIndex}>
+                      {row.map((cell, cellIndex) => (
+                        <TableCell key={cellIndex}>
+                          {cell === null ? (
+                            <span className="italic text-muted-foreground">
+                              NULL
+                            </span>
+                          ) : typeof cell === "object" ? (
+                            <code className="text-xs">
+                              {JSON.stringify(cell)}
+                            </code>
+                          ) : (
+                            String(cell)
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <div className="p-4 text-center text-sm text-muted-foreground border-t">
+                Showing {sampleData.rows.length} rows (limited to 50)
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center space-y-2">
+                <Database className="h-8 w-8 mx-auto text-muted-foreground" />
+                <p className="text-muted-foreground">No data loaded</p>
+                <Button variant="outline" size="sm" onClick={fetchSampleData}>
+                  Load Sample Data
+                </Button>
+              </div>
+            </div>
+          )}
+        </TabsContent>
 
         {/* Columns Tab */}
         <TabsContent value="columns" className="flex-1 m-0">
@@ -265,61 +320,6 @@ export function TableInspector({
               </div>
             )}
           </ScrollArea>
-        </TabsContent>
-
-        {/* Data Tab */}
-        <TabsContent value="data" className="flex-1 m-0">
-          {loadingSampleData ? (
-            <div className="flex items-center justify-center h-full">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-            </div>
-          ) : sampleData ? (
-            <ScrollArea className="h-full">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {sampleData.columns.map((col) => (
-                      <TableHead key={col}>{col}</TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sampleData.rows.map((row, rowIndex) => (
-                    <TableRow key={rowIndex}>
-                      {row.map((cell, cellIndex) => (
-                        <TableCell key={cellIndex}>
-                          {cell === null ? (
-                            <span className="italic text-muted-foreground">
-                              NULL
-                            </span>
-                          ) : typeof cell === "object" ? (
-                            <code className="text-xs">
-                              {JSON.stringify(cell)}
-                            </code>
-                          ) : (
-                            String(cell)
-                          )}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <div className="p-4 text-center text-sm text-muted-foreground border-t">
-                Showing {sampleData.rows.length} rows (limited to 50)
-              </div>
-            </ScrollArea>
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center space-y-2">
-                <Database className="h-8 w-8 mx-auto text-muted-foreground" />
-                <p className="text-muted-foreground">No data loaded</p>
-                <Button variant="outline" size="sm" onClick={fetchSampleData}>
-                  Load Sample Data
-                </Button>
-              </div>
-            </div>
-          )}
         </TabsContent>
       </Tabs>
     </div>
