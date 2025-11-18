@@ -35,8 +35,6 @@ export function SchemaExplorer({
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("public");
   const [tables, setTables] = useState<TableInfo[]>([]);
-  const [databases, setDatabases] = useState<string[]>([]);
-  const [loadingDatabases, setLoadingDatabases] = useState(true);
   const [loadingSchemas, setLoadingSchemas] = useState(true);
   const [loadingTables, setLoadingTables] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,9 +42,8 @@ export function SchemaExplorer({
   // Get the connected database name from the connection profile
   const connectedDatabase = connectionProfile.database || "postgres";
 
-  // Fetch databases and schemas on component mount
+  // Fetch schemas on component mount
   useEffect(() => {
-    fetchDatabases();
     fetchSchemas();
   }, [connectionId]);
 
@@ -56,21 +53,6 @@ export function SchemaExplorer({
       fetchTables(selectedSchema);
     }
   }, [selectedSchema]);
-
-  const fetchDatabases = async () => {
-    setLoadingDatabases(true);
-    try {
-      const dbsData = await invoke<{ name: string }[]>("get_databases", {
-        connectionId,
-      });
-      setDatabases(dbsData.map((db) => db.name));
-    } catch (err) {
-      console.error("Failed to load databases:", err);
-      // Don't set error here, it's not critical
-    } finally {
-      setLoadingDatabases(false);
-    }
-  };
 
   const fetchSchemas = async () => {
     setLoadingSchemas(true);
@@ -155,42 +137,14 @@ export function SchemaExplorer({
           </Button>
         </div>
 
-        {/* Connected Database with available databases hint */}
+        {/* Connected Database */}
         <div className="mb-3">
           <div className="text-xs text-muted-foreground mb-1">
             Connected Database
           </div>
-          <div className="px-3 py-2 bg-muted rounded-md">
-            <div className="flex items-center gap-2 mb-1">
-              <Database className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">{connectedDatabase}</span>
-            </div>
-            {databases.length > 1 && !loadingDatabases && (
-              <div className="text-xs text-muted-foreground mt-2 pt-2 border-t border-border">
-                <div className="font-medium mb-1">Other databases available:</div>
-                <div className="space-y-0.5">
-                  {databases
-                    .filter((db) => db !== connectedDatabase)
-                    .slice(0, 3)
-                    .map((db) => (
-                      <div key={db} className="text-muted-foreground">
-                        • {db}
-                      </div>
-                    ))}
-                  {databases.filter((db) => db !== connectedDatabase).length >
-                    3 && (
-                    <div className="text-muted-foreground">
-                      • and{" "}
-                      {databases.filter((db) => db !== connectedDatabase).length - 3}{" "}
-                      more...
-                    </div>
-                  )}
-                </div>
-                <div className="text-xs text-muted-foreground mt-2 italic">
-                  To switch databases, edit your connection profile and reconnect
-                </div>
-              </div>
-            )}
+          <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
+            <Database className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">{connectedDatabase}</span>
           </div>
         </div>
 

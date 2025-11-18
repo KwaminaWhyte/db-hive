@@ -45,15 +45,22 @@ export function TableInspector({
   const [activeTab, setActiveTab] = useState("data");
 
   useEffect(() => {
+    // Reset state when table changes
+    setTableSchema(null);
+    setSampleData(null);
+    setError(null);
+    setActiveTab("data");
+
+    // Fetch new table schema
     fetchTableSchema();
   }, [connectionId, schema, tableName]);
 
-  // Fetch sample data when Data tab is opened
+  // Fetch sample data when Data tab is opened and schema is loaded
   useEffect(() => {
-    if (activeTab === "data" && !sampleData && !loadingSampleData) {
+    if (activeTab === "data" && !sampleData && !loadingSampleData && tableSchema) {
       fetchSampleData();
     }
-  }, [activeTab]);
+  }, [activeTab, tableName, schema, tableSchema]);
 
   const fetchTableSchema = async () => {
     setLoading(true);
@@ -177,47 +184,57 @@ export function TableInspector({
         </div>
 
         {/* Data Tab */}
-        <TabsContent value="data" className="flex-1 m-0">
+        <TabsContent value="data" className="flex-1 m-0 overflow-hidden">
           {loadingSampleData ? (
             <div className="flex items-center justify-center h-full">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : sampleData ? (
-            <ScrollArea className="h-full">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {sampleData.columns.map((col) => (
-                      <TableHead key={col}>{col}</TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sampleData.rows.map((row, rowIndex) => (
-                    <TableRow key={rowIndex}>
-                      {row.map((cell, cellIndex) => (
-                        <TableCell key={cellIndex}>
-                          {cell === null ? (
-                            <span className="italic text-muted-foreground">
-                              NULL
-                            </span>
-                          ) : typeof cell === "object" ? (
-                            <code className="text-xs">
-                              {JSON.stringify(cell)}
-                            </code>
-                          ) : (
-                            String(cell)
-                          )}
-                        </TableCell>
+            <div className="h-full flex flex-col">
+              <ScrollArea className="flex-1">
+                <div className="min-w-max">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background z-10">
+                      <TableRow>
+                        {sampleData.columns.map((col) => (
+                          <TableHead key={col} className="whitespace-nowrap">
+                            {col}
+                          </TableHead>
+                        ))}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sampleData.rows.map((row, rowIndex) => (
+                        <TableRow key={rowIndex}>
+                          {row.map((cell, cellIndex) => (
+                            <TableCell key={cellIndex} className="whitespace-nowrap">
+                              {cell === null || cell === undefined ? (
+                                <span className="italic text-muted-foreground">
+                                  NULL
+                                </span>
+                              ) : typeof cell === "object" ? (
+                                <code className="text-xs bg-muted px-1 rounded">
+                                  {JSON.stringify(cell)}
+                                </code>
+                              ) : cell === "" ? (
+                                <span className="italic text-muted-foreground">
+                                  (empty)
+                                </span>
+                              ) : (
+                                <span>{String(cell)}</span>
+                              )}
+                            </TableCell>
+                          ))}
+                        </TableRow>
                       ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                    </TableBody>
+                  </Table>
+                </div>
+              </ScrollArea>
               <div className="p-4 text-center text-sm text-muted-foreground border-t">
                 Showing {sampleData.rows.length} rows (limited to 50)
               </div>
-            </ScrollArea>
+            </div>
           ) : (
             <div className="flex items-center justify-center h-full">
               <div className="text-center space-y-2">
@@ -232,18 +249,19 @@ export function TableInspector({
         </TabsContent>
 
         {/* Columns Tab */}
-        <TabsContent value="columns" className="flex-1 m-0">
+        <TabsContent value="columns" className="flex-1 m-0 overflow-hidden">
           <ScrollArea className="h-full">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Column</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Nullable</TableHead>
-                  <TableHead>Default</TableHead>
-                  <TableHead>Constraints</TableHead>
-                </TableRow>
-              </TableHeader>
+            <div className="min-w-max">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow>
+                    <TableHead className="whitespace-nowrap">Column</TableHead>
+                    <TableHead className="whitespace-nowrap">Type</TableHead>
+                    <TableHead className="whitespace-nowrap">Nullable</TableHead>
+                    <TableHead className="whitespace-nowrap">Default</TableHead>
+                    <TableHead className="whitespace-nowrap">Constraints</TableHead>
+                  </TableRow>
+                </TableHeader>
               <TableBody>
                 {tableSchema.columns.map((column) => (
                   <TableRow key={column.name}>
@@ -276,22 +294,24 @@ export function TableInspector({
                   </TableRow>
                 ))}
               </TableBody>
-            </Table>
+              </Table>
+            </div>
           </ScrollArea>
         </TabsContent>
 
         {/* Indexes Tab */}
-        <TabsContent value="indexes" className="flex-1 m-0">
+        <TabsContent value="indexes" className="flex-1 m-0 overflow-hidden">
           <ScrollArea className="h-full">
             {tableSchema.indexes.length > 0 ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Index Name</TableHead>
-                    <TableHead>Columns</TableHead>
-                    <TableHead>Type</TableHead>
-                  </TableRow>
-                </TableHeader>
+              <div className="min-w-max">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background z-10">
+                    <TableRow>
+                      <TableHead className="whitespace-nowrap">Index Name</TableHead>
+                      <TableHead className="whitespace-nowrap">Columns</TableHead>
+                      <TableHead className="whitespace-nowrap">Type</TableHead>
+                    </TableRow>
+                  </TableHeader>
                 <TableBody>
                   {tableSchema.indexes.map((index) => (
                     <TableRow key={index.name}>
@@ -313,7 +333,8 @@ export function TableInspector({
                     </TableRow>
                   ))}
                 </TableBody>
-              </Table>
+                </Table>
+              </div>
             ) : (
               <div className="flex items-center justify-center h-full">
                 <p className="text-muted-foreground">No indexes found</p>

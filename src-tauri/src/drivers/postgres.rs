@@ -87,12 +87,67 @@ impl PostgresDriver {
                     .and_then(|v| serde_json::Number::from_f64(v))
                     .map(serde_json::Value::Number)
                     .unwrap_or(serde_json::Value::Null),
-                "text" | "varchar" | "bpchar" | "name" => row
+                "text" | "varchar" | "bpchar" | "name" | "char" => row
                     .try_get::<_, Option<String>>(i)
                     .ok()
                     .flatten()
                     .map(serde_json::Value::String)
                     .unwrap_or(serde_json::Value::Null),
+                "uuid" => row
+                    .try_get::<_, Option<uuid::Uuid>>(i)
+                    .ok()
+                    .flatten()
+                    .map(|v| serde_json::Value::String(v.to_string()))
+                    .unwrap_or(serde_json::Value::Null),
+                "timestamp" | "timestamptz" => row
+                    .try_get::<_, Option<chrono::NaiveDateTime>>(i)
+                    .ok()
+                    .flatten()
+                    .map(|v| serde_json::Value::String(v.to_string()))
+                    .or_else(|| {
+                        // Try as DateTime<Utc> for timestamptz
+                        row.try_get::<_, Option<chrono::DateTime<chrono::Utc>>>(i)
+                            .ok()
+                            .flatten()
+                            .map(|v| serde_json::Value::String(v.to_rfc3339()))
+                    })
+                    .unwrap_or(serde_json::Value::Null),
+                "date" => row
+                    .try_get::<_, Option<chrono::NaiveDate>>(i)
+                    .ok()
+                    .flatten()
+                    .map(|v| serde_json::Value::String(v.to_string()))
+                    .unwrap_or(serde_json::Value::Null),
+                "time" | "timetz" => row
+                    .try_get::<_, Option<chrono::NaiveTime>>(i)
+                    .ok()
+                    .flatten()
+                    .map(|v| serde_json::Value::String(v.to_string()))
+                    .unwrap_or(serde_json::Value::Null),
+                "numeric" | "decimal" => {
+                    // Try as f64 first for numeric types
+                    row.try_get::<_, Option<f64>>(i)
+                        .ok()
+                        .flatten()
+                        .and_then(|v| serde_json::Number::from_f64(v))
+                        .map(serde_json::Value::Number)
+                        .or_else(|| {
+                            // Fallback to string for very large or precise decimals
+                            row.try_get::<_, Option<String>>(i)
+                                .ok()
+                                .flatten()
+                                .map(serde_json::Value::String)
+                        })
+                        .unwrap_or(serde_json::Value::Null)
+                },
+                "json" | "jsonb" => {
+                    // Get JSON as string and parse it
+                    row.try_get::<_, Option<String>>(i)
+                        .ok()
+                        .flatten()
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                        .unwrap_or(serde_json::Value::Null)
+                },
                 // For unknown types, try to get as string
                 _ => row
                     .try_get::<_, Option<String>>(i)
