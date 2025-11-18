@@ -1,7 +1,7 @@
 import { useState } from "react";
-import "./App.css";
 import { ConnectionForm } from "./components/ConnectionForm";
 import { ConnectionList } from "./components/ConnectionList";
+import { ModeToggle } from "./components/mode-toggle";
 import { ConnectionProfile } from "./types/database";
 
 function App() {
@@ -25,6 +25,11 @@ function App() {
 
   return (
     <div className="flex h-screen w-full bg-background">
+      {/* Theme Toggle - Top Right Corner */}
+      <div className="fixed top-4 right-4 z-50">
+        <ModeToggle />
+      </div>
+
       {/* Left Side - Connection List */}
       <div className="w-2/5 border-r overflow-y-auto">
         <ConnectionList
