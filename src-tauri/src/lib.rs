@@ -32,6 +32,7 @@ pub fn run() {
             commands::connection::list_connection_profiles,
             commands::connection::connect_to_database,
             commands::connection::disconnect_from_database,
+            commands::query::execute_query,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

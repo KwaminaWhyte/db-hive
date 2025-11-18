@@ -29,11 +29,14 @@ interface ConnectionListProps {
   onEdit?: (profile: ConnectionProfile) => void;
   /** Callback when profiles list changes */
   onProfilesChange?: () => void;
+  /** Callback when successfully connected to a database */
+  onConnected?: (connectionId: string) => void;
 }
 
 export const ConnectionList: FC<ConnectionListProps> = ({
   onEdit,
   onProfilesChange,
+  onConnected,
 }) => {
   const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
   const [loading, setLoading] = useState(false);
@@ -89,7 +92,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     setError(null);
 
     try {
-      await invoke<string>('connect_to_database', {
+      const connectionId = await invoke<string>('connect_to_database', {
         profileId: passwordPrompt.profileId,
         password,
       });
@@ -97,7 +100,9 @@ export const ConnectionList: FC<ConnectionListProps> = ({
       // Success - close password prompt
       setPasswordPrompt(null);
       setPassword('');
-      alert(`Connected to ${passwordPrompt.profileName} successfully!`);
+
+      // Notify parent component
+      onConnected?.(connectionId);
     } catch (err) {
       const dbError = err as DbError;
       setError(`Failed to connect: ${dbError.message}`);

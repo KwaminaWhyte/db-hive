@@ -4,3 +4,4 @@
 //! Commands are organized by functionality into separate submodules.
 
 pub mod connection;
+pub mod query;

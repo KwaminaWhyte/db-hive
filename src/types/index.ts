@@ -9,6 +9,8 @@ export type {
   ConnectionProfile,
   ConnectionStatus,
   DbError,
+  QueryExecutionResult,
+  QueryError,
 } from './database';
 
 export { getDefaultPort, getDriverDisplayName } from './database';

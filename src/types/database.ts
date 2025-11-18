@@ -138,3 +138,38 @@ export function getDriverDisplayName(driver: DbDriver): string {
       return driver;
   }
 }
+
+/**
+ * Query execution result
+ *
+ * Represents the result of executing a SQL query
+ */
+export interface QueryExecutionResult {
+  /** Column names in the result set */
+  columns: string[];
+
+  /** Row data as array of arrays */
+  rows: any[][];
+
+  /** Number of rows affected by DML statements (INSERT, UPDATE, DELETE) */
+  rowsAffected: number | null;
+
+  /** Query execution time in milliseconds */
+  executionTime: number;
+}
+
+/**
+ * Query error
+ *
+ * Extends DbError with query-specific information
+ */
+export interface QueryError extends DbError {
+  /** The SQL query that caused the error */
+  sql?: string;
+
+  /** Line number where error occurred (if available) */
+  line?: number;
+
+  /** Column number where error occurred (if available) */
+  column?: number;
+}
