@@ -490,40 +490,84 @@ async fn export_results_csv(
 
 ### Milestone 1.4: Schema Explorer (Weeks 12-14)
 
-**Week 12: Tree View Component**
+**Week 12: Schema Browser Component** ✅ COMPLETED
 
-- [ ] Build hierarchical tree component:
+- [x] Create schema exploration backend commands: ✅
+  - `get_databases` - List all databases with metadata ✅
+  - `get_schemas` - List schemas in a database ✅
+  - `get_tables` - List tables and views in a schema ✅
+  - `get_table_schema` - Get detailed table structure ✅
 
-  - Databases
-  - Schemas
-  - Tables
-  - Views
-  - Functions
-  - Procedures
+```rust
+// src-tauri/src/commands/schema.rs
+#[tauri::command]
+pub async fn get_databases(
+    connection_id: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<DatabaseInfo>, DbError> {
+    // Fetches databases from active connection
+}
 
-- [ ] Add lazy loading for tree nodes
-- [ ] Implement search/filter in tree
-- [ ] Add icons for different object types
+#[tauri::command]
+pub async fn get_tables(
+    connection_id: String,
+    schema: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<TableInfo>, DbError> {
+    // Fetches tables and views from schema
+}
+```
 
-**Week 13: Table Inspector**
+- [x] Build SchemaExplorer React component: ✅
+  - Database dropdown selector at top ✅
+  - Auto-selects first database on connection ✅
+  - Displays tables list below ✅
+  - Icons for different object types (Table, View) ✅
+  - Shows row counts when available ✅
+  - Disconnect button in header ✅
 
-- [ ] Show table metadata (columns, types, nullable, defaults)
-- [ ] Display indexes and constraints
-- [ ] Show foreign key relationships
-- [ ] Add sample data preview
+- [x] Add TypeScript types for schema metadata: ✅
+  - `DatabaseInfo`, `SchemaInfo`, `TableInfo` ✅
+  - `ColumnInfo`, `IndexInfo`, `TableSchema` ✅
 
-**Week 14: Quick Actions**
+- [x] Integrate with App layout: ✅
+  - Left sidebar shows ConnectionList when disconnected ✅
+  - Automatically switches to SchemaExplorer when connected ✅
+  - Returns to ConnectionList on disconnect ✅
 
-- [ ] Implement context menus:
+**Implementation Details:**
+- Created `SchemaExplorer.tsx` with database dropdown and table list
+- Uses shadcn/ui Select, ScrollArea, and Button components
+- Comprehensive error handling for database/table loading
+- Loading states with spinners
+- Visual icons (green for tables, blue for views)
+- Inspired by Beekeeper Studio design patterns
 
-  - "Open Table" (view data)
+**Week 13: Table Inspector** (TODO: Next to implement)
+
+- [ ] Show table metadata on click:
+  - Columns (name, type, nullable, default, primary key)
+  - Indexes and constraints
+  - Foreign key relationships
+- [ ] Add tabs for different views (Columns / Indexes / Relations / Data)
+- [ ] Display sample data preview (first 50 rows)
+- [ ] Show table statistics (row count, size)
+
+**Week 14: Quick Actions & Enhancements** (TODO: Future)
+
+- [ ] Implement context menus on table items:
+  - "View Data" (SELECT * with LIMIT)
   - "Generate SELECT"
-  - "Generate INSERT"
+  - "Generate INSERT template"
   - "Copy Name"
-  - "Export Structure"
+  - "Refresh"
 
+- [ ] Add search/filter in table list
+- [ ] Implement hierarchical tree view (expand/collapse schemas)
+- [ ] Add lazy loading for tree nodes
 - [ ] Add drag-and-drop (table name to editor)
-- [ ] Implement "Refresh" functionality
+- [ ] Support for Functions and Procedures
+- [ ] Schema refresh functionality
 
 ### MVP Polish & Testing
 

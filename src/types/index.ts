@@ -11,6 +11,12 @@ export type {
   DbError,
   QueryExecutionResult,
   QueryError,
+  DatabaseInfo,
+  SchemaInfo,
+  TableInfo,
+  ColumnInfo,
+  IndexInfo,
+  TableSchema,
 } from './database';
 
 export { getDefaultPort, getDriverDisplayName } from './database';

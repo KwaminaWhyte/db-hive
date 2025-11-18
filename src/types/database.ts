@@ -173,3 +173,108 @@ export interface QueryError extends DbError {
   /** Column number where error occurred (if available) */
   column?: number;
 }
+
+/**
+ * Database information
+ *
+ * Represents a database/catalog within a database server
+ */
+export interface DatabaseInfo {
+  /** Database name */
+  name: string;
+
+  /** Database owner/creator (if available) */
+  owner?: string | null;
+
+  /** Database size in bytes (if available) */
+  size?: number | null;
+}
+
+/**
+ * Schema information
+ *
+ * Represents a schema/namespace within a database
+ */
+export interface SchemaInfo {
+  /** Schema name */
+  name: string;
+
+  /** Parent database name */
+  database: string;
+}
+
+/**
+ * Table information
+ *
+ * Represents a table or view within a schema
+ */
+export interface TableInfo {
+  /** Table name */
+  name: string;
+
+  /** Parent schema name */
+  schema: string;
+
+  /** Approximate row count (if available) */
+  rowCount?: number | null;
+
+  /** Table type: "TABLE", "VIEW", "MATERIALIZED VIEW", etc. */
+  tableType: string;
+}
+
+/**
+ * Column information
+ *
+ * Represents a column within a table
+ */
+export interface ColumnInfo {
+  /** Column name */
+  name: string;
+
+  /** Data type (e.g., "VARCHAR(255)", "INTEGER", "TIMESTAMP") */
+  dataType: string;
+
+  /** Whether the column accepts NULL values */
+  nullable: boolean;
+
+  /** Default value expression (if any) */
+  defaultValue?: string | null;
+
+  /** Whether this column is part of the primary key */
+  isPrimaryKey: boolean;
+}
+
+/**
+ * Index information
+ *
+ * Represents an index on a table
+ */
+export interface IndexInfo {
+  /** Index name */
+  name: string;
+
+  /** Columns included in the index (in order) */
+  columns: string[];
+
+  /** Whether this is a unique index */
+  isUnique: boolean;
+
+  /** Whether this is the primary key index */
+  isPrimary: boolean;
+}
+
+/**
+ * Complete table schema
+ *
+ * Contains all metadata about a table
+ */
+export interface TableSchema {
+  /** Table metadata */
+  table: TableInfo;
+
+  /** Column definitions */
+  columns: ColumnInfo[];
+
+  /** Indexes defined on the table */
+  indexes: IndexInfo[];
+}

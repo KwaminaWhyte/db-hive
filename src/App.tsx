@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ConnectionForm } from "./components/ConnectionForm";
 import { ConnectionList } from "./components/ConnectionList";
+import { SchemaExplorer } from "./components/SchemaExplorer";
 import { QueryPanel } from "./components/QueryPanel";
 import { ModeToggle } from "./components/mode-toggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -38,6 +39,13 @@ function App() {
     setActiveTab("query");
   };
 
+  // Handle disconnect
+  const handleDisconnect = () => {
+    setActiveConnectionId(null);
+    // Switch back to connections tab
+    setActiveTab("connections");
+  };
+
   // Execute query via Tauri command
   const executeQuery = async (
     sql: string
@@ -59,14 +67,21 @@ function App() {
         <ModeToggle />
       </div>
 
-      {/* Left Sidebar - Connection List */}
+      {/* Left Sidebar - Connection List or Schema Explorer */}
       <div className="w-80 border-r overflow-y-auto">
-        <ConnectionList
-          key={refreshKey}
-          onEdit={handleEdit}
-          onProfilesChange={() => setRefreshKey((prev) => prev + 1)}
-          onConnected={handleConnected}
-        />
+        {activeConnectionId ? (
+          <SchemaExplorer
+            connectionId={activeConnectionId}
+            onDisconnect={handleDisconnect}
+          />
+        ) : (
+          <ConnectionList
+            key={refreshKey}
+            onEdit={handleEdit}
+            onProfilesChange={() => setRefreshKey((prev) => prev + 1)}
+            onConnected={handleConnected}
+          />
+        )}
       </div>
 
       {/* Main Content Area - Tabs */}
