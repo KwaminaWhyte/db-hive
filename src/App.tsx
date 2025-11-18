@@ -1,50 +1,58 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+import { ConnectionForm } from "./components/ConnectionForm";
+import { ConnectionList } from "./components/ConnectionList";
+import { ConnectionProfile } from "./types/database";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [selectedProfile, setSelectedProfile] = useState<
+    ConnectionProfile | undefined
+  >(undefined);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  // Handle successful profile save
+  const handleProfileSaved = () => {
+    // Trigger refresh of connection list
+    setRefreshKey((prev) => prev + 1);
+    // Clear selected profile
+    setSelectedProfile(undefined);
+  };
+
+  // Handle edit button click
+  const handleEdit = (profile: ConnectionProfile) => {
+    setSelectedProfile(profile);
+  };
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
+    <div style={{ display: "flex", height: "100vh" }}>
+      {/* Left Side - Connection List */}
+      <div
+        style={{
+          width: "40%",
+          borderRight: "1px solid #ccc",
+          overflowY: "auto",
         }}
       >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+        <ConnectionList
+          key={refreshKey}
+          onEdit={handleEdit}
+          onProfilesChange={() => setRefreshKey((prev) => prev + 1)}
         />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      </div>
+
+      {/* Right Side - Connection Form */}
+      <div
+        style={{
+          width: "60%",
+          overflowY: "auto",
+        }}
+      >
+        <ConnectionForm
+          profile={selectedProfile}
+          onSuccess={handleProfileSaved}
+        />
+      </div>
+    </div>
   );
 }
 
