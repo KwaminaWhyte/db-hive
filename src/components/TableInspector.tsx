@@ -19,6 +19,8 @@ import {
   Database,
   X,
   RefreshCw,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { TableSchema, QueryExecutionResult } from "@/types";
 
@@ -43,6 +45,9 @@ export function TableInspector({
   const [loadingSampleData, setLoadingSampleData] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("data");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(50);
+  const [totalRows, setTotalRows] = useState<number | null>(null);
 
   useEffect(() => {
     // Reset state when table changes
@@ -50,17 +55,19 @@ export function TableInspector({
     setSampleData(null);
     setError(null);
     setActiveTab("data");
+    setCurrentPage(1);
+    setTotalRows(null);
 
     // Fetch new table schema
     fetchTableSchema();
   }, [connectionId, schema, tableName]);
 
-  // Fetch sample data when Data tab is opened and schema is loaded
+  // Fetch sample data when Data tab is opened, schema is loaded, or page changes
   useEffect(() => {
-    if (activeTab === "data" && !sampleData && !loadingSampleData && tableSchema) {
+    if (activeTab === "data" && tableSchema) {
       fetchSampleData();
     }
-  }, [activeTab, tableName, schema, tableSchema]);
+  }, [activeTab, tableName, schema, tableSchema, currentPage]);
 
   const fetchTableSchema = async () => {
     setLoading(true);
@@ -85,9 +92,28 @@ export function TableInspector({
     setLoadingSampleData(true);
     setError(null);
     try {
+      // Calculate offset based on current page
+      const offset = (currentPage - 1) * pageSize;
+
+      // Fetch total row count if not already fetched
+      if (totalRows === null) {
+        try {
+          const countResult = await invoke<QueryExecutionResult>("execute_query", {
+            connectionId,
+            sql: `SELECT COUNT(*) FROM "${schema}"."${tableName}"`,
+          });
+          const count = countResult.rows[0]?.[0];
+          setTotalRows(typeof count === 'number' ? count : parseInt(String(count)) || 0);
+        } catch (err) {
+          console.error("Failed to fetch row count:", err);
+          // Continue without total count
+        }
+      }
+
+      // Fetch paginated data
       const result = await invoke<QueryExecutionResult>("execute_query", {
         connectionId,
-        sql: `SELECT * FROM "${schema}"."${tableName}" LIMIT 50`,
+        sql: `SELECT * FROM "${schema}"."${tableName}" LIMIT ${pageSize} OFFSET ${offset}`,
       });
       setSampleData(result);
     } catch (err) {
@@ -103,9 +129,27 @@ export function TableInspector({
     fetchTableSchema();
     if (activeTab === "data") {
       setSampleData(null);
+      setTotalRows(null);
+      setCurrentPage(1);
       fetchSampleData();
     }
   };
+
+  const handleNextPage = () => {
+    if (totalRows === null) return;
+    const totalPages = Math.ceil(totalRows / pageSize);
+    if (currentPage < totalPages) {
+      setCurrentPage(currentPage + 1);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (currentPage > 1) {
+      setCurrentPage(currentPage - 1);
+    }
+  };
+
+  const totalPages = totalRows !== null ? Math.ceil(totalRows / pageSize) : null;
 
   if (loading) {
     return (
@@ -184,59 +228,99 @@ export function TableInspector({
         </div>
 
         {/* Data Tab */}
-        <TabsContent value="data" className="flex-1 m-0 overflow-hidden">
+        <TabsContent value="data" className="flex-1 m-0 overflow-hidden flex flex-col">
           {loadingSampleData ? (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center flex-1">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : sampleData ? (
-            <div className="h-full flex flex-col">
-              <ScrollArea className="flex-1">
-                <div className="min-w-max">
-                  <Table>
-                    <TableHeader className="sticky top-0 bg-background z-10">
-                      <TableRow>
-                        {sampleData.columns.map((col) => (
-                          <TableHead key={col} className="whitespace-nowrap">
-                            {col}
-                          </TableHead>
-                        ))}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sampleData.rows.map((row, rowIndex) => (
-                        <TableRow key={rowIndex}>
-                          {row.map((cell, cellIndex) => (
-                            <TableCell key={cellIndex} className="whitespace-nowrap">
-                              {cell === null || cell === undefined ? (
-                                <span className="italic text-muted-foreground">
-                                  NULL
-                                </span>
-                              ) : typeof cell === "object" ? (
-                                <code className="text-xs bg-muted px-1 rounded">
-                                  {JSON.stringify(cell)}
-                                </code>
-                              ) : cell === "" ? (
-                                <span className="italic text-muted-foreground">
-                                  (empty)
-                                </span>
-                              ) : (
-                                <span>{String(cell)}</span>
-                              )}
-                            </TableCell>
+            <>
+              <div className="flex-1 overflow-hidden">
+                <ScrollArea className="h-full w-full">
+                  <div className="min-w-max">
+                    <Table>
+                      <TableHeader className="sticky top-0 bg-background z-10">
+                        <TableRow>
+                          {sampleData.columns.map((col) => (
+                            <TableHead key={col} className="whitespace-nowrap font-semibold">
+                              {col}
+                            </TableHead>
                           ))}
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </ScrollArea>
-              <div className="p-4 text-center text-sm text-muted-foreground border-t">
-                Showing {sampleData.rows.length} rows (limited to 50)
+                      </TableHeader>
+                      <TableBody>
+                        {sampleData.rows.map((row, rowIndex) => (
+                          <TableRow key={rowIndex}>
+                            {row.map((cell, cellIndex) => (
+                              <TableCell key={cellIndex} className="whitespace-nowrap">
+                                {cell === null || cell === undefined ? (
+                                  <span className="italic text-muted-foreground">
+                                    NULL
+                                  </span>
+                                ) : typeof cell === "object" ? (
+                                  <code className="text-xs bg-muted px-1 rounded">
+                                    {JSON.stringify(cell)}
+                                  </code>
+                                ) : cell === "" ? (
+                                  <span className="italic text-muted-foreground">
+                                    (empty)
+                                  </span>
+                                ) : (
+                                  <span>{String(cell)}</span>
+                                )}
+                              </TableCell>
+                            ))}
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </ScrollArea>
               </div>
-            </div>
+
+              {/* Pagination Controls */}
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-background">
+                <div className="text-sm text-muted-foreground">
+                  {totalRows !== null ? (
+                    <>
+                      Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalRows)} of {totalRows.toLocaleString()} rows
+                    </>
+                  ) : (
+                    <>Showing {sampleData.rows.length} rows</>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {totalPages !== null && (
+                    <span className="text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages}
+                    </span>
+                  )}
+                  <div className="flex gap-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handlePreviousPage}
+                      disabled={currentPage === 1 || loadingSampleData}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      Previous
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleNextPage}
+                      disabled={totalPages === null || currentPage >= totalPages || loadingSampleData}
+                    >
+                      Next
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </>
           ) : (
-            <div className="flex items-center justify-center h-full">
+            <div className="flex items-center justify-center flex-1">
               <div className="text-center space-y-2">
                 <Database className="h-8 w-8 mx-auto text-muted-foreground" />
                 <p className="text-muted-foreground">No data loaded</p>
@@ -250,7 +334,7 @@ export function TableInspector({
 
         {/* Columns Tab */}
         <TabsContent value="columns" className="flex-1 m-0 overflow-hidden">
-          <ScrollArea className="h-full">
+          <ScrollArea className="h-full w-full">
             <div className="min-w-max">
               <Table>
                 <TableHeader className="sticky top-0 bg-background z-10">
@@ -301,7 +385,7 @@ export function TableInspector({
 
         {/* Indexes Tab */}
         <TabsContent value="indexes" className="flex-1 m-0 overflow-hidden">
-          <ScrollArea className="h-full">
+          <ScrollArea className="h-full w-full">
             {tableSchema.indexes.length > 0 ? (
               <div className="min-w-max">
                 <Table>
