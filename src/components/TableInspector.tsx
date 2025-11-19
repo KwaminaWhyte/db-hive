@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -21,10 +21,12 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  Copy,
 } from "lucide-react";
 import { TableSchema, QueryExecutionResult } from "@/types";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { RowJsonViewer } from "./RowJsonViewer";
+import { toast } from "sonner";
 
 interface TableInspectorProps {
   connectionId: string;
@@ -63,6 +65,39 @@ export function TableInspector({
     // PostgreSQL, SQLite use double quotes
     return `"${identifier}"`;
   };
+
+  // Copy helper functions
+  const copyToClipboard = useCallback(async (text: string, message: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(message);
+    } catch (err) {
+      toast.error("Failed to copy to clipboard");
+    }
+  }, []);
+
+  const copyCellValue = useCallback(async (value: any) => {
+    const text = value === null ? 'NULL' : String(value);
+    await copyToClipboard(text, "Cell value copied");
+  }, [copyToClipboard]);
+
+  const copyRowValues = useCallback(async (row: any[]) => {
+    const text = row.map((v) => (v === null ? 'NULL' : String(v))).join('\t');
+    await copyToClipboard(text, "Row copied");
+  }, [copyToClipboard]);
+
+  const copyColumnValues = useCallback(async (columnName: string) => {
+    if (!sampleData) return;
+    const columnIndex = sampleData.columns.indexOf(columnName);
+    if (columnIndex === -1) return;
+
+    const columnValues = sampleData.rows.map((row) => {
+      const value = row[columnIndex];
+      return value === null ? 'NULL' : String(value);
+    });
+    const text = columnValues.join('\n');
+    await copyToClipboard(text, `Column "${columnName}" copied`);
+  }, [sampleData, copyToClipboard]);
 
   useEffect(() => {
     // Reset state when table changes
@@ -296,14 +331,28 @@ export function TableInspector({
                               {sampleData.columns.map((col) => {
                                 const columnInfo = tableSchema?.columns.find(c => c.name === col);
                                 return (
-                                  <TableHead key={col} className="whitespace-nowrap">
-                                    <div className="flex flex-col gap-0.5">
-                                      <span className="font-medium text-foreground">{col}</span>
-                                      {columnInfo && (
-                                        <span className="text-[10px] font-normal text-muted-foreground">
-                                          {columnInfo.dataType.toUpperCase()}
-                                        </span>
-                                      )}
+                                  <TableHead key={col} className="whitespace-nowrap group">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="font-medium text-foreground">{col}</span>
+                                        {columnInfo && (
+                                          <span className="text-[10px] font-normal text-muted-foreground">
+                                            {columnInfo.dataType.toUpperCase()}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          copyColumnValues(col);
+                                        }}
+                                        title={`Copy column "${col}"`}
+                                      >
+                                        <Copy className="h-3 w-3" />
+                                      </Button>
                                     </div>
                                   </TableHead>
                                 );
@@ -316,18 +365,40 @@ export function TableInspector({
                               return (
                                 <TableRow
                                   key={rowIndex}
-                                  className="hover:bg-muted/50 cursor-pointer"
-                                  onDoubleClick={() => {
-                                    setSelectedRow(row);
-                                    setShowRowViewer(true);
-                                  }}
+                                  className="hover:bg-muted/50 group"
                                   title="Double-click to view row details"
                                 >
-                                  <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
-                                    {absoluteRowNumber}
+                                  <TableCell
+                                    className="w-12 text-center text-xs text-muted-foreground font-mono"
+                                    onDoubleClick={() => {
+                                      setSelectedRow(row);
+                                      setShowRowViewer(true);
+                                    }}
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <span>{absoluteRowNumber}</span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={() => copyRowValues(row)}
+                                        title="Copy row"
+                                      >
+                                        <Copy className="h-3 w-3" />
+                                      </Button>
+                                    </div>
                                   </TableCell>
                                   {row.map((cell, cellIndex) => (
-                                    <TableCell key={cellIndex} className="whitespace-nowrap font-mono text-sm">
+                                    <TableCell
+                                      key={cellIndex}
+                                      className="whitespace-nowrap font-mono text-sm cursor-pointer hover:bg-accent/50"
+                                      onClick={() => copyCellValue(cell)}
+                                      onDoubleClick={() => {
+                                        setSelectedRow(row);
+                                        setShowRowViewer(true);
+                                      }}
+                                      title="Click to copy cell value"
+                                    >
                                       {cell === null || cell === undefined ? (
                                         <span className="italic text-muted-foreground opacity-50">
                                           NULL
