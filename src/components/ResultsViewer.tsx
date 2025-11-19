@@ -1,4 +1,4 @@
-import { FC, useMemo, useState } from "react";
+import { FC, useMemo, useState, useCallback } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -60,34 +60,34 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
   const [viewMode, setViewMode] = useState<"grid" | "json" | "raw">("grid");
 
   // Copy helper functions
-  const copyToClipboard = async (text: string, message: string) => {
+  const copyToClipboard = useCallback(async (text: string, message: string) => {
     try {
       await navigator.clipboard.writeText(text);
       toast.success(message);
     } catch (err) {
       toast.error("Failed to copy to clipboard");
     }
-  };
+  }, []);
 
-  const copyCellValue = async (value: any) => {
+  const copyCellValue = useCallback(async (value: any) => {
     const text = value === null ? 'NULL' : String(value);
     await copyToClipboard(text, "Cell value copied to clipboard");
-  };
+  }, [copyToClipboard]);
 
-  const copyRowValues = async (rowIndex: number) => {
+  const copyRowValues = useCallback(async (rowIndex: number) => {
     const row = rows[rowIndex];
     const text = row.map((v) => (v === null ? 'NULL' : String(v))).join('\t');
     await copyToClipboard(text, `Row ${rowIndex + 1} copied to clipboard`);
-  };
+  }, [rows, copyToClipboard]);
 
-  const copyColumnValues = async (columnIndex: number) => {
+  const copyColumnValues = useCallback(async (columnIndex: number) => {
     const columnValues = rows.map((row) => {
       const value = row[columnIndex];
       return value === null ? 'NULL' : String(value);
     });
     const text = columnValues.join('\n');
     await copyToClipboard(text, `Column "${columns[columnIndex]}" copied to clipboard`);
-  };
+  }, [rows, columns, copyToClipboard]);
 
   // Handle CSV export
   const handleExportCSV = async () => {
@@ -198,7 +198,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
         );
       },
     }));
-  }, [columns]);
+  }, [columns, rows, copyCellValue, copyColumnValues]);
 
   const table = useReactTable({
     data: rows,
