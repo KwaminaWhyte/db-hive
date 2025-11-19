@@ -35,16 +35,22 @@ export function SchemaExplorer({
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("public");
   const [tables, setTables] = useState<TableInfo[]>([]);
+  const [databases, setDatabases] = useState<string[]>([]);
+  const [selectedDatabase, setSelectedDatabase] = useState<string>("");
   const [loadingSchemas, setLoadingSchemas] = useState(true);
   const [loadingTables, setLoadingTables] = useState(false);
+  const [loadingDatabases, setLoadingDatabases] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showDatabaseHint, setShowDatabaseHint] = useState(false);
 
   // Get the connected database name from the connection profile
   const connectedDatabase = connectionProfile.database || "postgres";
 
-  // Fetch schemas on component mount
+  // Fetch schemas and databases on component mount
   useEffect(() => {
+    setSelectedDatabase(connectedDatabase);
     fetchSchemas();
+    fetchDatabases();
   }, [connectionId]);
 
   // Fetch tables when schema is selected
@@ -53,6 +59,22 @@ export function SchemaExplorer({
       fetchTables(selectedSchema);
     }
   }, [selectedSchema]);
+
+  const fetchDatabases = async () => {
+    setLoadingDatabases(true);
+    try {
+      const dbsData = await invoke<{ name: string }[]>("get_databases", {
+        connectionId,
+      });
+      const dbNames = dbsData.map(db => db.name);
+      setDatabases(dbNames);
+    } catch (err) {
+      console.error("Failed to fetch databases:", err);
+      // Don't show error, databases dropdown is optional
+    } finally {
+      setLoadingDatabases(false);
+    }
+  };
 
   const fetchSchemas = async () => {
     setLoadingSchemas(true);
@@ -109,6 +131,15 @@ export function SchemaExplorer({
     }
   };
 
+  const handleDatabaseChange = (database: string) => {
+    setSelectedDatabase(database);
+    if (database !== connectedDatabase) {
+      setShowDatabaseHint(true);
+    } else {
+      setShowDatabaseHint(false);
+    }
+  };
+
   const getTableIcon = (tableType: string) => {
     const type = tableType.toUpperCase();
     if (type.includes("VIEW")) {
@@ -137,16 +168,54 @@ export function SchemaExplorer({
           </Button>
         </div>
 
-        {/* Connected Database */}
+        {/* Database Selector */}
         <div className="mb-3">
           <div className="text-xs text-muted-foreground mb-1">
-            Connected Database
+            Database
           </div>
-          <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
-            <Database className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">{connectedDatabase}</span>
-          </div>
+          {loadingDatabases ? (
+            <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <span className="text-sm">Loading databases...</span>
+            </div>
+          ) : databases.length > 0 ? (
+            <Select value={selectedDatabase} onValueChange={handleDatabaseChange}>
+              <SelectTrigger className="w-full">
+                <div className="flex items-center gap-2">
+                  <Database className="h-4 w-4 text-muted-foreground" />
+                  <SelectValue placeholder="Select a database" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                {databases.map((db) => (
+                  <SelectItem key={db} value={db}>
+                    <div className="flex items-center gap-2">
+                      {db === connectedDatabase && (
+                        <span className="text-xs text-green-600">●</span>
+                      )}
+                      <span>{db}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
+              <Database className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">{connectedDatabase}</span>
+            </div>
+          )}
         </div>
+
+        {/* Database Switch Hint */}
+        {showDatabaseHint && (
+          <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-md">
+            <p className="text-xs text-yellow-800 dark:text-yellow-200">
+              To switch to "{selectedDatabase}", you need to edit the connection
+              profile and reconnect.
+            </p>
+          </div>
+        )}
 
         {/* Schema Selector */}
         {loadingSchemas ? (

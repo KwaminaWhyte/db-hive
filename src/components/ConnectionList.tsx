@@ -247,7 +247,9 @@ export const ConnectionList: FC<ConnectionListProps> = ({
               return (
                 <div
                   key={profile.id}
-                  className="group relative border rounded-lg p-3 hover:bg-muted/50 transition-colors"
+                  className="group relative border rounded-lg p-3 hover:bg-muted/50 transition-colors cursor-pointer select-none"
+                  onDoubleClick={() => handleConnectClick(profile)}
+                  title="Double-click to connect"
                 >
                   <div className="flex items-start justify-between">
                     <div className="flex items-start gap-3 flex-1">
@@ -263,6 +265,11 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                           >
                             {driverName}
                           </Badge>
+                          {connectingId === profile.id && (
+                            <span className="text-xs text-muted-foreground animate-pulse">
+                              Connecting...
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-muted-foreground space-y-0.5">
                           <div className="flex items-center gap-4">
@@ -285,19 +292,13 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button
                         variant="ghost"
-                        size="sm"
-                        onClick={() => handleConnectClick(profile)}
-                        disabled={connectingId !== null}
-                      >
-                        {connectingId === profile.id
-                          ? "Connecting..."
-                          : "Connect"}
-                      </Button>
-                      <Button
-                        variant="ghost"
                         size="icon"
                         className="h-8 w-8"
-                        onClick={() => onEdit?.(profile)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit?.(profile);
+                        }}
+                        title="Edit connection"
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -305,7 +306,11 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                         variant="ghost"
                         size="icon"
                         className="h-8 w-8 hover:text-destructive"
-                        onClick={() => handleDeleteClick(profile)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteClick(profile);
+                        }}
+                        title="Delete connection"
                       >
                         <Trash className="h-4 w-4" />
                       </Button>
