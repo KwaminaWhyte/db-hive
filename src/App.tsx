@@ -10,8 +10,10 @@ import { ConnectionProfile, QueryExecutionResult } from "./types/database";
 import { invoke } from "@tauri-apps/api/core";
 import { X } from "lucide-react";
 import { Toaster } from "sonner";
+import { useTheme } from "./components/theme-provider";
 
 function App() {
+  const { theme } = useTheme();
   const [selectedProfile, setSelectedProfile] = useState<
     ConnectionProfile | undefined
   >(undefined);
@@ -258,7 +260,11 @@ function App() {
           </Tabs>
         )}
       </div>
-      <Toaster richColors position="bottom-right" />
+      <Toaster
+        richColors
+        position="bottom-right"
+        theme={theme === "system" ? undefined : theme}
+      />
     </div>
   );
 }
