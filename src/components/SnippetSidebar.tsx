@@ -51,8 +51,12 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [editingSnippet, setEditingSnippet] = useState<QuerySnippet | null>(null);
-  const [deletingSnippet, setDeletingSnippet] = useState<QuerySnippet | null>(null);
+  const [editingSnippet, setEditingSnippet] = useState<QuerySnippet | null>(
+    null
+  );
+  const [deletingSnippet, setDeletingSnippet] = useState<QuerySnippet | null>(
+    null
+  );
 
   // Form states
   const [formName, setFormName] = useState("");
@@ -219,7 +223,10 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
       <div className="p-4 border-b shrink-0">
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-lg font-semibold">Snippets</h2>
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+          <Dialog
+            open={isCreateDialogOpen}
+            onOpenChange={setIsCreateDialogOpen}
+          >
             <DialogTrigger asChild>
               <Button size="sm">New Snippet</Button>
             </DialogTrigger>
@@ -279,7 +286,10 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
                 >
                   Cancel
                 </Button>
-                <Button onClick={handleCreateSnippet} disabled={!formName || !formQuery}>
+                <Button
+                  onClick={handleCreateSnippet}
+                  disabled={!formName || !formQuery}
+                >
                   Create
                 </Button>
               </DialogFooter>
@@ -331,12 +341,16 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
       <ScrollArea className="flex-1">
         {loading ? (
           <div className="flex items-center justify-center p-8">
-            <div className="text-muted-foreground text-sm">Loading snippets...</div>
+            <div className="text-muted-foreground text-sm">
+              Loading snippets...
+            </div>
           </div>
         ) : filteredSnippets.length === 0 ? (
           <div className="flex flex-col items-center justify-center p-8 text-center">
             <div className="text-muted-foreground mb-2">
-              {snippets.length === 0 ? "No snippets yet" : "No matching snippets"}
+              {snippets.length === 0
+                ? "No snippets yet"
+                : "No matching snippets"}
             </div>
             <div className="text-sm text-muted-foreground">
               {snippets.length === 0
@@ -413,7 +427,9 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Snippet</DialogTitle>
-            <DialogDescription>Update your saved query snippet</DialogDescription>
+            <DialogDescription>
+              Update your saved query snippet
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
@@ -442,7 +458,9 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-tags">Tags (comma-separated, optional)</Label>
+              <Label htmlFor="edit-tags">
+                Tags (comma-separated, optional)
+              </Label>
               <Input
                 id="edit-tags"
                 value={formTags}
@@ -461,7 +479,10 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
             >
               Cancel
             </Button>
-            <Button onClick={handleEditSnippet} disabled={!formName || !formQuery}>
+            <Button
+              onClick={handleEditSnippet}
+              disabled={!formName || !formQuery}
+            >
               Save Changes
             </Button>
           </DialogFooter>
@@ -469,20 +490,25 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
       </Dialog>
 
       {/* Delete Dialog */}
-      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+      <AlertDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete snippet?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete "{deletingSnippet?.name}"? This action
-              cannot be undone.
+              Are you sure you want to delete "{deletingSnippet?.name}"? This
+              action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setDeletingSnippet(null)}>
               Cancel
             </AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteSnippet}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={handleDeleteSnippet}>
+              Delete
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
