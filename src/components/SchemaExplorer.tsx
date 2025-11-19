@@ -67,7 +67,7 @@ export function SchemaExplorer({
       const dbsData = await invoke<{ name: string }[]>("get_databases", {
         connectionId,
       });
-      const dbNames = dbsData.map(db => db.name);
+      const dbNames = dbsData.map((db) => db.name);
       setDatabases(dbNames);
     } catch (err) {
       console.error("Failed to fetch databases:", err);
@@ -196,34 +196,19 @@ export function SchemaExplorer({
     <div className="h-full flex flex-col">
       {/* Header with Disconnect Button */}
       <div className="border-b p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Database className="h-5 w-5" />
-            Schema Explorer
-          </h2>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleDisconnect}
-            color="danger"
-          >
-            <LogOut className="h-4 w-4 mr-2" />
-            Disconnect
-          </Button>
-        </div>
-
         {/* Database Selector */}
         <div className="mb-3">
-          <div className="text-xs text-muted-foreground mb-1">
-            Database
-          </div>
+          <div className="text-xs text-muted-foreground mb-1">Database</div>
           {loadingDatabases ? (
             <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               <span className="text-sm">Loading databases...</span>
             </div>
           ) : databases.length > 0 ? (
-            <Select value={selectedDatabase} onValueChange={handleDatabaseChange}>
+            <Select
+              value={selectedDatabase}
+              onValueChange={handleDatabaseChange}
+            >
               <SelectTrigger className="w-full">
                 <div className="flex items-center gap-2">
                   <Database className="h-4 w-4 text-muted-foreground" />
@@ -305,7 +290,9 @@ export function SchemaExplorer({
                             ? "bg-accent text-accent-foreground"
                             : "hover:bg-accent/50"
                         }`}
-                        onClick={() => onTableSelect(selectedSchema, table.name)}
+                        onDoubleClick={() =>
+                          onTableSelect(selectedSchema, table.name)
+                        }
                       >
                         {getTableIcon(table.tableType)}
                         <span className="flex-1 text-sm font-medium">
@@ -319,7 +306,9 @@ export function SchemaExplorer({
                           )}
                         <ChevronRight
                           className={`h-4 w-4 text-muted-foreground transition-opacity ${
-                            isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                            isSelected
+                              ? "opacity-100"
+                              : "opacity-0 group-hover:opacity-100"
                           }`}
                         />
                       </button>
@@ -338,6 +327,17 @@ export function SchemaExplorer({
             </div>
           </ScrollArea>
         )}
+      </div>
+      <div className="p-4 border-t">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDisconnect}
+          color="danger"
+        >
+          <LogOut className="h-4 w-4 mr-2" />
+          Disconnect
+        </Button>
       </div>
     </div>
   );
