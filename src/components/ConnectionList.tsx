@@ -317,10 +317,10 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                             </span>
                             {profile.database && (
                               <>
-                                <span className="text-muted-foreground/50">
+                                <span key="separator" className="text-muted-foreground/50">
                                   •
                                 </span>
-                                <span>{profile.database}</span>
+                                <span key="database">{profile.database}</span>
                               </>
                             )}
                           </div>

@@ -111,7 +111,7 @@ export function HistoryPanel({
   return (
     <div className="flex flex-col h-full">
       <CardHeader className="shrink-0">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-2">
           <div>
             <CardTitle>Query History</CardTitle>
             <CardDescription>
