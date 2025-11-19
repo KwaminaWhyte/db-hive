@@ -258,7 +258,7 @@ pub async fn connect_to_database(
         host: profile.host.clone(),
         port: profile.port,
         username: profile.username.clone(),
-        password: Some(password),
+        password: Some(password.clone()),
         database: profile.database.clone(),
         timeout: Some(30),
     };
@@ -291,9 +291,10 @@ pub async fn connect_to_database(
         }
     };
 
-    // Store connection in state
+    // Store connection and password in state
     let mut state = state.lock().unwrap();
     state.add_connection(profile_id.clone(), connection);
+    state.connection_passwords.insert(profile_id.clone(), password);
 
     Ok(profile_id)
 }
@@ -316,9 +317,10 @@ pub async fn disconnect_from_database(
     connection_id: String,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<(), DbError> {
-    // Remove connection from state
+    // Remove connection and password from state
     let connection = {
         let mut state = state.lock().unwrap();
+        state.connection_passwords.remove(&connection_id); // Clear stored password
         state
             .remove_connection(&connection_id)
             .ok_or_else(|| {
@@ -330,6 +332,108 @@ pub async fn disconnect_from_database(
     connection.close().await?;
 
     Ok(())
+}
+
+/// Switch to a different database using the same connection credentials
+///
+/// This command creates a new connection to a different database on the same server,
+/// reusing the credentials from the existing connection. This is useful when no
+/// specific database was configured in the profile and the user wants to browse
+/// different databases.
+///
+/// # Arguments
+///
+/// * `connection_id` - ID of the current connection
+/// * `new_database` - Name of the database to switch to
+/// * `state` - Application state
+///
+/// # Returns
+///
+/// Returns the connection ID if successful
+///
+/// # Notes
+///
+/// This maintains the same connection ID but creates a new underlying connection
+/// to the different database.
+#[tauri::command]
+pub async fn switch_database(
+    connection_id: String,
+    new_database: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<String, DbError> {
+    // Get the profile and password from state
+    let (profile, password) = {
+        let state_guard = state.lock().unwrap();
+
+        // Get the connection to ensure it exists
+        let _connection = state_guard
+            .get_connection(&connection_id)
+            .ok_or_else(|| {
+                DbError::NotFound(format!("Connection with ID {} not found", connection_id))
+            })?;
+
+        // Get the profile
+        let profile = state_guard
+            .get_profile(&connection_id)
+            .ok_or_else(|| {
+                DbError::NotFound(format!("Profile for connection {} not found", connection_id))
+            })?
+            .clone();
+
+        // Get the stored password
+        let password = state_guard
+            .connection_passwords
+            .get(&connection_id)
+            .ok_or_else(|| {
+                DbError::AuthError("Password not found for connection".to_string())
+            })?
+            .clone();
+
+        (profile, password)
+    };
+
+    // Build connection options with the new database
+    let opts = ConnectionOptions {
+        host: profile.host.clone(),
+        port: profile.port,
+        username: profile.username.clone(),
+        password: Some(password.clone()),
+        database: Some(new_database.clone()),
+        timeout: Some(30),
+    };
+
+    // Connect to the new database based on driver type
+    let new_connection: Arc<dyn DatabaseDriver> = match profile.driver {
+        DbDriver::Postgres => {
+            let driver = PostgresDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
+        _ => {
+            return Err(DbError::InternalError(
+                "Database switching only supported for PostgreSQL currently".to_string(),
+            ))
+        }
+    };
+
+    // Close the old connection
+    let old_connection = {
+        let mut state_guard = state.lock().unwrap();
+        state_guard.remove_connection(&connection_id)
+    };
+
+    if let Some(old_connection) = old_connection {
+        // Try to close but don't fail if it errors
+        let _ = old_connection.close().await;
+    }
+
+    // Store the new connection with the same ID
+    {
+        let mut state_guard = state.lock().unwrap();
+        state_guard.add_connection(connection_id.clone(), new_connection);
+        // Password is already stored, no need to update it
+    }
+
+    Ok(connection_id)
 }
 
 #[cfg(test)]

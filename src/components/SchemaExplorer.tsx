@@ -41,7 +41,6 @@ export function SchemaExplorer({
   const [loadingTables, setLoadingTables] = useState(false);
   const [loadingDatabases, setLoadingDatabases] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showDatabaseHint, setShowDatabaseHint] = useState(false);
 
   // Get the connected database name from the connection profile
   const connectedDatabase = connectionProfile.database || "postgres";
@@ -82,7 +81,7 @@ export function SchemaExplorer({
     try {
       const schemasData = await invoke<SchemaInfo[]>("get_schemas", {
         connectionId,
-        database: connectedDatabase,
+        database: selectedDatabase || connectedDatabase,
       });
       setSchemas(schemasData);
 
@@ -131,12 +130,36 @@ export function SchemaExplorer({
     }
   };
 
-  const handleDatabaseChange = (database: string) => {
+  const handleDatabaseChange = async (database: string) => {
+    if (database === selectedDatabase) return;
+
     setSelectedDatabase(database);
+
+    // If switching to a different database, attempt to switch the connection
     if (database !== connectedDatabase) {
-      setShowDatabaseHint(true);
-    } else {
-      setShowDatabaseHint(false);
+      setError(null);
+      setLoadingSchemas(true);
+      setLoadingTables(true);
+
+      try {
+        // Switch to the new database using the same credentials
+        await invoke("switch_database", {
+          connectionId,
+          newDatabase: database,
+        });
+
+        // Refresh schemas for the new database
+        await fetchSchemas();
+      } catch (err) {
+        const errorMessage =
+          typeof err === "string" ? err : (err as any)?.message || String(err);
+        setError(`Failed to switch database: ${errorMessage}`);
+        // Revert to the original database in the UI
+        setSelectedDatabase(connectedDatabase);
+      } finally {
+        setLoadingSchemas(false);
+        setLoadingTables(false);
+      }
     }
   };
 
@@ -206,16 +229,6 @@ export function SchemaExplorer({
             </div>
           )}
         </div>
-
-        {/* Database Switch Hint */}
-        {showDatabaseHint && (
-          <div className="mb-3 p-2 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900 rounded-md">
-            <p className="text-xs text-yellow-800 dark:text-yellow-200">
-              To switch to "{selectedDatabase}", you need to edit the connection
-              profile and reconnect.
-            </p>
-          </div>
-        )}
 
         {/* Schema Selector */}
         {loadingSchemas ? (

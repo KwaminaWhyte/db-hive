@@ -46,6 +46,11 @@ pub struct AppState {
     /// Key: Profile ID (UUID), Value: Connection profile
     pub connection_profiles: HashMap<String, ConnectionProfile>,
 
+    /// Temporary password storage for active connections (not persisted)
+    /// Key: Connection ID (UUID), Value: Password
+    /// These are cleared when connections are disconnected
+    pub connection_passwords: HashMap<String, String>,
+
     // TODO: Define QueryRecord type and add query_history field
     // pub query_history: Vec<QueryRecord>,
 }
@@ -60,6 +65,7 @@ impl AppState {
         Self {
             connections: HashMap::new(),
             connection_profiles: HashMap::new(),
+            connection_passwords: HashMap::new(),
         }
     }
 
