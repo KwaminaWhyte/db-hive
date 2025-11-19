@@ -19,6 +19,7 @@ function App() {
   const [activeConnectionProfile, setActiveConnectionProfile] = useState<
     ConnectionProfile | undefined
   >(undefined);
+  const [currentDatabase, setCurrentDatabase] = useState<string>("");
   const [openTables, setOpenTables] = useState<Array<{
     schema: string;
     tableName: string;
@@ -46,8 +47,14 @@ function App() {
   const handleConnected = (connectionId: string, profile: ConnectionProfile) => {
     setActiveConnectionId(connectionId);
     setActiveConnectionProfile(profile);
+    setCurrentDatabase(profile.database || "");
     // Switch to query editor tab
     setActiveTab("query");
+  };
+
+  // Handle database change from SchemaExplorer
+  const handleDatabaseChange = (database: string) => {
+    setCurrentDatabase(database);
   };
 
   // Handle disconnect
@@ -125,6 +132,7 @@ function App() {
             connectionProfile={activeConnectionProfile}
             onDisconnect={handleDisconnect}
             onTableSelect={handleTableSelect}
+            onDatabaseChange={handleDatabaseChange}
             selectedTable={activeTableId ? activeTableId.split('.')[1] : null}
           />
         ) : (
@@ -206,6 +214,7 @@ function App() {
               <QueryPanel
                 connectionId={activeConnectionId}
                 connectionProfile={activeConnectionProfile}
+                currentDatabase={currentDatabase}
                 onExecuteQuery={executeQuery}
               />
             )}

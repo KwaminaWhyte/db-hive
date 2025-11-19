@@ -24,6 +24,7 @@ interface SchemaExplorerProps {
   connectionProfile: ConnectionProfile;
   onDisconnect: () => void;
   onTableSelect: (schema: string, tableName: string) => void;
+  onDatabaseChange?: (database: string) => void;
   selectedTable?: string | null;
 }
 
@@ -32,6 +33,7 @@ export function SchemaExplorer({
   connectionProfile,
   onDisconnect,
   onTableSelect,
+  onDatabaseChange,
   selectedTable,
 }: SchemaExplorerProps) {
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
@@ -136,6 +138,9 @@ export function SchemaExplorer({
     if (database === selectedDatabase) return;
 
     setSelectedDatabase(database);
+
+    // Notify parent component about database change
+    onDatabaseChange?.(database);
 
     // If switching to a different database, attempt to switch the connection
     if (database !== connectedDatabase) {

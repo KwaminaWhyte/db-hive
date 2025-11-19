@@ -36,18 +36,20 @@ interface HistoryPanelProps {
   connectionId?: string;
   /** Callback to execute a query from history */
   onExecuteQuery?: (query: string) => void;
+  /** Trigger to refresh history (changes when new queries are executed) */
+  refreshTrigger?: number;
 }
 
-export function HistoryPanel({ connectionId, onExecuteQuery }: HistoryPanelProps) {
+export function HistoryPanel({ connectionId, onExecuteQuery, refreshTrigger }: HistoryPanelProps) {
   const [history, setHistory] = useState<QueryHistory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState(50);
 
-  // Load history on mount and when connectionId or limit changes
+  // Load history on mount and when connectionId, limit, or refreshTrigger changes
   useEffect(() => {
     loadHistory();
-  }, [connectionId, limit]);
+  }, [connectionId, limit, refreshTrigger]);
 
   const loadHistory = async () => {
     setLoading(true);

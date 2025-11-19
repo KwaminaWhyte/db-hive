@@ -17,6 +17,9 @@ interface QueryPanelProps {
   /** Active connection profile (for history metadata) */
   connectionProfile?: ConnectionProfile;
 
+  /** Current database name */
+  currentDatabase?: string;
+
   /** Callback to execute query - returns a Promise with results */
   onExecuteQuery: (sql: string) => Promise<QueryExecutionResult>;
 }
@@ -24,12 +27,14 @@ interface QueryPanelProps {
 export const QueryPanel: FC<QueryPanelProps> = ({
   connectionId,
   connectionProfile,
+  currentDatabase,
   onExecuteQuery,
 }) => {
   const [sql, setSql] = useState('');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<QueryExecutionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
 
   // Handle query execution
   const handleExecute = async (sqlToExecute: string) => {
@@ -55,17 +60,21 @@ export const QueryPanel: FC<QueryPanelProps> = ({
         const historyEntry = createQueryHistory(
           connectionId,
           connectionProfile.name,
-          connectionProfile.database || 'unknown',
+          currentDatabase || connectionProfile.database || 'unknown',
           sqlToExecute,
           true,
           executionTime,
           result.rowsAffected !== null ? result.rowsAffected : result.rows.length
         );
 
-        // Save to backend (fire and forget - don't block UI)
-        invoke('save_to_history', { history: historyEntry }).catch((err) => {
-          console.error('Failed to save query to history:', err);
-        });
+        // Save to backend and trigger refresh
+        invoke('save_to_history', { history: historyEntry })
+          .then(() => {
+            setHistoryRefreshKey(prev => prev + 1);
+          })
+          .catch((err) => {
+            console.error('Failed to save query to history:', err);
+          });
       }
     } catch (err: any) {
       // Handle error - could be a DbError from Tauri
@@ -79,7 +88,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
         const historyEntry = createQueryHistory(
           connectionId,
           connectionProfile.name,
-          connectionProfile.database || 'unknown',
+          currentDatabase || connectionProfile.database || 'unknown',
           sqlToExecute,
           false,
           executionTime,
@@ -87,10 +96,14 @@ export const QueryPanel: FC<QueryPanelProps> = ({
           errorMessage
         );
 
-        // Save to backend (fire and forget)
-        invoke('save_to_history', { history: historyEntry }).catch((err) => {
-          console.error('Failed to save query to history:', err);
-        });
+        // Save to backend and trigger refresh
+        invoke('save_to_history', { history: historyEntry })
+          .then(() => {
+            setHistoryRefreshKey(prev => prev + 1);
+          })
+          .catch((err) => {
+            console.error('Failed to save query to history:', err);
+          });
       }
     } finally {
       setLoading(false);
@@ -166,6 +179,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
             <HistoryPanel
               connectionId={connectionId || undefined}
               onExecuteQuery={handleExecuteFromHistory}
+              refreshTrigger={historyRefreshKey}
             />
           </TabsContent>
 
