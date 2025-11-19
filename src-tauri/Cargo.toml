@@ -32,5 +32,7 @@ tauri-plugin-store = "2.4.1"
 tauri-plugin-dialog = "2.4.2"
 rusqlite = { version = "0.37.0", features = ["bundled"] }
 mysql_async = "0.36.1"
+mongodb = "3.1.0"
+futures-util = "0.3"
 hex = "0.4.3"
 
