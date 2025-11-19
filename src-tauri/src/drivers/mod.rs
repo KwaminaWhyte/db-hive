@@ -11,6 +11,7 @@ use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
 
+pub mod mysql;
 pub mod postgres;
 pub mod sqlite;
 
