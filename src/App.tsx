@@ -8,6 +8,7 @@ import { ModeToggle } from "./components/mode-toggle";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectionProfile, QueryExecutionResult } from "./types/database";
 import { invoke } from "@tauri-apps/api/core";
+import { X } from "lucide-react";
 
 function App() {
   const [selectedProfile, setSelectedProfile] = useState<
@@ -164,62 +165,55 @@ function App() {
             {openTables.length > 0 ? (
               <>
                 {/* Table Tabs */}
-                <Tabs value={activeTableId || undefined} onValueChange={setActiveTableId} className="flex-1 flex flex-col overflow-hidden">
-                  <div className="border-b px-4 shrink-0">
-                    <TabsList className="h-10">
-                      {openTables.map((table) => (
-                        <TabsTrigger
-                          key={table.id}
-                          value={table.id}
-                          className="relative group pr-8"
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Tab Bar */}
+                  <div className="flex items-center gap-1 bg-muted/30 border-b px-2 py-1 overflow-x-auto shrink-0">
+                    {openTables.map((table) => (
+                      <div
+                        key={table.id}
+                        className={`
+                          group flex items-center gap-2 px-3 py-1.5 rounded-t-md text-sm cursor-pointer transition-colors
+                          ${
+                            table.id === activeTableId
+                              ? 'bg-background border-t border-x text-foreground'
+                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                          }
+                        `}
+                        onClick={() => setActiveTableId(table.id)}
+                      >
+                        <span className="select-none truncate max-w-[150px]">
+                          {table.tableName}
+                        </span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCloseTable(table.id);
+                          }}
+                          className="opacity-0 group-hover:opacity-100 hover:bg-muted rounded p-0.5 transition-opacity"
                         >
-                          <span className="truncate max-w-[150px]">
-                            {table.tableName}
-                          </span>
-                          <button
-                            className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:bg-destructive/20 rounded p-0.5 transition-opacity"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleCloseTable(table.id);
-                            }}
-                          >
-                            <span className="sr-only">Close</span>
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              width="14"
-                              height="14"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2"
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                            >
-                              <line x1="18" y1="6" x2="6" y2="18"></line>
-                              <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
-                          </button>
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
 
-                  {/* Table Inspector for each tab */}
-                  {openTables.map((table) => (
-                    <TabsContent
-                      key={table.id}
-                      value={table.id}
-                      className="flex-1 m-0 overflow-hidden"
-                    >
-                      <TableInspector
-                        connectionId={activeConnectionId}
-                        schema={table.schema}
-                        tableName={table.tableName}
-                        onClose={() => handleCloseTable(table.id)}
-                      />
-                    </TabsContent>
-                  ))}
-                </Tabs>
+                  {/* Table Inspector for active tab */}
+                  <div className="flex-1 overflow-hidden">
+                    {openTables.map((table) => (
+                      <div
+                        key={table.id}
+                        className={table.id === activeTableId ? 'h-full' : 'hidden'}
+                      >
+                        <TableInspector
+                          connectionId={activeConnectionId}
+                          schema={table.schema}
+                          tableName={table.tableName}
+                          onClose={() => handleCloseTable(table.id)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </>
             ) : (
               <QueryPanel
