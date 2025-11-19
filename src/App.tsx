@@ -47,7 +47,7 @@ function App() {
   const handleConnected = (connectionId: string, profile: ConnectionProfile) => {
     setActiveConnectionId(connectionId);
     setActiveConnectionProfile(profile);
-    setCurrentDatabase(profile.database || "");
+    // Don't set currentDatabase here - let SchemaExplorer tell us the actual database
     // Switch to query editor tab
     setActiveTab("query");
   };

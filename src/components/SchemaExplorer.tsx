@@ -52,6 +52,8 @@ export function SchemaExplorer({
   // Fetch schemas and databases on component mount
   useEffect(() => {
     setSelectedDatabase(connectedDatabase);
+    // Notify parent of initial database
+    onDatabaseChange?.(connectedDatabase);
     fetchSchemas();
     fetchDatabases();
   }, [connectionId]);
