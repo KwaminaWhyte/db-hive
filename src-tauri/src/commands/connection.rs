@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
-use crate::drivers::{postgres::PostgresDriver, sqlite::SqliteDriver, ConnectionOptions, DatabaseDriver};
+use crate::drivers::{mysql::MysqlDriver, postgres::PostgresDriver, sqlite::SqliteDriver, ConnectionOptions, DatabaseDriver};
 use crate::models::{ConnectionProfile, ConnectionStatus, DbDriver, DbError};
 use crate::state::AppState;
 
@@ -59,9 +59,11 @@ pub async fn test_connection_command(
             driver.test_connection().await?;
             Ok(ConnectionStatus::Connected)
         }
-        DbDriver::MySql => Err(DbError::InternalError(
-            "MySQL driver not yet implemented".to_string(),
-        )),
+        DbDriver::MySql => {
+            let driver = MysqlDriver::connect(opts).await?;
+            driver.test_connection().await?;
+            Ok(ConnectionStatus::Connected)
+        }
         DbDriver::MongoDb => Err(DbError::InternalError(
             "MongoDB driver not yet implemented".to_string(),
         )),
@@ -351,9 +353,8 @@ pub async fn connect_to_database(
             Arc::new(driver)
         }
         DbDriver::MySql => {
-            return Err(DbError::InternalError(
-                "MySQL driver not yet implemented".to_string(),
-            ))
+            let driver = MysqlDriver::connect(opts).await?;
+            Arc::new(driver)
         }
         DbDriver::MongoDb => {
             return Err(DbError::InternalError(
@@ -493,9 +494,13 @@ pub async fn switch_database(
             let driver = SqliteDriver::connect(opts).await?;
             Arc::new(driver)
         }
+        DbDriver::MySql => {
+            let driver = MysqlDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
         _ => {
             return Err(DbError::InternalError(
-                "Database switching only supported for PostgreSQL and SQLite currently".to_string(),
+                "Database switching only supported for PostgreSQL, MySQL, and SQLite currently".to_string(),
             ))
         }
     };
