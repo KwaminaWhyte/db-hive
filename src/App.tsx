@@ -34,9 +34,9 @@ function App() {
     setSelectedProfile(undefined);
   };
 
-  // Handle edit button click
-  const handleEdit = (profile: ConnectionProfile) => {
-    setSelectedProfile(profile);
+  // Handle edit button click (or new connection when null)
+  const handleEdit = (profile: ConnectionProfile | null) => {
+    setSelectedProfile(profile ?? undefined);
     setActiveTab("connections");
   };
 

@@ -239,39 +239,64 @@ export function TableInspector({
                 <ScrollArea className="h-full w-full">
                   <div className="min-w-max">
                     <Table>
-                      <TableHeader className="sticky top-0 bg-background z-10">
+                      <TableHeader className="sticky top-0 bg-background border-b z-10">
                         <TableRow>
-                          {sampleData.columns.map((col) => (
-                            <TableHead key={col} className="whitespace-nowrap font-semibold">
-                              {col}
-                            </TableHead>
-                          ))}
+                          <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
+                          {sampleData.columns.map((col) => {
+                            const columnInfo = tableSchema?.columns.find(c => c.name === col);
+                            return (
+                              <TableHead key={col} className="whitespace-nowrap">
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="font-medium text-foreground">{col}</span>
+                                  {columnInfo && (
+                                    <span className="text-[10px] font-normal text-muted-foreground">
+                                      {columnInfo.dataType.toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
+                              </TableHead>
+                            );
+                          })}
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {sampleData.rows.map((row, rowIndex) => (
-                          <TableRow key={rowIndex}>
-                            {row.map((cell, cellIndex) => (
-                              <TableCell key={cellIndex} className="whitespace-nowrap">
-                                {cell === null || cell === undefined ? (
-                                  <span className="italic text-muted-foreground">
-                                    NULL
-                                  </span>
-                                ) : typeof cell === "object" ? (
-                                  <code className="text-xs bg-muted px-1 rounded">
-                                    {JSON.stringify(cell)}
-                                  </code>
-                                ) : cell === "" ? (
-                                  <span className="italic text-muted-foreground">
-                                    (empty)
-                                  </span>
-                                ) : (
-                                  <span>{String(cell)}</span>
-                                )}
+                        {sampleData.rows.map((row, rowIndex) => {
+                          const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
+                          return (
+                            <TableRow key={rowIndex} className="hover:bg-muted/50">
+                              <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
+                                {absoluteRowNumber}
                               </TableCell>
-                            ))}
-                          </TableRow>
-                        ))}
+                              {row.map((cell, cellIndex) => (
+                                <TableCell key={cellIndex} className="whitespace-nowrap font-mono text-sm">
+                                  {cell === null || cell === undefined ? (
+                                    <span className="italic text-muted-foreground opacity-50">
+                                      NULL
+                                    </span>
+                                  ) : typeof cell === "object" ? (
+                                    <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
+                                      {JSON.stringify(cell)}
+                                    </code>
+                                  ) : typeof cell === "boolean" ? (
+                                    <span className={cell ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                      {String(cell)}
+                                    </span>
+                                  ) : typeof cell === "number" ? (
+                                    <span className="text-blue-600 dark:text-blue-400">
+                                      {cell.toLocaleString()}
+                                    </span>
+                                  ) : cell === "" ? (
+                                    <span className="italic text-muted-foreground opacity-50">
+                                      (empty)
+                                    </span>
+                                  ) : (
+                                    <span className="text-foreground">{String(cell)}</span>
+                                  )}
+                                </TableCell>
+                              ))}
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
