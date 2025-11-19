@@ -217,11 +217,14 @@ impl DatabaseDriver for PostgresDriver {
 
                 Ok(QueryResult::with_data(columns, data))
             }
-            Err(e) => {
+            Err(query_err) => {
                 // If query failed, try as an execute (for INSERT/UPDATE/DELETE)
                 match self.client.execute(sql, &[]).await {
                     Ok(rows_affected) => Ok(QueryResult::with_affected(rows_affected)),
-                    Err(_) => Err(DbError::QueryError(format!("Query failed: {}", e))),
+                    Err(_execute_err) => {
+                        // Both query and execute failed, return the query error with full details
+                        Err(DbError::QueryError(format!("{}", query_err)))
+                    }
                 }
             }
         }

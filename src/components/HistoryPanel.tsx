@@ -40,7 +40,11 @@ interface HistoryPanelProps {
   refreshTrigger?: number;
 }
 
-export function HistoryPanel({ connectionId, onExecuteQuery, refreshTrigger }: HistoryPanelProps) {
+export function HistoryPanel({
+  connectionId,
+  onExecuteQuery,
+  refreshTrigger,
+}: HistoryPanelProps) {
   const [history, setHistory] = useState<QueryHistory[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,8 +183,8 @@ export function HistoryPanel({ connectionId, onExecuteQuery, refreshTrigger }: H
           <ScrollArea className="h-full">
             <div className="space-y-2 p-4">
               {history.map((entry) => (
-                <Card key={entry.id} className="overflow-hidden">
-                  <CardHeader className="pb-3">
+                <Card key={entry.id} className="overflow-hidden gap-0">
+                  <CardHeader>
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
