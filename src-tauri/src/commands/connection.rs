@@ -5,7 +5,7 @@
 //! active database connections.
 
 use std::sync::{Arc, Mutex};
-use tauri::State;
+use tauri::{AppHandle, State};
 use uuid::Uuid;
 
 use crate::drivers::{postgres::PostgresDriver, ConnectionOptions, DatabaseDriver};
@@ -91,6 +91,7 @@ pub async fn test_connection_command(
 pub fn create_connection_profile(
     mut profile: ConnectionProfile,
     state: State<'_, Mutex<AppState>>,
+    app: AppHandle,
 ) -> Result<String, DbError> {
     // Generate UUID if ID is empty
     if profile.id.is_empty() {
@@ -99,7 +100,7 @@ pub fn create_connection_profile(
 
     let profile_id = profile.id.clone();
 
-    // Check if profile already exists
+    // Check if profile already exists and add to state
     let mut state = state.lock().unwrap();
     if state.get_profile(&profile_id).is_some() {
         return Err(DbError::InvalidInput(format!(
@@ -110,6 +111,9 @@ pub fn create_connection_profile(
 
     // Add profile to state
     state.add_profile(profile);
+
+    // Save profiles to persistent storage
+    state.save_profiles_to_store(&app)?;
 
     Ok(profile_id)
 }
@@ -131,6 +135,7 @@ pub fn create_connection_profile(
 pub fn update_connection_profile(
     profile: ConnectionProfile,
     state: State<'_, Mutex<AppState>>,
+    app: AppHandle,
 ) -> Result<(), DbError> {
     let mut state = state.lock().unwrap();
 
@@ -144,6 +149,9 @@ pub fn update_connection_profile(
 
     // Update profile
     state.add_profile(profile);
+
+    // Save profiles to persistent storage
+    state.save_profiles_to_store(&app)?;
 
     Ok(())
 }
@@ -165,6 +173,7 @@ pub fn update_connection_profile(
 pub async fn delete_connection_profile(
     profile_id: String,
     state: State<'_, Mutex<AppState>>,
+    app: AppHandle,
 ) -> Result<(), DbError> {
     // Check if profile exists and get connection if present
     let connection = {
@@ -187,9 +196,14 @@ pub async fn delete_connection_profile(
         conn.close().await?;
     }
 
-    // Remove profile
-    let mut state_guard = state.lock().unwrap();
-    state_guard.remove_profile(&profile_id);
+    // Remove profile and save to store
+    {
+        let mut state_guard = state.lock().unwrap();
+        state_guard.remove_profile(&profile_id);
+
+        // Save profiles to persistent storage
+        state_guard.save_profiles_to_store(&app)?;
+    }
 
     Ok(())
 }

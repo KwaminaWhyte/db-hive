@@ -9,7 +9,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::drivers::DatabaseDriver;
-use crate::models::ConnectionProfile;
+use crate::models::{ConnectionProfile, DbError};
+use tauri::AppHandle;
+use tauri_plugin_store::StoreExt;
 
 /// Application state
 ///
@@ -229,6 +231,78 @@ impl AppState {
                     .unwrap_or(false)
             })
             .collect()
+    }
+
+    // ========================================================================
+    // Persistent Storage
+    // ========================================================================
+
+    /// Load connection profiles from persistent storage
+    ///
+    /// # Arguments
+    ///
+    /// * `app` - Tauri application handle
+    ///
+    /// # Returns
+    ///
+    /// Number of profiles loaded
+    pub fn load_profiles_from_store(&mut self, app: &AppHandle) -> Result<usize, DbError> {
+        let store = app
+            .store("profiles.json")
+            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+
+        // Get profiles from store
+        if let Some(profiles_value) = store.get("profiles") {
+            // Deserialize profiles
+            let profiles: Vec<ConnectionProfile> =
+                serde_json::from_value(profiles_value.clone()).map_err(|e| {
+                    DbError::InternalError(format!("Failed to deserialize profiles: {}", e))
+                })?;
+
+            // Add each profile to the in-memory map
+            let count = profiles.len();
+            for profile in profiles {
+                self.connection_profiles
+                    .insert(profile.id.clone(), profile);
+            }
+
+            Ok(count)
+        } else {
+            // No profiles in store yet
+            Ok(0)
+        }
+    }
+
+    /// Save connection profiles to persistent storage
+    ///
+    /// # Arguments
+    ///
+    /// * `app` - Tauri application handle
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if successful
+    pub fn save_profiles_to_store(&self, app: &AppHandle) -> Result<(), DbError> {
+        let store = app
+            .store("profiles.json")
+            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+
+        // Convert profiles map to vector
+        let profiles: Vec<&ConnectionProfile> = self.connection_profiles.values().collect();
+
+        // Serialize and save to store
+        let profiles_value = serde_json::to_value(&profiles)
+            .map_err(|e| DbError::InternalError(format!("Failed to serialize profiles: {}", e)))?;
+
+        // Set profiles in store (returns ())
+        store.set("profiles", profiles_value);
+
+        // Save the store to disk
+        store
+            .save()
+            .map_err(|e| DbError::InternalError(format!("Failed to persist store: {}", e)))?;
+
+        Ok(())
     }
 }
 

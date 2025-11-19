@@ -18,10 +18,26 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
-            // Initialize and manage application state
-            app.manage(Mutex::new(AppState::default()));
+            // Initialize application state
+            let mut state = AppState::default();
+
+            // Load saved profiles from persistent storage
+            match state.load_profiles_from_store(&app.handle()) {
+                Ok(count) => {
+                    if count > 0 {
+                        println!("Loaded {} connection profile(s) from storage", count);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to load profiles from storage: {}", e);
+                }
+            }
+
+            // Manage the state
+            app.manage(Mutex::new(state));
             Ok(())
         })
+        .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet,
