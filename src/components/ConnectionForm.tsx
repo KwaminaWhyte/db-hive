@@ -1,5 +1,5 @@
-import { FC, useState, FormEvent, ChangeEvent } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { FC, useState, FormEvent, ChangeEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import {
   ConnectionProfile,
   DbDriver,
@@ -7,24 +7,24 @@ import {
   ConnectionStatus,
   getDefaultPort,
   getDriverDisplayName,
-} from '../types/database';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+} from "../types/database";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from "@/components/ui/card";
 
 interface ConnectionFormProps {
   /** Existing profile to edit, or undefined for new profile */
@@ -39,32 +39,32 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
 }) => {
   // Form state
   const [formData, setFormData] = useState<Partial<ConnectionProfile>>({
-    id: profile?.id || '',
-    name: profile?.name || '',
-    driver: profile?.driver || 'Postgres',
-    host: profile?.host || 'localhost',
+    id: profile?.id || "",
+    name: profile?.name || "",
+    driver: profile?.driver || "Postgres",
+    host: profile?.host || "localhost",
     port: profile?.port || 5432,
-    username: profile?.username || '',
-    database: profile?.database || '',
-    sslMode: profile?.sslMode || 'Prefer',
+    username: profile?.username || "",
+    database: profile?.database || "",
+    sslMode: profile?.sslMode || "Prefer",
   });
 
-  const [password, setPassword] = useState('');
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<string | null>(null);
 
   // Available database drivers
   const drivers: DbDriver[] = [
-    'Postgres',
-    'MySql',
-    'Sqlite',
-    'MongoDb',
-    'SqlServer',
+    "Postgres",
+    "MySql",
+    "Sqlite",
+    "MongoDb",
+    "SqlServer",
   ];
 
   // Available SSL modes
-  const sslModes: SslMode[] = ['Disable', 'Prefer', 'Require'];
+  const sslModes: SslMode[] = ["Disable", "Prefer", "Require"];
 
   // Handle form field changes
   const handleChange = (
@@ -73,14 +73,14 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     const { name, value } = e.target;
 
     // Handle driver change - update port to default
-    if (name === 'driver') {
+    if (name === "driver") {
       const newDriver = value as DbDriver;
       setFormData((prev) => ({
         ...prev,
         driver: newDriver,
         port: getDefaultPort(newDriver),
       }));
-    } else if (name === 'port') {
+    } else if (name === "port") {
       // Convert port to number
       setFormData((prev) => ({
         ...prev,
@@ -97,19 +97,22 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   // Validate form
   const validateForm = (): string | null => {
     if (!formData.name?.trim()) {
-      return 'Connection name is required';
+      return "Connection name is required";
     }
     if (!formData.driver) {
-      return 'Database driver is required';
+      return "Database driver is required";
     }
     if (!formData.host?.trim()) {
-      return 'Host is required';
+      return "Host is required";
     }
     if (!formData.username?.trim()) {
-      return 'Username is required';
+      return "Username is required";
     }
-    if (formData.port !== undefined && (formData.port < 0 || formData.port > 65535)) {
-      return 'Port must be between 0 and 65535';
+    if (
+      formData.port !== undefined &&
+      (formData.port < 0 || formData.port > 65535)
+    ) {
+      return "Port must be between 0 and 65535";
     }
     return null;
   };
@@ -126,7 +129,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     }
 
     if (!password) {
-      setError('Password is required to test connection');
+      setError("Password is required to test connection");
       return;
     }
 
@@ -134,7 +137,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
 
     try {
       const testProfile: ConnectionProfile = {
-        id: formData.id || '',
+        id: formData.id || "",
         name: formData.name!,
         driver: formData.driver!,
         host: formData.host!,
@@ -147,34 +150,33 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         folder: null,
       };
 
-      const status = await invoke<ConnectionStatus>('test_connection_command', {
+      const status = await invoke<ConnectionStatus>("test_connection_command", {
         profile: testProfile,
         password,
       });
 
-      if (status === 'Connected') {
-        setTestStatus('Connection successful!');
+      if (status === "Connected") {
+        setTestStatus("Connection successful!");
 
         // Save password for future use (if profile has an ID)
         if (testProfile.id) {
           try {
-            await invoke('save_password', {
+            await invoke("save_password", {
               profileId: testProfile.id,
               password,
             });
           } catch (err) {
-            console.error('Failed to save password:', err);
+            console.error("Failed to save password:", err);
             // Don't show error to user, connection test was successful
           }
         }
       } else {
-        setTestStatus('Connection failed');
+        setTestStatus("Connection failed");
       }
     } catch (err) {
       // Handle error - could be string or DbError object
-      const errorMessage = typeof err === 'string'
-        ? err
-        : (err as any)?.message || String(err);
+      const errorMessage =
+        typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Connection test failed: ${errorMessage}`);
     } finally {
       setLoading(false);
@@ -197,7 +199,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
 
     try {
       const saveProfile: ConnectionProfile = {
-        id: formData.id || '',
+        id: formData.id || "",
         name: formData.name!,
         driver: formData.driver!,
         host: formData.host!,
@@ -210,45 +212,44 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         folder: null,
       };
 
-      const profileId = await invoke<string>('create_connection_profile', {
+      const profileId = await invoke<string>("create_connection_profile", {
         profile: saveProfile,
       });
 
       // Save password if provided
       if (password) {
         try {
-          await invoke('save_password', {
+          await invoke("save_password", {
             profileId,
             password,
           });
         } catch (err) {
-          console.error('Failed to save password:', err);
+          console.error("Failed to save password:", err);
           // Don't show error to user, profile was saved successfully
         }
       }
 
-      setTestStatus('Connection profile saved successfully!');
+      setTestStatus("Connection profile saved successfully!");
       onSuccess?.(profileId);
 
       // Reset form if creating new profile
       if (!profile) {
         setFormData({
-          id: '',
-          name: '',
-          driver: 'Postgres',
-          host: 'localhost',
+          id: "",
+          name: "",
+          driver: "Postgres",
+          host: "localhost",
           port: 5432,
-          username: '',
-          database: '',
-          sslMode: 'Prefer',
+          username: "",
+          database: "",
+          sslMode: "Prefer",
         });
-        setPassword('');
+        setPassword("");
       }
     } catch (err) {
       // Handle error - could be string or DbError object
-      const errorMessage = typeof err === 'string'
-        ? err
-        : (err as any)?.message || String(err);
+      const errorMessage =
+        typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Failed to save profile: ${errorMessage}`);
     } finally {
       setLoading(false);
@@ -258,11 +259,11 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   return (
     <Card className="m-6">
       <CardHeader>
-        <CardTitle>{profile ? 'Edit Connection' : 'New Connection'}</CardTitle>
+        <CardTitle>{profile ? "Edit Connection" : "New Connection"}</CardTitle>
         <CardDescription>
           {profile
-            ? 'Update your database connection settings'
-            : 'Configure a new database connection'}
+            ? "Update your database connection settings"
+            : "Configure a new database connection"}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -276,7 +277,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
               type="text"
               id="name"
               name="name"
-              value={formData.name || ''}
+              value={formData.name || ""}
               onChange={handleChange}
               placeholder="My Database"
               required
@@ -289,10 +290,10 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
               Database Driver <span className="text-destructive">*</span>
             </Label>
             <Select
-              value={formData.driver || 'Postgres'}
+              value={formData.driver || "Postgres"}
               onValueChange={(value) =>
                 handleChange({
-                  target: { name: 'driver', value },
+                  target: { name: "driver", value },
                 } as ChangeEvent<HTMLSelectElement>)
               }
             >
@@ -319,7 +320,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
                 type="text"
                 id="host"
                 name="host"
-                value={formData.host || ''}
+                value={formData.host || ""}
                 onChange={handleChange}
                 placeholder="localhost"
                 required
@@ -352,7 +353,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
               type="text"
               id="username"
               name="username"
-              value={formData.username || ''}
+              value={formData.username || ""}
               onChange={handleChange}
               placeholder="postgres"
               required
@@ -381,16 +382,13 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
               type="text"
               id="database"
               name="database"
-              value={formData.database || ''}
+              value={formData.database || ""}
               onChange={handleChange}
               placeholder="mydb"
             />
             <p className="text-xs text-muted-foreground">
-              The specific database to connect to. Leave empty to connect to the default database.
-              <br />
-              <span className="font-medium text-yellow-600 dark:text-yellow-500">
-                Note: After connecting, you can only view tables from this database. To switch databases, edit this field and reconnect.
-              </span>
+              The specific database to connect to. Leave empty to connect to the
+              default database.
             </p>
           </div>
 
@@ -398,10 +396,10 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
           <div className="space-y-2">
             <Label htmlFor="sslMode">SSL Mode</Label>
             <Select
-              value={formData.sslMode || 'Prefer'}
+              value={formData.sslMode || "Prefer"}
               onValueChange={(value) =>
                 handleChange({
-                  target: { name: 'sslMode', value },
+                  target: { name: "sslMode", value },
                 } as ChangeEvent<HTMLSelectElement>)
               }
             >
@@ -441,11 +439,11 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
               disabled={loading}
               className="flex-1"
             >
-              {loading ? 'Testing...' : 'Test Connection'}
+              {loading ? "Testing..." : "Test Connection"}
             </Button>
 
             <Button type="submit" disabled={loading} className="flex-1">
-              {loading ? 'Saving...' : 'Save'}
+              {loading ? "Saving..." : "Save"}
             </Button>
           </div>
         </form>

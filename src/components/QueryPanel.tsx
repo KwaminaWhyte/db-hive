@@ -178,6 +178,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
           <TabsContent value="history" className="flex-1 m-0 overflow-hidden">
             <HistoryPanel
               connectionId={connectionId || undefined}
+              currentDatabase={currentDatabase}
               onExecuteQuery={handleExecuteFromHistory}
               refreshTrigger={historyRefreshKey}
             />

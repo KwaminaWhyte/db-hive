@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "db-hive",
+        "title": "DB Hive",
         "width": 1500,
         "height": 900
       }
