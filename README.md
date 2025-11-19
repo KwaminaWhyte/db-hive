@@ -14,17 +14,20 @@ DB-Hive is a professional database client application designed to compete with i
 ### ✅ Implemented (MVP)
 
 - **Multi-Database Support**
+
   - ✅ PostgreSQL with full metadata support
   - ✅ SQLite with local database management
   - ✅ MySQL/MariaDB with connection handling
 
 - **Connection Management**
+
   - Save and manage multiple connection profiles
   - Test connections before saving
   - Password persistence using Tauri plugin-store
   - Quick connect from saved profiles
 
 - **SQL Editor**
+
   - Monaco Editor with SQL syntax highlighting
   - Execute single or multiple SQL statements
   - Query history with automatic saving
@@ -32,6 +35,7 @@ DB-Hive is a professional database client application designed to compete with i
   - Keyboard shortcuts (Ctrl+Enter to execute)
 
 - **Schema Browser**
+
   - Browse databases, schemas, and tables
   - View table structure (columns, indexes, data types)
   - Table data preview with pagination
@@ -39,6 +43,7 @@ DB-Hive is a professional database client application designed to compete with i
   - Row detail viewer (JSON format)
 
 - **Results Viewer**
+
   - Multiple view modes (Grid, JSON, Raw)
   - Sortable columns with visual indicators
   - Click cells to copy values
@@ -47,6 +52,7 @@ DB-Hive is a professional database client application designed to compete with i
   - Export results to CSV or JSON
 
 - **Query Management**
+
   - Auto-save query history
   - Create and manage snippets
   - Search through history
@@ -73,6 +79,7 @@ DB-Hive is a professional database client application designed to compete with i
 ## Technology Stack
 
 ### Frontend
+
 - React 19 with TypeScript
 - Tauri 2.0 for native functionality
 - Monaco Editor for SQL editing
@@ -81,6 +88,7 @@ DB-Hive is a professional database client application designed to compete with i
 - Sonner for toast notifications
 
 ### Backend
+
 - Rust with Tokio async runtime
 - tokio-postgres for PostgreSQL
 - mysql_async for MySQL/MariaDB
@@ -100,7 +108,7 @@ DB-Hive is a professional database client application designed to compete with i
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/db-hive.git
+git clone https://github.com/KwaminaWhyte/db-hive.git
 cd db-hive
 
 # Install dependencies (using Bun, or use npm/yarn/pnpm)
@@ -144,6 +152,7 @@ See [Code Signing Guide](docs/CODE_SIGNING.md) for signing binaries on all platf
 4. Click **"Save"** to store the connection profile
 
 For SQLite:
+
 - Click **"Browse"** to select your .db file
 - No username/password required
 
@@ -158,11 +167,13 @@ For SQLite:
 ### Managing Query History and Snippets
 
 **History**:
+
 - All executed queries are automatically saved
 - Click the **History** tab in the query panel
 - Click any history item to load it into the editor
 
 **Snippets**:
+
 - Save frequently used queries as snippets
 - Click **"Save as Snippet"** button
 - Provide a name and optional description
@@ -246,17 +257,20 @@ cargo fmt
 ## Architecture
 
 ### Multi-Process Design
+
 - **Core Process (Rust)**: Manages database connections, state, and credentials
 - **WebView Process (React)**: Handles UI rendering and user interactions
 - **IPC Communication**: Tauri Commands for frontend → backend, Events for backend → frontend
 
 ### Security Model
+
 - Credentials stored using tauri-plugin-store (encrypted local storage)
 - No sensitive data in frontend state
 - SQL injection prevention through parameterized queries
 - Connection validation before saving
 
 ### Performance
+
 - Virtualized tables with TanStack Table for smooth scrolling
 - Lazy loading of schema metadata
 - Pagination for large datasets
@@ -267,6 +281,7 @@ cargo fmt
 ### Database Connection Examples
 
 **PostgreSQL**:
+
 ```
 Host: localhost
 Port: 5432
@@ -276,6 +291,7 @@ Password: ••••••••
 ```
 
 **MySQL**:
+
 ```
 Host: localhost
 Port: 3306
@@ -285,6 +301,7 @@ Password: ••••••••
 ```
 
 **SQLite**:
+
 ```
 Database File: /path/to/database.db
 ```
@@ -294,12 +311,14 @@ Database File: /path/to/database.db
 ### Connection Issues
 
 **Problem**: "Connection refused" or "Could not connect"
+
 - Check that the database server is running
 - Verify host and port are correct
 - Ensure firewall allows the connection
 - Test with `psql`, `mysql`, or `sqlite3` CLI first
 
 **Problem**: "Authentication failed"
+
 - Double-check username and password
 - Verify user has access to the specified database
 - Check database user permissions
@@ -307,11 +326,13 @@ Database File: /path/to/database.db
 ### Query Execution Issues
 
 **Problem**: Query syntax error
+
 - Verify SQL syntax for your database type
 - MySQL uses backticks (\`) for identifiers
 - PostgreSQL uses double quotes (") for identifiers
 
 **Problem**: Query takes too long
+
 - Add LIMIT clause to limit result size
 - Create indexes on frequently queried columns
 - Use WHERE clauses to filter data
@@ -319,11 +340,13 @@ Database File: /path/to/database.db
 ### Application Issues
 
 **Problem**: App won't start
+
 - Ensure all dependencies are installed: `bun install`
 - Check Rust toolchain: `rustc --version`
 - Clear build cache: `rm -rf src-tauri/target`
 
 **Problem**: Theme not working
+
 - Check system theme settings
 - Try switching theme manually in app
 - Reload application
@@ -345,6 +368,7 @@ See [Implementation Roadmap](docs/implementation-roadmap.md) for detailed develo
 **Current Status**: MVP Complete (v0.1.0)
 
 **Next Priorities**:
+
 - User documentation and guides
 - End-to-end testing
 - Bug fixes and polish
@@ -357,11 +381,13 @@ MIT License - See [LICENSE](LICENSE) file for details
 ## Acknowledgments
 
 Inspired by excellent tools:
+
 - [Beekeeper Studio](https://www.beekeeperstudio.io/)
 - [DbGate](https://dbgate.org/)
 - [DBeaver](https://dbeaver.io/)
 
 Built with amazing technologies:
+
 - [Tauri](https://tauri.app/)
 - [React](https://react.dev/)
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/)
@@ -370,7 +396,7 @@ Built with amazing technologies:
 
 ## Support
 
-For issues and feature requests, please use the [GitHub Issues](https://github.com/yourusername/db-hive/issues) page.
+For issues and feature requests, please use the [GitHub Issues](https://github.com/KwaminaWhyte/db-hive/issues) page.
 
 ---
 
