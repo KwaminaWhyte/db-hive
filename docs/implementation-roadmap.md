@@ -280,11 +280,11 @@ async fn execute_query_streamed(
 
 **What's Next:**
 - [ ] Credential encryption (OS keyring - to replace plaintext password storage)
-- [ ] SQLite driver implementation
+- [x] SQLite driver implementation ✅
 - [ ] Schema browser enhancements
-- [ ] Query history tracking
-- [ ] Multiple editor tabs
-- [ ] Export results (CSV, JSON)
+- [x] Query history tracking ✅
+- [x] Multiple editor tabs ✅
+- [x] Export results (CSV, JSON) ✅
 
 ---
 
@@ -401,12 +401,12 @@ interface ConnectionStore {
 
 ### Milestone 1.2: SQL Editor (Weeks 6-8)
 
-**Week 6: Monaco Editor Integration** ✅ COMPLETED
+**Week 6: Monaco Editor Integration** ✅ COMPLETED (2025-11-19)
 
 - [x] Integrate `@monaco-editor/react` ✅
 - [x] Configure SQL syntax highlighting ✅
 - [x] Add basic keyword autocomplete ✅
-- [ ] Implement multiple editor tabs (TODO: Next milestone)
+- [x] Implement multiple editor tabs ✅
 - [x] Add keyboard shortcuts (Ctrl+Enter to run, Ctrl+K to clear) ✅
 
 **Implementation Details:**
@@ -416,6 +416,13 @@ interface ConnectionStore {
 - Connection status indicator with visual feedback
 - Read-only mode during query execution
 - Keyboard hint badges showing shortcuts
+- **Multiple Editor Tabs:**
+  - Tab bar UI with add/close buttons
+  - Each tab maintains independent state (SQL, results, errors)
+  - Seamless tab switching preserves all state
+  - Active tab highlighting with visual indicators
+  - Close button appears on hover, last tab resets instead of closing
+  - Tab overflow scrolling for many tabs
 
 **Week 7: Query Execution** ✅ COMPLETED
 
