@@ -4,6 +4,7 @@
 //! Commands are organized by functionality into separate submodules.
 
 pub mod connection;
+pub mod export;
 pub mod history;
 pub mod query;
 pub mod schema;

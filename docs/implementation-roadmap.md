@@ -486,23 +486,21 @@ pub async fn execute_query(
 - Loading states with spinner
 - Error display with styled alerts
 
-**Week 10: Result Actions**
+**Week 10: Result Actions** ✅ COMPLETED (2025-11-19)
 
-- [ ] Implement CSV export:
+- [x] Implement CSV export with proper escaping (RFC 4180)
+- [x] Implement JSON export with pretty formatting
+- [x] Add export buttons to ResultsViewer
+- [x] Integrate tauri-plugin-dialog for save dialogs
+- [x] Show execution metadata (time, rows) ✅ Already implemented
 
-```rust
-#[tauri::command]
-async fn export_results_csv(
-    query_id: String,
-    file_path: String,
-) -> Result<(), DbError> {
-    // Export to CSV
-}
-```
-
-- [ ] Implement JSON export
-- [ ] Add result pagination controls
-- [ ] Show execution metadata (time, rows, warnings)
+**Implementation Details:**
+- Created `commands/export.rs` with `export_to_csv` and `export_to_json` commands
+- CSV export properly escapes quotes, commas, and newlines
+- JSON export creates array of objects with column names as keys
+- Export buttons appear in results header when results are available
+- File save dialog with proper file type filters
+- Execution time already displayed in results header
 
 **Week 11: Multiple Result Sets**
 

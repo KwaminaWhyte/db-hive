@@ -74,6 +74,7 @@ pub fn run() {
             Ok(())
         })
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet,
@@ -99,6 +100,8 @@ pub fn run() {
             commands::history::list_snippets,
             commands::history::delete_snippet,
             commands::history::get_snippet,
+            commands::export::export_to_csv,
+            commands::export::export_to_json,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

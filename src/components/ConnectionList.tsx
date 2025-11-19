@@ -96,7 +96,9 @@ export const ConnectionList: FC<ConnectionListProps> = ({
           onConnected?.(connectionId, profile);
         } catch (err) {
           const errorMessage =
-            typeof err === "string" ? err : (err as any)?.message || String(err);
+            typeof err === "string"
+              ? err
+              : (err as any)?.message || String(err);
           setError(`Failed to connect: ${errorMessage}`);
         } finally {
           setConnectingId(null);
@@ -311,7 +313,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                         <div className="text-xs text-muted-foreground space-y-0.5">
                           <div className="flex items-center gap-4">
                             <span>
-                              {profile.host}:{profile.port}
+                              {profile.host}:{profile.port}/{profile.username}
                             </span>
                             {profile.database && (
                               <>
@@ -322,7 +324,6 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                               </>
                             )}
                           </div>
-                          <div>{profile.username}</div>
                         </div>
                       </div>
                     </div>

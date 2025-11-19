@@ -1,4 +1,4 @@
-import { FC, useMemo } from 'react';
+import { FC, useMemo, useState } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
@@ -9,9 +9,18 @@ import {
 } from '@tanstack/react-table';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
-import { Loader2, AlertCircle, CheckCircle2, Table as TableIcon } from 'lucide-react';
+import { Button } from './ui/button';
+import {
+  Loader2,
+  AlertCircle,
+  CheckCircle2,
+  Table as TableIcon,
+  FileText,
+  FileJson
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
+import { save } from '@tauri-apps/plugin-dialog';
 
 interface ResultsViewerProps {
   /** Column names */
@@ -42,6 +51,63 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
   executionTime,
 }) => {
   const [sorting, setSorting] = useState<SortingState>([]);
+  const [exporting, setExporting] = useState(false);
+
+  // Handle CSV export
+  const handleExportCSV = async () => {
+    try {
+      setExporting(true);
+      const filePath = await save({
+        defaultPath: 'query_results.csv',
+        filters: [{
+          name: 'CSV',
+          extensions: ['csv']
+        }]
+      });
+
+      if (filePath) {
+        await invoke('export_to_csv', {
+          filePath,
+          columns,
+          rows
+        });
+        console.log('Exported to CSV:', filePath);
+      }
+    } catch (err) {
+      console.error('Failed to export CSV:', err);
+      alert(`Failed to export CSV: ${err}`);
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  // Handle JSON export
+  const handleExportJSON = async () => {
+    try {
+      setExporting(true);
+      const filePath = await save({
+        defaultPath: 'query_results.json',
+        filters: [{
+          name: 'JSON',
+          extensions: ['json']
+        }]
+      });
+
+      if (filePath) {
+        await invoke('export_to_json', {
+          filePath,
+          columns,
+          rows
+        });
+        console.log('Exported to JSON:', filePath);
+      }
+    } catch (err) {
+      console.error('Failed to export JSON:', err);
+      alert(`Failed to export JSON: ${err}`);
+    } finally {
+      setExporting(false);
+    }
+  };
 
   // Create column definitions from column names
   const columnDefs = useMemo<ColumnDef<any[]>[]>(() => {
@@ -167,13 +233,39 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
           <CardTitle className="text-base font-medium">
             Results ({rows.length} row{rows.length !== 1 ? 's' : ''})
           </CardTitle>
-          {executionTime !== undefined && (
-            <div className="text-sm text-muted-foreground">
-              {executionTime < 1000
-                ? `${executionTime.toFixed(0)}ms`
-                : `${(executionTime / 1000).toFixed(2)}s`}
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {executionTime !== undefined && (
+              <div className="text-sm text-muted-foreground">
+                {executionTime < 1000
+                  ? `${executionTime.toFixed(0)}ms`
+                  : `${(executionTime / 1000).toFixed(2)}s`}
+              </div>
+            )}
+            {rows.length > 0 && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportCSV}
+                  disabled={exporting}
+                  className="gap-1"
+                >
+                  <FileText className="h-4 w-4" />
+                  CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportJSON}
+                  disabled={exporting}
+                  className="gap-1"
+                >
+                  <FileJson className="h-4 w-4" />
+                  JSON
+                </Button>
+              </>
+            )}
+          </div>
         </div>
       </CardHeader>
 
