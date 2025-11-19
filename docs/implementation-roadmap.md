@@ -502,12 +502,21 @@ pub async fn execute_query(
 - File save dialog with proper file type filters
 - Execution time already displayed in results header
 
-**Week 11: Multiple Result Sets**
+**Week 11: Multiple Result Sets** ✅ PARTIALLY COMPLETED (2025-11-19)
 
-- [ ] Support multiple result sets (for stored procedures)
-- [ ] Add result tabs (Grid / JSON / Raw)
-- [ ] Implement result caching
-- [ ] Add "Export All" functionality
+- [ ] Support multiple result sets (for stored procedures) (TODO: Advanced feature)
+- [x] Add result tabs (Grid / JSON / Raw) ✅
+- [ ] Implement result caching (TODO: Performance enhancement)
+- [ ] Add "Export All" functionality (TODO: Future enhancement)
+
+**Implementation Details:**
+- Added tabbed view mode to ResultsViewer (Grid / JSON / Raw)
+- Grid view: Sortable table with TanStack Table (existing functionality)
+- JSON view: Pretty-printed JSON with proper formatting
+- Raw view: Tab-delimited text format for easy copying
+- Tab switching preserves data without re-rendering
+- Used shadcn/ui Tabs component with icons for each view
+- All views show the same data in different formats
 
 ### Milestone 1.4: Schema Explorer (Weeks 12-14)
 

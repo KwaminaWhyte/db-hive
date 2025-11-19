@@ -10,13 +10,16 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
 import { Button } from './ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import {
   Loader2,
   AlertCircle,
   CheckCircle2,
   Table as TableIcon,
   FileText,
-  FileJson
+  FileJson,
+  Code,
+  FileCode
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { invoke } from '@tauri-apps/api/core';
@@ -52,6 +55,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
 }) => {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [exporting, setExporting] = useState(false);
+  const [viewMode, setViewMode] = useState<'grid' | 'json' | 'raw'>('grid');
 
   // Handle CSV export
   const handleExportCSV = async () => {
@@ -147,6 +151,41 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
   });
+
+  // Convert results to JSON format
+  const resultsAsJSON = useMemo(() => {
+    if (!columns.length || !rows.length) return '[]';
+
+    const jsonRows = rows.map((row) => {
+      const obj: Record<string, any> = {};
+      columns.forEach((col, idx) => {
+        obj[col] = row[idx];
+      });
+      return obj;
+    });
+
+    return JSON.stringify(jsonRows, null, 2);
+  }, [columns, rows]);
+
+  // Convert results to raw text format
+  const resultsAsRaw = useMemo(() => {
+    if (!columns.length) return '';
+
+    // Create header row
+    const header = columns.join('\t');
+
+    // Create data rows
+    const dataRows = rows.map((row) =>
+      row.map((cell) => {
+        if (cell === null) return 'NULL';
+        if (cell === undefined) return 'undefined';
+        if (typeof cell === 'object') return JSON.stringify(cell);
+        return String(cell);
+      }).join('\t')
+    );
+
+    return [header, ...dataRows].join('\n');
+  }, [columns, rows]);
 
   // Render loading state
   if (loading) {
@@ -269,59 +308,95 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
         </div>
       </CardHeader>
 
-      <CardContent className="flex-1 p-0 overflow-auto">
-        <div className="relative h-full">
-          <table className="w-full border-collapse text-sm">
-            <thead className="sticky top-0 bg-muted/50 backdrop-blur-sm z-10">
-              {table.getHeaderGroups().map((headerGroup) => (
-                <tr key={headerGroup.id} className="border-b">
-                  {headerGroup.headers.map((header) => (
-                    <th
-                      key={header.id}
+      <CardContent className="flex-1 p-0 overflow-hidden">
+        <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'grid' | 'json' | 'raw')} className="h-full flex flex-col">
+          <div className="border-b px-4 shrink-0">
+            <TabsList className="h-10">
+              <TabsTrigger value="grid" className="gap-1.5">
+                <TableIcon className="h-3.5 w-3.5" />
+                Grid
+              </TabsTrigger>
+              <TabsTrigger value="json" className="gap-1.5">
+                <Code className="h-3.5 w-3.5" />
+                JSON
+              </TabsTrigger>
+              <TabsTrigger value="raw" className="gap-1.5">
+                <FileCode className="h-3.5 w-3.5" />
+                Raw
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          {/* Grid View */}
+          <TabsContent value="grid" className="flex-1 m-0 overflow-auto">
+            <div className="relative h-full">
+              <table className="w-full border-collapse text-sm">
+                <thead className="sticky top-0 bg-muted/50 backdrop-blur-sm z-10">
+                  {table.getHeaderGroups().map((headerGroup) => (
+                    <tr key={headerGroup.id} className="border-b">
+                      {headerGroup.headers.map((header) => (
+                        <th
+                          key={header.id}
+                          className={cn(
+                            'text-left font-semibold px-4 py-3 border-r last:border-r-0',
+                            header.column.getCanSort() && 'cursor-pointer select-none'
+                          )}
+                          onClick={header.column.getToggleSortingHandler()}
+                        >
+                          <div className="flex items-center gap-2">
+                            {flexRender(
+                              header.column.columnDef.header,
+                              header.getContext()
+                            )}
+                            {header.column.getIsSorted() && (
+                              <span className="text-xs">
+                                {header.column.getIsSorted() === 'asc' ? '↑' : '↓'}
+                              </span>
+                            )}
+                          </div>
+                        </th>
+                      ))}
+                    </tr>
+                  ))}
+                </thead>
+                <tbody>
+                  {table.getRowModel().rows.map((row, rowIndex) => (
+                    <tr
+                      key={row.id}
                       className={cn(
-                        'text-left font-semibold px-4 py-3 border-r last:border-r-0',
-                        header.column.getCanSort() && 'cursor-pointer select-none'
+                        'border-b hover:bg-muted/30 transition-colors',
+                        rowIndex % 2 === 0 ? 'bg-background' : 'bg-muted/10'
                       )}
-                      onClick={header.column.getToggleSortingHandler()}
                     >
-                      <div className="flex items-center gap-2">
-                        {flexRender(
-                          header.column.columnDef.header,
-                          header.getContext()
-                        )}
-                        {header.column.getIsSorted() && (
-                          <span className="text-xs">
-                            {header.column.getIsSorted() === 'asc' ? '↑' : '↓'}
-                          </span>
-                        )}
-                      </div>
-                    </th>
+                      {row.getVisibleCells().map((cell) => (
+                        <td
+                          key={cell.id}
+                          className="px-4 py-2 border-r last:border-r-0 max-w-md"
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              ))}
-            </thead>
-            <tbody>
-              {table.getRowModel().rows.map((row, rowIndex) => (
-                <tr
-                  key={row.id}
-                  className={cn(
-                    'border-b hover:bg-muted/30 transition-colors',
-                    rowIndex % 2 === 0 ? 'bg-background' : 'bg-muted/10'
-                  )}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <td
-                      key={cell.id}
-                      className="px-4 py-2 border-r last:border-r-0 max-w-md"
-                    >
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </tbody>
+              </table>
+            </div>
+          </TabsContent>
+
+          {/* JSON View */}
+          <TabsContent value="json" className="flex-1 m-0 overflow-auto">
+            <pre className="p-4 text-xs font-mono">
+              <code>{resultsAsJSON}</code>
+            </pre>
+          </TabsContent>
+
+          {/* Raw View */}
+          <TabsContent value="raw" className="flex-1 m-0 overflow-auto">
+            <pre className="p-4 text-xs font-mono whitespace-pre">
+              <code>{resultsAsRaw}</code>
+            </pre>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );
