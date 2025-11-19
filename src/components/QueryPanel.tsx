@@ -8,7 +8,17 @@ import { QueryExecutionResult, ConnectionProfile } from '@/types/database';
 import { createQueryHistory } from '@/types/history';
 import { invoke } from '@tauri-apps/api/core';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { GripHorizontal, GripVertical } from 'lucide-react';
+import { Button } from './ui/button';
+import { GripHorizontal, GripVertical, Plus, X } from 'lucide-react';
+
+interface EditorTab {
+  id: string;
+  name: string;
+  sql: string;
+  loading: boolean;
+  results: QueryExecutionResult | null;
+  error: string | null;
+}
 
 interface QueryPanelProps {
   /** Active connection ID */
@@ -24,34 +34,107 @@ interface QueryPanelProps {
   onExecuteQuery: (sql: string) => Promise<QueryExecutionResult>;
 }
 
+let tabIdCounter = 1;
+
 export const QueryPanel: FC<QueryPanelProps> = ({
   connectionId,
   connectionProfile,
   currentDatabase,
   onExecuteQuery,
 }) => {
-  const [sql, setSql] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<QueryExecutionResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Tab management
+  const [tabs, setTabs] = useState<EditorTab[]>([
+    {
+      id: 'tab-1',
+      name: 'Query 1',
+      sql: '',
+      loading: false,
+      results: null,
+      error: null,
+    },
+  ]);
+  const [activeTabId, setActiveTabId] = useState('tab-1');
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  // Get the active tab
+  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+
+  // Add new tab
+  const handleAddTab = () => {
+    tabIdCounter++;
+    const newTab: EditorTab = {
+      id: `tab-${tabIdCounter}`,
+      name: `Query ${tabIdCounter}`,
+      sql: '',
+      loading: false,
+      results: null,
+      error: null,
+    };
+    setTabs([...tabs, newTab]);
+    setActiveTabId(newTab.id);
+  };
+
+  // Close tab
+  const handleCloseTab = (tabId: string) => {
+    if (tabs.length === 1) {
+      // Don't close the last tab, just reset it
+      setTabs([
+        {
+          id: tabId,
+          name: 'Query 1',
+          sql: '',
+          loading: false,
+          results: null,
+          error: null,
+        },
+      ]);
+      return;
+    }
+
+    const tabIndex = tabs.findIndex((t) => t.id === tabId);
+    const newTabs = tabs.filter((t) => t.id !== tabId);
+    setTabs(newTabs);
+
+    // If closing active tab, switch to adjacent tab
+    if (tabId === activeTabId) {
+      const newActiveIndex = Math.min(tabIndex, newTabs.length - 1);
+      setActiveTabId(newTabs[newActiveIndex].id);
+    }
+  };
+
+  // Update tab state
+  const updateTab = (
+    tabId: string,
+    updates: Partial<Omit<EditorTab, 'id' | 'name'>>
+  ) => {
+    setTabs((prevTabs) =>
+      prevTabs.map((tab) =>
+        tab.id === tabId ? { ...tab, ...updates } : tab
+      )
+    );
+  };
 
   // Handle query execution
   const handleExecute = async (sqlToExecute: string) => {
     if (!connectionId) {
-      setError('No active connection');
+      updateTab(activeTabId, { error: 'No active connection' });
       return;
     }
 
-    setLoading(true);
-    setError(null);
-    setResults(null);
+    updateTab(activeTabId, {
+      loading: true,
+      error: null,
+      results: null,
+    });
 
     const startTime = Date.now();
 
     try {
       const result = await onExecuteQuery(sqlToExecute);
-      setResults(result);
+      updateTab(activeTabId, {
+        results: result,
+        loading: false,
+      });
 
       const executionTime = Date.now() - startTime;
 
@@ -79,7 +162,10 @@ export const QueryPanel: FC<QueryPanelProps> = ({
     } catch (err: any) {
       // Handle error - could be a DbError from Tauri
       const errorMessage = err?.message || String(err);
-      setError(errorMessage);
+      updateTab(activeTabId, {
+        error: errorMessage,
+        loading: false,
+      });
 
       const executionTime = Date.now() - startTime;
 
@@ -105,20 +191,23 @@ export const QueryPanel: FC<QueryPanelProps> = ({
             console.error('Failed to save query to history:', err);
           });
       }
-    } finally {
-      setLoading(false);
     }
   };
 
   // Handle inserting snippet into editor
   const handleInsertSnippet = (query: string) => {
-    setSql(query);
+    updateTab(activeTabId, { sql: query });
   };
 
   // Handle executing query from history
   const handleExecuteFromHistory = (query: string) => {
-    setSql(query);
+    updateTab(activeTabId, { sql: query });
     handleExecute(query);
+  };
+
+  // Handle SQL change
+  const handleSqlChange = (value: string) => {
+    updateTab(activeTabId, { sql: value });
   };
 
   return (
@@ -126,15 +215,55 @@ export const QueryPanel: FC<QueryPanelProps> = ({
       {/* Main Query Editor Area */}
       <Panel defaultSize={70} minSize={40}>
         <PanelGroup direction="vertical" className="h-full">
-          {/* SQL Editor Panel */}
-          <Panel defaultSize={40} minSize={20} className="relative">
-            <SQLEditor
-              connectionId={connectionId}
-              onExecuteQuery={handleExecute}
-              value={sql}
-              onChange={(value) => setSql(value || '')}
-              loading={loading}
-            />
+          {/* SQL Editor Panel with Tabs */}
+          <Panel defaultSize={40} minSize={20} className="relative flex flex-col">
+            {/* Tab Bar */}
+            <div className="flex items-center gap-1 bg-muted/30 border-b px-2 py-1 overflow-x-auto">
+              {tabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  className={`
+                    group flex items-center gap-2 px-3 py-1.5 rounded-t-md text-sm cursor-pointer transition-colors
+                    ${
+                      tab.id === activeTabId
+                        ? 'bg-background border-t border-x text-foreground'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                    }
+                  `}
+                  onClick={() => setActiveTabId(tab.id)}
+                >
+                  <span className="select-none">{tab.name}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleCloseTab(tab.id);
+                    }}
+                    className="opacity-0 group-hover:opacity-100 hover:bg-muted rounded p-0.5 transition-opacity"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={handleAddTab}
+                className="h-7 px-2"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+
+            {/* Active Tab Editor */}
+            <div className="flex-1 overflow-hidden">
+              <SQLEditor
+                connectionId={connectionId}
+                onExecuteQuery={handleExecute}
+                value={activeTab.sql}
+                onChange={(value) => handleSqlChange(value || '')}
+                loading={activeTab.loading}
+              />
+            </div>
           </Panel>
 
           {/* Horizontal Resizable Handle */}
@@ -147,12 +276,12 @@ export const QueryPanel: FC<QueryPanelProps> = ({
           {/* Results Viewer Panel */}
           <Panel defaultSize={60} minSize={30} className="relative">
             <ResultsViewer
-              columns={results?.columns || []}
-              rows={results?.rows || []}
-              rowsAffected={results?.rowsAffected || null}
-              loading={loading}
-              error={error}
-              executionTime={results?.executionTime}
+              columns={activeTab.results?.columns || []}
+              rows={activeTab.results?.rows || []}
+              rowsAffected={activeTab.results?.rowsAffected || null}
+              loading={activeTab.loading}
+              error={activeTab.error}
+              executionTime={activeTab.results?.executionTime}
             />
           </Panel>
         </PanelGroup>
