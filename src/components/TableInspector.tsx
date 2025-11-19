@@ -31,6 +31,7 @@ interface TableInspectorProps {
   schema: string;
   tableName: string;
   onClose: () => void;
+  driverType?: string;
 }
 
 export function TableInspector({
@@ -38,6 +39,7 @@ export function TableInspector({
   schema,
   tableName,
   onClose,
+  driverType = 'Postgres',
 }: TableInspectorProps) {
   const [tableSchema, setTableSchema] = useState<TableSchema | null>(null);
   const [sampleData, setSampleData] = useState<QueryExecutionResult | null>(
@@ -52,6 +54,15 @@ export function TableInspector({
   const [totalRows, setTotalRows] = useState<number | null>(null);
   const [selectedRow, setSelectedRow] = useState<any[] | null>(null);
   const [showRowViewer, setShowRowViewer] = useState(false);
+
+  // Helper function to quote identifiers based on database driver
+  const quoteIdentifier = (identifier: string) => {
+    if (driverType === 'MySql') {
+      return `\`${identifier}\``;
+    }
+    // PostgreSQL, SQLite use double quotes
+    return `"${identifier}"`;
+  };
 
   useEffect(() => {
     // Reset state when table changes
@@ -104,7 +115,7 @@ export function TableInspector({
         try {
           const countResult = await invoke<QueryExecutionResult>("execute_query", {
             connectionId,
-            sql: `SELECT COUNT(*) FROM "${schema}"."${tableName}"`,
+            sql: `SELECT COUNT(*) FROM ${quoteIdentifier(schema)}.${quoteIdentifier(tableName)}`,
           });
           const count = countResult.rows[0]?.[0];
           setTotalRows(typeof count === 'number' ? count : parseInt(String(count)) || 0);
@@ -117,7 +128,7 @@ export function TableInspector({
       // Fetch paginated data
       const result = await invoke<QueryExecutionResult>("execute_query", {
         connectionId,
-        sql: `SELECT * FROM "${schema}"."${tableName}" LIMIT ${pageSize} OFFSET ${offset}`,
+        sql: `SELECT * FROM ${quoteIdentifier(schema)}.${quoteIdentifier(tableName)} LIMIT ${pageSize} OFFSET ${offset}`,
       });
       setSampleData(result);
     } catch (err) {

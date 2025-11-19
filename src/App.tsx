@@ -209,6 +209,7 @@ function App() {
                           schema={table.schema}
                           tableName={table.tableName}
                           onClose={() => handleCloseTable(table.id)}
+                          driverType={activeConnectionProfile?.driver}
                         />
                       </div>
                     ))}
