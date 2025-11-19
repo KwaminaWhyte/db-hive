@@ -205,6 +205,7 @@ function App() {
             ) : (
               <QueryPanel
                 connectionId={activeConnectionId}
+                connectionProfile={activeConnectionProfile}
                 onExecuteQuery={executeQuery}
               />
             )}

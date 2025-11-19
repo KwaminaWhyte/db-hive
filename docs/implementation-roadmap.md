@@ -437,23 +437,33 @@ pub async fn execute_query(
 - Created `QueryPanel.tsx` with resizable split layout
 - Integrated tabs navigation in main App (Query Editor | Connections)
 
-**Week 8: Query History & Snippets** ⏳ TODO
+**Week 8: Query History & Snippets** ✅ COMPLETED (2025-11-19)
 
-- [ ] Create local SQLite database for history
-- [ ] Implement history commands:
+- [x] Create local SQLite database for history (using tauri-plugin-store)
+- [x] Implement history commands:
 
   - `save_to_history`
   - `get_query_history`
   - `clear_history`
 
-- [ ] Add snippet management:
+- [x] Add snippet management:
 
   - `save_snippet`
   - `list_snippets`
   - `delete_snippet`
+  - `get_snippet`
 
-- [ ] Build history UI component
-- [ ] Build snippet sidebar
+- [x] Build history UI component (HistoryPanel)
+- [x] Build snippet sidebar (SnippetSidebar)
+- [x] Integrate auto-save with query execution
+- [x] Add resizable panels for History/Snippets in Query Editor
+
+**Implementation Details:**
+- Used tauri-plugin-store for persistent storage (history.json, snippets.json)
+- Auto-save history on every query execution (success or failure)
+- History panel shows recent queries with metadata (time, rows, success/failure)
+- Snippet management with tags, search, and quick insertion
+- Resizable 3-panel layout: Editor | Results | History/Snippets
 
 ### Milestone 1.3: Results Viewer (Weeks 9-11)
 

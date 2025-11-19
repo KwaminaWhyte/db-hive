@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::drivers::DatabaseDriver;
-use crate::models::{ConnectionProfile, DbError};
+use crate::models::{ConnectionProfile, DbError, QueryHistory, QuerySnippet};
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
@@ -53,8 +53,13 @@ pub struct AppState {
     /// These are cleared when connections are disconnected
     pub connection_passwords: HashMap<String, String>,
 
-    // TODO: Define QueryRecord type and add query_history field
-    // pub query_history: Vec<QueryRecord>,
+    /// Query execution history
+    /// Stores records of all executed queries with metadata
+    pub query_history: Vec<QueryHistory>,
+
+    /// Saved query snippets
+    /// Key: Snippet ID (UUID), Value: Query snippet
+    pub query_snippets: HashMap<String, QuerySnippet>,
 }
 
 impl AppState {
@@ -68,6 +73,8 @@ impl AppState {
             connections: HashMap::new(),
             connection_profiles: HashMap::new(),
             connection_passwords: HashMap::new(),
+            query_history: Vec::new(),
+            query_snippets: HashMap::new(),
         }
     }
 
@@ -371,6 +378,161 @@ impl AppState {
         store.set("passwords", passwords_value);
 
         // Save the store to disk
+        store
+            .save()
+            .map_err(|e| DbError::InternalError(format!("Failed to persist store: {}", e)))?;
+
+        Ok(())
+    }
+
+    // ========================================================================
+    // Query History Management
+    // ========================================================================
+
+    /// Add a query history entry
+    pub fn add_history(&mut self, history: QueryHistory) {
+        self.query_history.push(history);
+    }
+
+    /// Get all query history
+    pub fn get_all_history(&self) -> Vec<QueryHistory> {
+        self.query_history.clone()
+    }
+
+    /// Get query history for a specific connection
+    pub fn get_history_by_connection(&self, connection_id: &str) -> Vec<QueryHistory> {
+        self.query_history
+            .iter()
+            .filter(|h| h.connection_id == connection_id)
+            .cloned()
+            .collect()
+    }
+
+    /// Clear all query history
+    pub fn clear_all_history(&mut self) -> usize {
+        let count = self.query_history.len();
+        self.query_history.clear();
+        count
+    }
+
+    /// Clear query history for a specific connection
+    pub fn clear_history_by_connection(&mut self, connection_id: &str) -> usize {
+        let original_len = self.query_history.len();
+        self.query_history
+            .retain(|h| h.connection_id != connection_id);
+        original_len - self.query_history.len()
+    }
+
+    /// Load query history from persistent storage
+    pub fn load_history_from_store(&mut self, app: &AppHandle) -> Result<usize, DbError> {
+        let store = app
+            .store("history.json")
+            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+
+        if let Some(history_value) = store.get("history") {
+            let history: Vec<QueryHistory> =
+                serde_json::from_value(history_value.clone()).map_err(|e| {
+                    DbError::InternalError(format!("Failed to deserialize history: {}", e))
+                })?;
+
+            let count = history.len();
+            self.query_history = history;
+            Ok(count)
+        } else {
+            Ok(0)
+        }
+    }
+
+    /// Save query history to persistent storage
+    pub fn save_history_to_store(&self, app: &AppHandle) -> Result<(), DbError> {
+        let store = app
+            .store("history.json")
+            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+
+        let history_value = serde_json::to_value(&self.query_history)
+            .map_err(|e| DbError::InternalError(format!("Failed to serialize history: {}", e)))?;
+
+        store.set("history", history_value);
+
+        store
+            .save()
+            .map_err(|e| DbError::InternalError(format!("Failed to persist store: {}", e)))?;
+
+        Ok(())
+    }
+
+    // ========================================================================
+    // Query Snippet Management
+    // ========================================================================
+
+    /// Add or update a query snippet
+    pub fn add_snippet(&mut self, snippet: QuerySnippet) {
+        self.query_snippets.insert(snippet.id.clone(), snippet);
+    }
+
+    /// Remove a query snippet
+    pub fn remove_snippet(&mut self, id: &str) -> Option<QuerySnippet> {
+        self.query_snippets.remove(id)
+    }
+
+    /// Get a query snippet by ID
+    pub fn get_snippet(&self, id: &str) -> Option<&QuerySnippet> {
+        self.query_snippets.get(id)
+    }
+
+    /// Get all query snippets
+    pub fn get_all_snippets(&self) -> Vec<QuerySnippet> {
+        self.query_snippets.values().cloned().collect()
+    }
+
+    /// Get snippets filtered by tag
+    pub fn get_snippets_by_tag(&self, tag: &str) -> Vec<QuerySnippet> {
+        self.query_snippets
+            .values()
+            .filter(|s| {
+                s.tags
+                    .as_ref()
+                    .map(|tags| tags.contains(&tag.to_string()))
+                    .unwrap_or(false)
+            })
+            .cloned()
+            .collect()
+    }
+
+    /// Load query snippets from persistent storage
+    pub fn load_snippets_from_store(&mut self, app: &AppHandle) -> Result<usize, DbError> {
+        let store = app
+            .store("snippets.json")
+            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+
+        if let Some(snippets_value) = store.get("snippets") {
+            let snippets: Vec<QuerySnippet> =
+                serde_json::from_value(snippets_value.clone()).map_err(|e| {
+                    DbError::InternalError(format!("Failed to deserialize snippets: {}", e))
+                })?;
+
+            let count = snippets.len();
+            for snippet in snippets {
+                self.query_snippets.insert(snippet.id.clone(), snippet);
+            }
+            Ok(count)
+        } else {
+            Ok(0)
+        }
+    }
+
+    /// Save query snippets to persistent storage
+    pub fn save_snippets_to_store(&self, app: &AppHandle) -> Result<(), DbError> {
+        let store = app
+            .store("snippets.json")
+            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+
+        let snippets: Vec<&QuerySnippet> = self.query_snippets.values().collect();
+        let snippets_value = serde_json::to_value(&snippets)
+            .map_err(|e| DbError::InternalError(format!("Failed to serialize snippets: {}", e)))?;
+
+        store.set("snippets", snippets_value);
+
         store
             .save()
             .map_err(|e| DbError::InternalError(format!("Failed to persist store: {}", e)))?;

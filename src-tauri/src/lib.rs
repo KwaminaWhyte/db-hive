@@ -45,6 +45,30 @@ pub fn run() {
                 }
             }
 
+            // Load query history from persistent storage
+            match state.load_history_from_store(&app.handle()) {
+                Ok(count) => {
+                    if count > 0 {
+                        println!("Loaded {} query history record(s) from storage", count);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to load query history from storage: {}", e);
+                }
+            }
+
+            // Load query snippets from persistent storage
+            match state.load_snippets_from_store(&app.handle()) {
+                Ok(count) => {
+                    if count > 0 {
+                        println!("Loaded {} query snippet(s) from storage", count);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to load query snippets from storage: {}", e);
+                }
+            }
+
             // Manage the state
             app.manage(Mutex::new(state));
             Ok(())
@@ -68,6 +92,13 @@ pub fn run() {
             commands::schema::get_schemas,
             commands::schema::get_tables,
             commands::schema::get_table_schema,
+            commands::history::save_to_history,
+            commands::history::get_query_history,
+            commands::history::clear_history,
+            commands::history::save_snippet,
+            commands::history::list_snippets,
+            commands::history::delete_snippet,
+            commands::history::get_snippet,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
