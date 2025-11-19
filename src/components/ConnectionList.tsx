@@ -8,7 +8,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +18,7 @@ import {
 } from "@/components/ui/dialog";
 import { Pencil, Trash, Database, Server, Plus, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface ConnectionListProps {
   /** Callback when a profile is selected for editing or null for new connection */
@@ -187,14 +187,41 @@ export const ConnectionList: FC<ConnectionListProps> = ({
 
   if (loading) {
     return (
-      <Card className="m-6">
-        <CardHeader>
-          <CardTitle>Connections</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <p className="text-muted-foreground">Loading...</p>
-        </CardContent>
-      </Card>
+      <div className="h-full flex flex-col">
+        {/* Header Skeleton */}
+        <div className="p-4 border-b">
+          <div className="flex justify-between flex-col">
+            <Skeleton className="h-9 w-full md:w-40" />
+            <div className="flex justify-between items-center w-full mt-4">
+              <div className="space-y-2">
+                <Skeleton className="h-6 w-48" />
+                <Skeleton className="h-4 w-32" />
+              </div>
+              <Skeleton className="h-9 w-9" />
+            </div>
+          </div>
+        </div>
+
+        {/* Connection List Skeleton */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="border rounded-lg p-3">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3 flex-1">
+                  <Skeleton className="h-5 w-5 mt-0.5 rounded" />
+                  <div className="flex-1 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Skeleton className="h-4 w-32" />
+                      <Skeleton className="h-5 w-20 rounded-full" />
+                    </div>
+                    <Skeleton className="h-3 w-48" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     );
   }
 

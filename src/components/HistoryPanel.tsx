@@ -20,6 +20,13 @@ import {
   CardTitle,
 } from "./ui/card";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -132,16 +139,20 @@ export function HistoryPanel({
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
-            <select
-              className="px-3 py-1 border rounded-md text-sm"
-              value={limit}
-              onChange={(e) => setLimit(parseInt(e.target.value))}
+            <Select
+              value={limit.toString()}
+              onValueChange={(value) => setLimit(parseInt(value))}
             >
-              <option value={25}>Last 25</option>
-              <option value={50}>Last 50</option>
-              <option value={100}>Last 100</option>
-              <option value={500}>Last 500</option>
-            </select>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="25">Last 25</SelectItem>
+                <SelectItem value="50">Last 50</SelectItem>
+                <SelectItem value="100">Last 100</SelectItem>
+                <SelectItem value="500">Last 500</SelectItem>
+              </SelectContent>
+            </Select>
             <Button variant="outline" size="sm" onClick={loadHistory}>
               Refresh
             </Button>

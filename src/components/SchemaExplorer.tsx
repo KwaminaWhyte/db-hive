@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -17,7 +18,6 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
-  Loader2,
   Database,
   Table2,
   Eye,
@@ -252,10 +252,7 @@ export function SchemaExplorer({
         <div className="mb-3">
           <div className="text-xs text-muted-foreground mb-1">Database</div>
           {loadingDatabases ? (
-            <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
-              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              <span className="text-sm">Loading databases...</span>
-            </div>
+            <Skeleton className="h-10 w-full rounded-md" />
           ) : databases.length > 0 ? (
             <Select
               value={selectedDatabase}
@@ -290,8 +287,9 @@ export function SchemaExplorer({
 
         {/* Schema Selector */}
         {loadingSchemas ? (
-          <div className="flex items-center justify-center py-4">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-10 w-full rounded-md" />
           </div>
         ) : schemas.length > 0 ? (
           <div>
@@ -347,8 +345,14 @@ export function SchemaExplorer({
       {/* Tables List */}
       <div className="flex-1 overflow-hidden">
         {loadingTables ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          <div className="p-4 space-y-2">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="flex items-center gap-2 px-3 py-2">
+                <Skeleton className="h-4 w-4 rounded" />
+                <Skeleton className="h-4 flex-1" />
+                <Skeleton className="h-3 w-16" />
+              </div>
+            ))}
           </div>
         ) : (
           <ScrollArea className="h-full">

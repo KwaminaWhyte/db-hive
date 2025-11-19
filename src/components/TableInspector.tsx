@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -13,7 +14,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Loader2,
   Table2,
   Key,
   Database,
@@ -157,8 +157,31 @@ export function TableInspector({
 
   if (loading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="h-full flex flex-col">
+        {/* Header Skeleton */}
+        <div className="flex items-center justify-between p-4 border-b">
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-6 w-6 rounded" />
+            <Skeleton className="h-6 w-48" />
+          </div>
+          <Skeleton className="h-8 w-8 rounded" />
+        </div>
+
+        {/* Tabs Skeleton */}
+        <div className="border-b px-4">
+          <div className="flex gap-4 h-10">
+            <Skeleton className="h-full w-20" />
+            <Skeleton className="h-full w-24" />
+            <Skeleton className="h-full w-20" />
+          </div>
+        </div>
+
+        {/* Content Skeleton */}
+        <div className="flex-1 p-4 space-y-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Skeleton key={i} className="h-12 w-full" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -234,8 +257,19 @@ export function TableInspector({
         {/* Data Tab */}
         <TabsContent value="data" className="flex-1 m-0 flex flex-col overflow-hidden">
           {loadingSampleData ? (
-            <div className="flex items-center justify-center flex-1">
-              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            <div className="flex-1 p-4 space-y-2">
+              <div className="flex gap-2 mb-4">
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <Skeleton key={i} className="h-8 flex-1" />
+                ))}
+              </div>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <div key={i} className="flex gap-2">
+                  {[1, 2, 3, 4, 5].map((j) => (
+                    <Skeleton key={j} className="h-10 flex-1" />
+                  ))}
+                </div>
+              ))}
             </div>
           ) : sampleData ? (
             <>
