@@ -154,6 +154,19 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
 
       if (status === 'Connected') {
         setTestStatus('Connection successful!');
+
+        // Save password for future use (if profile has an ID)
+        if (testProfile.id) {
+          try {
+            await invoke('save_password', {
+              profileId: testProfile.id,
+              password,
+            });
+          } catch (err) {
+            console.error('Failed to save password:', err);
+            // Don't show error to user, connection test was successful
+          }
+        }
       } else {
         setTestStatus('Connection failed');
       }
@@ -200,6 +213,19 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       const profileId = await invoke<string>('create_connection_profile', {
         profile: saveProfile,
       });
+
+      // Save password if provided
+      if (password) {
+        try {
+          await invoke('save_password', {
+            profileId,
+            password,
+          });
+        } catch (err) {
+          console.error('Failed to save password:', err);
+          // Don't show error to user, profile was saved successfully
+        }
+      }
 
       setTestStatus('Connection profile saved successfully!');
       onSuccess?.(profileId);

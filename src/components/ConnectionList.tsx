@@ -74,12 +74,49 @@ export const ConnectionList: FC<ConnectionListProps> = ({
   };
 
   // Handle connect button click
-  const handleConnectClick = (profile: ConnectionProfile) => {
-    setPasswordPrompt({
-      profileId: profile.id,
-      profileName: profile.name,
-    });
-    setPassword("");
+  const handleConnectClick = async (profile: ConnectionProfile) => {
+    // Check if there's a saved password for this profile
+    try {
+      const savedPassword = await invoke<string | null>("get_saved_password", {
+        profileId: profile.id,
+      });
+
+      if (savedPassword) {
+        // Auto-connect with saved password
+        setConnectingId(profile.id);
+        setError(null);
+
+        try {
+          const connectionId = await invoke<string>("connect_to_database", {
+            profileId: profile.id,
+            password: savedPassword,
+          });
+
+          // Success - notify parent component
+          onConnected?.(connectionId, profile);
+        } catch (err) {
+          const errorMessage =
+            typeof err === "string" ? err : (err as any)?.message || String(err);
+          setError(`Failed to connect: ${errorMessage}`);
+        } finally {
+          setConnectingId(null);
+        }
+      } else {
+        // No saved password, show password prompt
+        setPasswordPrompt({
+          profileId: profile.id,
+          profileName: profile.name,
+        });
+        setPassword("");
+      }
+    } catch (err) {
+      // If fetching saved password fails, show password prompt
+      setPasswordPrompt({
+        profileId: profile.id,
+        profileName: profile.name,
+      });
+      setPassword("");
+    }
   };
 
   // Handle connect with password

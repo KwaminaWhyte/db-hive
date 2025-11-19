@@ -304,6 +304,79 @@ impl AppState {
 
         Ok(())
     }
+
+    /// Load saved passwords from persistent storage
+    ///
+    /// # Arguments
+    ///
+    /// * `app` - Tauri application handle
+    ///
+    /// # Returns
+    ///
+    /// Number of passwords loaded
+    ///
+    /// # Security Note
+    ///
+    /// This is a temporary solution. Passwords are stored in plaintext
+    /// in the store file. In the future, this should be replaced with
+    /// OS keyring storage for better security.
+    pub fn load_passwords_from_store(&mut self, app: &AppHandle) -> Result<usize, DbError> {
+        let store = app
+            .store("passwords.json")
+            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+
+        // Get passwords from store
+        if let Some(passwords_value) = store.get("passwords") {
+            // Deserialize passwords map
+            let passwords: HashMap<String, String> =
+                serde_json::from_value(passwords_value.clone()).map_err(|e| {
+                    DbError::InternalError(format!("Failed to deserialize passwords: {}", e))
+                })?;
+
+            let count = passwords.len();
+            self.connection_passwords = passwords;
+
+            Ok(count)
+        } else {
+            // No passwords in store yet
+            Ok(0)
+        }
+    }
+
+    /// Save connection passwords to persistent storage
+    ///
+    /// # Arguments
+    ///
+    /// * `app` - Tauri application handle
+    ///
+    /// # Returns
+    ///
+    /// Ok(()) if successful
+    ///
+    /// # Security Note
+    ///
+    /// This is a temporary solution. Passwords are stored in plaintext
+    /// in the store file. In the future, this should be replaced with
+    /// OS keyring storage for better security.
+    pub fn save_passwords_to_store(&self, app: &AppHandle) -> Result<(), DbError> {
+        let store = app
+            .store("passwords.json")
+            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+
+        // Serialize and save passwords
+        let passwords_value = serde_json::to_value(&self.connection_passwords)
+            .map_err(|e| DbError::InternalError(format!("Failed to serialize passwords: {}", e)))?;
+
+        // Set passwords in store
+        store.set("passwords", passwords_value);
+
+        // Save the store to disk
+        store
+            .save()
+            .map_err(|e| DbError::InternalError(format!("Failed to persist store: {}", e)))?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]

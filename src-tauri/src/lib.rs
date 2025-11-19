@@ -33,6 +33,18 @@ pub fn run() {
                 }
             }
 
+            // Load saved passwords from persistent storage
+            match state.load_passwords_from_store(&app.handle()) {
+                Ok(count) => {
+                    if count > 0 {
+                        println!("Loaded {} saved password(s) from storage", count);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to load passwords from storage: {}", e);
+                }
+            }
+
             // Manage the state
             app.manage(Mutex::new(state));
             Ok(())
@@ -46,6 +58,8 @@ pub fn run() {
             commands::connection::update_connection_profile,
             commands::connection::delete_connection_profile,
             commands::connection::list_connection_profiles,
+            commands::connection::get_saved_password,
+            commands::connection::save_password,
             commands::connection::connect_to_database,
             commands::connection::disconnect_from_database,
             commands::connection::switch_database,

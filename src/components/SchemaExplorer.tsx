@@ -149,7 +149,26 @@ export function SchemaExplorer({
         });
 
         // Refresh schemas for the new database
-        await fetchSchemas();
+        const schemasData = await invoke<SchemaInfo[]>("get_schemas", {
+          connectionId,
+          database,
+        });
+        setSchemas(schemasData);
+
+        // Auto-select "public" schema if it exists, otherwise select the first one
+        const publicSchema = schemasData.find((s) => s.name === "public");
+        const newSelectedSchema = publicSchema
+          ? "public"
+          : schemasData.length > 0
+          ? schemasData[0].name
+          : "";
+
+        setSelectedSchema(newSelectedSchema);
+
+        // Fetch tables for the selected schema
+        if (newSelectedSchema) {
+          await fetchTables(newSelectedSchema);
+        }
       } catch (err) {
         const errorMessage =
           typeof err === "string" ? err : (err as any)?.message || String(err);

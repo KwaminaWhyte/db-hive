@@ -196,13 +196,15 @@ pub async fn delete_connection_profile(
         conn.close().await?;
     }
 
-    // Remove profile and save to store
+    // Remove profile and password, then save to store
     {
         let mut state_guard = state.lock().unwrap();
         state_guard.remove_profile(&profile_id);
+        state_guard.connection_passwords.remove(&profile_id);
 
-        // Save profiles to persistent storage
+        // Save profiles and passwords to persistent storage
         state_guard.save_profiles_to_store(&app)?;
+        state_guard.save_passwords_to_store(&app)?;
     }
 
     Ok(())
@@ -230,6 +232,64 @@ pub fn list_connection_profiles(
     Ok(profiles.into_iter().cloned().collect())
 }
 
+/// Get saved password for a connection profile
+///
+/// This command retrieves the saved password for a profile if one exists.
+///
+/// # Arguments
+///
+/// * `profile_id` - ID of the profile
+/// * `state` - Application state
+///
+/// # Returns
+///
+/// Returns the saved password if it exists, otherwise None
+///
+/// # Security Note
+///
+/// Passwords are currently stored in plaintext in the persistent store.
+/// This is a temporary solution and should be replaced with OS keyring storage.
+#[tauri::command]
+pub fn get_saved_password(
+    profile_id: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Option<String>, DbError> {
+    let state = state.lock().unwrap();
+    Ok(state.connection_passwords.get(&profile_id).cloned())
+}
+
+/// Save password for a connection profile
+///
+/// This command saves a password for a profile to the persistent store.
+///
+/// # Arguments
+///
+/// * `profile_id` - ID of the profile
+/// * `password` - Password to save
+/// * `state` - Application state
+/// * `app` - Application handle
+///
+/// # Returns
+///
+/// Returns Ok(()) if successful
+///
+/// # Security Note
+///
+/// Passwords are currently stored in plaintext in the persistent store.
+/// This is a temporary solution and should be replaced with OS keyring storage.
+#[tauri::command]
+pub fn save_password(
+    profile_id: String,
+    password: String,
+    state: State<'_, Mutex<AppState>>,
+    app: AppHandle,
+) -> Result<(), DbError> {
+    let mut state = state.lock().unwrap();
+    state.connection_passwords.insert(profile_id, password);
+    state.save_passwords_to_store(&app)?;
+    Ok(())
+}
+
 /// Connect to a database using a saved profile
 ///
 /// This command establishes an active database connection using the credentials
@@ -255,6 +315,7 @@ pub async fn connect_to_database(
     profile_id: String,
     password: String,
     state: State<'_, Mutex<AppState>>,
+    app: AppHandle,
 ) -> Result<String, DbError> {
     // Get the profile from state
     let profile = {
@@ -306,9 +367,14 @@ pub async fn connect_to_database(
     };
 
     // Store connection and password in state
-    let mut state = state.lock().unwrap();
-    state.add_connection(profile_id.clone(), connection);
-    state.connection_passwords.insert(profile_id.clone(), password);
+    {
+        let mut state = state.lock().unwrap();
+        state.add_connection(profile_id.clone(), connection);
+        state.connection_passwords.insert(profile_id.clone(), password);
+
+        // Save password to persistent storage
+        state.save_passwords_to_store(&app)?;
+    }
 
     Ok(profile_id)
 }
@@ -331,10 +397,10 @@ pub async fn disconnect_from_database(
     connection_id: String,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<(), DbError> {
-    // Remove connection and password from state
+    // Remove connection from state (but keep password for reconnection)
     let connection = {
         let mut state = state.lock().unwrap();
-        state.connection_passwords.remove(&connection_id); // Clear stored password
+        // Note: We no longer clear connection_passwords here to allow easy reconnection
         state
             .remove_connection(&connection_id)
             .ok_or_else(|| {

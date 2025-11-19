@@ -205,9 +205,10 @@ async fn execute_query_streamed(
 
 **Security Implementation** ⏳ IN PROGRESS
 
-- [ ] Implement credential encryption using OS keyring (TODO: Week 4)
+- [ ] Implement credential encryption using OS keyring (TODO: Future - currently using persistent store)
 - [ ] Add master passphrase support (optional) (TODO: Later)
 - [x] Implement secure connection storage (ConnectionProfile model with passwordKeyringKey field) ✅
+- [x] Implement persistent password storage (Tauri Store - plaintext, temporary solution) ✅
 - [ ] Add SSH tunnel manager (TODO: Week 5)
 
 ---
@@ -269,10 +270,18 @@ async fn execute_query_streamed(
 - Active connection tracking
 - Auto-switch to query editor on connection
 
+**Recent Additions (2025-11-19):**
+- ✅ Persistent storage for connection profiles (Tauri Store)
+- ✅ Persistent password storage (plaintext - temporary, to be replaced with OS keyring)
+- ✅ Auto-connect with saved passwords
+- ✅ Database switching with automatic table reload
+- ✅ `get_saved_password` command for auto-fill
+- ✅ `switch_database` command for seamless database switching
+
 **What's Next:**
-- [ ] Credential encryption (OS keyring)
+- [ ] Credential encryption (OS keyring - to replace plaintext password storage)
 - [ ] SQLite driver implementation
-- [ ] Schema browser tree view
+- [ ] Schema browser enhancements
 - [ ] Query history tracking
 - [ ] Multiple editor tabs
 - [ ] Export results (CSV, JSON)
@@ -283,15 +292,18 @@ async fn execute_query_streamed(
 
 **Week 3: Connection Manager Backend** ✅ COMPLETED
 
-- [x] Implement connection profile storage (in-memory with AppState, SQLite TODO) ✅
+- [x] Implement connection profile storage (Tauri Store for persistent storage) ✅
+- [x] Implement password storage (Tauri Store - plaintext, temporary solution) ✅
 - [x] Create connection CRUD commands: ✅
   - `create_connection_profile` ✅
   - `update_connection_profile` ✅
   - `delete_connection_profile` ✅
   - `list_connection_profiles` ✅
+  - `get_saved_password` ✅
   - `test_connection_command` ✅
   - `connect_to_database` ✅
   - `disconnect_from_database` ✅
+  - `switch_database` ✅
 
 ```rust
 #[derive(Serialize, Deserialize)]
@@ -314,8 +326,9 @@ async fn test_connection(profile: ConnectionProfile) -> Result<ConnectionStatus,
 }
 ```
 
-- [ ] Implement credential storage using `keyring` crate (TODO: Next session)
+- [x] Implement credential storage using Tauri Store (plaintext - temporary, OS keyring TODO) ✅
 - [x] Add connection state management (AppState with HashMap) ✅
+- [x] Add persistent storage for profiles and passwords (Tauri Store plugin) ✅
 
 **Week 4: PostgreSQL Driver** ✅ COMPLETED
 
