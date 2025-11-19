@@ -485,7 +485,7 @@ pub async fn execute_query(
 
 ### Milestone 1.3: Results Viewer (Weeks 9-11)
 
-**Week 9: Virtualized Data Grid** ✅ PARTIALLY COMPLETED
+**Week 9: Virtualized Data Grid** ✅ COMPLETED (2025-11-19)
 
 - [x] Implement TanStack Table with virtualization ✅
 - [x] Add column sorting ✅
@@ -507,8 +507,11 @@ pub async fn execute_query(
   - Click any cell to copy its value to clipboard
   - Copy button on column headers to copy entire column (newline-separated)
   - Row number column with copy button for each row (tab-separated)
-  - Toast notifications using Sonner for copy feedback
+  - Implemented in both `ResultsViewer.tsx` (query results) and `TableInspector.tsx` (table data viewer)
+  - Toast notifications using Sonner for copy feedback (theme-aware)
   - Proper NULL value handling in copied data
+  - Hover effects to reveal copy buttons
+  - Works in both states: with and without JSON row viewer sidebar open
 
 **Week 10: Result Actions** ✅ COMPLETED (2025-11-19)
 
