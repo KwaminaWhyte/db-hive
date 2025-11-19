@@ -1,5 +1,6 @@
 import { FC, useState, FormEvent, ChangeEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import {
   ConnectionProfile,
   DbDriver,
@@ -94,6 +95,36 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     }
   };
 
+  // Handle file picker for SQLite
+  const handleBrowseFile = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        filters: [
+          {
+            name: "SQLite Database",
+            extensions: ["db", "sqlite", "sqlite3", "db3"],
+          },
+          {
+            name: "All Files",
+            extensions: ["*"],
+          },
+        ],
+      });
+
+      if (selected && typeof selected === "string") {
+        setFormData((prev) => ({
+          ...prev,
+          database: selected,
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to open file picker:", err);
+      setError("Failed to open file picker");
+    }
+  };
+
   // Validate form
   const validateForm = (): string | null => {
     if (!formData.name?.trim()) {
@@ -102,6 +133,16 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     if (!formData.driver) {
       return "Database driver is required";
     }
+
+    // SQLite validation
+    if (formData.driver === "Sqlite") {
+      if (!formData.database?.trim()) {
+        return "Database file path is required for SQLite";
+      }
+      return null;
+    }
+
+    // Server-based database validation
     if (!formData.host?.trim()) {
       return "Host is required";
     }
@@ -128,7 +169,8 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       return;
     }
 
-    if (!password) {
+    // SQLite doesn't require password
+    if (formData.driver !== "Sqlite" && !password) {
       setError("Password is required to test connection");
       return;
     }
@@ -310,111 +352,140 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
             </Select>
           </div>
 
-          {/* Host and Port - Side by side */}
-          <div className="grid grid-cols-3 gap-4">
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="host">
-                Host <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                type="text"
-                id="host"
-                name="host"
-                value={formData.host || ""}
-                onChange={handleChange}
-                placeholder="localhost"
-                required
-              />
-            </div>
-
+          {/* SQLite File Path */}
+          {formData.driver === "Sqlite" ? (
             <div className="space-y-2">
-              <Label htmlFor="port">
-                Port <span className="text-destructive">*</span>
+              <Label htmlFor="database">
+                Database File <span className="text-destructive">*</span>
               </Label>
-              <Input
-                type="number"
-                id="port"
-                name="port"
-                value={formData.port || 0}
-                onChange={handleChange}
-                min="0"
-                max="65535"
-                required
-              />
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  id="database"
+                  name="database"
+                  value={formData.database || ""}
+                  onChange={handleChange}
+                  placeholder="/path/to/database.db"
+                  required
+                  className="flex-1"
+                />
+                <Button type="button" variant="outline" onClick={handleBrowseFile}>
+                  Browse
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Select or enter the path to your SQLite database file
+              </p>
             </div>
-          </div>
+          ) : (
+            <>
+              {/* Host and Port - Side by side */}
+              <div className="grid grid-cols-3 gap-4">
+                <div className="col-span-2 space-y-2">
+                  <Label htmlFor="host">
+                    Host <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    type="text"
+                    id="host"
+                    name="host"
+                    value={formData.host || ""}
+                    onChange={handleChange}
+                    placeholder="localhost"
+                    required
+                  />
+                </div>
 
-          {/* Username */}
-          <div className="space-y-2">
-            <Label htmlFor="username">
-              Username <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              type="text"
-              id="username"
-              name="username"
-              value={formData.username || ""}
-              onChange={handleChange}
-              placeholder="postgres"
-              required
-            />
-          </div>
+                <div className="space-y-2">
+                  <Label htmlFor="port">
+                    Port <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    id="port"
+                    name="port"
+                    value={formData.port || 0}
+                    onChange={handleChange}
+                    min="0"
+                    max="65535"
+                    required
+                  />
+                </div>
+              </div>
 
-          {/* Password */}
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              type="password"
-              id="password"
-              name="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-            />
-          </div>
+              {/* Username */}
+              <div className="space-y-2">
+                <Label htmlFor="username">
+                  Username <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  type="text"
+                  id="username"
+                  name="username"
+                  value={formData.username || ""}
+                  onChange={handleChange}
+                  placeholder="postgres"
+                  required
+                />
+              </div>
 
-          {/* Database */}
-          <div className="space-y-2">
-            <Label htmlFor="database">
-              Database <span className="text-muted-foreground">(optional)</span>
-            </Label>
-            <Input
-              type="text"
-              id="database"
-              name="database"
-              value={formData.database || ""}
-              onChange={handleChange}
-              placeholder="mydb"
-            />
-            <p className="text-xs text-muted-foreground">
-              The specific database to connect to. Leave empty to connect to the
-              default database.
-            </p>
-          </div>
+              {/* Password */}
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  type="password"
+                  id="password"
+                  name="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </div>
 
-          {/* SSL Mode */}
-          <div className="space-y-2">
-            <Label htmlFor="sslMode">SSL Mode</Label>
-            <Select
-              value={formData.sslMode || "Prefer"}
-              onValueChange={(value) =>
-                handleChange({
-                  target: { name: "sslMode", value },
-                } as ChangeEvent<HTMLSelectElement>)
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select SSL mode" />
-              </SelectTrigger>
-              <SelectContent>
-                {sslModes.map((mode) => (
-                  <SelectItem key={mode} value={mode}>
-                    {mode}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              {/* Database */}
+              <div className="space-y-2">
+                <Label htmlFor="database">
+                  Database <span className="text-muted-foreground">(optional)</span>
+                </Label>
+                <Input
+                  type="text"
+                  id="database"
+                  name="database"
+                  value={formData.database || ""}
+                  onChange={handleChange}
+                  placeholder="mydb"
+                />
+                <p className="text-xs text-muted-foreground">
+                  The specific database to connect to. Leave empty to connect to the
+                  default database.
+                </p>
+              </div>
+
+              {/* SSL Mode */}
+              <div className="space-y-2">
+                <Label htmlFor="sslMode">SSL Mode</Label>
+                <Select
+                  value={formData.sslMode || "Prefer"}
+                  onValueChange={(value) =>
+                    handleChange({
+                      target: { name: "sslMode", value },
+                    } as ChangeEvent<HTMLSelectElement>)
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select SSL mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sslModes.map((mode) => (
+                      <SelectItem key={mode} value={mode}>
+                        {mode}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
 
           {/* Error Message */}
           {error && (

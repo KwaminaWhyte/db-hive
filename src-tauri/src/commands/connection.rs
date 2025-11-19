@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
-use crate::drivers::{postgres::PostgresDriver, ConnectionOptions, DatabaseDriver};
+use crate::drivers::{postgres::PostgresDriver, sqlite::SqliteDriver, ConnectionOptions, DatabaseDriver};
 use crate::models::{ConnectionProfile, ConnectionStatus, DbDriver, DbError};
 use crate::state::AppState;
 
@@ -54,11 +54,13 @@ pub async fn test_connection_command(
             driver.test_connection().await?;
             Ok(ConnectionStatus::Connected)
         }
+        DbDriver::Sqlite => {
+            let driver = SqliteDriver::connect(opts).await?;
+            driver.test_connection().await?;
+            Ok(ConnectionStatus::Connected)
+        }
         DbDriver::MySql => Err(DbError::InternalError(
             "MySQL driver not yet implemented".to_string(),
-        )),
-        DbDriver::Sqlite => Err(DbError::InternalError(
-            "SQLite driver not yet implemented".to_string(),
         )),
         DbDriver::MongoDb => Err(DbError::InternalError(
             "MongoDB driver not yet implemented".to_string(),
@@ -344,14 +346,13 @@ pub async fn connect_to_database(
             let driver = PostgresDriver::connect(opts).await?;
             Arc::new(driver)
         }
+        DbDriver::Sqlite => {
+            let driver = SqliteDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
         DbDriver::MySql => {
             return Err(DbError::InternalError(
                 "MySQL driver not yet implemented".to_string(),
-            ))
-        }
-        DbDriver::Sqlite => {
-            return Err(DbError::InternalError(
-                "SQLite driver not yet implemented".to_string(),
             ))
         }
         DbDriver::MongoDb => {
@@ -488,9 +489,13 @@ pub async fn switch_database(
             let driver = PostgresDriver::connect(opts).await?;
             Arc::new(driver)
         }
+        DbDriver::Sqlite => {
+            let driver = SqliteDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
         _ => {
             return Err(DbError::InternalError(
-                "Database switching only supported for PostgreSQL currently".to_string(),
+                "Database switching only supported for PostgreSQL and SQLite currently".to_string(),
             ))
         }
     };
