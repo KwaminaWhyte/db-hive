@@ -121,8 +121,10 @@ impl DatabaseDriver for MongoDbDriver {
 
         let database_name = opts.database.clone().unwrap_or_else(|| "test".to_string());
 
+        // Build connection string with authSource=admin for authentication
+        // This is required for MongoDB when authenticating with root/admin users
         let connection_string = format!(
-            "mongodb://{}{}:{}/{}",
+            "mongodb://{}{}:{}/{}?authSource=admin",
             auth, opts.host, opts.port, database_name
         );
 
