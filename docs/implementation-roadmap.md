@@ -358,10 +358,10 @@ impl DatabaseDriver for PostgresDriver {
 }
 ```
 
-**Week 5: SQLite Driver + Connection UI** ⏳ PARTIALLY COMPLETED
+**Week 5: SQLite Driver + Connection UI** ✅ COMPLETED (2025-11-19)
 
-- [ ] Implement SQLite driver using `rusqlite` (TODO: Next milestone)
-- [ ] Add file picker for SQLite databases (TODO: Next milestone)
+- [x] Implement SQLite driver using `rusqlite` ✅
+- [x] Add file picker for SQLite databases ✅
 - [x] Create React components: ✅
 
   - `ConnectionList` ✅ (with shadcn/ui Dialog, Card, Button)
@@ -376,6 +376,17 @@ impl DatabaseDriver for PostgresDriver {
   - Dark mode with ThemeProvider ✅
   - ModeToggle component (Light/Dark/System) ✅
   - Theme persistence via localStorage ✅
+
+**Implementation Details:**
+- Created `src-tauri/src/drivers/sqlite.rs` with `SqliteDriver` struct
+- Uses rusqlite with bundled SQLite (no system dependency)
+- File-based connection (database field contains file path)
+- Handles SQLite-specific metadata queries (PRAGMA table_info, index_list)
+- Row-to-JSON conversion for different SQLite types (INTEGER, REAL, TEXT, BLOB)
+- Frontend: Conditional form rendering based on driver type
+- File picker with filters for .db, .sqlite, .sqlite3, .db3 extensions
+- Updated validation to handle SQLite's lack of host/port/username/password
+- Comprehensive unit tests for connection, queries, and metadata
 
 - [ ] Implement connection state in Zustand: (TODO: Using component state for now)
 
