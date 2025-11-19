@@ -709,7 +709,38 @@ pub async fn get_tables(
 - [ ] Add "Add Row" functionality
 - [ ] Support NULL handling
 
-### Milestone 2.5: Query Plan Visualizer (Week 25)
+### Milestone 2.5: SQL Import/Export (Week 25)
+
+**Database Backup/Restore**
+
+- [ ] Implement SQL export command (pg_dump style for PostgreSQL)
+- [ ] Support table-specific export
+- [ ] Support schema-only and data-only export options
+- [ ] Add SQL import command with transaction support
+- [ ] Build export UI with format options
+- [ ] Build import UI with file picker and validation
+- [ ] Add progress tracking for large exports/imports
+- [ ] Support multiple database formats:
+  - PostgreSQL: `pg_dump` / `psql` compatibility
+  - MySQL: `mysqldump` / `mysql` compatibility
+  - SQLite: `.dump` command compatibility
+
+**Export Options**
+
+- [ ] Include DROP statements option
+- [ ] Include CREATE statements option
+- [ ] Include INSERT statements (data)
+- [ ] Filter by schema/table
+- [ ] Batch size configuration for large datasets
+
+**Import Options**
+
+- [ ] Preview SQL before execution
+- [ ] Transaction rollback on error
+- [ ] Continue on error option
+- [ ] Show import progress with statement counter
+
+### Milestone 2.6: Query Plan Visualizer (Week 26)
 
 **PostgreSQL EXPLAIN**
 
@@ -718,7 +749,7 @@ pub async fn get_tables(
 - [ ] Highlight expensive nodes
 - [ ] Show timing and row counts
 
-### Milestone 2.6: ER Diagram Generator (Weeks 26-28)
+### Milestone 2.7: ER Diagram Generator (Weeks 27-29)
 
 **Schema Visualization**
 

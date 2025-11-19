@@ -23,6 +23,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { TableSchema, QueryExecutionResult } from "@/types";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { RowJsonViewer } from "./RowJsonViewer";
 
 interface TableInspectorProps {
   connectionId: string;
@@ -48,6 +50,8 @@ export function TableInspector({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(20);
   const [totalRows, setTotalRows] = useState<number | null>(null);
+  const [selectedRow, setSelectedRow] = useState<any[] | null>(null);
+  const [showRowViewer, setShowRowViewer] = useState(false);
 
   useEffect(() => {
     // Reset state when table changes
@@ -235,7 +239,97 @@ export function TableInspector({
             </div>
           ) : sampleData ? (
             <>
-              <div className="flex-1 overflow-auto">
+              {showRowViewer && selectedRow ? (
+                <PanelGroup direction="horizontal" className="flex-1">
+                  <Panel defaultSize={65} minSize={40}>
+                    <div className="h-full overflow-auto">
+                      <div className="min-w-max h-full">
+                        <Table>
+                          <TableHeader className="sticky top-0 bg-background border-b z-10">
+                            <TableRow>
+                              <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
+                              {sampleData.columns.map((col) => {
+                                const columnInfo = tableSchema?.columns.find(c => c.name === col);
+                                return (
+                                  <TableHead key={col} className="whitespace-nowrap">
+                                    <div className="flex flex-col gap-0.5">
+                                      <span className="font-medium text-foreground">{col}</span>
+                                      {columnInfo && (
+                                        <span className="text-[10px] font-normal text-muted-foreground">
+                                          {columnInfo.dataType.toUpperCase()}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </TableHead>
+                                );
+                              })}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sampleData.rows.map((row, rowIndex) => {
+                              const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
+                              return (
+                                <TableRow
+                                  key={rowIndex}
+                                  className="hover:bg-muted/50 cursor-pointer"
+                                  onDoubleClick={() => {
+                                    setSelectedRow(row);
+                                    setShowRowViewer(true);
+                                  }}
+                                  title="Double-click to view row details"
+                                >
+                                  <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
+                                    {absoluteRowNumber}
+                                  </TableCell>
+                                  {row.map((cell, cellIndex) => (
+                                    <TableCell key={cellIndex} className="whitespace-nowrap font-mono text-sm">
+                                      {cell === null || cell === undefined ? (
+                                        <span className="italic text-muted-foreground opacity-50">
+                                          NULL
+                                        </span>
+                                      ) : typeof cell === "object" ? (
+                                        <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
+                                          {JSON.stringify(cell)}
+                                        </code>
+                                      ) : typeof cell === "boolean" ? (
+                                        <span className={cell ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                          {String(cell)}
+                                        </span>
+                                      ) : typeof cell === "number" ? (
+                                        <span className="text-blue-600 dark:text-blue-400">
+                                          {cell.toLocaleString()}
+                                        </span>
+                                      ) : cell === "" ? (
+                                        <span className="italic text-muted-foreground opacity-50">
+                                          (empty)
+                                        </span>
+                                      ) : (
+                                        <span className="text-foreground">{String(cell)}</span>
+                                      )}
+                                    </TableCell>
+                                  ))}
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  </Panel>
+                  <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+                  <Panel defaultSize={35} minSize={25} maxSize={60}>
+                    <RowJsonViewer
+                      columns={sampleData.columns}
+                      row={selectedRow}
+                      onClose={() => {
+                        setShowRowViewer(false);
+                        setSelectedRow(null);
+                      }}
+                    />
+                  </Panel>
+                </PanelGroup>
+              ) : (
+                <div className="flex-1 overflow-auto">
                 <div className="min-w-max h-full">
                   <Table>
                       <TableHeader className="sticky top-0 bg-background border-b z-10">
@@ -262,7 +356,15 @@ export function TableInspector({
                         {sampleData.rows.map((row, rowIndex) => {
                           const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
                           return (
-                            <TableRow key={rowIndex} className="hover:bg-muted/50">
+                            <TableRow
+                              key={rowIndex}
+                              className="hover:bg-muted/50 cursor-pointer"
+                              onDoubleClick={() => {
+                                setSelectedRow(row);
+                                setShowRowViewer(true);
+                              }}
+                              title="Double-click to view row details"
+                            >
                               <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
                                 {absoluteRowNumber}
                               </TableCell>
@@ -299,7 +401,8 @@ export function TableInspector({
                       </TableBody>
                     </Table>
                   </div>
-              </div>
+                </div>
+              )}
 
               {/* Pagination Controls */}
               <div className="flex items-center justify-between px-4 py-3 border-t bg-background shrink-0">
