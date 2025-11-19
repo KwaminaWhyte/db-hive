@@ -5,7 +5,6 @@ import { SchemaExplorer } from "./components/SchemaExplorer";
 import { TableInspector } from "./components/TableInspector";
 import { QueryPanel } from "./components/QueryPanel";
 import { ModeToggle } from "./components/mode-toggle";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ConnectionProfile, QueryExecutionResult } from "./types/database";
 import { invoke } from "@tauri-apps/api/core";
 import { X } from "lucide-react";
@@ -15,7 +14,7 @@ import { useTheme } from "./components/theme-provider";
 function App() {
   const { theme } = useTheme();
   const [selectedProfile, setSelectedProfile] = useState<
-    ConnectionProfile | undefined
+    ConnectionProfile | null | undefined
   >(undefined);
   const [activeConnectionId, setActiveConnectionId] = useState<string | null>(
     null
@@ -31,7 +30,6 @@ function App() {
   }>>([]);
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
-  const [activeTab, setActiveTab] = useState<string>("connections");
   const [pendingQuery, setPendingQuery] = useState<string | null>(null);
 
   // Handle successful profile save
@@ -44,8 +42,8 @@ function App() {
 
   // Handle edit button click (or new connection when null)
   const handleEdit = (profile: ConnectionProfile | null) => {
-    setSelectedProfile(profile ?? undefined);
-    setActiveTab("connections");
+    // Use null for new connection, undefined for no selection (show logo)
+    setSelectedProfile(profile);
   };
 
   // Handle successful connection
@@ -53,8 +51,6 @@ function App() {
     setActiveConnectionId(connectionId);
     setActiveConnectionProfile(profile);
     // Don't set currentDatabase here - let SchemaExplorer tell us the actual database
-    // Switch to query editor tab
-    setActiveTab("query");
   };
 
   // Handle database change from SchemaExplorer
@@ -68,8 +64,6 @@ function App() {
     setActiveConnectionProfile(undefined);
     setOpenTables([]);
     setActiveTableId(null);
-    // Switch back to connections tab
-    setActiveTab("connections");
   };
 
   // Handle table selection - open in new tab or switch to existing tab
@@ -230,34 +224,31 @@ function App() {
               />
             )}
           </div>
+        ) : selectedProfile !== undefined ? (
+          // When not connected but showing connection form (selectedProfile is null or ConnectionProfile)
+          <div className="h-full overflow-y-auto">
+            <ConnectionForm
+              profile={selectedProfile ?? undefined}
+              onSuccess={handleProfileSaved}
+            />
+          </div>
         ) : (
-          // When not connected, show tabs for Connections and Query Editor
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full">
-            <div className="border-b px-4">
-              <TabsList>
-                <TabsTrigger value="connections">Connections</TabsTrigger>
-                <TabsTrigger value="query">Query Editor</TabsTrigger>
-              </TabsList>
-            </div>
-
-            <TabsContent value="connections" className="h-[calc(100%-3rem)] m-0 overflow-y-auto">
-              <ConnectionForm
-                profile={selectedProfile}
-                onSuccess={handleProfileSaved}
+          // When not connected and selectedProfile is undefined - show logo
+          <div className="flex items-center justify-center h-full">
+            <div className="text-center space-y-6">
+              <img
+                src="/logo.png"
+                alt="DB-Hive Logo"
+                className="w-64 h-64 mx-auto object-contain"
               />
-            </TabsContent>
-
-            <TabsContent value="query" className="h-[calc(100%-3rem)] m-0">
-              <div className="flex items-center justify-center h-full text-muted-foreground">
-                <div className="text-center space-y-2">
-                  <p className="text-lg">No active connection</p>
-                  <p className="text-sm">
-                    Connect to a database from the Connections tab
-                  </p>
-                </div>
+              <div className="space-y-2">
+                <h1 className="text-3xl font-bold">Welcome to DB-Hive</h1>
+                <p className="text-muted-foreground">
+                  A modern database client for PostgreSQL, MySQL, and SQLite
+                </p>
               </div>
-            </TabsContent>
-          </Tabs>
+            </div>
+          </div>
         )}
       </div>
       <Toaster
