@@ -34,6 +34,8 @@ import {
 interface HistoryPanelProps {
   /** Current connection ID (to filter history) */
   connectionId?: string;
+  /** Current database name (to filter history by database) */
+  currentDatabase?: string;
   /** Callback to execute a query from history */
   onExecuteQuery?: (query: string) => void;
   /** Trigger to refresh history (changes when new queries are executed) */
@@ -42,6 +44,7 @@ interface HistoryPanelProps {
 
 export function HistoryPanel({
   connectionId,
+  currentDatabase,
   onExecuteQuery,
   refreshTrigger,
 }: HistoryPanelProps) {
@@ -50,10 +53,10 @@ export function HistoryPanel({
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState(50);
 
-  // Load history on mount and when connectionId, limit, or refreshTrigger changes
+  // Load history on mount and when connectionId, currentDatabase, limit, or refreshTrigger changes
   useEffect(() => {
     loadHistory();
-  }, [connectionId, limit, refreshTrigger]);
+  }, [connectionId, currentDatabase, limit, refreshTrigger]);
 
   const loadHistory = async () => {
     setLoading(true);
@@ -63,7 +66,13 @@ export function HistoryPanel({
         connectionId: connectionId || null,
         limit,
       });
-      setHistory(result);
+
+      // If currentDatabase is specified, filter by database name as well
+      const filteredResult = currentDatabase
+        ? result.filter((entry) => entry.database === currentDatabase)
+        : result;
+
+      setHistory(filteredResult);
     } catch (err) {
       setError(
         typeof err === "string" ? err : (err as any)?.message || String(err)
@@ -115,9 +124,11 @@ export function HistoryPanel({
           <div>
             <CardTitle>Query History</CardTitle>
             <CardDescription>
-              {connectionId
+              {connectionId && currentDatabase
+                ? `History for ${currentDatabase}`
+                : connectionId
                 ? "History for current connection"
-                : "History for all connections"}
+                : "No active connection"}
             </CardDescription>
           </div>
           <div className="flex items-center gap-2">
@@ -144,9 +155,11 @@ export function HistoryPanel({
                 <AlertDialogHeader>
                   <AlertDialogTitle>Clear query history?</AlertDialogTitle>
                   <AlertDialogDescription>
-                    {connectionId
+                    {connectionId && currentDatabase
+                      ? `This will permanently delete the query history for the ${currentDatabase} database.`
+                      : connectionId
                       ? "This will permanently delete the query history for the current connection."
-                      : "This will permanently delete all query history."}
+                      : "No history to clear."}
                   </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
