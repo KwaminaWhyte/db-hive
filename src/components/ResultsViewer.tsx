@@ -1,4 +1,4 @@
-import { FC, useMemo, useState } from 'react';
+import { FC, useMemo, useState } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -6,11 +6,11 @@ import {
   flexRender,
   ColumnDef,
   SortingState,
-} from '@tanstack/react-table';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
-import { Alert, AlertDescription } from './ui/alert';
-import { Button } from './ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+} from "@tanstack/react-table";
+import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
+import { Alert, AlertDescription } from "./ui/alert";
+import { Button } from "./ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import {
   Loader2,
   AlertCircle,
@@ -19,11 +19,11 @@ import {
   FileText,
   FileJson,
   Code,
-  FileCode
-} from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { invoke } from '@tauri-apps/api/core';
-import { save } from '@tauri-apps/plugin-dialog';
+  FileCode,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { invoke } from "@tauri-apps/api/core";
+import { save } from "@tauri-apps/plugin-dialog";
 
 interface ResultsViewerProps {
   /** Column names */
@@ -55,30 +55,32 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
 }) => {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [exporting, setExporting] = useState(false);
-  const [viewMode, setViewMode] = useState<'grid' | 'json' | 'raw'>('grid');
+  const [viewMode, setViewMode] = useState<"grid" | "json" | "raw">("grid");
 
   // Handle CSV export
   const handleExportCSV = async () => {
     try {
       setExporting(true);
       const filePath = await save({
-        defaultPath: 'query_results.csv',
-        filters: [{
-          name: 'CSV',
-          extensions: ['csv']
-        }]
+        defaultPath: "query_results.csv",
+        filters: [
+          {
+            name: "CSV",
+            extensions: ["csv"],
+          },
+        ],
       });
 
       if (filePath) {
-        await invoke('export_to_csv', {
+        await invoke("export_to_csv", {
           filePath,
           columns,
-          rows
+          rows,
         });
-        console.log('Exported to CSV:', filePath);
+        console.log("Exported to CSV:", filePath);
       }
     } catch (err) {
-      console.error('Failed to export CSV:', err);
+      console.error("Failed to export CSV:", err);
       alert(`Failed to export CSV: ${err}`);
     } finally {
       setExporting(false);
@@ -90,23 +92,25 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
     try {
       setExporting(true);
       const filePath = await save({
-        defaultPath: 'query_results.json',
-        filters: [{
-          name: 'JSON',
-          extensions: ['json']
-        }]
+        defaultPath: "query_results.json",
+        filters: [
+          {
+            name: "JSON",
+            extensions: ["json"],
+          },
+        ],
       });
 
       if (filePath) {
-        await invoke('export_to_json', {
+        await invoke("export_to_json", {
           filePath,
           columns,
-          rows
+          rows,
         });
-        console.log('Exported to JSON:', filePath);
+        console.log("Exported to JSON:", filePath);
       }
     } catch (err) {
-      console.error('Failed to export JSON:', err);
+      console.error("Failed to export JSON:", err);
       alert(`Failed to export JSON: ${err}`);
     } finally {
       setExporting(false);
@@ -127,13 +131,13 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
           return <span className="text-muted-foreground italic">NULL</span>;
         }
         if (value === undefined) {
-          return <span className="text-muted-foreground italic">undefined</span>;
-        }
-        if (typeof value === 'object') {
           return (
-            <span className="text-xs font-mono">
-              {JSON.stringify(value)}
-            </span>
+            <span className="text-muted-foreground italic">undefined</span>
+          );
+        }
+        if (typeof value === "object") {
+          return (
+            <span className="text-xs font-mono">{JSON.stringify(value)}</span>
           );
         }
         return <span className="truncate">{String(value)}</span>;
@@ -154,7 +158,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
 
   // Convert results to JSON format
   const resultsAsJSON = useMemo(() => {
-    if (!columns.length || !rows.length) return '[]';
+    if (!columns.length || !rows.length) return "[]";
 
     const jsonRows = rows.map((row) => {
       const obj: Record<string, any> = {};
@@ -169,22 +173,24 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
 
   // Convert results to raw text format
   const resultsAsRaw = useMemo(() => {
-    if (!columns.length) return '';
+    if (!columns.length) return "";
 
     // Create header row
-    const header = columns.join('\t');
+    const header = columns.join("\t");
 
     // Create data rows
     const dataRows = rows.map((row) =>
-      row.map((cell) => {
-        if (cell === null) return 'NULL';
-        if (cell === undefined) return 'undefined';
-        if (typeof cell === 'object') return JSON.stringify(cell);
-        return String(cell);
-      }).join('\t')
+      row
+        .map((cell) => {
+          if (cell === null) return "NULL";
+          if (cell === undefined) return "undefined";
+          if (typeof cell === "object") return JSON.stringify(cell);
+          return String(cell);
+        })
+        .join("\t")
     );
 
-    return [header, ...dataRows].join('\n');
+    return [header, ...dataRows].join("\n");
   }, [columns, rows]);
 
   // Render loading state
@@ -244,9 +250,11 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
             <AlertDescription className="ml-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="font-semibold">Query executed successfully</div>
+                  <div className="font-semibold">
+                    Query executed successfully
+                  </div>
                   <div className="text-sm text-muted-foreground mt-1">
-                    {rowsAffected} row{rowsAffected !== 1 ? 's' : ''} affected
+                    {rowsAffected} row{rowsAffected !== 1 ? "s" : ""} affected
                   </div>
                 </div>
                 {executionTime !== undefined && (
@@ -266,11 +274,11 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
 
   // Render table results
   return (
-    <Card className="h-full flex flex-col">
-      <CardHeader className="pb-3 border-b">
+    <Card className="h-full flex flex-col gap-0">
+      <CardHeader className="border-b pb-0">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-medium">
-            Results ({rows.length} row{rows.length !== 1 ? 's' : ''})
+            Results ({rows.length} row{rows.length !== 1 ? "s" : ""})
           </CardTitle>
           <div className="flex items-center gap-2">
             {executionTime !== undefined && (
@@ -309,7 +317,13 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
       </CardHeader>
 
       <CardContent className="flex-1 p-0 overflow-hidden">
-        <Tabs value={viewMode} onValueChange={(value) => setViewMode(value as 'grid' | 'json' | 'raw')} className="h-full flex flex-col">
+        <Tabs
+          value={viewMode}
+          onValueChange={(value) =>
+            setViewMode(value as "grid" | "json" | "raw")
+          }
+          className="h-full flex flex-col"
+        >
           <div className="border-b px-4 shrink-0">
             <TabsList className="h-10">
               <TabsTrigger value="grid" className="gap-1.5">
@@ -338,8 +352,9 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                         <th
                           key={header.id}
                           className={cn(
-                            'text-left font-semibold px-4 py-3 border-r last:border-r-0',
-                            header.column.getCanSort() && 'cursor-pointer select-none'
+                            "text-left font-semibold px-4 py-3 border-r last:border-r-0",
+                            header.column.getCanSort() &&
+                              "cursor-pointer select-none"
                           )}
                           onClick={header.column.getToggleSortingHandler()}
                         >
@@ -350,7 +365,9 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                             )}
                             {header.column.getIsSorted() && (
                               <span className="text-xs">
-                                {header.column.getIsSorted() === 'asc' ? '↑' : '↓'}
+                                {header.column.getIsSorted() === "asc"
+                                  ? "↑"
+                                  : "↓"}
                               </span>
                             )}
                           </div>
@@ -364,8 +381,8 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                     <tr
                       key={row.id}
                       className={cn(
-                        'border-b hover:bg-muted/30 transition-colors',
-                        rowIndex % 2 === 0 ? 'bg-background' : 'bg-muted/10'
+                        "border-b hover:bg-muted/30 transition-colors",
+                        rowIndex % 2 === 0 ? "bg-background" : "bg-muted/10"
                       )}
                     >
                       {row.getVisibleCells().map((cell) => (
@@ -373,7 +390,10 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                           key={cell.id}
                           className="px-4 py-2 border-r last:border-r-0 max-w-md"
                         >
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
                         </td>
                       ))}
                     </tr>
