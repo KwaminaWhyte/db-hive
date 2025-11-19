@@ -489,8 +489,8 @@ pub async fn execute_query(
 
 - [x] Implement TanStack Table with virtualization ✅
 - [x] Add column sorting ✅
+- [x] Implement cell copying (single cell, row, column) ✅ (2025-11-19)
 - [ ] Add column filtering (TODO: Future enhancement)
-- [ ] Implement cell copying (single cell, row, column) (TODO: Future enhancement)
 - [ ] Add column resizing and reordering (TODO: Future enhancement)
 
 **Implementation Details:**
@@ -503,6 +503,12 @@ pub async fn execute_query(
 - Zebra striping for readability
 - Loading states with spinner
 - Error display with styled alerts
+- **Cell Copying (2025-11-19):**
+  - Click any cell to copy its value to clipboard
+  - Copy button on column headers to copy entire column (newline-separated)
+  - Row number column with copy button for each row (tab-separated)
+  - Toast notifications using Sonner for copy feedback
+  - Proper NULL value handling in copied data
 
 **Week 10: Result Actions** ✅ COMPLETED (2025-11-19)
 

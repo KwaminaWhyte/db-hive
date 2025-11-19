@@ -20,10 +20,12 @@ import {
   FileJson,
   Code,
   FileCode,
+  Copy,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
+import { toast } from "sonner";
 
 interface ResultsViewerProps {
   /** Column names */
@@ -56,6 +58,36 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [exporting, setExporting] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "json" | "raw">("grid");
+
+  // Copy helper functions
+  const copyToClipboard = async (text: string, message: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(message);
+    } catch (err) {
+      toast.error("Failed to copy to clipboard");
+    }
+  };
+
+  const copyCellValue = async (value: any) => {
+    const text = value === null ? 'NULL' : String(value);
+    await copyToClipboard(text, "Cell value copied to clipboard");
+  };
+
+  const copyRowValues = async (rowIndex: number) => {
+    const row = rows[rowIndex];
+    const text = row.map((v) => (v === null ? 'NULL' : String(v))).join('\t');
+    await copyToClipboard(text, `Row ${rowIndex + 1} copied to clipboard`);
+  };
+
+  const copyColumnValues = async (columnIndex: number) => {
+    const columnValues = rows.map((row) => {
+      const value = row[columnIndex];
+      return value === null ? 'NULL' : String(value);
+    });
+    const text = columnValues.join('\n');
+    await copyToClipboard(text, `Column "${columns[columnIndex]}" copied to clipboard`);
+  };
 
   // Handle CSV export
   const handleExportCSV = async () => {
@@ -124,23 +156,46 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
     return columns.map((colName, index) => ({
       id: colName,
       accessorFn: (row) => row[index],
-      header: colName,
+      header: () => (
+        <div className="flex items-center justify-between group">
+          <span>{colName}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => {
+              e.stopPropagation();
+              copyColumnValues(index);
+            }}
+            title={`Copy column "${colName}"`}
+          >
+            <Copy className="h-3 w-3" />
+          </Button>
+        </div>
+      ),
       cell: (info) => {
         const value = info.getValue();
+        let displayValue: React.ReactNode;
+
         if (value === null) {
-          return <span className="text-muted-foreground italic">NULL</span>;
+          displayValue = <span className="text-muted-foreground italic">NULL</span>;
+        } else if (value === undefined) {
+          displayValue = <span className="text-muted-foreground italic">undefined</span>;
+        } else if (typeof value === "object") {
+          displayValue = <span className="text-xs font-mono">{JSON.stringify(value)}</span>;
+        } else {
+          displayValue = <span className="truncate">{String(value)}</span>;
         }
-        if (value === undefined) {
-          return (
-            <span className="text-muted-foreground italic">undefined</span>
-          );
-        }
-        if (typeof value === "object") {
-          return (
-            <span className="text-xs font-mono">{JSON.stringify(value)}</span>
-          );
-        }
-        return <span className="truncate">{String(value)}</span>;
+
+        return (
+          <div
+            className="cursor-pointer hover:bg-muted/50 -mx-4 -my-2 px-4 py-2 transition-colors"
+            onClick={() => copyCellValue(value)}
+            title="Click to copy cell value"
+          >
+            {displayValue}
+          </div>
+        );
       },
     }));
   }, [columns]);
@@ -348,6 +403,9 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                 <thead className="sticky top-0 bg-muted/50 backdrop-blur-sm z-10">
                   {table.getHeaderGroups().map((headerGroup) => (
                     <tr key={headerGroup.id} className="border-b">
+                      <th className="text-left font-semibold px-2 py-3 border-r text-xs text-muted-foreground sticky left-0 bg-muted/50 backdrop-blur-sm">
+                        #
+                      </th>
                       {headerGroup.headers.map((header) => (
                         <th
                           key={header.id}
@@ -381,10 +439,24 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                     <tr
                       key={row.id}
                       className={cn(
-                        "border-b hover:bg-muted/30 transition-colors",
+                        "border-b hover:bg-muted/30 transition-colors group",
                         rowIndex % 2 === 0 ? "bg-background" : "bg-muted/10"
                       )}
                     >
+                      <td className="px-2 py-2 border-r text-xs text-muted-foreground sticky left-0 bg-inherit">
+                        <div className="flex items-center gap-1">
+                          <span className="w-8 text-right">{rowIndex + 1}</span>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => copyRowValues(rowIndex)}
+                            title={`Copy row ${rowIndex + 1}`}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </td>
                       {row.getVisibleCells().map((cell) => (
                         <td
                           key={cell.id}
