@@ -116,7 +116,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
       }
     } catch (err) {
       console.error("Failed to export CSV:", err);
-      alert(`Failed to export CSV: ${err}`);
+      toast.error(`Failed to export CSV: ${err}`);
     } finally {
       setExporting(false);
     }
@@ -146,7 +146,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
       }
     } catch (err) {
       console.error("Failed to export JSON:", err);
-      alert(`Failed to export JSON: ${err}`);
+      toast.error(`Failed to export JSON: ${err}`);
     } finally {
       setExporting(false);
     }
