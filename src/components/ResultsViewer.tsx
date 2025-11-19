@@ -59,6 +59,8 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
   const [exporting, setExporting] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "json" | "raw">("grid");
 
+  console.log("ResultsViewer rendered with", rows.length, "rows");
+
   // Copy helper functions
   const copyToClipboard = useCallback(async (text: string, message: string) => {
     try {
@@ -70,6 +72,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
   }, []);
 
   const copyCellValue = useCallback(async (value: any) => {
+    console.log("copyCellValue called with:", value);
     const text = value === null ? 'NULL' : String(value);
     await copyToClipboard(text, "Cell value copied to clipboard");
   }, [copyToClipboard]);
@@ -164,6 +167,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
             size="sm"
             className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={(e) => {
+              console.log("Column copy button clicked for:", colName);
               e.stopPropagation();
               copyColumnValues(index);
             }}
@@ -190,7 +194,10 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
         return (
           <div
             className="cursor-pointer hover:bg-muted/50 -mx-4 -my-2 px-4 py-2 transition-colors"
-            onClick={() => copyCellValue(value)}
+            onClick={() => {
+              console.log("Cell clicked, value:", value);
+              copyCellValue(value);
+            }}
             title="Click to copy cell value"
           >
             {displayValue}
@@ -450,7 +457,10 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                             variant="ghost"
                             size="sm"
                             className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => copyRowValues(rowIndex)}
+                            onClick={() => {
+                              console.log("Row copy button clicked for row:", rowIndex);
+                              copyRowValues(rowIndex);
+                            }}
                             title={`Copy row ${rowIndex + 1}`}
                           >
                             <Copy className="h-3 w-3" />
