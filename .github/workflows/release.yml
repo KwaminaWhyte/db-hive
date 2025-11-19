@@ -1,0 +1,117 @@
+name: "Release"
+
+on:
+  workflow_dispatch:  # Allow manual trigger
+  push:
+    tags:
+      - "v*"  # Trigger on version tags like v0.1.0
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: "macos-latest"  # macOS Apple Silicon (M1/M2/M3)
+            args: "--target aarch64-apple-darwin"
+          - platform: "macos-latest"  # macOS Intel
+            args: "--target x86_64-apple-darwin"
+          - platform: "ubuntu-22.04"  # Linux x64
+            args: ""
+          - platform: "windows-latest"  # Windows x64
+            args: ""
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: "npm"
+
+      - name: Install Bun
+        run: |
+          curl -fsSL https://bun.sh/install | bash
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          # Install macOS targets for universal builds
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "./src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: bun install
+
+      - name: Build frontend
+        run: bun run build
+
+      - name: Build and release Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "DB-Hive ${{ github.ref_name }}"
+          releaseBody: |
+            ## DB-Hive ${{ github.ref_name }}
+
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
+
+            ### Installation
+
+            **macOS:**
+            - Download the `.dmg` file for your architecture:
+              - `aarch64.dmg` for Apple Silicon (M1/M2/M3)
+              - `x64.dmg` for Intel Macs
+            - Open the DMG and drag DB-Hive to Applications
+            - On first launch, right-click → Open to bypass Gatekeeper
+
+            **Windows:**
+            - Download the `.msi` installer
+            - Run the installer and follow the prompts
+            - Or download the `setup.exe` for NSIS installer
+
+            **Linux (Debian/Ubuntu):**
+            - Download the `.deb` file
+            - Install: `sudo dpkg -i db-hive_*_amd64.deb`
+
+            **Linux (Fedora/RHEL):**
+            - Download the `.rpm` file
+            - Install: `sudo rpm -i db-hive-*-1.x86_64.rpm`
+
+            **Linux (AppImage - Universal):**
+            - Download the `.AppImage` file
+            - Make executable: `chmod +x db-hive_*_amd64.AppImage`
+            - Run: `./db-hive_*_amd64.AppImage`
+
+            ### Code Signing & Verification
+
+            See [CODE_SIGNING.md](https://github.com/${{ github.repository }}/blob/main/docs/CODE_SIGNING.md) for instructions on verifying signatures.
+
+            ### Checksums
+            SHA256 checksums are available in the release assets.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

@@ -1,4 +1,4 @@
-import { FC, useState, FormEvent, ChangeEvent } from "react";
+import { FC, useState, useEffect, FormEvent, ChangeEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import {
@@ -54,6 +54,24 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<string | null>(null);
+
+  // Update form data when profile prop changes
+  useEffect(() => {
+    setFormData({
+      id: profile?.id || "",
+      name: profile?.name || "",
+      driver: profile?.driver || "Postgres",
+      host: profile?.host || "localhost",
+      port: profile?.port || 5432,
+      username: profile?.username || "",
+      database: profile?.database || "",
+      sslMode: profile?.sslMode || "Prefer",
+    });
+    // Clear password and status when switching profiles
+    setPassword("");
+    setError(null);
+    setTestStatus(null);
+  }, [profile]);
 
   // Available database drivers
   const drivers: DbDriver[] = [
@@ -254,9 +272,20 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         folder: null,
       };
 
-      const profileId = await invoke<string>("create_connection_profile", {
-        profile: saveProfile,
-      });
+      let profileId: string;
+
+      if (profile) {
+        // Editing existing profile - use update command
+        await invoke("update_connection_profile", {
+          profile: saveProfile,
+        });
+        profileId = saveProfile.id;
+      } else {
+        // Creating new profile
+        profileId = await invoke<string>("create_connection_profile", {
+          profile: saveProfile,
+        });
+      }
 
       // Save password if provided
       if (password) {

@@ -120,7 +120,12 @@ bun run build
 npm run tauri build
 
 # Output will be in src-tauri/target/release/bundle/
+# - Linux: .deb, .rpm, .AppImage
+# - macOS: .dmg, .app
+# - Windows: .msi, .exe installer
 ```
+
+See [Code Signing Guide](docs/CODE_SIGNING.md) for signing binaries on all platforms.
 
 ## Usage
 
