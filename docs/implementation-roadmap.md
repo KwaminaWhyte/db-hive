@@ -610,21 +610,30 @@ pub async fn get_tables(
 - [ ] Show table statistics (row count, size) (TODO: Future enhancement)
 - [ ] Show foreign key relationships (TODO: Future enhancement)
 
-**Week 14: Quick Actions & Enhancements** (TODO: Future)
+**Week 14: Quick Actions & Enhancements** ✅ PARTIALLY COMPLETED (2025-11-19)
 
-- [ ] Implement context menus on table items:
+- [ ] Implement context menus on table items: (TODO: Future enhancement)
   - "View Data" (SELECT * with LIMIT)
   - "Generate SELECT"
   - "Generate INSERT template"
   - "Copy Name"
   - "Refresh"
 
-- [ ] Add search/filter in table list
-- [ ] Implement hierarchical tree view (expand/collapse schemas)
-- [ ] Add lazy loading for tree nodes
-- [ ] Add drag-and-drop (table name to editor)
-- [ ] Support for Functions and Procedures
-- [ ] Schema refresh functionality
+- [x] Add search/filter in table list ✅
+- [ ] Implement hierarchical tree view (expand/collapse schemas) (TODO: Future)
+- [ ] Add lazy loading for tree nodes (TODO: Future)
+- [ ] Add drag-and-drop (table name to editor) (TODO: Future)
+- [ ] Support for Functions and Procedures (TODO: Future)
+- [ ] Schema refresh functionality (TODO: Future)
+
+**Implementation Details:**
+- Added search input to SchemaExplorer with search icon
+- Real-time filtering of tables as user types
+- Clear button (X icon) to reset search
+- Case-insensitive search matching table names
+- Empty state message when no tables match search
+- Search input only appears when tables are loaded
+- Memoized filtering for performance
 
 ### MVP Polish & Testing
 

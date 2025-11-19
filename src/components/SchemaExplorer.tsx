@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Select,
@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Loader2,
@@ -16,6 +17,8 @@ import {
   Eye,
   LogOut,
   ChevronRight,
+  Search,
+  X,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 
@@ -45,6 +48,7 @@ export function SchemaExplorer({
   const [loadingTables, setLoadingTables] = useState(false);
   const [loadingDatabases, setLoadingDatabases] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Get the connected database name from the connection profile
   const connectedDatabase = connectionProfile.database || "postgres";
@@ -199,6 +203,16 @@ export function SchemaExplorer({
     return <Table2 className="h-4 w-4 text-green-500" />;
   };
 
+  // Filter tables based on search query
+  const filteredTables = useMemo(() => {
+    if (!searchQuery.trim()) return tables;
+
+    const query = searchQuery.toLowerCase().trim();
+    return tables.filter((table) =>
+      table.name.toLowerCase().includes(query)
+    );
+  }, [tables, searchQuery]);
+
   return (
     <div className="h-full flex flex-col">
       {/* Header with Disconnect Button */}
@@ -276,6 +290,29 @@ export function SchemaExplorer({
         </div>
       )}
 
+      {/* Search Input */}
+      {!loadingTables && tables.length > 0 && (
+        <div className="px-4 py-3 border-b">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search tables..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 pr-9"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Tables List */}
       <div className="flex-1 overflow-hidden">
         {loadingTables ? (
@@ -286,8 +323,9 @@ export function SchemaExplorer({
           <ScrollArea className="h-full">
             <div className="p-2">
               {tables.length > 0 ? (
-                <div className="space-y-1">
-                  {tables.map((table) => {
+                filteredTables.length > 0 ? (
+                  <div className="space-y-1">
+                    {filteredTables.map((table) => {
                     const isSelected = selectedTable === table.name;
                     return (
                       <button
@@ -322,6 +360,20 @@ export function SchemaExplorer({
                     );
                   })}
                 </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <Search className="h-8 w-8 text-muted-foreground mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      No tables match "{searchQuery}"
+                    </p>
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="text-xs text-primary hover:underline mt-2"
+                    >
+                      Clear search
+                    </button>
+                  </div>
+                )
               ) : selectedSchema ? (
                 <p className="text-sm text-muted-foreground text-center py-8">
                   No tables found in this schema
