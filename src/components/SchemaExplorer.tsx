@@ -24,6 +24,7 @@ interface SchemaExplorerProps {
   connectionProfile: ConnectionProfile;
   onDisconnect: () => void;
   onTableSelect: (schema: string, tableName: string) => void;
+  selectedTable?: string | null;
 }
 
 export function SchemaExplorer({
@@ -31,6 +32,7 @@ export function SchemaExplorer({
   connectionProfile,
   onDisconnect,
   onTableSelect,
+  selectedTable,
 }: SchemaExplorerProps) {
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("public");
@@ -293,23 +295,36 @@ export function SchemaExplorer({
             <div className="p-2">
               {tables.length > 0 ? (
                 <div className="space-y-1">
-                  {tables.map((table) => (
-                    <button
-                      key={`${table.schema}.${table.name}`}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-md hover:bg-accent transition-colors text-left group"
-                      onClick={() => onTableSelect(selectedSchema, table.name)}
-                    >
-                      {getTableIcon(table.tableType)}
-                      <span className="flex-1 text-sm">{table.name}</span>
-                      {table.rowCount !== null &&
-                        table.rowCount !== undefined && (
-                          <span className="text-xs text-muted-foreground">
-                            {table.rowCount.toLocaleString()} rows
-                          </span>
-                        )}
-                      <ChevronRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </button>
-                  ))}
+                  {tables.map((table) => {
+                    const isSelected = selectedTable === table.name;
+                    return (
+                      <button
+                        key={`${table.schema}.${table.name}`}
+                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left group ${
+                          isSelected
+                            ? "bg-accent text-accent-foreground"
+                            : "hover:bg-accent/50"
+                        }`}
+                        onClick={() => onTableSelect(selectedSchema, table.name)}
+                      >
+                        {getTableIcon(table.tableType)}
+                        <span className="flex-1 text-sm font-medium">
+                          {table.name}
+                        </span>
+                        {table.rowCount !== null &&
+                          table.rowCount !== undefined && (
+                            <span className="text-xs text-muted-foreground">
+                              {table.rowCount.toLocaleString()} rows
+                            </span>
+                          )}
+                        <ChevronRight
+                          className={`h-4 w-4 text-muted-foreground transition-opacity ${
+                            isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
                 </div>
               ) : selectedSchema ? (
                 <p className="text-sm text-muted-foreground text-center py-8">

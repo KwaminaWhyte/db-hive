@@ -46,7 +46,7 @@ export function TableInspector({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("data");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(50);
+  const [pageSize] = useState(20);
   const [totalRows, setTotalRows] = useState<number | null>(null);
 
   useEffect(() => {
@@ -214,8 +214,8 @@ export function TableInspector({
       )}
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-        <div className="border-b px-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
+        <div className="border-b px-4 flex-shrink-0">
           <TabsList>
             <TabsTrigger value="data">Data</TabsTrigger>
             <TabsTrigger value="columns">
@@ -228,17 +228,16 @@ export function TableInspector({
         </div>
 
         {/* Data Tab */}
-        <TabsContent value="data" className="flex-1 m-0 overflow-hidden flex flex-col">
+        <TabsContent value="data" className="flex-1 m-0 flex flex-col overflow-hidden">
           {loadingSampleData ? (
             <div className="flex items-center justify-center flex-1">
               <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
             </div>
           ) : sampleData ? (
             <>
-              <div className="flex-1 overflow-hidden">
-                <ScrollArea className="h-full w-full">
-                  <div className="min-w-max">
-                    <Table>
+              <div className="flex-1 overflow-auto">
+                <div className="min-w-max h-full">
+                  <Table>
                       <TableHeader className="sticky top-0 bg-background border-b z-10">
                         <TableRow>
                           <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
@@ -300,11 +299,10 @@ export function TableInspector({
                       </TableBody>
                     </Table>
                   </div>
-                </ScrollArea>
               </div>
 
               {/* Pagination Controls */}
-              <div className="flex items-center justify-between px-4 py-3 border-t bg-background">
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-background flex-shrink-0">
                 <div className="text-sm text-muted-foreground">
                   {totalRows !== null ? (
                     <>

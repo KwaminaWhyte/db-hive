@@ -91,6 +91,7 @@ function App() {
             connectionProfile={activeConnectionProfile}
             onDisconnect={handleDisconnect}
             onTableSelect={handleTableSelect}
+            selectedTable={selectedTable?.tableName || null}
           />
         ) : (
           <ConnectionList
