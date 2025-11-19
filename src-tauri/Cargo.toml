@@ -30,4 +30,5 @@ uuid = { version = "1.11", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 tauri-plugin-store = "2.4.1"
 tauri-plugin-dialog = "2.4.2"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
 

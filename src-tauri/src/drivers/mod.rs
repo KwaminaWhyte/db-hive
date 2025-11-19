@@ -12,6 +12,7 @@ use crate::models::{
 };
 
 pub mod postgres;
+pub mod sqlite;
 
 /// Connection options for establishing a database connection
 ///
