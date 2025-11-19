@@ -1,4 +1,4 @@
-import { FC, useState } from 'react';
+import { FC, useState, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { SQLEditor } from './SQLEditor';
 import { ResultsViewer } from './ResultsViewer';
@@ -32,6 +32,12 @@ interface QueryPanelProps {
 
   /** Callback to execute query - returns a Promise with results */
   onExecuteQuery: (sql: string) => Promise<QueryExecutionResult>;
+
+  /** Pending query to load into active tab */
+  pendingQuery?: string | null;
+
+  /** Callback when pending query is loaded */
+  onQueryLoaded?: () => void;
 }
 
 let tabIdCounter = 1;
@@ -41,6 +47,8 @@ export const QueryPanel: FC<QueryPanelProps> = ({
   connectionProfile,
   currentDatabase,
   onExecuteQuery,
+  pendingQuery,
+  onQueryLoaded,
 }) => {
   // Tab management
   const [tabs, setTabs] = useState<EditorTab[]>([
@@ -58,6 +66,14 @@ export const QueryPanel: FC<QueryPanelProps> = ({
 
   // Get the active tab
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
+
+  // Handle pending query from parent
+  useEffect(() => {
+    if (pendingQuery) {
+      updateTab(activeTabId, { sql: pendingQuery });
+      onQueryLoaded?.();
+    }
+  }, [pendingQuery]);
 
   // Add new tab
   const handleAddTab = () => {

@@ -28,6 +28,7 @@ function App() {
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<string>("connections");
+  const [pendingQuery, setPendingQuery] = useState<string | null>(null);
 
   // Handle successful profile save
   const handleProfileSaved = () => {
@@ -103,6 +104,15 @@ function App() {
     });
   };
 
+  // Handle query execution from context menu
+  const handleExecuteGeneratedQuery = (sql: string) => {
+    // Close all table tabs to show QueryPanel
+    setOpenTables([]);
+    setActiveTableId(null);
+    // Set pending query for QueryPanel to pick up
+    setPendingQuery(sql);
+  };
+
   // Execute query via Tauri command
   const executeQuery = async (
     sql: string
@@ -134,6 +144,7 @@ function App() {
             onTableSelect={handleTableSelect}
             onDatabaseChange={handleDatabaseChange}
             selectedTable={activeTableId ? activeTableId.split('.')[1] : null}
+            onExecuteQuery={handleExecuteGeneratedQuery}
           />
         ) : (
           <ConnectionList
@@ -216,6 +227,8 @@ function App() {
                 connectionProfile={activeConnectionProfile}
                 currentDatabase={currentDatabase}
                 onExecuteQuery={executeQuery}
+                pendingQuery={pendingQuery}
+                onQueryLoaded={() => setPendingQuery(null)}
               />
             )}
           </div>
