@@ -13,11 +13,13 @@ DB-Hive is a modern, cross-platform database client built with Tauri 2.0 and Rea
 ### Core Features
 
 #### Multi-Database Support
+
 - **PostgreSQL**: Full support with metadata queries, connection pooling
 - **MySQL/MariaDB**: Complete driver implementation with MySQL-specific features
 - **SQLite**: Local database management with file picker
 
 #### Connection Management
+
 - Create, edit, and delete connection profiles
 - Test connections before saving
 - Secure password persistence (stored locally)
@@ -25,6 +27,7 @@ DB-Hive is a modern, cross-platform database client built with Tauri 2.0 and Rea
 - Database dropdown to switch between databases on the same server
 
 #### SQL Editor
+
 - **Monaco Editor**: VS Code's editor with SQL syntax highlighting
 - **Multi-statement execution**: Run multiple queries separated by semicolons
 - **Keyboard shortcuts**: Ctrl+Enter to execute, Ctrl+F to find, Ctrl+/ to comment
@@ -32,6 +35,7 @@ DB-Hive is a modern, cross-platform database client built with Tauri 2.0 and Rea
 - **Multi-cursor editing**: Alt+Click for multiple cursors
 
 #### Schema Browser
+
 - Browse databases, schemas, and tables in a tree view
 - View table metadata:
   - **Data tab**: Sample data with pagination (20 rows per page)
@@ -44,6 +48,7 @@ DB-Hive is a modern, cross-platform database client built with Tauri 2.0 and Rea
   - Refresh table data
 
 #### Results Viewer
+
 - **Three view modes**:
   - **Grid**: Sortable table with click-to-copy cells
   - **JSON**: Pretty-printed JSON array
@@ -58,6 +63,7 @@ DB-Hive is a modern, cross-platform database client built with Tauri 2.0 and Rea
 - **NULL handling**: Clear visual indicators for NULL values
 
 #### Query Management
+
 - **Query History**: Automatically saves all executed queries
   - Timestamp, row count, execution time
   - Success/failure status
@@ -69,6 +75,7 @@ DB-Hive is a modern, cross-platform database client built with Tauri 2.0 and Rea
   - Delete when no longer needed
 
 #### Professional UI/UX
+
 - **Theme Support**: Dark, Light, or System (follows OS preference)
 - **Toast Notifications**: Non-intrusive feedback (using Sonner)
 - **Error Handling**: ErrorBoundary catches React errors gracefully
@@ -79,6 +86,7 @@ DB-Hive is a modern, cross-platform database client built with Tauri 2.0 and Rea
 ## 📊 Technical Specifications
 
 ### Frontend
+
 - React 19 with TypeScript
 - Tauri 2.0 for native desktop functionality
 - Monaco Editor for SQL editing
@@ -87,6 +95,7 @@ DB-Hive is a modern, cross-platform database client built with Tauri 2.0 and Rea
 - Vite for fast development and builds
 
 ### Backend
+
 - Rust with Tokio async runtime
 - Database drivers:
   - `tokio-postgres` for PostgreSQL
@@ -96,6 +105,7 @@ DB-Hive is a modern, cross-platform database client built with Tauri 2.0 and Rea
 - `serde` for serialization
 
 ### Architecture
+
 - Multi-process design (Rust core + React WebView)
 - IPC communication via Tauri commands
 - Thread-safe state management with `Mutex<AppState>`
@@ -106,6 +116,7 @@ DB-Hive is a modern, cross-platform database client built with Tauri 2.0 and Rea
 This release includes comprehensive documentation:
 
 ### User Documentation
+
 - **README.md**: Complete overview, installation, usage examples
 - **USER_GUIDE.md**: 533-line step-by-step tutorial covering:
   - Getting started
@@ -118,6 +129,7 @@ This release includes comprehensive documentation:
   - Troubleshooting
 
 ### Developer Documentation
+
 - **CLAUDE.md**: Project overview for Claude Code
 - **docs/implementation-roadmap.md**: Detailed development plan
 - **CHANGELOG.md**: Version history and changes
@@ -149,6 +161,7 @@ This release includes comprehensive documentation:
 ## 📦 Installation
 
 ### Prerequisites
+
 - Node.js 18+ (Bun recommended)
 - Rust 1.70+
 - Git
@@ -157,7 +170,7 @@ This release includes comprehensive documentation:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/db-hive.git
+git clone https://github.com/KwaminaWhyte/db-hive.git
 cd db-hive
 
 # Install dependencies
@@ -190,6 +203,7 @@ npm run tauri build
 ## 🗺️ Roadmap
 
 ### Next Release (v0.2.0)
+
 - MongoDB database driver
 - SQL Server database driver
 - SSH tunneling support
@@ -197,6 +211,7 @@ npm run tauri build
 - Table data inline editing
 
 ### Future Releases
+
 - Query plan visualizer
 - ER diagram generator
 - Plugin system
@@ -208,6 +223,7 @@ See [docs/implementation-roadmap.md](implementation-roadmap.md) for the complete
 ## 🤝 Contributing
 
 We welcome contributions! Please:
+
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
@@ -221,6 +237,7 @@ MIT License - See [LICENSE](../LICENSE) file for details
 ## 🙏 Acknowledgments
 
 Built with amazing technologies:
+
 - [Tauri](https://tauri.app/) - Lightweight desktop framework
 - [React](https://react.dev/) - UI library
 - [Monaco Editor](https://microsoft.github.io/monaco-editor/) - VS Code's editor
@@ -228,6 +245,7 @@ Built with amazing technologies:
 - [shadcn/ui](https://ui.shadcn.com/) - Beautiful UI components
 
 Inspired by:
+
 - [Beekeeper Studio](https://www.beekeeperstudio.io/)
 - [DbGate](https://dbgate.org/)
 - [DBeaver](https://dbeaver.io/)
@@ -235,8 +253,8 @@ Inspired by:
 ## 📞 Support
 
 - **Documentation**: See [README.md](../README.md) and [USER_GUIDE.md](USER_GUIDE.md)
-- **Issues**: Report bugs at [GitHub Issues](https://github.com/yourusername/db-hive/issues)
-- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/yourusername/db-hive/discussions)
+- **Issues**: Report bugs at [GitHub Issues](https://github.com/KwaminaWhyte/db-hive/issues)
+- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/KwaminaWhyte/db-hive/discussions)
 
 ---
 
