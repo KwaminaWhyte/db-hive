@@ -215,7 +215,7 @@ export function TableInspector({
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <div className="border-b px-4 flex-shrink-0">
+        <div className="border-b px-4 shrink-0">
           <TabsList>
             <TabsTrigger value="data">Data</TabsTrigger>
             <TabsTrigger value="columns">
@@ -302,7 +302,7 @@ export function TableInspector({
               </div>
 
               {/* Pagination Controls */}
-              <div className="flex items-center justify-between px-4 py-3 border-t bg-background flex-shrink-0">
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-background shrink-0">
                 <div className="text-sm text-muted-foreground">
                   {totalRows !== null ? (
                     <>

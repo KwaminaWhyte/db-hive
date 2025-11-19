@@ -19,10 +19,12 @@ function App() {
   const [activeConnectionProfile, setActiveConnectionProfile] = useState<
     ConnectionProfile | undefined
   >(undefined);
-  const [selectedTable, setSelectedTable] = useState<{
+  const [openTables, setOpenTables] = useState<Array<{
     schema: string;
     tableName: string;
-  } | null>(null);
+    id: string; // Unique identifier for the tab
+  }>>([]);
+  const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [activeTab, setActiveTab] = useState<string>("connections");
 
@@ -52,14 +54,46 @@ function App() {
   const handleDisconnect = () => {
     setActiveConnectionId(null);
     setActiveConnectionProfile(undefined);
-    setSelectedTable(null);
+    setOpenTables([]);
+    setActiveTableId(null);
     // Switch back to connections tab
     setActiveTab("connections");
   };
 
-  // Handle table selection
+  // Handle table selection - open in new tab or switch to existing tab
   const handleTableSelect = (schema: string, tableName: string) => {
-    setSelectedTable({ schema, tableName });
+    const tableId = `${schema}.${tableName}`;
+
+    // Check if table is already open
+    const existingTable = openTables.find(t => t.id === tableId);
+
+    if (existingTable) {
+      // Table already open, just switch to it
+      setActiveTableId(tableId);
+    } else {
+      // Open new table tab
+      setOpenTables(prev => [...prev, { schema, tableName, id: tableId }]);
+      setActiveTableId(tableId);
+    }
+  };
+
+  // Handle closing a table tab
+  const handleCloseTable = (tableId: string) => {
+    setOpenTables(prev => {
+      const newTables = prev.filter(t => t.id !== tableId);
+
+      // If closing the active table, switch to another table or null
+      if (activeTableId === tableId) {
+        if (newTables.length > 0) {
+          // Switch to the last table in the list
+          setActiveTableId(newTables[newTables.length - 1].id);
+        } else {
+          setActiveTableId(null);
+        }
+      }
+
+      return newTables;
+    });
   };
 
   // Execute query via Tauri command
@@ -91,7 +125,7 @@ function App() {
             connectionProfile={activeConnectionProfile}
             onDisconnect={handleDisconnect}
             onTableSelect={handleTableSelect}
-            selectedTable={selectedTable?.tableName || null}
+            selectedTable={activeTableId ? activeTableId.split('.')[1] : null}
           />
         ) : (
           <ConnectionList
@@ -106,15 +140,68 @@ function App() {
       {/* Main Content Area - Tabs */}
       <div className="flex-1 overflow-hidden">
         {activeConnectionId ? (
-          // When connected, show TableInspector or Query Editor
-          <div className="h-full">
-            {selectedTable ? (
-              <TableInspector
-                connectionId={activeConnectionId}
-                schema={selectedTable.schema}
-                tableName={selectedTable.tableName}
-                onClose={() => setSelectedTable(null)}
-              />
+          // When connected, show table tabs and table inspector
+          <div className="h-full flex flex-col">
+            {openTables.length > 0 ? (
+              <>
+                {/* Table Tabs */}
+                <Tabs value={activeTableId || undefined} onValueChange={setActiveTableId} className="flex-1 flex flex-col overflow-hidden">
+                  <div className="border-b px-4 shrink-0">
+                    <TabsList className="h-10">
+                      {openTables.map((table) => (
+                        <TabsTrigger
+                          key={table.id}
+                          value={table.id}
+                          className="relative group pr-8"
+                        >
+                          <span className="truncate max-w-[150px]">
+                            {table.tableName}
+                          </span>
+                          <button
+                            className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 hover:bg-destructive/20 rounded p-0.5 transition-opacity"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCloseTable(table.id);
+                            }}
+                          >
+                            <span className="sr-only">Close</span>
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              width="14"
+                              height="14"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <line x1="18" y1="6" x2="6" y2="18"></line>
+                              <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                          </button>
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </div>
+
+                  {/* Table Inspector for each tab */}
+                  {openTables.map((table) => (
+                    <TabsContent
+                      key={table.id}
+                      value={table.id}
+                      className="flex-1 m-0 overflow-hidden"
+                    >
+                      <TableInspector
+                        connectionId={activeConnectionId}
+                        schema={table.schema}
+                        tableName={table.tableName}
+                        onClose={() => handleCloseTable(table.id)}
+                      />
+                    </TabsContent>
+                  ))}
+                </Tabs>
+              </>
             ) : (
               <QueryPanel
                 connectionId={activeConnectionId}
