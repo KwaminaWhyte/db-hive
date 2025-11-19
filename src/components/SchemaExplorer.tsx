@@ -11,6 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Loader2,
   Database,
   Table2,
@@ -19,6 +25,10 @@ import {
   ChevronRight,
   Search,
   X,
+  RefreshCw,
+  Copy,
+  FileCode,
+  FileInput,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 
@@ -29,6 +39,7 @@ interface SchemaExplorerProps {
   onTableSelect: (schema: string, tableName: string) => void;
   onDatabaseChange?: (database: string) => void;
   selectedTable?: string | null;
+  onExecuteQuery?: (sql: string) => void;
 }
 
 export function SchemaExplorer({
@@ -38,6 +49,7 @@ export function SchemaExplorer({
   onTableSelect,
   onDatabaseChange,
   selectedTable,
+  onExecuteQuery,
 }: SchemaExplorerProps) {
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("public");
@@ -203,6 +215,25 @@ export function SchemaExplorer({
     return <Table2 className="h-4 w-4 text-green-500" />;
   };
 
+  // Generate SELECT query for a table
+  const generateSelectQuery = (tableName: string) => {
+    return `SELECT * FROM "${selectedSchema}"."${tableName}" LIMIT 100;`;
+  };
+
+  // Generate INSERT template for a table
+  const generateInsertTemplate = (tableName: string) => {
+    return `INSERT INTO "${selectedSchema}"."${tableName}" (column1, column2, ...) \nVALUES (value1, value2, ...);`;
+  };
+
+  // Copy table name to clipboard
+  const copyTableName = async (tableName: string) => {
+    try {
+      await navigator.clipboard.writeText(tableName);
+    } catch (err) {
+      console.error("Failed to copy table name:", err);
+    }
+  };
+
   // Filter tables based on search query
   const filteredTables = useMemo(() => {
     if (!searchQuery.trim()) return tables;
@@ -328,35 +359,76 @@ export function SchemaExplorer({
                     {filteredTables.map((table) => {
                     const isSelected = selectedTable === table.name;
                     return (
-                      <button
-                        key={`${table.schema}.${table.name}`}
-                        className={`w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left group ${
-                          isSelected
-                            ? "bg-accent text-accent-foreground"
-                            : "hover:bg-accent/50"
-                        }`}
-                        onDoubleClick={() =>
-                          onTableSelect(selectedSchema, table.name)
-                        }
-                      >
-                        {getTableIcon(table.tableType)}
-                        <span className="flex-1 text-sm font-medium">
-                          {table.name}
-                        </span>
-                        {table.rowCount !== null &&
-                          table.rowCount !== undefined && (
-                            <span className="text-xs text-muted-foreground">
-                              {table.rowCount.toLocaleString()} rows
+                      <ContextMenu key={`${table.schema}.${table.name}`}>
+                        <ContextMenuTrigger asChild>
+                          <button
+                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left group ${
+                              isSelected
+                                ? "bg-accent text-accent-foreground"
+                                : "hover:bg-accent/50"
+                            }`}
+                            onDoubleClick={() =>
+                              onTableSelect(selectedSchema, table.name)
+                            }
+                          >
+                            {getTableIcon(table.tableType)}
+                            <span className="flex-1 text-sm font-medium">
+                              {table.name}
                             </span>
-                          )}
-                        <ChevronRight
-                          className={`h-4 w-4 text-muted-foreground transition-opacity ${
-                            isSelected
-                              ? "opacity-100"
-                              : "opacity-0 group-hover:opacity-100"
-                          }`}
-                        />
-                      </button>
+                            {table.rowCount !== null &&
+                              table.rowCount !== undefined && (
+                                <span className="text-xs text-muted-foreground">
+                                  {table.rowCount.toLocaleString()} rows
+                                </span>
+                              )}
+                            <ChevronRight
+                              className={`h-4 w-4 text-muted-foreground transition-opacity ${
+                                isSelected
+                                  ? "opacity-100"
+                                  : "opacity-0 group-hover:opacity-100"
+                              }`}
+                            />
+                          </button>
+                        </ContextMenuTrigger>
+                        <ContextMenuContent>
+                          <ContextMenuItem
+                            onClick={() => onTableSelect(selectedSchema, table.name)}
+                          >
+                            <Eye className="h-4 w-4 mr-2" />
+                            View Data
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onClick={() => {
+                              const sql = generateSelectQuery(table.name);
+                              onExecuteQuery?.(sql);
+                            }}
+                          >
+                            <FileCode className="h-4 w-4 mr-2" />
+                            Generate SELECT
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onClick={() => {
+                              const sql = generateInsertTemplate(table.name);
+                              onExecuteQuery?.(sql);
+                            }}
+                          >
+                            <FileInput className="h-4 w-4 mr-2" />
+                            Generate INSERT
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onClick={() => copyTableName(table.name)}
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy Name
+                          </ContextMenuItem>
+                          <ContextMenuItem
+                            onClick={() => fetchTables(selectedSchema)}
+                          >
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            Refresh
+                          </ContextMenuItem>
+                        </ContextMenuContent>
+                      </ContextMenu>
                     );
                   })}
                 </div>
@@ -387,12 +459,28 @@ export function SchemaExplorer({
           </ScrollArea>
         )}
       </div>
-      <div className="p-4 border-t">
+      <div className="p-4 border-t flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            fetchSchemas();
+            if (selectedSchema) {
+              fetchTables(selectedSchema);
+            }
+          }}
+          disabled={loadingSchemas || loadingTables}
+          className="flex-1"
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${(loadingSchemas || loadingTables) ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={handleDisconnect}
           color="danger"
+          className="flex-1"
         >
           <LogOut className="h-4 w-4 mr-2" />
           Disconnect
