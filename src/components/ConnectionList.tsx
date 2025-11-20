@@ -217,7 +217,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
 
   if (loading) {
     return (
-      <div className="h-full flex flex-col bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+      <div className="h-full flex flex-col bg-background">
         <div className="p-4 border-b border-slate-800/70">
           <Skeleton className="h-10 w-full rounded-xl bg-slate-800/50" />
           <div className="mt-4 space-y-2">
@@ -253,13 +253,13 @@ export const ConnectionList: FC<ConnectionListProps> = ({
   };
 
   return (
-    <div className="h-full flex flex-col bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className="p-4 border-b border-slate-800/70">
         <Button
           size="sm"
           onClick={() => onEdit?.(null)}
-          className="w-full rounded-xl border border-amber-300/70 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 text-slate-950 font-medium shadow-[0_8px_20px_rgba(251,191,36,0.4)] hover:-translate-y-[1px] active:translate-y-[1px] transition-transform"
+          className="w-full"
         >
           <Plus className="h-4 w-4 mr-2" strokeWidth={1.5} />
           New Connection
