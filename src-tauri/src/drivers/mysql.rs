@@ -180,13 +180,17 @@ impl DatabaseDriver for MysqlDriver {
         let columns: Vec<ColumnInfo> = column_rows
             .into_iter()
             .map(
-                |(name, column_type, is_nullable, default_value, column_key, extra)| ColumnInfo {
-                    name,
-                    data_type: column_type,
-                    nullable: is_nullable == "YES",
-                    default_value,
-                    is_primary_key: column_key == "PRI",
-                    is_auto_increment: extra.to_lowercase().contains("auto_increment"),
+                |(name, column_type, is_nullable, default_value, column_key, extra)| {
+                    let is_auto_increment = extra.to_lowercase().contains("auto_increment");
+
+                    ColumnInfo {
+                        name,
+                        data_type: column_type,
+                        nullable: is_nullable == "YES",
+                        default_value,
+                        is_primary_key: column_key == "PRI",
+                        is_auto_increment,
+                    }
                 },
             )
             .collect();

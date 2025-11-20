@@ -57,7 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Changed UUID detection to use `COLUMN_TYPE` instead of `DATA_TYPE` for full type info
 - **PostgreSQL Driver** (`src-tauri/src/drivers/postgres.rs`):
   - Detects `SERIAL`/`BIGSERIAL`/`SMALLSERIAL` types in data_type field
-  - Detects `nextval()` function calls in column default values
+  - Detects `nextval()` and `sequence` in column default values for proper SERIAL detection
+  - Enhanced detection logic to handle all PostgreSQL auto-increment patterns
   - Added row count fetching using `pg_class.reltuples` statistics
   - Fixed empty table column header extraction using prepared statements
 - **SQLite Driver** (`src-tauri/src/drivers/sqlite.rs`):
