@@ -105,6 +105,8 @@ pub fn run() {
             commands::history::get_snippet,
             commands::export::export_to_csv,
             commands::export::export_to_json,
+            commands::export::export_to_sql,
+            commands::export::import_from_sql,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

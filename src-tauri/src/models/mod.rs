@@ -9,7 +9,7 @@ pub mod history;
 pub mod metadata;
 
 // Re-export commonly used types for convenience
-pub use connection::{ConnectionProfile, ConnectionStatus, DbDriver, SshConfig, SslMode};
+pub use connection::{ConnectionProfile, ConnectionStatus, DbDriver};
 pub use error::DbError;
 pub use history::{QueryHistory, QuerySnippet};
 pub use metadata::{ColumnInfo, DatabaseInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema};

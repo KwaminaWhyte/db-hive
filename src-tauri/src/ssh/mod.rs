@@ -8,7 +8,7 @@ use crate::models::DbError;
 use russh::client;
 use russh_keys::key;
 use std::collections::HashMap;
-use std::net::{SocketAddr, TcpListener};
+use std::net::TcpListener;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -31,14 +31,12 @@ struct SshClientHandler;
 impl client::Handler for SshClientHandler {
     type Error = russh::Error;
 
-    async fn check_server_key(
-        &mut self,
-        _server_public_key: &key::PublicKey,
-    ) -> Result<bool, Self::Error> {
-        // TODO: In production, verify host keys against known_hosts
-        // For now, accept all keys (useful for development)
-        Ok(true)
-    }
+    // FIXME: Lifetime mismatch with trait - needs investigation of russh API
+    // async fn check_server_key(&mut self, _server_public_key: &key::PublicKey) -> Result<bool, Self::Error> {
+    //     // TODO: In production, verify host keys against known_hosts
+    //     // For now, accept all keys (useful for development)
+    //     Ok(true)
+    // }
 }
 
 /// SSH Tunnel Manager
@@ -132,9 +130,12 @@ impl SshTunnelManager {
                 let key_data = std::fs::read(key_path)
                     .map_err(|e| DbError::ConnectionError(format!("Failed to read private key: {}", e)))?;
 
-                let key = key::PrivateKey::from_openssh(&key_data)
-                    .or_else(|_| key::PrivateKey::from_pem(&key_data, None))
-                    .map_err(|e| DbError::AuthError(format!("Failed to parse private key: {}", e)))?;
+                let key = russh_keys::decode_secret_key(
+                    std::str::from_utf8(&key_data)
+                        .map_err(|e| DbError::AuthError(format!("Invalid UTF-8 in key file: {}", e)))?,
+                    None,
+                )
+                .map_err(|e| DbError::AuthError(format!("Failed to parse private key: {}", e)))?;
 
                 let auth_result = session
                     .authenticate_publickey(&config.username, Arc::new(key))
@@ -229,7 +230,7 @@ impl SshTunnelManager {
         db_port: u16,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Open SSH channel for port forwarding
-        let mut session_guard = session.lock().await;
+        let session_guard = session.lock().await;
         let mut channel = session_guard
             .channel_open_direct_tcpip(&db_host, db_port as u32, "127.0.0.1", 0)
             .await?;
@@ -237,7 +238,6 @@ impl SshTunnelManager {
 
         // Buffer for data transfer
         let mut local_buf = vec![0u8; 8192];
-        let mut remote_buf = vec![0u8; 8192];
 
         loop {
             tokio::select! {
@@ -288,7 +288,7 @@ impl SshTunnelManager {
             tunnel_info.task_handle.abort();
 
             // Close the SSH session
-            let mut session = tunnel_info.session.lock().await;
+            let session = tunnel_info.session.lock().await;
             session.disconnect(russh::Disconnect::ByApplication, "", "en").await
                 .map_err(|e| DbError::InternalError(format!("Failed to disconnect SSH session: {}", e)))?;
         }
