@@ -18,6 +18,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fallback mechanism for backward compatibility during migration
   - Full credential lifecycle: save, retrieve, delete, and check existence
 
+- **Hierarchical Schema Browser Tree View**:
+  - Replaced flat table list with collapsible schema tree structure
+  - Expand/collapse functionality for each schema with visual indicators
+  - Folder icons (open/closed) for schemas based on expansion state
+  - Lazy loading: Tables loaded on-demand when schema is expanded
+  - Per-schema loading indicators during table fetch
+  - Drag-and-drop support: Drag table names directly to SQL editor
+  - Enhanced search: Filter across both schemas and tables
+  - Search auto-expands matching schemas to show relevant tables
+  - Improved UX: Tables remain cached after loading until database switch
+  - Clear visual hierarchy with indentation for tables under schemas
+
 - **Add Row Functionality**:
   - "Add Row" button in table toolbar (visible only in edit mode)
   - New rows rendered at top of table with green visual indicator
@@ -64,6 +76,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - discardChanges() now clears both cell edits and new rows
 
 ### Technical Details
+
+#### Schema Browser Enhancements
+- **SchemaExplorer Component Refactor** (`src/components/SchemaExplorer.tsx`):
+  - Replaced schema selector dropdown with hierarchical tree view using Radix UI Collapsible
+  - State management: `expandedSchemas` Set tracks which schemas are expanded
+  - Lazy loading: `tablesBySchema` record stores tables per schema, loaded only when expanded
+  - `loadingTablesForSchema` record tracks loading state per schema independently
+  - `toggleSchemaExpansion()` function handles expand/collapse with automatic table fetch
+  - Drag-and-drop: `draggable` attribute with `onDragStart` handler sets table name as plain text
+  - Visual feedback: Folder icons (FolderOpen/FolderClosed) and chevron indicators
+  - Enhanced filtering: `filteredSchemas` includes schemas matching by name or containing matching tables
+  - `getFilteredTablesForSchema()` function filters tables within each schema
+  - Refresh button now refreshes all expanded schemas instead of just selected one
+  - Database switch clears `tablesBySchema` cache and resets expanded state
+
+- **New UI Component**:
+  - Added Collapsible component from shadcn/ui (`src/components/ui/collapsible.tsx`)
+  - Uses @radix-ui/react-collapsible for accessible expand/collapse behavior
 
 #### Security Implementation
 - **Credential Manager Module** (`src-tauri/src/credentials/mod.rs`):
