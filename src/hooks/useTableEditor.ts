@@ -467,11 +467,23 @@ export function useTableEditor({ columns, rows }: UseTableEditorOptions) {
       return false;
     }
 
-    // Skip common auto-generated timestamp columns
+    // Skip common auto-generated timestamp columns ONLY if they have defaults
+    // Typically these have DEFAULT CURRENT_TIMESTAMP or similar
     if ((lowerName === 'created_at' || lowerName === 'updated_at') &&
         (lowerType.includes('timestamp') || lowerType.includes('datetime'))) {
-      console.log(`[shouldSkipColumnInInsert] ✓ Skipping ${col.name}: auto-timestamp column`);
-      return true;
+      // Only skip if there's a default value (CURRENT_TIMESTAMP, now(), etc.)
+      if (col.defaultValue &&
+          (col.defaultValue.toLowerCase().includes('current_timestamp') ||
+           col.defaultValue.toLowerCase().includes('now()') ||
+           col.defaultValue.toLowerCase().includes('getdate()') ||
+           col.defaultValue.toLowerCase().includes('current_date') ||
+           col.defaultValue.toLowerCase().includes('current_time'))) {
+        console.log(`[shouldSkipColumnInInsert] ✓ Skipping ${col.name}: auto-timestamp column with default`);
+        return true;
+      }
+      // Don't skip - need to provide timestamp value
+      console.log(`[shouldSkipColumnInInsert] ✗ NOT skipping ${col.name}: timestamp column WITHOUT default (must provide value)`);
+      return false;
     }
 
     console.log(`[shouldSkipColumnInInsert] ✗ NOT skipping ${col.name}`);
@@ -518,6 +530,17 @@ export function useTableEditor({ columns, rows }: UseTableEditorOptions) {
             // Generate a v4 UUID
             value = crypto.randomUUID();
             console.log(`[generateInsertStatements] Generated UUID for ${col.name}:`, value);
+          }
+
+          // Generate current timestamp for timestamp columns that don't have a value
+          const lowerName = col.name.toLowerCase();
+          const lowerType = col.dataType.toLowerCase();
+          if ((value === null || value === undefined) &&
+              (lowerName === 'created_at' || lowerName === 'updated_at') &&
+              (lowerType.includes('timestamp') || lowerType.includes('datetime'))) {
+            // Generate current timestamp in ISO format
+            value = new Date().toISOString().slice(0, 19).replace('T', ' ');
+            console.log(`[generateInsertStatements] Generated timestamp for ${col.name}:`, value);
           }
 
           console.log(`[generateInsertStatements] Column ${col.name} value:`, value);
