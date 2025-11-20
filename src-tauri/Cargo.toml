@@ -1,6 +1,6 @@
 [package]
 name = "db-hive"
-version = "0.2.0"
+version = "0.3.0"
 description = "A Tauri App"
 authors = ["KwaminaWhyte"]
 edition = "2021"
@@ -38,3 +38,6 @@ mysql_async = "0.36.1"
 mongodb = "3.1.0"
 futures-util = "0.3"
 hex = "0.4.3"
+russh = "0.45"
+russh-keys = "0.45"
+dirs = "5.0"

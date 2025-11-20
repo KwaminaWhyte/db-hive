@@ -725,15 +725,18 @@ pub async fn get_tables(
 - [ ] Add aggregation pipeline builder UI (TODO: Future enhancement)
 - [ ] Implement visual MongoDB query builder (TODO: Future enhancement)
 
-### Milestone 2.2: SSH Tunneling (Weeks 18-19)
+### Milestone 2.2: SSH Tunneling (Weeks 18-19) 🚧 IN PROGRESS
 
 **SSH Implementation**
 
-- [ ] Add SSH tunnel manager in Rust
-- [ ] Support password and key-based auth
-- [ ] Implement tunnel lifecycle management
-- [ ] Add connection through bastion hosts
+- [x] Add SSH tunnel manager in Rust ✅
+- [x] Support password and key-based auth ✅
+- [x] Implement tunnel lifecycle management ✅
+- [x] Enhanced SSH config model with auth methods ✅
+- [ ] Integrate SSH tunneling with connection commands (IN PROGRESS)
+- [ ] Build SSH configuration UI component (IN PROGRESS)
 - [ ] Test with various SSH configurations
+- [ ] Add connection through bastion hosts (TODO: Future enhancement)
 
 ### Milestone 2.3: Advanced Autocomplete (Weeks 20-21)
 

@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use crate::drivers::DatabaseDriver;
 use crate::models::{ConnectionProfile, DbError, QueryHistory, QuerySnippet};
+use crate::ssh::SshTunnelManager;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
@@ -38,7 +39,6 @@ use tauri_plugin_store::StoreExt;
 ///     Ok(())
 /// }
 /// ```
-#[derive(Default)]
 pub struct AppState {
     /// Active database connections
     /// Key: Connection ID (UUID), Value: Database driver instance
@@ -60,6 +60,22 @@ pub struct AppState {
     /// Saved query snippets
     /// Key: Snippet ID (UUID), Value: Query snippet
     pub query_snippets: HashMap<String, QuerySnippet>,
+
+    /// SSH tunnel manager for managing active SSH tunnels
+    pub ssh_tunnel_manager: SshTunnelManager,
+}
+
+impl Default for AppState {
+    fn default() -> Self {
+        Self {
+            connections: HashMap::new(),
+            connection_profiles: HashMap::new(),
+            connection_passwords: HashMap::new(),
+            query_history: Vec::new(),
+            query_snippets: HashMap::new(),
+            ssh_tunnel_manager: SshTunnelManager::new(),
+        }
+    }
 }
 
 impl AppState {
@@ -75,6 +91,7 @@ impl AppState {
             connection_passwords: HashMap::new(),
             query_history: Vec::new(),
             query_snippets: HashMap::new(),
+            ssh_tunnel_manager: SshTunnelManager::new(),
         }
     }
 

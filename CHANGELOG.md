@@ -5,6 +5,43 @@ All notable changes to DB-Hive will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2025-11-20
+
+### Added
+
+#### SSH Tunneling Infrastructure (WIP)
+- SSH tunnel manager architecture and data models
+- Enhanced SSH configuration with flexible authentication methods:
+  - Password-based authentication support
+  - Private key authentication support
+  - Configurable local port binding
+- SSH tunnel lifecycle management structure
+- Integration with application state management
+- Dependencies added: `russh = "0.45"`, `russh-keys = "0.45"`, `dirs = "5.0"`
+
+**Note**: Full SSH tunneling implementation is in progress. The infrastructure and APIs are in place, but the actual tunnel creation and port forwarding will be completed in the next release.
+
+### Fixed
+- TypeScript linting errors in JSON syntax highlighting
+- Unused import warnings in frontend components
+
+### Technical Details
+
+#### Backend Changes
+- New SSH module at `src-tauri/src/ssh/mod.rs` with tunnel manager stub
+- Enhanced `SshConfig` model with `SshAuthMethod` enum and authentication options
+- Added `SshTunnelManager` to `AppState` for centralized SSH tunnel management
+- Updated Cargo dependencies for SSH support
+
+#### Frontend Changes
+- Fixed unused parameters in `ResultsViewer.tsx` and `RowJsonViewer.tsx`
+- Removed unused `ScrollArea` import
+
+### Known Limitations
+- SSH tunneling feature not yet fully functional (infrastructure only)
+- MongoDB aggregation pipeline builder UI not yet implemented
+- SQL Server driver not yet implemented
+
 ## [0.2.0] - 2025-11-20
 
 ### Added

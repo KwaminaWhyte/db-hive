@@ -41,6 +41,16 @@ impl Default for SslMode {
     }
 }
 
+/// SSH authentication method
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum SshAuthMethod {
+    /// Password-based authentication
+    Password,
+    /// Public/private key authentication
+    PrivateKey,
+}
+
 /// SSH tunnel configuration
 ///
 /// Configuration for establishing an SSH tunnel to access a remote database.
@@ -58,8 +68,17 @@ pub struct SshConfig {
     /// SSH username
     pub username: String,
 
-    /// Path to the private key file for SSH authentication
-    pub private_key_path: String,
+    /// Authentication method (password or private key)
+    pub auth_method: SshAuthMethod,
+
+    /// Path to the private key file (only used with PrivateKey auth)
+    pub private_key_path: Option<String>,
+
+    /// Passphrase for encrypted private keys (optional)
+    pub key_passphrase_keyring_key: Option<String>,
+
+    /// Local port to bind the tunnel to (0 = auto-assign)
+    pub local_port: u16,
 }
 
 /// Connection profile
