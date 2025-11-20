@@ -6,7 +6,7 @@
  * Radius: 8-12px (0.5rem - 0.75rem)
  */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
+/* Fonts are loaded in index.html */
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -203,7 +203,11 @@
 }
 
 * {
-  font-family: "Inter", sans-serif;
+  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
   font-optical-sizing: auto;
   font-style: normal;
+}
+
+code, pre, .font-mono {
+  font-family: "Geist Mono", "Space Mono", ui-monospace, monospace;
 }
