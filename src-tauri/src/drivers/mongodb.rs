@@ -113,20 +113,28 @@ impl DatabaseDriver for MongoDbDriver {
     {
         // Build MongoDB connection string
         // Format: mongodb://username:password@host:port/database
-        let auth = if let Some(password) = &opts.password {
-            format!("{}:{}@", opts.username, password)
-        } else {
-            format!("{}@", opts.username)
-        };
-
+        // Or: mongodb://host:port/database (for no authentication)
         let database_name = opts.database.clone().unwrap_or_else(|| "test".to_string());
 
-        // Build connection string with authSource=admin for authentication
-        // This is required for MongoDB when authenticating with root/admin users
-        let connection_string = format!(
-            "mongodb://{}{}:{}/{}?authSource=admin",
-            auth, opts.host, opts.port, database_name
-        );
+        let connection_string = if opts.username.is_empty() {
+            // No authentication
+            format!(
+                "mongodb://{}:{}/{}",
+                opts.host, opts.port, database_name
+            )
+        } else if let Some(password) = &opts.password {
+            // Username and password authentication
+            format!(
+                "mongodb://{}:{}@{}:{}/{}?authSource=admin",
+                opts.username, password, opts.host, opts.port, database_name
+            )
+        } else {
+            // Username only (no password)
+            format!(
+                "mongodb://{}@{}:{}/{}?authSource=admin",
+                opts.username, opts.host, opts.port, database_name
+            )
+        };
 
         // Connect to MongoDB
         let client = Client::with_uri_str(&connection_string)

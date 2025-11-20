@@ -5,6 +5,74 @@ All notable changes to DB-Hive will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2025-11-20
+
+### Added
+
+#### MongoDB Support
+- MongoDB database driver with full CRUD operations support
+- MongoDB query parser supporting JavaScript-like syntax:
+  - `db.collection.find({...})` - Query documents
+  - `db.collection.findOne({...})` - Query single document
+  - `db.collection.insertOne({...})` / `insertMany([...])` - Insert documents
+  - `db.collection.updateOne/updateMany(filter, update)` - Update documents
+  - `db.collection.deleteOne/deleteMany({...})` - Delete documents
+  - `db.collection.aggregate([...])` - Run aggregation pipelines
+- MongoDB metadata support:
+  - List databases
+  - List collections (shown as tables)
+  - Schema inference from sample documents
+  - BSON to JSON conversion for data display
+- Optional authentication for local MongoDB instances
+- Connection string builder with `authSource=admin` support
+
+#### UI/UX Improvements
+- Password visibility toggle in connection form (eye/eye-off icon)
+- JSON syntax highlighting in:
+  - JSON Row Viewer with color-coded tokens
+  - Results Viewer JSON tab with color-coded tokens
+- Cell content truncation at 100 characters with tooltips showing full content
+- Empty state messages for tables and query results:
+  - "No data found in this table" for empty collections/tables
+  - "No results returned" for successful queries with no rows
+- Improved MongoDB username/password validation (both fields now optional)
+
+### Changed
+- Connection form validation now allows optional username/password for MongoDB
+- TableInspector now detects MongoDB driver and uses MongoDB query syntax
+- Database switching now supports MongoDB in addition to PostgreSQL, MySQL, and SQLite
+- ResultsViewer cell rendering now truncates long values for better readability
+
+### Fixed
+- MongoDB authentication issues with remote servers (added `authSource=admin` parameter)
+- Local MongoDB connections no longer require username/password
+- JSON Row Viewer scrolling functionality restored
+- Cell content overflow in both TableInspector and ResultsViewer
+
+### Technical Details
+
+#### New Dependencies
+- `mongodb = "3.1.0"` - Official MongoDB Rust driver
+- `futures-util = "0.3"` - Async stream utilities for MongoDB cursors
+
+#### Backend Changes
+- New MongoDB driver implementation at `src-tauri/src/drivers/mongodb.rs` (459 lines)
+- Enhanced connection commands to support MongoDB driver type
+- MongoDB-specific connection string builder with conditional authentication
+- BSON document to JSON conversion utilities
+
+#### Frontend Changes
+- Enhanced `ConnectionForm.tsx` with password toggle and MongoDB validation
+- Updated `TableInspector.tsx` with MongoDB query support and empty states
+- Updated `ResultsViewer.tsx` with cell truncation and empty states
+- Enhanced `RowJsonViewer.tsx` with syntax highlighting
+
+### Known Limitations
+- MongoDB aggregation pipeline builder UI not yet implemented
+- SQL Server driver not yet implemented
+- SSH tunneling not yet supported
+- MongoDB pagination not yet implemented
+
 ## [0.1.0-mvp] - 2025-11-19
 
 ### Added

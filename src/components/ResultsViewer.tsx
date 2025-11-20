@@ -180,16 +180,30 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
       cell: (info) => {
         const value = info.getValue();
         let displayValue: React.ReactNode;
+        let cellString: string;
+        let isTruncated = false;
 
         if (value === null) {
+          cellString = 'NULL';
           displayValue = <span className="text-muted-foreground italic">NULL</span>;
         } else if (value === undefined) {
+          cellString = 'undefined';
           displayValue = <span className="text-muted-foreground italic">undefined</span>;
         } else if (typeof value === "object") {
-          displayValue = <span className="text-xs font-mono">{JSON.stringify(value)}</span>;
+          cellString = JSON.stringify(value);
+          isTruncated = cellString.length > 100;
+          const displayString = isTruncated ? cellString.substring(0, 100) + '...' : cellString;
+          displayValue = <span className="text-xs font-mono truncate">{displayString}</span>;
         } else {
-          displayValue = <span className="truncate">{String(value)}</span>;
+          cellString = String(value);
+          isTruncated = cellString.length > 100;
+          const displayString = isTruncated ? cellString.substring(0, 100) + '...' : cellString;
+          displayValue = <span className="truncate">{displayString}</span>;
         }
+
+        const tooltipText = isTruncated
+          ? `${cellString}\n\nClick to copy cell value`
+          : "Click to copy cell value";
 
         return (
           <div
@@ -198,9 +212,11 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
               console.log("Cell clicked, value:", value);
               copyCellValue(value);
             }}
-            title="Click to copy cell value"
+            title={tooltipText}
           >
-            {displayValue}
+            <div className="truncate max-w-md">
+              {displayValue}
+            </div>
           </div>
         );
       },
@@ -254,6 +270,21 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
 
     return [header, ...dataRows].join("\n");
   }, [columns, rows]);
+
+  // Syntax highlight JSON
+  const highlightJSON = (json: string) => {
+    return json
+      .replace(/("(?:\\.|[^"\\])*")(\s*:)?/g, (match, p1, p2) => {
+        // Property keys (followed by colon) vs string values
+        if (p2) {
+          return `<span class="text-blue-400">${p1}</span>${p2}`;
+        }
+        return `<span class="text-green-400">${p1}</span>`;
+      })
+      .replace(/\b(true|false)\b/g, '<span class="text-purple-400">$1</span>')
+      .replace(/\b(null)\b/g, '<span class="text-red-400">$1</span>')
+      .replace(/\b(-?\d+\.?\d*)\b/g, '<span class="text-orange-400">$1</span>');
+  };
 
   // Render loading state
   if (loading) {
@@ -480,6 +511,19 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                       ))}
                     </tr>
                   ))}
+                  {rows.length === 0 && (
+                    <tr>
+                      <td colSpan={columns.length + 1} className="text-center py-12">
+                        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+                          <TableIcon className="h-12 w-12 opacity-50" />
+                          <div>
+                            <p className="font-medium">No results returned</p>
+                            <p className="text-sm">The query executed successfully but returned no rows</p>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -488,7 +532,9 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
           {/* JSON View */}
           <TabsContent value="json" className="flex-1 m-0 overflow-auto">
             <pre className="p-4 text-xs font-mono">
-              <code>{resultsAsJSON}</code>
+              <code
+                dangerouslySetInnerHTML={{ __html: highlightJSON(resultsAsJSON) }}
+              />
             </pre>
           </TabsContent>
 

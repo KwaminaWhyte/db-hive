@@ -527,47 +527,66 @@ export function TableInspector({
                                   </Button>
                                 </div>
                               </TableCell>
-                              {row.map((cell, cellIndex) => (
-                                <TableCell
-                                  key={cellIndex}
-                                  className="whitespace-nowrap font-mono text-sm cursor-pointer hover:bg-accent/50"
-                                  onClick={() => copyCellValue(cell)}
-                                  onDoubleClick={() => {
-                                    setSelectedRow(row);
-                                    setShowRowViewer(true);
-                                  }}
-                                  title="Click to copy cell value"
-                                >
-                                  {cell === null || cell === undefined ? (
-                                    <span className="italic text-muted-foreground opacity-50">
-                                      NULL
-                                    </span>
-                                  ) : typeof cell === "object" ? (
-                                    <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
-                                      {JSON.stringify(cell)}
-                                    </code>
-                                  ) : typeof cell === "boolean" ? (
-                                    <span className={cell ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
-                                      {String(cell)}
-                                    </span>
-                                  ) : typeof cell === "number" ? (
-                                    <span className="text-blue-600 dark:text-blue-400">
-                                      {cell.toLocaleString()}
-                                    </span>
-                                  ) : cell === "" ? (
-                                    <span className="italic text-muted-foreground opacity-50">
-                                      (empty)
-                                    </span>
-                                  ) : (
-                                    <span className="text-foreground">{String(cell)}</span>
-                                  )}
-                                </TableCell>
-                              ))}
+                              {row.map((cell, cellIndex) => {
+                                const cellString = cell === null || cell === undefined ? 'NULL' :
+                                                  typeof cell === "object" ? JSON.stringify(cell) :
+                                                  String(cell);
+                                const isTruncated = cellString.length > 100;
+                                const displayValue = isTruncated ? cellString.substring(0, 100) + '...' : cellString;
+
+                                return (
+                                  <TableCell
+                                    key={cellIndex}
+                                    className="whitespace-nowrap font-mono text-sm cursor-pointer hover:bg-accent/50 max-w-md"
+                                    onClick={() => copyCellValue(cell)}
+                                    onDoubleClick={() => {
+                                      setSelectedRow(row);
+                                      setShowRowViewer(true);
+                                    }}
+                                    title={isTruncated ? `${cellString}\n\nClick to copy • Double-click for JSON viewer` : "Click to copy cell value"}
+                                  >
+                                    <div className="truncate">
+                                      {cell === null || cell === undefined ? (
+                                        <span className="italic text-muted-foreground opacity-50">
+                                          NULL
+                                        </span>
+                                      ) : typeof cell === "object" ? (
+                                        <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
+                                          {displayValue}
+                                        </code>
+                                      ) : typeof cell === "boolean" ? (
+                                        <span className={cell ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                          {String(cell)}
+                                        </span>
+                                      ) : typeof cell === "number" ? (
+                                        <span className="text-blue-600 dark:text-blue-400">
+                                          {cell.toLocaleString()}
+                                        </span>
+                                      ) : cell === "" ? (
+                                        <span className="italic text-muted-foreground opacity-50">
+                                          (empty)
+                                        </span>
+                                      ) : (
+                                        <span className="text-foreground">{displayValue}</span>
+                                      )}
+                                    </div>
+                                  </TableCell>
+                                );
+                              })}
                             </TableRow>
                           );
                         })}
                       </TableBody>
                     </Table>
+                    {sampleData.rows.length === 0 && (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="text-center space-y-2">
+                          <Database className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                          <p className="text-muted-foreground">No data found in this table</p>
+                          <p className="text-sm text-muted-foreground">This collection/table is empty</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
