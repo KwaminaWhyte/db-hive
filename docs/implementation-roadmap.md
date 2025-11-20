@@ -203,13 +203,13 @@ async fn execute_query_streamed(
 }
 ```
 
-**Security Implementation** ⏳ IN PROGRESS
+**Security Implementation** ✅ COMPLETED (2025-11-20)
 
-- [ ] Implement credential encryption using OS keyring (TODO: Future - currently using persistent store)
+- [x] Implement credential encryption using OS keyring ✅ (2025-11-20)
 - [ ] Add master passphrase support (optional) (TODO: Later)
 - [x] Implement secure connection storage (ConnectionProfile model with passwordKeyringKey field) ✅
-- [x] Implement persistent password storage (Tauri Store - plaintext, temporary solution) ✅
-- [ ] Add SSH tunnel manager (TODO: Week 5)
+- [x] Implement OS-native credential storage (macOS Keychain, Windows Credential Manager, Linux Secret Service) ✅
+- [ ] Add SSH tunnel manager (TODO: Week 5 - partially implemented, needs completion)
 
 ---
 
@@ -648,9 +648,9 @@ pub async fn get_tables(
 
 - [x] Add search/filter in table list ✅
 - [x] Schema refresh functionality ✅
-- [ ] Implement hierarchical tree view (expand/collapse schemas) (TODO: Future)
-- [ ] Add lazy loading for tree nodes (TODO: Future)
-- [ ] Add drag-and-drop (table name to editor) (TODO: Future)
+- [x] Implement hierarchical tree view (expand/collapse schemas) ✅ (2025-11-20)
+- [x] Add lazy loading for tree nodes ✅ (2025-11-20)
+- [x] Add drag-and-drop (table name to editor) ✅ (2025-11-20)
 - [ ] Support for Functions and Procedures (TODO: Future)
 
 **Implementation Details:**
@@ -661,9 +661,21 @@ pub async fn get_tables(
 - Empty state message when no tables match search
 - Search input only appears when tables are loaded
 - Memoized filtering for performance
+- **Hierarchical Tree View (2025-11-20):**
+  - Replaced flat table list with collapsible schema tree structure
+  - Expand/collapse functionality using Radix UI Collapsible component
+  - Folder icons (FolderOpen/FolderClosed) show schema state
+  - ChevronRight/ChevronDown icons for expand/collapse indication
+  - Lazy loading: Tables only loaded when schema expanded
+  - Per-schema loading indicators during fetch
+  - Tables remain cached after loading for performance
+  - Drag-and-drop: Drag table names to SQL editor as `"schema"."table"`
+  - Enhanced search: Filters across both schemas and tables
+  - Clear visual hierarchy with indentation for tables
+  - Database switch clears cache and resets expanded state
 - **Schema Refresh:**
   - Refresh button next to disconnect button
-  - Refreshes schemas and tables simultaneously
+  - Refreshes schemas and all expanded schemas' tables
   - Spinning icon animation during loading
   - Disabled state prevents duplicate requests
 - **Context Menus:**
