@@ -37,8 +37,12 @@ import {
   FileInput,
   FolderClosed,
   FolderOpen,
+  Upload,
+  Download,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
+import { SqlExportDialog } from "./SqlExportDialog";
+import { SqlImportDialog } from "./SqlImportDialog";
 
 interface SchemaExplorerProps {
   connectionId: string;
@@ -72,6 +76,9 @@ export function SchemaExplorer({
   const [searchQuery, setSearchQuery] = useState<string>("");
   // Track which schemas are expanded
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set(["public"]));
+  // Import/Export dialog state
+  const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
 
   // Get the connected database name from the connection profile
   const connectedDatabase = connectionProfile.database || "postgres";
@@ -321,6 +328,27 @@ export function SchemaExplorer({
           )}
         </div>
 
+        {/* Import/Export Buttons */}
+        <div className="flex gap-2 mt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => setShowExportDialog(true)}
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1"
+            onClick={() => setShowImportDialog(true)}
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Import
+          </Button>
+        </div>
       </div>
 
       {/* Error Display */}
@@ -565,6 +593,21 @@ export function SchemaExplorer({
           Disconnect
         </Button>
       </div>
+
+      {/* SQL Export Dialog */}
+      <SqlExportDialog
+        open={showExportDialog}
+        onClose={() => setShowExportDialog(false)}
+        connectionId={connectionId}
+        currentSchema={selectedDatabase}
+      />
+
+      {/* SQL Import Dialog */}
+      <SqlImportDialog
+        open={showImportDialog}
+        onClose={() => setShowImportDialog(false)}
+        connectionId={connectionId}
+      />
     </div>
   );
 }

@@ -281,3 +281,38 @@ export interface TableSchema {
   /** Indexes defined on the table */
   indexes: IndexInfo[];
 }
+
+/**
+ * SQL Export Options
+ *
+ * Configuration for exporting database structure and data to SQL dump files
+ */
+export interface SqlExportOptions {
+  /** Include DROP TABLE statements before CREATE TABLE */
+  includeDrop: boolean;
+
+  /** Include CREATE TABLE statements */
+  includeCreate: boolean;
+
+  /** Include INSERT statements (data) */
+  includeData: boolean;
+
+  /** Filter by specific tables (empty array = all tables) */
+  tables: string[];
+
+  /** Schema to export from (PostgreSQL/MySQL). Defaults to "public" if not specified */
+  schema?: string | null;
+}
+
+/**
+ * SQL Import Options
+ *
+ * Configuration for importing SQL dump files into a database
+ */
+export interface SqlImportOptions {
+  /** Continue importing even if some statements fail */
+  continueOnError: boolean;
+
+  /** Use a transaction (rollback all changes on error) */
+  useTransaction: boolean;
+}

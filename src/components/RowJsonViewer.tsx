@@ -37,7 +37,7 @@ export const RowJsonViewer: FC<RowJsonViewerProps> = ({
     // Replace with spans for different token types
     return escaped
       // Numbers (must come before strings to avoid matching inside classes)
-      .replace(/:\s*(-?\d+\.?\d*)/g, (match, p1) => {
+      .replace(/:\s*(-?\d+\.?\d*)/g, (_match, p1) => {
         return `: <span style="color: #fb923c">${p1}</span>`;
       })
       // Property keys (followed by colon)

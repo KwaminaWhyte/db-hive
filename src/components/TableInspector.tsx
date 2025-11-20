@@ -41,7 +41,7 @@ import {
 import { TableSchema, QueryExecutionResult } from "@/types";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { RowJsonViewer } from "./RowJsonViewer";
-import { EditableCell, CellChange } from "./EditableCell";
+import { EditableCell } from "./EditableCell";
 import { TransactionPreview } from "./TransactionPreview";
 import { useTableEditor } from "@/hooks/useTableEditor";
 import { toast } from "sonner";
