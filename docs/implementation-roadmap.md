@@ -832,36 +832,46 @@ pub async fn get_tables(
 - Auto-generation detection uses column name patterns and default value analysis
 - New rows use negative IDs to differentiate from existing rows
 
-### Milestone 2.5: SQL Import/Export (Week 25)
+### Milestone 2.5: SQL Import/Export (Week 25) ✅ COMPLETED (2025-11-20)
 
 **Database Backup/Restore**
 
-- [ ] Implement SQL export command (pg_dump style for PostgreSQL)
-- [ ] Support table-specific export
-- [ ] Support schema-only and data-only export options
-- [ ] Add SQL import command with transaction support
-- [ ] Build export UI with format options
-- [ ] Build import UI with file picker and validation
-- [ ] Add progress tracking for large exports/imports
-- [ ] Support multiple database formats:
-  - PostgreSQL: `pg_dump` / `psql` compatibility
-  - MySQL: `mysqldump` / `mysql` compatibility
-  - SQLite: `.dump` command compatibility
+- [x] Implement SQL export command (pg_dump style for PostgreSQL) ✅ (2025-11-20)
+- [x] Support table-specific export ✅ (2025-11-20)
+- [x] Support schema-only and data-only export options ✅ (2025-11-20)
+- [x] Add SQL import command with transaction support ✅ (2025-11-20)
+- [x] Build export UI with format options ✅ (2025-11-20)
+- [x] Build import UI with file picker and validation ✅ (2025-11-20)
+- [ ] Add progress tracking for large exports/imports (TODO: Future enhancement)
+- [x] Support multiple database formats: ✅ (2025-11-20)
+  - [x] PostgreSQL: `pg_dump` / `psql` compatibility ✅
+  - [x] MySQL: `mysqldump` / `mysql` compatibility ✅
+  - [x] SQLite: `.dump` command compatibility ✅
 
 **Export Options**
 
-- [ ] Include DROP statements option
-- [ ] Include CREATE statements option
-- [ ] Include INSERT statements (data)
-- [ ] Filter by schema/table
-- [ ] Batch size configuration for large datasets
+- [x] Include DROP statements option ✅ (2025-11-20)
+- [x] Include CREATE statements option ✅ (2025-11-20)
+- [x] Include INSERT statements (data) ✅ (2025-11-20)
+- [x] Filter by schema/table ✅ (2025-11-20)
+- [ ] Batch size configuration for large datasets (TODO: Future enhancement)
 
 **Import Options**
 
-- [ ] Preview SQL before execution
-- [ ] Transaction rollback on error
-- [ ] Continue on error option
-- [ ] Show import progress with statement counter
+- [ ] Preview SQL before execution (TODO: Future enhancement)
+- [x] Transaction rollback on error ✅ (2025-11-20)
+- [x] Continue on error option ✅ (2025-11-20)
+- [x] Show import progress with statement counter ✅ (2025-11-20)
+
+**Implementation Notes** (2025-11-20):
+- Backend: 400+ lines in `src-tauri/src/commands/export.rs`
+- Frontend: `SqlExportDialog.tsx` (232 lines) + `SqlImportDialog.tsx` (228 lines)
+- Database-specific SQL syntax generation for PostgreSQL, MySQL, SQLite
+- File picker integration with `@tauri-apps/plugin-dialog`
+- Proper SQL value escaping and type handling
+- ACID transaction support with BEGIN/COMMIT/ROLLBACK
+- Per-statement error reporting in import
+- Toast notifications for user feedback
 
 ### Milestone 2.6: Query Plan Visualizer (Week 26)
 
