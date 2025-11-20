@@ -41,6 +41,10 @@ pub enum DbError {
     /// Internal error that doesn't fit other categories
     #[error("Internal error: {0}")]
     InternalError(String),
+
+    /// Error occurred during credential storage/retrieval
+    #[error("Credential error: {0}")]
+    CredentialError(String),
 }
 
 impl serde::Serialize for DbError {
@@ -70,6 +74,7 @@ impl serde::Serialize for DbError {
             DbError::InvalidInput(_) => "invalid_input",
             DbError::NotFound(_) => "not_found",
             DbError::InternalError(_) => "internal",
+            DbError::CredentialError(_) => "credential",
         };
 
         state.serialize_field("kind", kind)?;

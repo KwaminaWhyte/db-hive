@@ -202,6 +202,9 @@ pub async fn delete_connection_profile(
         conn.close().await?;
     }
 
+    // Delete password from OS keyring
+    crate::credentials::CredentialManager::delete_password(&profile_id)?;
+
     // Remove profile and password, then save to store
     {
         let mut state_guard = state.lock().unwrap();
@@ -260,13 +263,20 @@ pub fn get_saved_password(
     profile_id: String,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<Option<String>, DbError> {
-    let state = state.lock().unwrap();
-    Ok(state.connection_passwords.get(&profile_id).cloned())
+    // Try to get password from OS keyring first
+    match crate::credentials::CredentialManager::get_password(&profile_id)? {
+        Some(password) => Ok(Some(password)),
+        None => {
+            // Fallback to in-memory store for migration purposes
+            let state = state.lock().unwrap();
+            Ok(state.connection_passwords.get(&profile_id).cloned())
+        }
+    }
 }
 
 /// Save password for a connection profile
 ///
-/// This command saves a password for a profile to the persistent store.
+/// This command saves a password for a profile to the OS keyring.
 ///
 /// # Arguments
 ///
@@ -281,8 +291,10 @@ pub fn get_saved_password(
 ///
 /// # Security Note
 ///
-/// Passwords are currently stored in plaintext in the persistent store.
-/// This is a temporary solution and should be replaced with OS keyring storage.
+/// Passwords are now stored securely in the OS keyring:
+/// - macOS: Keychain
+/// - Windows: Credential Manager
+/// - Linux: Secret Service API (libsecret)
 #[tauri::command]
 pub fn save_password(
     profile_id: String,
@@ -290,9 +302,17 @@ pub fn save_password(
     state: State<'_, Mutex<AppState>>,
     app: AppHandle,
 ) -> Result<(), DbError> {
+    // Save to OS keyring
+    crate::credentials::CredentialManager::save_password(&profile_id, &password)?;
+
+    // Remove password from in-memory store (we now use keyring)
     let mut state = state.lock().unwrap();
-    state.connection_passwords.insert(profile_id, password);
+    state.connection_passwords.remove(&profile_id);
+
+    // Save the updated passwords (without this one) to the store file
+    // This ensures we remove any existing plaintext password
     state.save_passwords_to_store(&app)?;
+
     Ok(())
 }
 
