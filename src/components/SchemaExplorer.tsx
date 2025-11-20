@@ -1,6 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -23,12 +28,15 @@ import {
   Eye,
   LogOut,
   ChevronRight,
+  ChevronDown,
   Search,
   X,
   RefreshCw,
   Copy,
   FileCode,
   FileInput,
+  FolderClosed,
+  FolderOpen,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 
@@ -52,15 +60,18 @@ export function SchemaExplorer({
   onExecuteQuery,
 }: SchemaExplorerProps) {
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
-  const [selectedSchema, setSelectedSchema] = useState<string>("public");
-  const [tables, setTables] = useState<TableInfo[]>([]);
+  const [selectedSchema, setSelectedSchema] = useState<string>("");
+  // Store tables per schema to support lazy loading
+  const [tablesBySchema, setTablesBySchema] = useState<Record<string, TableInfo[]>>({});
   const [databases, setDatabases] = useState<string[]>([]);
   const [selectedDatabase, setSelectedDatabase] = useState<string>("");
   const [loadingSchemas, setLoadingSchemas] = useState(true);
-  const [loadingTables, setLoadingTables] = useState(false);
+  const [loadingTablesForSchema, setLoadingTablesForSchema] = useState<Record<string, boolean>>({});
   const [loadingDatabases, setLoadingDatabases] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
+  // Track which schemas are expanded
+  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set(["public"]));
 
   // Get the connected database name from the connection profile
   const connectedDatabase = connectionProfile.database || "postgres";
@@ -74,12 +85,23 @@ export function SchemaExplorer({
     fetchDatabases();
   }, [connectionId]);
 
-  // Fetch tables when schema is selected
-  useEffect(() => {
-    if (selectedSchema) {
-      fetchTables(selectedSchema);
+  // Lazy load tables when a schema is expanded
+  const toggleSchemaExpansion = async (schemaName: string) => {
+    const newExpanded = new Set(expandedSchemas);
+
+    if (expandedSchemas.has(schemaName)) {
+      // Collapse schema
+      newExpanded.delete(schemaName);
+    } else {
+      // Expand schema - load tables if not already loaded
+      newExpanded.add(schemaName);
+      if (!tablesBySchema[schemaName]) {
+        await fetchTables(schemaName);
+      }
     }
-  }, [selectedSchema]);
+
+    setExpandedSchemas(newExpanded);
+  };
 
   const fetchDatabases = async () => {
     setLoadingDatabases(true);
@@ -124,20 +146,20 @@ export function SchemaExplorer({
   };
 
   const fetchTables = async (schema: string) => {
-    setLoadingTables(true);
+    setLoadingTablesForSchema((prev) => ({ ...prev, [schema]: true }));
     setError(null);
     try {
       const tablesData = await invoke<TableInfo[]>("get_tables", {
         connectionId,
         schema,
       });
-      setTables(tablesData);
+      setTablesBySchema((prev) => ({ ...prev, [schema]: tablesData }));
     } catch (err) {
       const errorMessage =
         typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Failed to load tables: ${errorMessage}`);
     } finally {
-      setLoadingTables(false);
+      setLoadingTablesForSchema((prev) => ({ ...prev, [schema]: false }));
     }
   };
 
@@ -164,7 +186,9 @@ export function SchemaExplorer({
     if (database !== connectedDatabase) {
       setError(null);
       setLoadingSchemas(true);
-      setLoadingTables(true);
+      // Clear tables cache and expanded state when switching databases
+      setTablesBySchema({});
+      setExpandedSchemas(new Set(["public"]));
 
       try {
         // Switch to the new database using the same credentials
@@ -180,7 +204,7 @@ export function SchemaExplorer({
         });
         setSchemas(schemasData);
 
-        // Auto-select "public" schema if it exists, otherwise select the first one
+        // Auto-select "public" schema if it exists, otherwise clear selection
         const publicSchema = schemasData.find((s) => s.name === "public");
         const newSelectedSchema = publicSchema
           ? "public"
@@ -189,11 +213,6 @@ export function SchemaExplorer({
           : "";
 
         setSelectedSchema(newSelectedSchema);
-
-        // Fetch tables for the selected schema
-        if (newSelectedSchema) {
-          await fetchTables(newSelectedSchema);
-        }
       } catch (err) {
         const errorMessage =
           typeof err === "string" ? err : (err as any)?.message || String(err);
@@ -202,7 +221,6 @@ export function SchemaExplorer({
         setSelectedDatabase(connectedDatabase);
       } finally {
         setLoadingSchemas(false);
-        setLoadingTables(false);
       }
     }
   };
@@ -216,13 +234,13 @@ export function SchemaExplorer({
   };
 
   // Generate SELECT query for a table
-  const generateSelectQuery = (tableName: string) => {
-    return `SELECT * FROM "${selectedSchema}"."${tableName}" LIMIT 100;`;
+  const generateSelectQuery = (schemaName: string, tableName: string) => {
+    return `SELECT * FROM "${schemaName}"."${tableName}" LIMIT 100;`;
   };
 
   // Generate INSERT template for a table
-  const generateInsertTemplate = (tableName: string) => {
-    return `INSERT INTO "${selectedSchema}"."${tableName}" (column1, column2, ...) \nVALUES (value1, value2, ...);`;
+  const generateInsertTemplate = (schemaName: string, tableName: string) => {
+    return `INSERT INTO "${schemaName}"."${tableName}" (column1, column2, ...) \nVALUES (value1, value2, ...);`;
   };
 
   // Copy table name to clipboard
@@ -234,15 +252,33 @@ export function SchemaExplorer({
     }
   };
 
-  // Filter tables based on search query
-  const filteredTables = useMemo(() => {
-    if (!searchQuery.trim()) return tables;
+  // Filter schemas and tables based on search query
+  const filteredSchemas = useMemo(() => {
+    if (!searchQuery.trim()) return schemas;
 
     const query = searchQuery.toLowerCase().trim();
-    return tables.filter((table) =>
+    return schemas.filter((schema) => {
+      // Include schema if its name matches
+      if (schema.name.toLowerCase().includes(query)) return true;
+
+      // Include schema if any of its tables match
+      const schemaTables = tablesBySchema[schema.name] || [];
+      return schemaTables.some((table) =>
+        table.name.toLowerCase().includes(query)
+      );
+    });
+  }, [schemas, tablesBySchema, searchQuery]);
+
+  // Get filtered tables for a specific schema
+  const getFilteredTablesForSchema = (schemaName: string) => {
+    const schemaTables = tablesBySchema[schemaName] || [];
+    if (!searchQuery.trim()) return schemaTables;
+
+    const query = searchQuery.toLowerCase().trim();
+    return schemaTables.filter((table) =>
       table.name.toLowerCase().includes(query)
     );
-  }, [tables, searchQuery]);
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -285,31 +321,6 @@ export function SchemaExplorer({
           )}
         </div>
 
-        {/* Schema Selector */}
-        {loadingSchemas ? (
-          <div className="space-y-2">
-            <Skeleton className="h-4 w-16" />
-            <Skeleton className="h-10 w-full rounded-md" />
-          </div>
-        ) : schemas.length > 0 ? (
-          <div>
-            <div className="text-xs text-muted-foreground mb-1">Schema</div>
-            <Select value={selectedSchema} onValueChange={setSelectedSchema}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a schema" />
-              </SelectTrigger>
-              <SelectContent>
-                {schemas.map((schema) => (
-                  <SelectItem key={schema.name} value={schema.name}>
-                    {schema.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">No schemas found</p>
-        )}
       </div>
 
       {/* Error Display */}
@@ -320,12 +331,12 @@ export function SchemaExplorer({
       )}
 
       {/* Search Input */}
-      {!loadingTables && tables.length > 0 && (
+      {!loadingSchemas && schemas.length > 0 && (
         <div className="px-4 py-3 border-b">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search tables..."
+              placeholder="Search schemas & tables..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-9 pr-9"
@@ -342,105 +353,172 @@ export function SchemaExplorer({
         </div>
       )}
 
-      {/* Tables List */}
+      {/* Schema & Tables Tree View */}
       <div className="flex-1 overflow-hidden">
-        {loadingTables ? (
+        {loadingSchemas ? (
           <div className="p-4 space-y-2">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="flex items-center gap-2 px-3 py-2">
                 <Skeleton className="h-4 w-4 rounded" />
                 <Skeleton className="h-4 flex-1" />
-                <Skeleton className="h-3 w-16" />
               </div>
             ))}
           </div>
         ) : (
           <ScrollArea className="h-full">
             <div className="p-2">
-              {tables.length > 0 ? (
-                filteredTables.length > 0 ? (
+              {schemas.length > 0 ? (
+                filteredSchemas.length > 0 ? (
                   <div className="space-y-1">
-                    {filteredTables.map((table) => {
-                    const isSelected = selectedTable === table.name;
-                    return (
-                      <ContextMenu key={`${table.schema}.${table.name}`}>
-                        <ContextMenuTrigger asChild>
-                          <button
-                            className={`w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left group ${
-                              isSelected
-                                ? "bg-accent text-accent-foreground"
-                                : "hover:bg-accent/50"
-                            }`}
-                            onDoubleClick={() =>
-                              onTableSelect(selectedSchema, table.name)
-                            }
-                          >
-                            {getTableIcon(table.tableType)}
-                            <span className="flex-1 text-sm font-medium">
-                              {table.name}
-                            </span>
-                            {table.rowCount !== null &&
-                              table.rowCount !== undefined && (
-                                <span className="text-xs text-muted-foreground">
-                                  {table.rowCount.toLocaleString()} rows
-                                </span>
+                    {filteredSchemas.map((schema) => {
+                      const isExpanded = expandedSchemas.has(schema.name);
+                      const schemaTables = getFilteredTablesForSchema(schema.name);
+                      const isLoadingTables = loadingTablesForSchema[schema.name];
+
+                      return (
+                        <Collapsible
+                          key={schema.name}
+                          open={isExpanded}
+                          onOpenChange={() => toggleSchemaExpansion(schema.name)}
+                        >
+                          {/* Schema Header */}
+                          <CollapsibleTrigger asChild>
+                            <button
+                              className="w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left hover:bg-accent/50 group"
+                              draggable={false}
+                            >
+                              {isExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                               )}
-                            <ChevronRight
-                              className={`h-4 w-4 text-muted-foreground transition-opacity ${
-                                isSelected
-                                  ? "opacity-100"
-                                  : "opacity-0 group-hover:opacity-100"
-                              }`}
-                            />
-                          </button>
-                        </ContextMenuTrigger>
-                        <ContextMenuContent>
-                          <ContextMenuItem
-                            onClick={() => onTableSelect(selectedSchema, table.name)}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View Data
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onClick={() => {
-                              const sql = generateSelectQuery(table.name);
-                              onExecuteQuery?.(sql);
-                            }}
-                          >
-                            <FileCode className="h-4 w-4 mr-2" />
-                            Generate SELECT
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onClick={() => {
-                              const sql = generateInsertTemplate(table.name);
-                              onExecuteQuery?.(sql);
-                            }}
-                          >
-                            <FileInput className="h-4 w-4 mr-2" />
-                            Generate INSERT
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onClick={() => copyTableName(table.name)}
-                          >
-                            <Copy className="h-4 w-4 mr-2" />
-                            Copy Name
-                          </ContextMenuItem>
-                          <ContextMenuItem
-                            onClick={() => fetchTables(selectedSchema)}
-                          >
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Refresh
-                          </ContextMenuItem>
-                        </ContextMenuContent>
-                      </ContextMenu>
-                    );
-                  })}
-                </div>
+                              {isExpanded ? (
+                                <FolderOpen className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                              ) : (
+                                <FolderClosed className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                              )}
+                              <span className="flex-1 text-sm font-medium truncate">
+                                {schema.name}
+                              </span>
+                              {isLoadingTables && (
+                                <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
+                              )}
+                            </button>
+                          </CollapsibleTrigger>
+
+                          {/* Tables under this schema */}
+                          <CollapsibleContent>
+                            <div className="ml-4 mt-1 space-y-1">
+                              {isLoadingTables ? (
+                                <div className="space-y-1">
+                                  {[1, 2, 3].map((i) => (
+                                    <div key={i} className="flex items-center gap-2 px-3 py-2">
+                                      <Skeleton className="h-4 w-4 rounded" />
+                                      <Skeleton className="h-4 flex-1" />
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : schemaTables.length > 0 ? (
+                                schemaTables.map((table) => {
+                                  const isSelected = selectedTable === table.name && selectedSchema === schema.name;
+                                  return (
+                                    <ContextMenu key={`${schema.name}.${table.name}`}>
+                                      <ContextMenuTrigger asChild>
+                                        <button
+                                          className={`w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left group ${
+                                            isSelected
+                                              ? "bg-accent text-accent-foreground"
+                                              : "hover:bg-accent/50"
+                                          }`}
+                                          onDoubleClick={() => {
+                                            setSelectedSchema(schema.name);
+                                            onTableSelect(schema.name, table.name);
+                                          }}
+                                          draggable
+                                          onDragStart={(e) => {
+                                            e.dataTransfer.setData("text/plain", `"${schema.name}"."${table.name}"`);
+                                            e.dataTransfer.effectAllowed = "copy";
+                                          }}
+                                        >
+                                          {getTableIcon(table.tableType)}
+                                          <span className="flex-1 text-sm truncate">
+                                            {table.name}
+                                          </span>
+                                          {table.rowCount !== null &&
+                                            table.rowCount !== undefined && (
+                                              <span className="text-xs text-muted-foreground">
+                                                {table.rowCount.toLocaleString()} rows
+                                              </span>
+                                            )}
+                                          <ChevronRight
+                                            className={`h-4 w-4 text-muted-foreground transition-opacity flex-shrink-0 ${
+                                              isSelected
+                                                ? "opacity-100"
+                                                : "opacity-0 group-hover:opacity-100"
+                                            }`}
+                                          />
+                                        </button>
+                                      </ContextMenuTrigger>
+                                      <ContextMenuContent>
+                                        <ContextMenuItem
+                                          onClick={() => {
+                                            setSelectedSchema(schema.name);
+                                            onTableSelect(schema.name, table.name);
+                                          }}
+                                        >
+                                          <Eye className="h-4 w-4 mr-2" />
+                                          View Data
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                          onClick={() => {
+                                            const sql = generateSelectQuery(schema.name, table.name);
+                                            onExecuteQuery?.(sql);
+                                          }}
+                                        >
+                                          <FileCode className="h-4 w-4 mr-2" />
+                                          Generate SELECT
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                          onClick={() => {
+                                            const sql = generateInsertTemplate(schema.name, table.name);
+                                            onExecuteQuery?.(sql);
+                                          }}
+                                        >
+                                          <FileInput className="h-4 w-4 mr-2" />
+                                          Generate INSERT
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                          onClick={() => copyTableName(table.name)}
+                                        >
+                                          <Copy className="h-4 w-4 mr-2" />
+                                          Copy Name
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                          onClick={() => fetchTables(schema.name)}
+                                        >
+                                          <RefreshCw className="h-4 w-4 mr-2" />
+                                          Refresh
+                                        </ContextMenuItem>
+                                      </ContextMenuContent>
+                                    </ContextMenu>
+                                  );
+                                })
+                              ) : (
+                                <p className="text-xs text-muted-foreground px-3 py-2">
+                                  No tables found
+                                </p>
+                              )}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    })}
+                  </div>
                 ) : (
                   <div className="flex flex-col items-center justify-center py-8 text-center">
                     <Search className="h-8 w-8 text-muted-foreground mb-2" />
                     <p className="text-sm text-muted-foreground">
-                      No tables match "{searchQuery}"
+                      No schemas or tables match "{searchQuery}"
                     </p>
                     <button
                       onClick={() => setSearchQuery("")}
@@ -450,13 +528,9 @@ export function SchemaExplorer({
                     </button>
                   </div>
                 )
-              ) : selectedSchema ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No tables found in this schema
-                </p>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-8">
-                  Select a schema to view tables
+                  No schemas found
                 </p>
               )}
             </div>
@@ -469,14 +543,15 @@ export function SchemaExplorer({
           size="sm"
           onClick={() => {
             fetchSchemas();
-            if (selectedSchema) {
-              fetchTables(selectedSchema);
-            }
+            // Refresh tables for all expanded schemas
+            expandedSchemas.forEach((schemaName) => {
+              fetchTables(schemaName);
+            });
           }}
-          disabled={loadingSchemas || loadingTables}
+          disabled={loadingSchemas || Object.values(loadingTablesForSchema).some(Boolean)}
           className="flex-1"
         >
-          <RefreshCw className={`h-4 w-4 mr-2 ${(loadingSchemas || loadingTables) ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`h-4 w-4 mr-2 ${(loadingSchemas || Object.values(loadingTablesForSchema).some(Boolean)) ? 'animate-spin' : ''}`} />
           Refresh
         </Button>
         <Button
