@@ -5,6 +5,108 @@ All notable changes to DB-Hive will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.3.1] - 2025-11-20
+
+### Fixed
+
+#### Table Editor Critical Fixes
+- **Fixed table editor cell editing functionality**:
+  - Removed automatic cell copy functionality that was causing toast spam
+  - Fixed EditableCell component not showing input field on double-click
+  - Added `stopPropagation()` to prevent event bubbling to parent handlers
+  - Fixed main table section missing edit mode logic (line 904+ section)
+  - Enabled manual text selection for copying cell values
+
+- **Fixed transaction commit for multi-statement SQL**:
+  - PostgreSQL driver now uses `batch_execute()` for transactions
+  - Added multi-statement SQL detection (counting semicolons)
+  - Transactions like `BEGIN; UPDATE ...; COMMIT;` now execute correctly
+  - Previously failed with "Query execution failed: db error"
+
+- **Database-specific transaction syntax support**:
+  - PostgreSQL: `BEGIN; ... COMMIT;`
+  - MySQL: `START TRANSACTION; ... COMMIT;`
+  - SQLite: `BEGIN TRANSACTION; ... COMMIT;`
+  - MongoDB: Table editing not supported (proper error message)
+
+- **Improved error logging**:
+  - Console now shows exact SQL that failed during commit
+  - Better error messages for debugging transaction issues
+
+### Technical Details
+
+#### Backend Changes
+- Enhanced `execute_query()` in `src-tauri/src/drivers/postgres.rs`:
+  - Detects multi-statement SQL by counting semicolons
+  - Routes multi-statement SQL to `batch_execute()`
+  - Keeps original `query()`/`execute()` logic for single statements
+  - Returns empty `QueryResult` for batch operations
+
+#### Frontend Changes
+- Updated `TableInspector.tsx`:
+  - Removed `copyCellValue()` function and all references
+  - Added edit mode logic to main table (previously missing)
+  - Fixed row number cells to only open JSON viewer when not in edit mode
+  - Added database-specific transaction syntax
+  - Enhanced error logging with SQL output
+- Updated `EditableCell.tsx`:
+  - Added `e.stopPropagation()` in `handleDoubleClick()`
+  - Changed cursor from `cursor-pointer` to `cursor-text select-text`
+
+## [0.3.0] - 2025-11-20
+
+### Added
+
+#### Advanced SQL Autocomplete
+- **Metadata Caching System**:
+  - Intelligent metadata cache with 5-minute expiration
+  - Caches databases, schemas, tables, and columns per connection
+  - Manual refresh capability via toolbar button
+  - Automatic cache invalidation on stale data
+
+- **Context-Aware SQL Suggestions**:
+  - **Table suggestions** after `FROM`, `JOIN`, `INTO`, `UPDATE` keywords
+  - **Column suggestions** after `SELECT`, `WHERE`, `ON`, `SET`, `GROUP BY`, `ORDER BY`
+  - **50+ SQL keywords** (SELECT, FROM, WHERE, JOIN, INSERT, etc.)
+  - **40+ SQL functions** (COUNT, SUM, AVG, CONCAT, DATE functions, etc.)
+  - Database and schema name suggestions
+
+- **Monaco Editor Integration**:
+  - Real-time autocomplete with `Ctrl+Space`
+  - Context-sensitive suggestions based on SQL syntax
+  - Refresh icon in editor toolbar for metadata updates
+  - Proper disposal and re-registration on metadata changes
+
+- **New Tauri Command**: `get_autocomplete_metadata`
+  - Returns flattened metadata optimized for autocomplete
+  - Supports force refresh parameter
+  - Works with all database types (PostgreSQL, MySQL, SQLite, MongoDB)
+
+### Fixed
+- JSON syntax highlighting in ResultsViewer and RowJsonViewer
+  - Fixed HTML class names appearing in JSON output (e.g., `-400">`)
+  - Switched from Tailwind classes to inline styles
+  - Added proper HTML escaping to prevent XSS
+  - Improved regex patterns to avoid false matches
+- TypeScript linting errors in JSON syntax highlighting
+- Unused import warnings in frontend components
+
+### Technical Details
+
+#### Backend Changes
+- New `MetadataCache` struct in `src-tauri/src/state/mod.rs`
+- Enhanced `get_autocomplete_metadata` command in `src-tauri/src/commands/schema.rs`
+- Added `metadata_cache` field to `AppState` for per-connection caching
+
+#### Frontend Changes
+- New hook: `src/hooks/useAutocompleteMetadata.ts`
+- New utility: `src/lib/sqlAutocomplete.ts` (Monaco provider)
+- Enhanced `SQLEditor` component with autocomplete integration
+- Updated `QueryPanel` to pass database context to editor
+- Fixed JSON highlighting in both viewers with inline styles
+
 ## [0.3.0] - 2025-11-20
 
 ### Added

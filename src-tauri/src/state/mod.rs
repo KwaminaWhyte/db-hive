@@ -7,12 +7,64 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::{Duration, SystemTime};
 
 use crate::drivers::DatabaseDriver;
-use crate::models::{ConnectionProfile, DbError, QueryHistory, QuerySnippet};
+use crate::models::{
+    ColumnInfo, ConnectionProfile, DatabaseInfo, DbError, QueryHistory, QuerySnippet, SchemaInfo,
+    TableInfo,
+};
 use crate::ssh::SshTunnelManager;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
+
+/// Metadata cache entry for a database connection
+///
+/// Caches schema metadata to improve autocomplete performance
+#[derive(Debug, Clone)]
+pub struct MetadataCache {
+    /// List of databases
+    pub databases: Vec<DatabaseInfo>,
+
+    /// Map of database name to schemas
+    pub schemas: HashMap<String, Vec<SchemaInfo>>,
+
+    /// Map of schema name to tables
+    pub tables: HashMap<String, Vec<TableInfo>>,
+
+    /// Map of "schema.table" to columns
+    pub columns: HashMap<String, Vec<ColumnInfo>>,
+
+    /// When the cache was last updated
+    pub last_updated: SystemTime,
+}
+
+impl MetadataCache {
+    /// Create a new empty metadata cache
+    pub fn new() -> Self {
+        Self {
+            databases: Vec::new(),
+            schemas: HashMap::new(),
+            tables: HashMap::new(),
+            columns: HashMap::new(),
+            last_updated: SystemTime::now(),
+        }
+    }
+
+    /// Check if the cache is stale (older than 5 minutes)
+    pub fn is_stale(&self) -> bool {
+        if let Ok(elapsed) = self.last_updated.elapsed() {
+            elapsed > Duration::from_secs(300) // 5 minutes
+        } else {
+            true
+        }
+    }
+
+    /// Update the timestamp
+    pub fn touch(&mut self) {
+        self.last_updated = SystemTime::now();
+    }
+}
 
 /// Application state
 ///
@@ -63,6 +115,10 @@ pub struct AppState {
 
     /// SSH tunnel manager for managing active SSH tunnels
     pub ssh_tunnel_manager: SshTunnelManager,
+
+    /// Metadata cache for each connection
+    /// Key: Connection ID (UUID), Value: Metadata cache
+    pub metadata_cache: HashMap<String, MetadataCache>,
 }
 
 impl Default for AppState {
@@ -74,6 +130,7 @@ impl Default for AppState {
             query_history: Vec::new(),
             query_snippets: HashMap::new(),
             ssh_tunnel_manager: SshTunnelManager::new(),
+            metadata_cache: HashMap::new(),
         }
     }
 }
@@ -92,6 +149,7 @@ impl AppState {
             query_history: Vec::new(),
             query_snippets: HashMap::new(),
             ssh_tunnel_manager: SshTunnelManager::new(),
+            metadata_cache: HashMap::new(),
         }
     }
 

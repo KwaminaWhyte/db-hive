@@ -24,18 +24,38 @@ export const RowJsonViewer: FC<RowJsonViewerProps> = ({
 
   // Syntax highlight JSON
   const highlightJSON = (json: string) => {
+    // First escape HTML to prevent XSS
+    const escapeHtml = (str: string) => {
+      return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    };
+
+    const escaped = escapeHtml(json);
+
     // Replace with spans for different token types
-    return json
-      .replace(/("(?:\\.|[^"\\])*")(\s*:)?/g, (_match, p1, p2) => {
-        // Property keys (followed by colon) vs string values
-        if (p2) {
-          return `<span class="text-blue-400">${p1}</span>${p2}`;
-        }
-        return `<span class="text-green-400">${p1}</span>`;
+    return escaped
+      // Numbers (must come before strings to avoid matching inside classes)
+      .replace(/:\s*(-?\d+\.?\d*)/g, (match, p1) => {
+        return `: <span style="color: #fb923c">${p1}</span>`;
       })
-      .replace(/\b(true|false)\b/g, '<span class="text-purple-400">$1</span>')
-      .replace(/\b(null)\b/g, '<span class="text-red-400">$1</span>')
-      .replace(/\b(-?\d+\.?\d*)\b/g, '<span class="text-orange-400">$1</span>');
+      // Property keys (followed by colon)
+      .replace(/"([^"]+)"(\s*):/g, (_match, p1, p2) => {
+        return `<span style="color: #60a5fa">"${p1}"</span>${p2}:`;
+      })
+      // String values
+      .replace(/:\s*"([^"]*)"/g, (_match, p1) => {
+        return `: <span style="color: #4ade80">"${p1}"</span>`;
+      })
+      // Booleans
+      .replace(/:\s*(true|false)/g, (_match, p1) => {
+        return `: <span style="color: #c084fc">${p1}</span>`;
+      })
+      // Null
+      .replace(/:\s*(null)/g, (_match, p1) => {
+        return `: <span style="color: #f87171">${p1}</span>`;
+      });
   };
 
   return (

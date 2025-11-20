@@ -1,14 +1,20 @@
 import { FC, useRef, useEffect } from 'react';
 import Editor, { Monaco } from '@monaco-editor/react';
+import type * as monaco from 'monaco-editor';
 import { useTheme } from './theme-provider';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Button } from './ui/button';
-import { Play, Trash2, CircleDot } from 'lucide-react';
+import { Play, Trash2, CircleDot, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useAutocompleteMetadata } from '@/hooks/useAutocompleteMetadata';
+import { registerSqlAutocomplete } from '@/lib/sqlAutocomplete';
 
 interface SQLEditorProps {
   /** Active connection ID */
   connectionId: string | null;
+
+  /** Active database name */
+  database: string | null;
 
   /** Callback when query is executed */
   onExecuteQuery: (sql: string) => void;
@@ -25,6 +31,7 @@ interface SQLEditorProps {
 
 export const SQLEditor: FC<SQLEditorProps> = ({
   connectionId,
+  database,
   onExecuteQuery,
   value,
   onChange,
@@ -32,6 +39,14 @@ export const SQLEditor: FC<SQLEditorProps> = ({
 }) => {
   const { theme } = useTheme();
   const editorRef = useRef<any>(null);
+  const autocompleteDisposableRef = useRef<monaco.IDisposable | null>(null);
+
+  // Fetch autocomplete metadata
+  const { metadata, loading: metadataLoading, refresh } = useAutocompleteMetadata({
+    connectionId,
+    database,
+    enabled: !!connectionId && !!database,
+  });
 
   // Determine Monaco theme based on current theme
   const getMonacoTheme = () => {
@@ -83,6 +98,27 @@ export const SQLEditor: FC<SQLEditorProps> = ({
     }
   }, [theme]);
 
+  // Register autocomplete provider when metadata changes
+  useEffect(() => {
+    const monacoInstance = (window as any).monaco;
+    if (!monacoInstance) return;
+
+    // Dispose previous provider
+    if (autocompleteDisposableRef.current) {
+      autocompleteDisposableRef.current.dispose();
+    }
+
+    // Register new provider with current metadata
+    autocompleteDisposableRef.current = registerSqlAutocomplete(monacoInstance, metadata);
+
+    // Cleanup on unmount
+    return () => {
+      if (autocompleteDisposableRef.current) {
+        autocompleteDisposableRef.current.dispose();
+      }
+    };
+  }, [metadata]);
+
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3 border-b">
@@ -111,6 +147,17 @@ export const SQLEditor: FC<SQLEditorProps> = ({
             >
               <Trash2 className="h-4 w-4" />
               Clear
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => refresh()}
+              disabled={!connectionId || !database || metadataLoading}
+              className="gap-2"
+              title="Refresh autocomplete metadata"
+            >
+              <RefreshCw className={cn('h-4 w-4', metadataLoading && 'animate-spin')} />
             </Button>
           </div>
 

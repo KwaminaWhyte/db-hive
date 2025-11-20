@@ -197,6 +197,21 @@ impl DatabaseDriver for PostgresDriver {
     }
 
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, DbError> {
+        // Check if SQL contains multiple statements (for transactions)
+        // Simple heuristic: contains semicolons not in quotes
+        let has_multiple_statements = sql.matches(';').count() > 1;
+
+        if has_multiple_statements {
+            // Use batch_execute for multi-statement SQL (transactions)
+            self.client
+                .batch_execute(sql)
+                .await
+                .map_err(|e| DbError::QueryError(format!("Transaction execution failed: {}", e)))?;
+
+            // Return empty result for batch execution (no way to get affected rows count for all statements)
+            return Ok(QueryResult::empty());
+        }
+
         // Try to execute as a query first (for SELECT statements)
         match self.client.query(sql, &[]).await {
             Ok(rows) => {

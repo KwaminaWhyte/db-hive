@@ -94,6 +94,7 @@ pub fn run() {
             commands::schema::get_schemas,
             commands::schema::get_tables,
             commands::schema::get_table_schema,
+            commands::schema::get_autocomplete_metadata,
             commands::history::save_to_history,
             commands::history::get_query_history,
             commands::history::clear_history,
