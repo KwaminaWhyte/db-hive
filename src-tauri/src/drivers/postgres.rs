@@ -420,11 +420,16 @@ impl DatabaseDriver for PostgresDriver {
                 let is_primary_key: bool = row.get(4);
 
                 // Check if column is auto-increment (serial types or nextval in default)
-                let is_auto_increment = data_type.to_lowercase().contains("serial")
-                    || default_value
-                        .as_ref()
-                        .map(|dv| dv.to_lowercase().contains("nextval"))
-                        .unwrap_or(false);
+                // Note: SERIAL types appear as "integer" or "bigint" with a nextval() default
+                let has_sequence_default = default_value
+                    .as_ref()
+                    .map(|dv| {
+                        let lower = dv.to_lowercase();
+                        lower.contains("nextval") || lower.contains("sequence")
+                    })
+                    .unwrap_or(false);
+
+                let is_auto_increment = data_type.to_lowercase().contains("serial") || has_sequence_default;
 
                 ColumnInfo {
                     name,
