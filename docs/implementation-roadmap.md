@@ -896,11 +896,152 @@ pub async fn get_tables(
 
 ## 5. Phase 3: Enterprise Features (Ongoing)
 
+### Milestone 3.1: Connection Wizard (Multi-Step Flow)
+
+**Enhanced Connection Setup** (discovered from redesign.md)
+
+- [ ] Design multi-step wizard flow:
+  - [ ] Step 1: Select Database Type (PostgreSQL, MySQL, SQLite, SQL Server, MongoDB)
+  - [ ] Step 2: Enter Credentials (host, port, username, password)
+  - [ ] Step 3: Advanced Options (SSL, SSH tunnel, connection timeout)
+  - [ ] Step 4: Test Connection (verify connectivity)
+  - [ ] Step 5: Save Connection (name, color tag, favorite)
+- [ ] Add progress indicator with check marks for completed steps
+- [ ] Implement validation at each step
+- [ ] Add toggleable advanced options panel
+- [ ] Create database type cards with icons
+
+### Milestone 3.2: Connection Manager Dashboard
+
+**Visual Connection Management** (discovered from redesign.md)
+
+- [ ] Build dashboard page for managing all connections:
+  - [ ] Left sidebar with categories (All, Favorites, Recently Used, Local, Cloud)
+  - [ ] Grid/list view toggle
+  - [ ] Connection cards showing:
+    - [ ] Connection name and DB type icon
+    - [ ] Host summary
+    - [ ] Color label/tag
+    - [ ] Status indicator (online/offline)
+  - [ ] Search bar with filters
+  - [ ] Top actions: Create Connection, Import/Export Connections
+- [ ] Three-column responsive card grid
+- [ ] Hover states and animations
+- [ ] Drag-and-drop to organize connections
+
+### Milestone 3.3: ERD (Entity Relationship Diagram) Builder
+
+**Visual Schema Designer** (discovered from redesign.md)
+
+- [ ] Implement ERD canvas with:
+  - [ ] Draggable table boxes
+  - [ ] Column lists inside each table box
+  - [ ] Visual relationship lines (one-to-one, one-to-many, many-to-many)
+  - [ ] Primary/foreign key indicators
+- [ ] Add ERD toolbar:
+  - [ ] Add Table button
+  - [ ] Auto-Layout algorithm
+  - [ ] Toggle Relationships visibility
+  - [ ] Export to PNG/SVG
+- [ ] Zoom controls (bottom right corner)
+- [ ] Grid-based canvas with snap-to-grid
+- [ ] Save/load ERD layouts
+
+### Milestone 3.4: Settings & Configuration
+
+**Application Settings Page** (discovered from redesign.md)
+
+- [ ] Build settings page with sidebar navigation:
+  - [ ] General settings (language, default database, startup behavior)
+  - [ ] Theme settings (Dark/Light/Auto, accent color)
+  - [ ] Keyboard Shortcuts editor
+  - [ ] Query Execution Settings (timeout, max rows, auto-commit)
+  - [ ] Backup & Import/Export preferences
+  - [ ] Plugins management
+- [ ] Add search bar for quick settings filtering
+- [ ] Use card layout with toggles, dropdowns, text inputs
+- [ ] Implement keyboard shortcuts customization modal
+
+### Milestone 3.5: Logs & Activity Monitor
+
+**Session Monitoring Dashboard** (discovered from redesign.md)
+
+- [ ] Build database session monitor showing:
+  - [ ] Active queries list with real-time updates
+  - [ ] CPU usage chart (line graph)
+  - [ ] Memory usage chart (line graph)
+  - [ ] Query execution logs with filtering
+- [ ] Add process list table with sorting
+- [ ] Implement filters by query type, duration, status
+- [ ] Export logs to file
+- [ ] Technical but clean UI design
+
+### Milestone 3.6: Plugin Marketplace
+
+**In-App Plugin Discovery** (discovered from redesign.md)
+
+- [ ] Design plugin marketplace page:
+  - [ ] Three-column grid of plugin cards
+  - [ ] Each card showing:
+    - [ ] Plugin name and description
+    - [ ] Category (Drivers, Themes, Tools, Export Formats)
+    - [ ] Star rating and downloads count
+    - [ ] Install/Uninstall button
+  - [ ] Search bar with category filters
+  - [ ] Sort options (Popular, Recent, Rating)
+- [ ] Implement plugin installation flow
+- [ ] Add plugin update notifications
+- [ ] Create plugin developer documentation
+
+### Milestone 3.7: Keyboard Shortcuts Cheat Sheet
+
+**Interactive Shortcuts Guide** (discovered from redesign.md)
+
+- [ ] Build keyboard shortcuts modal:
+  - [ ] Grouped by category (Editor, Navigation, Query, Tables)
+  - [ ] Grid layout with card-style sections
+  - [ ] Monospace font for shortcut keys
+  - [ ] Search bar for filtering shortcuts
+  - [ ] Platform-specific shortcuts (Cmd vs Ctrl)
+- [ ] Add "?" hotkey to open shortcuts modal
+- [ ] Make shortcuts customizable (link to Settings)
+
+### Milestone 3.8: Error & Empty States
+
+**Friendly Error Handling** (discovered from redesign.md)
+
+- [ ] Design error states:
+  - [ ] "Connection Lost" page with bee icon holding broken cable
+  - [ ] Reconnect and Go to Dashboard buttons
+  - [ ] Soft animations for error states
+  - [ ] Minimal, friendly text
+- [ ] Add empty states for:
+  - [ ] No connections saved
+  - [ ] No query history
+  - [ ] No tables in database
+  - [ ] No search results
+- [ ] Use illustrations and helpful calls-to-action
+
+### Milestone 3.9: About Page
+
+**Application Information** (discovered from redesign.md)
+
+- [ ] Create About page showing:
+  - [ ] DB Hive logo (centered)
+  - [ ] Version number
+  - [ ] Contributors & Core Team section
+  - [ ] GitHub link
+  - [ ] Documentation link
+  - [ ] License information (MIT)
+  - [ ] Third-party credits
+- [ ] Centered typography with minimal layout
+- [ ] Add "Check for Updates" button
+
 ### Plugin System
 
 - [ ] Design plugin architecture (JS or WASM)
 - [ ] Create plugin API
-- [ ] Build plugin manager UI
+- [ ] Build plugin manager UI (see Milestone 3.6)
 - [ ] Develop example plugins
 
 ### Workspace Sync

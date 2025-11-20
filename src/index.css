@@ -1,14 +1,25 @@
-@import url("https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,300..900;1,300..900&display=swap");
+/**
+ * DB Hive Design System
+ * Modern, minimalistic database client UI
+ * Primary: Honey Gold (#FFB400)
+ * Typography: Inter, SF Pro
+ * Radius: 8-12px (0.5rem - 0.75rem)
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  /* Radius system: 8-12px for modern, clean corners */
+  --radius-sm: 0.5rem;  /* 8px */
+  --radius-md: 0.625rem; /* 10px */
+  --radius-lg: 0.75rem; /* 12px */
+  --radius-xl: 1rem;    /* 16px */
+
+  /* Core theme colors */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -24,14 +35,19 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
+  /* Chart colors */
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
+
+  /* Sidebar colors */
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -41,82 +57,140 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* Amber/Honey accent colors for welcome screen */
-  --color-amber-50: oklch(0.98 0.02 85);
-  --color-amber-100: oklch(0.96 0.05 85);
-  --color-amber-200: oklch(0.92 0.10 85);
-  --color-amber-300: oklch(0.85 0.15 85);
-  --color-amber-400: oklch(0.75 0.18 80);
-  --color-amber-500: oklch(0.65 0.20 75);
+  /* Honey Gold palette - Primary brand color */
+  --color-honey-50: oklch(0.98 0.03 90);
+  --color-honey-100: oklch(0.95 0.06 85);
+  --color-honey-200: oklch(0.90 0.10 82);
+  --color-honey-300: oklch(0.82 0.14 78);
+  --color-honey-400: oklch(0.74 0.18 75);  /* #FFB400 equivalent */
+  --color-honey-500: oklch(0.66 0.20 72);
+  --color-honey-600: oklch(0.58 0.18 70);
+  --color-honey-700: oklch(0.48 0.15 68);
+  --color-honey-800: oklch(0.38 0.12 65);
+  --color-honey-900: oklch(0.28 0.09 62);
 }
 
+/**
+ * Light Mode Theme
+ * Clean, high-contrast for daylight use
+ */
 :root {
-  --radius: 0.65rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
+  --radius: 0.75rem; /* 12px default */
+
+  /* Core colors - Light mode */
+  --background: oklch(0.99 0 0); /* Near white */
+  --foreground: oklch(0.15 0.01 270); /* Near black */
+
+  /* Card surfaces */
+  --card: oklch(1 0 0); /* Pure white */
+  --card-foreground: oklch(0.15 0.01 270);
+
+  /* Popovers */
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.541 0.281 293.009);
-  --primary-foreground: oklch(0.969 0.016 293.756);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.702 0.183 293.541);
-  --chart-1: oklch(0.811 0.111 293.571);
-  --chart-2: oklch(0.606 0.25 292.717);
-  --chart-3: oklch(0.541 0.281 293.009);
-  --chart-4: oklch(0.491 0.27 292.581);
-  --chart-5: oklch(0.432 0.232 292.759);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.541 0.281 293.009);
-  --sidebar-primary-foreground: oklch(0.969 0.016 293.756);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.702 0.183 293.541);
+  --popover-foreground: oklch(0.15 0.01 270);
+
+  /* Primary: Honey Gold */
+  --primary: oklch(0.74 0.18 75); /* Honey gold #FFB400 */
+  --primary-foreground: oklch(0.15 0.01 270); /* Dark text on honey */
+
+  /* Secondary: Subtle gray */
+  --secondary: oklch(0.96 0.005 270);
+  --secondary-foreground: oklch(0.20 0.01 270);
+
+  /* Muted backgrounds */
+  --muted: oklch(0.97 0.005 270);
+  --muted-foreground: oklch(0.50 0.01 270);
+
+  /* Accent: Lighter honey for highlights */
+  --accent: oklch(0.95 0.06 85);
+  --accent-foreground: oklch(0.20 0.01 270);
+
+  /* Destructive: Red for errors */
+  --destructive: oklch(0.60 0.24 25);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  /* Borders and inputs */
+  --border: oklch(0.90 0.005 270);
+  --input: oklch(0.90 0.005 270);
+  --ring: oklch(0.74 0.18 75); /* Honey gold focus ring */
+
+  /* Chart colors - Honey-inspired palette */
+  --chart-1: oklch(0.74 0.18 75);  /* Honey gold */
+  --chart-2: oklch(0.66 0.20 72);  /* Darker honey */
+  --chart-3: oklch(0.58 0.18 70);  /* Deep honey */
+  --chart-4: oklch(0.82 0.14 78);  /* Light honey */
+  --chart-5: oklch(0.48 0.15 68);  /* Bronze */
+
+  /* Sidebar - Light */
+  --sidebar: oklch(0.98 0.005 270);
+  --sidebar-foreground: oklch(0.20 0.01 270);
+  --sidebar-primary: oklch(0.74 0.18 75);
+  --sidebar-primary-foreground: oklch(0.15 0.01 270);
+  --sidebar-accent: oklch(0.95 0.06 85);
+  --sidebar-accent-foreground: oklch(0.20 0.01 270);
+  --sidebar-border: oklch(0.90 0.005 270);
+  --sidebar-ring: oklch(0.74 0.18 75);
 }
 
+/**
+ * Dark Mode Theme
+ * Deep charcoal/black with honey gold accents
+ * Default theme for developer-centric UI
+ */
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.606 0.25 292.717);
-  --primary-foreground: oklch(0.969 0.016 293.756);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.38 0.189 293.745);
-  --chart-1: oklch(0.811 0.111 293.571);
-  --chart-2: oklch(0.606 0.25 292.717);
-  --chart-3: oklch(0.541 0.281 293.009);
-  --chart-4: oklch(0.491 0.27 292.581);
-  --chart-5: oklch(0.432 0.232 292.759);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.606 0.25 292.717);
-  --sidebar-primary-foreground: oklch(0.969 0.016 293.756);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.38 0.189 293.745);
+  /* Core colors - Dark mode */
+  --background: oklch(0.12 0.01 270); /* Deep charcoal */
+  --foreground: oklch(0.98 0 0); /* Near white */
+
+  /* Card surfaces - Slightly lighter than background */
+  --card: oklch(0.16 0.01 270);
+  --card-foreground: oklch(0.98 0 0);
+
+  /* Popovers */
+  --popover: oklch(0.18 0.01 270);
+  --popover-foreground: oklch(0.98 0 0);
+
+  /* Primary: Honey Gold (brighter in dark mode) */
+  --primary: oklch(0.78 0.19 78); /* Brighter honey for contrast */
+  --primary-foreground: oklch(0.12 0.01 270); /* Dark background on honey */
+
+  /* Secondary: Medium gray */
+  --secondary: oklch(0.22 0.01 270);
+  --secondary-foreground: oklch(0.95 0 0);
+
+  /* Muted backgrounds */
+  --muted: oklch(0.22 0.01 270);
+  --muted-foreground: oklch(0.65 0.01 270);
+
+  /* Accent: Honey highlight */
+  --accent: oklch(0.25 0.02 270);
+  --accent-foreground: oklch(0.95 0 0);
+
+  /* Destructive: Softer red for dark mode */
+  --destructive: oklch(0.65 0.22 25);
+  --destructive-foreground: oklch(0.99 0 0);
+
+  /* Borders and inputs - Subtle in dark mode */
+  --border: oklch(0.25 0.01 270);
+  --input: oklch(0.25 0.01 270);
+  --ring: oklch(0.78 0.19 78); /* Honey gold focus ring */
+
+  /* Chart colors - Same honey palette works in dark */
+  --chart-1: oklch(0.78 0.19 78);
+  --chart-2: oklch(0.70 0.20 75);
+  --chart-3: oklch(0.62 0.18 72);
+  --chart-4: oklch(0.85 0.15 80);
+  --chart-5: oklch(0.52 0.16 70);
+
+  /* Sidebar - Dark */
+  --sidebar: oklch(0.14 0.01 270);
+  --sidebar-foreground: oklch(0.95 0 0);
+  --sidebar-primary: oklch(0.78 0.19 78);
+  --sidebar-primary-foreground: oklch(0.12 0.01 270);
+  --sidebar-accent: oklch(0.22 0.01 270);
+  --sidebar-accent-foreground: oklch(0.95 0 0);
+  --sidebar-border: oklch(0.25 0.01 270);
+  --sidebar-ring: oklch(0.78 0.19 78);
 }
 
 @layer base {
@@ -129,7 +203,7 @@
 }
 
 * {
-  font-family: "Figtree", sans-serif;
+  font-family: "Inter", sans-serif;
   font-optical-sizing: auto;
   font-style: normal;
 }
