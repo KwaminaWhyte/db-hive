@@ -17,6 +17,8 @@ export type {
   ColumnInfo,
   IndexInfo,
   TableSchema,
+  SqlExportOptions,
+  SqlImportOptions,
 } from './database';
 
 export { getDefaultPort, getDriverDisplayName } from './database';
