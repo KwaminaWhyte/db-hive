@@ -64,7 +64,7 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
   onOpenDocs,
 }) => {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-100 antialiased flex items-stretch justify-center relative overflow-hidden">
+    <div className="min-h-screen bg-background text-slate-100 antialiased flex items-stretch justify-center relative overflow-hidden">
       {/* Main shell */}
       <div className="relative z-10 flex w-full items-stretch justify-center">
         <section className="w-full md:w-3/5 flex flex-col justify-between border-b md:border-b-0 md:border-r border-slate-800/70 dark:border-slate-800/70">
@@ -239,7 +239,7 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
         </section>
 
         {/* Right pane: shortcuts / empty state */}
-        <aside className="w-full md:w-2/5 bg-gradient-to-br from-slate-950 via-slate-950/90 to-slate-900/90 dark:from-slate-950 dark:via-slate-950/90 dark:to-slate-900/90 flex flex-col justify-between">
+        <aside className="w-full md:w-2/5 bg-background flex flex-col justify-between">
           {/* Keyboard cheatsheet */}
           <div className="px-4 md:px-6 pt-5 md:pt-6 pb-4 border-b border-slate-800/80 dark:border-slate-800/80">
             <div className="flex items-center justify-between mb-3">
