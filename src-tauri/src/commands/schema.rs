@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::models::{ColumnInfo, DatabaseInfo, DbError, SchemaInfo, TableInfo, TableSchema};
+use crate::models::{DatabaseInfo, DbError, SchemaInfo, TableInfo, TableSchema};
 use crate::state::{AppState, MetadataCache};
 
 /// Get list of databases for a connection

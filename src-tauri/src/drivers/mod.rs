@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::models::{
-    ColumnInfo, DatabaseInfo, DbError, IndexInfo, SchemaInfo, TableInfo, TableSchema,
+    DatabaseInfo, DbError, SchemaInfo, TableInfo, TableSchema,
 };
 
 pub mod mongodb;

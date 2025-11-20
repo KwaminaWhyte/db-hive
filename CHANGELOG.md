@@ -8,6 +8,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **SQL Database Import/Export**:
+  - Full database dump and restore functionality for PostgreSQL, MySQL, and SQLite
+  - Export options: include/exclude DROP, CREATE, and INSERT statements
+  - Table filtering: Export specific tables or entire schemas
+  - Database-specific SQL syntax (PostgreSQL double quotes, MySQL backticks)
+  - Transaction support for imports with ACID guarantees
+  - Continue-on-error mode for partial import recovery
+  - SQL file parsing with comment support and statement detection
+  - Proper SQL value escaping (NULL, booleans, strings, numbers)
+  - Tauri commands: `export_to_sql`, `import_from_sql`
+  - Comprehensive error reporting per statement during import
+
+- **SSH Tunneling Infrastructure (In Progress)**:
+  - Complete SSH tunnel management system using russh library
+  - Password and private key authentication methods
+  - Automatic local port assignment for tunnel endpoints
+  - Async port forwarding with bidirectional data transfer
+  - Tunnel lifecycle management (create, close, check existence)
+  - Support for OpenSSH and PEM format private keys
+  - Task-based listener pattern with graceful shutdown
+  - Note: SSH handler trait implementation pending russh API investigation
+
 - **OS Keyring Credential Encryption (Critical Security Fix)**:
   - Passwords now stored securely in OS-native credential storage
   - macOS: Keychain integration
