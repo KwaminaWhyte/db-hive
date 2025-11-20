@@ -23,11 +23,13 @@ function App() {
     ConnectionProfile | undefined
   >(undefined);
   const [currentDatabase, setCurrentDatabase] = useState<string>("");
-  const [openTables, setOpenTables] = useState<Array<{
-    schema: string;
-    tableName: string;
-    id: string; // Unique identifier for the tab
-  }>>([]);
+  const [openTables, setOpenTables] = useState<
+    Array<{
+      schema: string;
+      tableName: string;
+      id: string; // Unique identifier for the tab
+    }>
+  >([]);
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [pendingQuery, setPendingQuery] = useState<string | null>(null);
@@ -47,7 +49,10 @@ function App() {
   };
 
   // Handle successful connection
-  const handleConnected = (connectionId: string, profile: ConnectionProfile) => {
+  const handleConnected = (
+    connectionId: string,
+    profile: ConnectionProfile
+  ) => {
     setActiveConnectionId(connectionId);
     setActiveConnectionProfile(profile);
     // Don't set currentDatabase here - let SchemaExplorer tell us the actual database
@@ -71,22 +76,22 @@ function App() {
     const tableId = `${schema}.${tableName}`;
 
     // Check if table is already open
-    const existingTable = openTables.find(t => t.id === tableId);
+    const existingTable = openTables.find((t) => t.id === tableId);
 
     if (existingTable) {
       // Table already open, just switch to it
       setActiveTableId(tableId);
     } else {
       // Open new table tab
-      setOpenTables(prev => [...prev, { schema, tableName, id: tableId }]);
+      setOpenTables((prev) => [...prev, { schema, tableName, id: tableId }]);
       setActiveTableId(tableId);
     }
   };
 
   // Handle closing a table tab
   const handleCloseTable = (tableId: string) => {
-    setOpenTables(prev => {
-      const newTables = prev.filter(t => t.id !== tableId);
+    setOpenTables((prev) => {
+      const newTables = prev.filter((t) => t.id !== tableId);
 
       // If closing the active table, switch to another table or null
       if (activeTableId === tableId) {
@@ -112,9 +117,7 @@ function App() {
   };
 
   // Execute query via Tauri command
-  const executeQuery = async (
-    sql: string
-  ): Promise<QueryExecutionResult> => {
+  const executeQuery = async (sql: string): Promise<QueryExecutionResult> => {
     if (!activeConnectionId) {
       throw new Error("No active connection");
     }
@@ -141,7 +144,7 @@ function App() {
             onDisconnect={handleDisconnect}
             onTableSelect={handleTableSelect}
             onDatabaseChange={handleDatabaseChange}
-            selectedTable={activeTableId ? activeTableId.split('.')[1] : null}
+            selectedTable={activeTableId ? activeTableId.split(".")[1] : null}
             onExecuteQuery={handleExecuteGeneratedQuery}
           />
         ) : (
@@ -172,8 +175,8 @@ function App() {
                           group flex items-center gap-2 px-3 py-1.5 rounded-t-md text-sm cursor-pointer transition-colors
                           ${
                             table.id === activeTableId
-                              ? 'bg-background border-t border-x text-foreground'
-                              : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
+                              ? "bg-background border-t border-x text-foreground"
+                              : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                           }
                         `}
                         onClick={() => setActiveTableId(table.id)}
@@ -199,7 +202,9 @@ function App() {
                     {openTables.map((table) => (
                       <div
                         key={table.id}
-                        className={table.id === activeTableId ? 'h-full' : 'hidden'}
+                        className={
+                          table.id === activeTableId ? "h-full" : "hidden"
+                        }
                       >
                         <TableInspector
                           connectionId={activeConnectionId}
@@ -244,7 +249,8 @@ function App() {
               <div className="space-y-2">
                 <h1 className="text-3xl font-bold">Welcome to DB-Hive</h1>
                 <p className="text-muted-foreground">
-                  A modern database client for PostgreSQL, MySQL, and SQLite
+                  A modern database client for PostgreSQL, MySQL, SQLite, and
+                  MongoDB
                 </p>
               </div>
             </div>
