@@ -8,19 +8,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **SQL Database Import/Export**:
-  - Full database dump and restore functionality for PostgreSQL, MySQL, and SQLite
-  - Export options: include/exclude DROP, CREATE, and INSERT statements
-  - Table filtering: Export specific tables or entire schemas
-  - Database-specific SQL syntax (PostgreSQL double quotes, MySQL backticks)
-  - Transaction support for imports with ACID guarantees
-  - Continue-on-error mode for partial import recovery
-  - SQL file parsing with comment support and statement detection
-  - Proper SQL value escaping (NULL, booleans, strings, numbers)
-  - Tauri commands: `export_to_sql`, `import_from_sql`
-  - Comprehensive error reporting per statement during import
+- **SQL Database Import/Export** (2025-11-20):
+  - **Backend Implementation** (400+ lines):
+    - Full database dump and restore functionality for PostgreSQL, MySQL, and SQLite
+    - Export options: include/exclude DROP, CREATE, and INSERT statements
+    - Table filtering: Export specific tables or entire schemas
+    - Database-specific SQL syntax (PostgreSQL double quotes, MySQL backticks)
+    - Transaction support for imports with ACID guarantees
+    - Continue-on-error mode for partial import recovery
+    - SQL file parsing with comment support and statement detection
+    - Proper SQL value escaping (NULL, booleans, strings, numbers)
+    - Tauri commands: `export_to_sql`, `import_from_sql`
+    - Comprehensive error reporting per statement during import
 
-- **SSH Tunneling Infrastructure (In Progress)**:
+  - **Frontend Implementation** (460+ lines):
+    - **SqlExportDialog Component**: Comprehensive export configuration
+      - File save picker integration with Tauri dialog plugin
+      - Checkbox options for DROP, CREATE, INSERT statements
+      - Schema/database selection input
+      - Table filtering with comma-separated list
+      - Real-time error feedback and validation
+      - Toast notifications for success/error states
+
+    - **SqlImportDialog Component**: Safe and flexible import
+      - File selection with Tauri file open dialog
+      - Transaction mode toggle (automatic rollback on error)
+      - Continue-on-error mode for partial recovery
+      - Success/error result display with statement counts
+      - Import progress feedback with loading spinners
+      - Disabled states during import operations
+
+    - **Integration**:
+      - Export/Import buttons added to SchemaExplorer component
+      - Positioned below database selector for easy access
+      - TypeScript types: `SqlExportOptions`, `SqlImportOptions`
+      - camelCase conversion for Rust snake_case fields
+      - Sonner toast integration for user notifications
+
+- **SSH Tunneling Infrastructure** (In Progress, 2025-11-20):
   - Complete SSH tunnel management system using russh library
   - Password and private key authentication methods
   - Automatic local port assignment for tunnel endpoints

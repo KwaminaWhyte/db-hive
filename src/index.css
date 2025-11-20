@@ -40,6 +40,14 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Amber/Honey accent colors for welcome screen */
+  --color-amber-50: oklch(0.98 0.02 85);
+  --color-amber-100: oklch(0.96 0.05 85);
+  --color-amber-200: oklch(0.92 0.10 85);
+  --color-amber-300: oklch(0.85 0.15 85);
+  --color-amber-400: oklch(0.75 0.18 80);
+  --color-amber-500: oklch(0.65 0.20 75);
 }
 
 :root {

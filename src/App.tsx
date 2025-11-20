@@ -5,6 +5,7 @@ import { SchemaExplorer } from "./components/SchemaExplorer";
 import { TableInspector } from "./components/TableInspector";
 import { QueryPanel } from "./components/QueryPanel";
 import { ModeToggle } from "./components/mode-toggle";
+import { WelcomeScreen } from "./components/WelcomeScreen";
 import { ConnectionProfile, QueryExecutionResult } from "./types/database";
 import { invoke } from "@tauri-apps/api/core";
 import { X } from "lucide-react";
@@ -238,23 +239,22 @@ function App() {
             />
           </div>
         ) : (
-          // When not connected and selectedProfile is undefined - show logo
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-6">
-              <img
-                src="/logo.png"
-                alt="DB-Hive Logo"
-                className="w-64 h-64 mx-auto object-contain"
-              />
-              <div className="space-y-2">
-                <h1 className="text-3xl font-bold">Welcome to DB-Hive</h1>
-                <p className="text-muted-foreground">
-                  A modern database client for PostgreSQL, MySQL, SQLite, and
-                  MongoDB
-                </p>
-              </div>
-            </div>
-          </div>
+          // When not connected and selectedProfile is undefined - show welcome screen
+          <WelcomeScreen
+            onNewConnection={() => handleEdit(null)}
+            onRecentConnections={() => {
+              // TODO: Implement recent connections feature
+              console.log("Recent connections clicked");
+            }}
+            onViewSample={() => {
+              // TODO: Implement sample database feature
+              console.log("View sample clicked");
+            }}
+            onOpenDocs={() => {
+              // TODO: Open documentation
+              window.open("https://github.com/anthropics/db-hive/wiki", "_blank");
+            }}
+          />
         )}
       </div>
       <Toaster
