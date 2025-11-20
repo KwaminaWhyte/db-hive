@@ -33,9 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - SQLite: Detects `INTEGER PRIMARY KEY` and `AUTOINCREMENT` keyword
   - MongoDB: `_id` field correctly marked as auto-increment
   - Frontend now checks `isAutoIncrement` field first before fallback heuristics
+- **UUID primary key handling (Critical)**:
+  - UUID columns without database defaults now have UUIDs auto-generated in the application
+  - Uses `crypto.randomUUID()` to generate RFC 4122 compliant v4 UUIDs
+  - Only skips UUID columns if database has UUID generation function (e.g., `DEFAULT UUID()`)
+  - Prevents "cannot be null" errors for UUID primary keys
 - Auto-generated columns (id, created_at, updated_at) no longer cause "cannot be null" errors
 - New rows now skip auto-increment and auto-timestamp columns in INSERT statements
-- UUID primary keys (CHAR/VARCHAR) are now properly detected and skipped in INSERT statements
 - PostgreSQL boolean values now correctly generate unquoted literals (true/false instead of 'true'/'false')
 - PostgreSQL tables now show row counts in sidebar (previously showed nothing)
 - PostgreSQL empty tables now display column headers (previously showed blank headers)
@@ -73,9 +77,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Implemented `addRow()`, `removeNewRow()`, and `updateNewRowValue()` functions
   - **Enhanced `shouldSkipColumnInInsert()`**:
     - Now checks `col.isAutoIncrement` field FIRST (most reliable)
-    - Falls back to heuristics for UUID columns and timestamp columns
+    - UUID primary keys now only skipped if they have database default value
+    - Falls back to heuristics for timestamp columns
     - Removed redundant primary key + numeric type check (now handled by backend)
-  - Enhanced `generateInsertStatements()` with smart column detection and proper type handling
+  - **Enhanced `generateInsertStatements()`** with UUID generation:
+    - Auto-generates UUIDs using `crypto.randomUUID()` for UUID columns without values
+    - Smart column detection and proper type handling
+    - Generates RFC 4122 compliant v4 UUIDs when needed
   - Enhanced `generateUpdateStatements()` with proper boolean value formatting
   - Updated `discardChanges()` to clear new rows
   - Updated `getCellValue()` and `applyChange()` to handle negative row indices
