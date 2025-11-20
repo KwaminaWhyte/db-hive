@@ -274,6 +274,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
             <div className="flex-1 overflow-hidden">
               <SQLEditor
                 connectionId={connectionId}
+                database={currentDatabase || null}
                 onExecuteQuery={handleExecute}
                 value={activeTab.sql}
                 onChange={(value) => handleSqlChange(value || '')}

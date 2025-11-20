@@ -22,10 +22,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  Edit3,
+  Save,
 } from "lucide-react";
 import { TableSchema, QueryExecutionResult } from "@/types";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { RowJsonViewer } from "./RowJsonViewer";
+import { EditableCell, CellChange } from "./EditableCell";
+import { TransactionPreview } from "./TransactionPreview";
+import { useTableEditor } from "@/hooks/useTableEditor";
 import { toast } from "sonner";
 
 interface TableInspectorProps {
@@ -56,6 +61,16 @@ export function TableInspector({
   const [totalRows, setTotalRows] = useState<number | null>(null);
   const [selectedRow, setSelectedRow] = useState<any[] | null>(null);
   const [showRowViewer, setShowRowViewer] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [showTransactionPreview, setShowTransactionPreview] = useState(false);
+  const [isCommitting, setIsCommitting] = useState(false);
+  const [commitError, setCommitError] = useState<string | null>(null);
+
+  // Initialize table editor hook
+  const editor = useTableEditor({
+    columns: tableSchema?.columns || [],
+    rows: sampleData?.rows || [],
+  });
 
   // Helper function to quote identifiers based on database driver
   const quoteIdentifier = (identifier: string) => {
@@ -75,11 +90,6 @@ export function TableInspector({
       toast.error("Failed to copy to clipboard");
     }
   }, []);
-
-  const copyCellValue = useCallback(async (value: any) => {
-    const text = value === null ? 'NULL' : String(value);
-    await copyToClipboard(text, "Cell value copied");
-  }, [copyToClipboard]);
 
   const copyRowValues = useCallback(async (row: any[]) => {
     const text = row.map((v) => (v === null ? 'NULL' : String(v))).join('\t');
@@ -217,6 +227,79 @@ export function TableInspector({
 
   const totalPages = totalRows !== null ? Math.ceil(totalRows / pageSize) : null;
 
+  // Handle commit changes
+  const handleCommit = async () => {
+    if (editor.getTotalChanges() === 0) {
+      toast.error('No changes to commit');
+      return;
+    }
+
+    let combinedSQL = ''; // Declare outside try block for error logging
+
+    try {
+      setIsCommitting(true);
+      setCommitError(null);
+
+      // Generate UPDATE statements
+      const statements = editor.generateUpdateStatements(schema, tableName, quoteIdentifier);
+
+      if (driverType === 'MySql') {
+        combinedSQL = `START TRANSACTION;\n${statements.join('\n')}\nCOMMIT;`;
+      } else if (driverType === 'Sqlite') {
+        combinedSQL = `BEGIN TRANSACTION;\n${statements.join('\n')}\nCOMMIT;`;
+      } else if (driverType === 'MongoDb') {
+        // MongoDB doesn't use SQL transactions in the same way
+        // For now, execute statements individually (will be updated when MongoDB transactions are properly implemented)
+        toast.error('Table editing is not yet supported for MongoDB');
+        return;
+      } else {
+        // PostgreSQL and SQL Server
+        combinedSQL = `BEGIN;\n${statements.join('\n')}\nCOMMIT;`;
+      }
+
+      await invoke('execute_query', {
+        connectionId,
+        sql: combinedSQL,
+      });
+
+      toast.success(`Successfully committed ${editor.getTotalChanges()} changes`);
+
+      // Clear changes and refresh data
+      editor.discardChanges();
+      setShowTransactionPreview(false);
+      fetchSampleData();
+    } catch (err) {
+      const errorMessage = typeof err === 'string' ? err : (err as any)?.message || String(err);
+      console.error('Commit failed:', errorMessage);
+      console.error('SQL that failed:', combinedSQL);
+      setCommitError(`Failed to commit changes: ${errorMessage}`);
+      toast.error(`Failed to commit changes: ${errorMessage}`);
+    } finally {
+      setIsCommitting(false);
+    }
+  };
+
+  // Handle discard changes
+  const handleDiscard = () => {
+    editor.discardChanges();
+    setShowTransactionPreview(false);
+    toast.info('Changes discarded');
+  };
+
+  // Toggle edit mode
+  const handleToggleEditMode = () => {
+    if (editMode && editor.getTotalChanges() > 0) {
+      // Warn user they have unsaved changes
+      toast.warning('You have unsaved changes. Please commit or discard them first.');
+      setShowTransactionPreview(true);
+      return;
+    }
+    setEditMode(!editMode);
+    if (!editMode) {
+      toast.info('Edit mode enabled - double-click cells to edit');
+    }
+  };
+
   if (loading) {
     return (
       <div className="h-full flex flex-col">
@@ -286,6 +369,30 @@ export function TableInspector({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {editor.getTotalChanges() > 0 && (
+            <>
+              <Badge variant="default" className="mr-2">
+                {editor.getTotalChanges()} {editor.getTotalChanges() === 1 ? 'change' : 'changes'}
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowTransactionPreview(!showTransactionPreview)}
+              >
+                <Save className="h-4 w-4 mr-1" />
+                Review Changes
+              </Button>
+            </>
+          )}
+          <Button
+            variant={editMode ? "default" : "outline"}
+            size="sm"
+            onClick={handleToggleEditMode}
+            title={editMode ? "Exit edit mode" : "Enter edit mode"}
+          >
+            <Edit3 className="h-4 w-4 mr-1" />
+            {editMode ? 'Editing' : 'Edit'}
+          </Button>
           <Button variant="ghost" size="sm" onClick={handleRefresh}>
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -335,12 +442,15 @@ export function TableInspector({
             </div>
           ) : sampleData ? (
             <>
-              {showRowViewer && selectedRow ? (
+              {showTransactionPreview ? (
                 <PanelGroup direction="horizontal" className="flex-1">
-                  <Panel defaultSize={65} minSize={40}>
-                    <div className="h-full overflow-auto">
-                      <div className="min-w-max h-full">
-                        <Table>
+                  <Panel defaultSize={70} minSize={50}>
+                    {showRowViewer && selectedRow ? (
+                      <PanelGroup direction="horizontal" className="h-full">
+                        <Panel defaultSize={65} minSize={40}>
+                          <div className="h-full overflow-auto">
+                            <div className="min-w-max h-full">
+                              <Table>
                           <TableHeader className="sticky top-0 bg-background border-b z-10">
                             <TableRow>
                               <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
@@ -386,10 +496,10 @@ export function TableInspector({
                                 >
                                   <TableCell
                                     className="w-12 text-center text-xs text-muted-foreground font-mono"
-                                    onDoubleClick={() => {
+                                    onDoubleClick={!editMode ? () => {
                                       setSelectedRow(row);
                                       setShowRowViewer(true);
-                                    }}
+                                    } : undefined}
                                   >
                                     <div className="flex items-center justify-center gap-1">
                                       <span>{absoluteRowNumber}</span>
@@ -407,13 +517,12 @@ export function TableInspector({
                                   {row.map((cell, cellIndex) => (
                                     <TableCell
                                       key={cellIndex}
-                                      className="whitespace-nowrap font-mono text-sm cursor-pointer hover:bg-accent/50"
-                                      onClick={() => copyCellValue(cell)}
+                                      className="whitespace-nowrap font-mono text-sm cursor-text select-text hover:bg-accent/50"
                                       onDoubleClick={() => {
                                         setSelectedRow(row);
                                         setShowRowViewer(true);
                                       }}
-                                      title="Click to copy cell value"
+                                      title="Double-click for JSON viewer"
                                     >
                                       {cell === null || cell === undefined ? (
                                         <span className="italic text-muted-foreground opacity-50">
@@ -447,20 +556,20 @@ export function TableInspector({
                         </Table>
                       </div>
                     </div>
-                  </Panel>
-                  <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
-                  <Panel defaultSize={35} minSize={25} maxSize={60}>
-                    <RowJsonViewer
-                      columns={sampleData.columns}
-                      row={selectedRow}
-                      onClose={() => {
-                        setShowRowViewer(false);
-                        setSelectedRow(null);
-                      }}
-                    />
-                  </Panel>
-                </PanelGroup>
-              ) : (
+                        </Panel>
+                        <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+                        <Panel defaultSize={35} minSize={25} maxSize={60}>
+                          <RowJsonViewer
+                            columns={sampleData.columns}
+                            row={selectedRow}
+                            onClose={() => {
+                              setShowRowViewer(false);
+                              setSelectedRow(null);
+                            }}
+                          />
+                        </Panel>
+                      </PanelGroup>
+                    ) : (
                 <div className="flex-1 overflow-auto">
                 <div className="min-w-max h-full">
                   <Table>
@@ -509,10 +618,10 @@ export function TableInspector({
                             >
                               <TableCell
                                 className="w-12 text-center text-xs text-muted-foreground font-mono"
-                                onDoubleClick={() => {
+                                onDoubleClick={!editMode ? () => {
                                   setSelectedRow(row);
                                   setShowRowViewer(true);
-                                }}
+                                } : undefined}
                               >
                                 <div className="flex items-center justify-center gap-1">
                                   <span>{absoluteRowNumber}</span>
@@ -528,6 +637,37 @@ export function TableInspector({
                                 </div>
                               </TableCell>
                               {row.map((cell, cellIndex) => {
+                                const columnName = sampleData.columns[cellIndex];
+                                const columnInfo = tableSchema?.columns.find(c => c.name === columnName);
+
+                                if (!columnInfo) return null;
+
+                                // In edit mode, use EditableCell component
+                                if (editMode) {
+                                  const isEditing = editor.editingCell?.rowIndex === rowIndex &&
+                                                   editor.editingCell?.columnIndex === cellIndex;
+                                  const isModified = editor.isCellModified(rowIndex, columnName);
+
+                                  return (
+                                    <TableCell key={cellIndex} className="p-0">
+                                      <EditableCell
+                                        value={cell}
+                                        rowIndex={rowIndex}
+                                        columnName={columnName}
+                                        columnIndex={cellIndex}
+                                        isEditing={isEditing}
+                                        isModified={isModified}
+                                        dataType={columnInfo.dataType}
+                                        nullable={columnInfo.nullable}
+                                        onStartEdit={editor.startEdit}
+                                        onChange={editor.applyChange}
+                                        onCancelEdit={editor.cancelEdit}
+                                      />
+                                    </TableCell>
+                                  );
+                                }
+
+                                // Read-only mode (original rendering)
                                 const cellString = cell === null || cell === undefined ? 'NULL' :
                                                   typeof cell === "object" ? JSON.stringify(cell) :
                                                   String(cell);
@@ -537,13 +677,12 @@ export function TableInspector({
                                 return (
                                   <TableCell
                                     key={cellIndex}
-                                    className="whitespace-nowrap font-mono text-sm cursor-pointer hover:bg-accent/50 max-w-md"
-                                    onClick={() => copyCellValue(cell)}
+                                    className="whitespace-nowrap font-mono text-sm cursor-text select-text hover:bg-accent/50 max-w-md"
                                     onDoubleClick={() => {
                                       setSelectedRow(row);
                                       setShowRowViewer(true);
                                     }}
-                                    title={isTruncated ? `${cellString}\n\nClick to copy • Double-click for JSON viewer` : "Click to copy cell value"}
+                                    title={isTruncated ? `${cellString}\n\nDouble-click for JSON viewer` : "Double-click for JSON viewer"}
                                   >
                                     <div className="truncate">
                                       {cell === null || cell === undefined ? (
@@ -590,6 +729,315 @@ export function TableInspector({
                   </div>
                 </div>
               )}
+                    </Panel>
+                    <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+                    <Panel defaultSize={30} minSize={20} maxSize={50}>
+                      <TransactionPreview
+                        statements={editor.getTotalChanges() > 0 ? editor.generateUpdateStatements(schema, tableName, quoteIdentifier) : []}
+                        isExecuting={isCommitting}
+                        onCommit={handleCommit}
+                        onDiscard={handleDiscard}
+                        onClose={() => setShowTransactionPreview(false)}
+                        error={commitError}
+                      />
+                    </Panel>
+                  </PanelGroup>
+                ) : (
+                  showRowViewer && selectedRow ? (
+                    <PanelGroup direction="horizontal" className="flex-1">
+                      <Panel defaultSize={65} minSize={40}>
+                        <div className="h-full overflow-auto">
+                          <div className="min-w-max h-full">
+                            <Table>
+                              <TableHeader className="sticky top-0 bg-background border-b z-10">
+                                <TableRow>
+                                  <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
+                                  {sampleData.columns.map((col) => {
+                                    const columnInfo = tableSchema?.columns.find(c => c.name === col);
+                                    return (
+                                      <TableHead key={col} className="whitespace-nowrap group">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex flex-col gap-0.5">
+                                            <span className="font-medium text-foreground">{col}</span>
+                                            {columnInfo && (
+                                              <span className="text-[10px] font-normal text-muted-foreground">
+                                                {columnInfo.dataType.toUpperCase()}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              copyColumnValues(col);
+                                            }}
+                                            title={`Copy column "${col}"`}
+                                          >
+                                            <Copy className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      </TableHead>
+                                    );
+                                  })}
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {sampleData.rows.map((row, rowIndex) => {
+                                  const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
+                                  return (
+                                    <TableRow
+                                      key={rowIndex}
+                                      className="hover:bg-muted/50 group"
+                                      title="Double-click to view row details"
+                                    >
+                                      <TableCell
+                                        className="w-12 text-center text-xs text-muted-foreground font-mono"
+                                        onDoubleClick={() => {
+                                          setSelectedRow(row);
+                                          setShowRowViewer(true);
+                                        }}
+                                      >
+                                        <div className="flex items-center justify-center gap-1">
+                                          <span>{absoluteRowNumber}</span>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                            onClick={() => copyRowValues(row)}
+                                            title="Copy row"
+                                          >
+                                            <Copy className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                      {row.map((cell, cellIndex) => {
+                                        const cellString = cell === null || cell === undefined ? 'NULL' :
+                                                          typeof cell === "object" ? JSON.stringify(cell) :
+                                                          String(cell);
+                                        const isTruncated = cellString.length > 100;
+                                        const displayValue = isTruncated ? cellString.substring(0, 100) + '...' : cellString;
+
+                                        return (
+                                          <TableCell
+                                            key={cellIndex}
+                                            className="whitespace-nowrap font-mono text-sm cursor-text select-text hover:bg-accent/50 max-w-md"
+                                            onDoubleClick={() => {
+                                              setSelectedRow(row);
+                                              setShowRowViewer(true);
+                                            }}
+                                            title={isTruncated ? `${cellString}\n\nDouble-click for JSON viewer` : "Double-click for JSON viewer"}
+                                          >
+                                            <div className="truncate">
+                                              {cell === null || cell === undefined ? (
+                                                <span className="italic text-muted-foreground opacity-50">
+                                                  NULL
+                                                </span>
+                                              ) : typeof cell === "object" ? (
+                                                <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
+                                                  {displayValue}
+                                                </code>
+                                              ) : typeof cell === "boolean" ? (
+                                                <span className={cell ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                                  {String(cell)}
+                                                </span>
+                                              ) : typeof cell === "number" ? (
+                                                <span className="text-blue-600 dark:text-blue-400">
+                                                  {cell.toLocaleString()}
+                                                </span>
+                                              ) : cell === "" ? (
+                                                <span className="italic text-muted-foreground opacity-50">
+                                                  (empty)
+                                                </span>
+                                              ) : (
+                                                <span className="text-foreground">{displayValue}</span>
+                                              )}
+                                            </div>
+                                          </TableCell>
+                                        );
+                                      })}
+                                    </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </div>
+                      </Panel>
+                      <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+                      <Panel defaultSize={35} minSize={25} maxSize={60}>
+                        <RowJsonViewer
+                          columns={sampleData.columns}
+                          row={selectedRow}
+                          onClose={() => {
+                            setShowRowViewer(false);
+                            setSelectedRow(null);
+                          }}
+                        />
+                      </Panel>
+                    </PanelGroup>
+                  ) : (
+                    <div className="flex-1 overflow-auto">
+                      <div className="min-w-max h-full">
+                        <Table>
+                          <TableHeader className="sticky top-0 bg-background border-b z-10">
+                            <TableRow>
+                              <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
+                              {sampleData.columns.map((col) => {
+                                const columnInfo = tableSchema?.columns.find(c => c.name === col);
+                                return (
+                                  <TableHead key={col} className="whitespace-nowrap group">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex flex-col gap-0.5">
+                                        <span className="font-medium text-foreground">{col}</span>
+                                        {columnInfo && (
+                                          <span className="text-[10px] font-normal text-muted-foreground">
+                                            {columnInfo.dataType.toUpperCase()}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          copyColumnValues(col);
+                                        }}
+                                        title={`Copy column "${col}"`}
+                                      >
+                                        <Copy className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </TableHead>
+                                );
+                              })}
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {sampleData.rows.map((row, rowIndex) => {
+                              const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
+                              return (
+                                <TableRow
+                                  key={rowIndex}
+                                  className="hover:bg-muted/50 group"
+                                  title="Double-click to view row details"
+                                >
+                                  <TableCell
+                                    className="w-12 text-center text-xs text-muted-foreground font-mono"
+                                    onDoubleClick={!editMode ? () => {
+                                      setSelectedRow(row);
+                                      setShowRowViewer(true);
+                                    } : undefined}
+                                  >
+                                    <div className="flex items-center justify-center gap-1">
+                                      <span>{absoluteRowNumber}</span>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={() => copyRowValues(row)}
+                                        title="Copy row"
+                                      >
+                                        <Copy className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                  {row.map((cell, cellIndex) => {
+                                    const columnName = sampleData.columns[cellIndex];
+                                    const columnInfo = tableSchema?.columns.find(c => c.name === columnName);
+
+                                    if (!columnInfo) return null;
+
+                                    // In edit mode, use EditableCell component
+                                    if (editMode) {
+                                      const isEditing = editor.editingCell?.rowIndex === rowIndex &&
+                                                       editor.editingCell?.columnIndex === cellIndex;
+                                      const isModified = editor.isCellModified(rowIndex, columnName);
+
+                                      return (
+                                        <TableCell key={cellIndex} className="p-0">
+                                          <EditableCell
+                                            value={cell}
+                                            rowIndex={rowIndex}
+                                            columnName={columnName}
+                                            columnIndex={cellIndex}
+                                            isEditing={isEditing}
+                                            isModified={isModified}
+                                            dataType={columnInfo.dataType}
+                                            nullable={columnInfo.nullable}
+                                            onStartEdit={editor.startEdit}
+                                            onChange={editor.applyChange}
+                                            onCancelEdit={editor.cancelEdit}
+                                          />
+                                        </TableCell>
+                                      );
+                                    }
+
+                                    // Read-only mode (original rendering)
+                                    const cellString = cell === null || cell === undefined ? 'NULL' :
+                                                      typeof cell === "object" ? JSON.stringify(cell) :
+                                                      String(cell);
+                                    const isTruncated = cellString.length > 100;
+                                    const displayValue = isTruncated ? cellString.substring(0, 100) + '...' : cellString;
+
+                                    return (
+                                      <TableCell
+                                        key={cellIndex}
+                                        className="whitespace-nowrap font-mono text-sm cursor-text select-text hover:bg-accent/50 max-w-md"
+                                        onDoubleClick={() => {
+                                          setSelectedRow(row);
+                                          setShowRowViewer(true);
+                                        }}
+                                        title={isTruncated ? `${cellString}\n\nDouble-click for JSON viewer` : "Double-click for JSON viewer"}
+                                      >
+                                        <div className="truncate">
+                                          {cell === null || cell === undefined ? (
+                                            <span className="italic text-muted-foreground opacity-50">
+                                              NULL
+                                            </span>
+                                          ) : typeof cell === "object" ? (
+                                            <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
+                                              {displayValue}
+                                            </code>
+                                          ) : typeof cell === "boolean" ? (
+                                            <span className={cell ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+                                              {String(cell)}
+                                            </span>
+                                          ) : typeof cell === "number" ? (
+                                            <span className="text-blue-600 dark:text-blue-400">
+                                              {cell.toLocaleString()}
+                                            </span>
+                                          ) : cell === "" ? (
+                                            <span className="italic text-muted-foreground opacity-50">
+                                              (empty)
+                                            </span>
+                                          ) : (
+                                            <span className="text-foreground">{displayValue}</span>
+                                          )}
+                                        </div>
+                                      </TableCell>
+                                    );
+                                  })}
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                        {sampleData.rows.length === 0 && (
+                          <div className="flex items-center justify-center py-12">
+                            <div className="text-center space-y-2">
+                              <Database className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+                              <p className="text-muted-foreground">No data found in this table</p>
+                              <p className="text-sm text-muted-foreground">This collection/table is empty</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                )}
 
               {/* Pagination Controls */}
               <div className="flex items-center justify-between px-4 py-3 border-t bg-background shrink-0">

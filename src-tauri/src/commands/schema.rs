@@ -4,10 +4,11 @@
 //! including listing databases, schemas, tables, and retrieving table details.
 
 use std::sync::Mutex;
+use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::models::{DatabaseInfo, DbError, SchemaInfo, TableInfo, TableSchema};
-use crate::state::AppState;
+use crate::models::{ColumnInfo, DatabaseInfo, DbError, SchemaInfo, TableInfo, TableSchema};
+use crate::state::{AppState, MetadataCache};
 
 /// Get list of databases for a connection
 ///
@@ -136,6 +137,183 @@ pub async fn get_table_schema(
 
     // Call the driver method
     connection.get_table_schema(&schema, &table).await
+}
+
+/// Response for autocomplete metadata
+///
+/// Contains all metadata needed for SQL autocomplete functionality,
+/// organized by schema and table for quick lookup.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutocompleteMetadata {
+    /// List of all databases
+    pub databases: Vec<String>,
+
+    /// List of all schemas
+    pub schemas: Vec<String>,
+
+    /// List of all tables with their schema
+    pub tables: Vec<TableReference>,
+
+    /// List of all columns with their table and schema
+    pub columns: Vec<ColumnReference>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TableReference {
+    pub schema: String,
+    pub table: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ColumnReference {
+    pub schema: String,
+    pub table: String,
+    pub column: String,
+    pub data_type: String,
+}
+
+/// Get metadata for SQL autocomplete
+///
+/// Returns flattened metadata suitable for autocomplete suggestions.
+/// Uses cached metadata when available and not stale (> 5 minutes old).
+/// Falls back to fetching fresh metadata from the database if needed.
+///
+/// # Arguments
+/// * `connection_id` - UUID of the active connection
+/// * `database` - Name of the database to get metadata for
+/// * `force_refresh` - If true, bypass cache and fetch fresh metadata
+/// * `state` - Application state containing active connections and cache
+///
+/// # Returns
+/// * `Ok(AutocompleteMetadata)` - Flattened metadata for autocomplete
+/// * `Err(DbError)` - If connection not found or query fails
+#[tauri::command]
+pub async fn get_autocomplete_metadata(
+    connection_id: String,
+    database: String,
+    force_refresh: bool,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<AutocompleteMetadata, DbError> {
+    // Check cache first
+    let cache_valid = {
+        let state = state.lock().unwrap();
+        if let Some(cache) = state.metadata_cache.get(&connection_id) {
+            !force_refresh && !cache.is_stale()
+        } else {
+            false
+        }
+    };
+
+    // Return cached data if valid
+    if cache_valid {
+        let state = state.lock().unwrap();
+        let cache = state.metadata_cache.get(&connection_id).unwrap();
+        return Ok(flatten_metadata_for_autocomplete(cache));
+    }
+
+    // Otherwise, fetch fresh metadata
+    let connection = {
+        let state = state.lock().unwrap();
+        state
+            .get_connection(&connection_id)
+            .ok_or_else(|| DbError::ConnectionError("Connection not found".to_string()))?
+            .clone()
+    };
+
+    // Fetch all metadata
+    let databases = connection.get_databases().await?;
+    let schemas = connection.get_schemas(&database).await?;
+
+    // Fetch tables and columns for all schemas
+    let mut all_tables = Vec::new();
+    let mut all_columns = std::collections::HashMap::new();
+
+    for schema in &schemas {
+        let tables = connection.get_tables(&schema.name).await?;
+        all_tables.push((schema.name.clone(), tables.clone()));
+
+        // Fetch columns for each table
+        for table in tables {
+            let table_schema = connection.get_table_schema(&schema.name, &table.name).await?;
+            let key = format!("{}.{}", schema.name, table.name);
+            all_columns.insert(key, table_schema.columns);
+        }
+    }
+
+    // Build and cache metadata
+    let mut cache = MetadataCache::new();
+    cache.databases = databases;
+    cache.schemas.insert(database.clone(), schemas);
+
+    for (schema_name, tables) in all_tables {
+        cache.tables.insert(schema_name, tables);
+    }
+
+    cache.columns = all_columns;
+    cache.touch();
+
+    let result = flatten_metadata_for_autocomplete(&cache);
+
+    // Store in cache
+    {
+        let mut state = state.lock().unwrap();
+        state.metadata_cache.insert(connection_id, cache);
+    }
+
+    Ok(result)
+}
+
+/// Helper function to flatten metadata cache into autocomplete format
+fn flatten_metadata_for_autocomplete(cache: &MetadataCache) -> AutocompleteMetadata {
+    let mut metadata = AutocompleteMetadata {
+        databases: cache.databases.iter().map(|d| d.name.clone()).collect(),
+        schemas: Vec::new(),
+        tables: Vec::new(),
+        columns: Vec::new(),
+    };
+
+    // Flatten schemas
+    for schemas in cache.schemas.values() {
+        for schema in schemas {
+            if !metadata.schemas.contains(&schema.name) {
+                metadata.schemas.push(schema.name.clone());
+            }
+        }
+    }
+
+    // Flatten tables
+    for (schema_name, tables) in &cache.tables {
+        for table in tables {
+            metadata.tables.push(TableReference {
+                schema: schema_name.clone(),
+                table: table.name.clone(),
+            });
+        }
+    }
+
+    // Flatten columns
+    for (key, columns) in &cache.columns {
+        // key is "schema.table"
+        let parts: Vec<&str> = key.split('.').collect();
+        if parts.len() == 2 {
+            let schema = parts[0];
+            let table = parts[1];
+
+            for column in columns {
+                metadata.columns.push(ColumnReference {
+                    schema: schema.to_string(),
+                    table: table.to_string(),
+                    column: column.name.clone(),
+                    data_type: column.data_type.clone(),
+                });
+            }
+        }
+    }
+
+    metadata
 }
 
 #[cfg(test)]
