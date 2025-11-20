@@ -2,6 +2,7 @@
 mod commands;
 mod drivers;
 mod models;
+mod ssh;
 mod state;
 
 use std::sync::Mutex;

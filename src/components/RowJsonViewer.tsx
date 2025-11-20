@@ -1,6 +1,5 @@
 import { FC } from "react";
 import { Button } from "./ui/button";
-import { ScrollArea } from "./ui/scroll-area";
 import { Code, X } from "lucide-react";
 
 interface RowJsonViewerProps {
@@ -27,7 +26,7 @@ export const RowJsonViewer: FC<RowJsonViewerProps> = ({
   const highlightJSON = (json: string) => {
     // Replace with spans for different token types
     return json
-      .replace(/("(?:\\.|[^"\\])*")(\s*:)?/g, (match, p1, p2) => {
+      .replace(/("(?:\\.|[^"\\])*")(\s*:)?/g, (_match, p1, p2) => {
         // Property keys (followed by colon) vs string values
         if (p2) {
           return `<span class="text-blue-400">${p1}</span>${p2}`;

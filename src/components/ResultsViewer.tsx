@@ -274,7 +274,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
   // Syntax highlight JSON
   const highlightJSON = (json: string) => {
     return json
-      .replace(/("(?:\\.|[^"\\])*")(\s*:)?/g, (match, p1, p2) => {
+      .replace(/("(?:\\.|[^"\\])*")(\s*:)?/g, (_match, p1, p2) => {
         // Property keys (followed by colon) vs string values
         if (p2) {
           return `<span class="text-blue-400">${p1}</span>${p2}`;
