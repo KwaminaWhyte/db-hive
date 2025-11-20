@@ -18,7 +18,7 @@ interface WelcomeScreenProps {
   onOpenDocs?: () => void;
 }
 
-const HiveLogo: FC<{ className?: string }> = ({ className = "" }) => (
+export const HiveLogo: FC<{ className?: string }> = ({ className = "" }) => (
   <div className={`relative ${className}`}>
     {/* Geometric honey DB Hive logo */}
     <div className="relative h-24 w-24 sm:h-28 sm:w-28 md:h-32 md:w-32 rounded-2xl border border-amber-300/40 bg-gradient-to-br from-amber-300/40 via-amber-400/25 to-amber-500/30 shadow-[0_0_0_1px_rgba(15,23,42,0.8),0_18px_45px_rgba(0,0,0,0.85)] overflow-hidden">
@@ -66,7 +66,10 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-100 antialiased flex items-stretch justify-center relative overflow-hidden">
       {/* Background hex pattern */}
-      <div className="pointer-events-none fixed inset-0 opacity-60" aria-hidden="true">
+      <div
+        className="pointer-events-none fixed inset-0 opacity-60"
+        aria-hidden="true"
+      >
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgba(255,180,0,0.12),transparent_55%),radial-gradient(circle_at_100%_0%,rgba(148,163,184,0.22),transparent_55%),radial-gradient(circle_at_0%_100%,rgba(15,23,42,1),rgba(15,23,42,1))]"></div>
         <div
           className="absolute inset-8 bg-[linear-gradient(120deg,rgba(148,163,184,0.25)_1px,transparent_1px),linear-gradient(210deg,rgba(148,163,184,0.25)_1px,transparent_1px)] bg-[size:4.5rem_3.2rem] opacity-12"
@@ -111,8 +114,8 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                     A focused workspace for your data.
                   </h1>
                   <p className="max-w-md mx-auto text-sm md:text-base text-slate-300/80">
-                    Inspect, query, and shape your databases with a developer-first client
-                    that stays out of your way.
+                    Inspect, query, and shape your databases with a
+                    developer-first client that stays out of your way.
                   </p>
                 </div>
               </div>
@@ -146,9 +149,14 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                     className="group flex items-center justify-between gap-3 rounded-xl border-slate-700/80 bg-slate-900/80 hover:bg-slate-900/95 px-4 py-5 text-sm md:text-base"
                   >
                     <div className="flex items-center gap-2.5">
-                      <Clock className="h-4 w-4 text-slate-200/85" strokeWidth={1.5} />
+                      <Clock
+                        className="h-4 w-4 text-slate-200/85"
+                        strokeWidth={1.5}
+                      />
                       <div className="flex flex-col items-start">
-                        <span className="font-medium">Open recent connections</span>
+                        <span className="font-medium">
+                          Open recent connections
+                        </span>
                         <span className="text-[0.7rem] text-slate-300/70 font-normal">
                           Jump back into your last sessions
                         </span>
@@ -168,9 +176,14 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                     className="group flex items-center justify-between gap-3 rounded-xl border-slate-700/70 bg-slate-900/60 hover:bg-slate-900/90 px-4 py-5 text-sm md:text-base"
                   >
                     <div className="flex items-center gap-2.5">
-                      <Database className="h-4 w-4 text-amber-300/90" strokeWidth={1.5} />
+                      <Database
+                        className="h-4 w-4 text-amber-300/90"
+                        strokeWidth={1.5}
+                      />
                       <div className="flex flex-col items-start">
-                        <span className="font-medium">View sample workspace</span>
+                        <span className="font-medium">
+                          View sample workspace
+                        </span>
                         <span className="text-[0.7rem] text-slate-300/70 font-normal">
                           Explore a curated sample database
                         </span>
@@ -190,7 +203,10 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                     className="group flex items-center justify-between gap-3 rounded-xl border-slate-700/60 bg-slate-900/50 hover:bg-slate-900/80 px-4 py-5 text-sm md:text-base"
                   >
                     <div className="flex items-center gap-2.5">
-                      <BookOpen className="h-4 w-4 text-slate-200/85" strokeWidth={1.5} />
+                      <BookOpen
+                        className="h-4 w-4 text-slate-200/85"
+                        strokeWidth={1.5}
+                      />
                       <div className="flex flex-col items-start">
                         <span className="font-medium">Documentation</span>
                         <span className="text-[0.7rem] text-slate-300/70 font-normal">
@@ -254,13 +270,18 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-amber-300/10 border border-amber-300/40">
-                    <Command className="h-3.5 w-3.5 text-amber-300" strokeWidth={1.5} />
+                    <Command
+                      className="h-3.5 w-3.5 text-amber-300"
+                      strokeWidth={1.5}
+                    />
                   </span>
                   <div className="flex flex-col">
                     <span className="text-xs font-medium uppercase tracking-[0.16em] text-slate-400">
                       keyboard flow
                     </span>
-                    <span className="text-sm text-slate-100/90">Stay on the home row</span>
+                    <span className="text-sm text-slate-100/90">
+                      Stay on the home row
+                    </span>
                   </div>
                 </div>
               </div>
@@ -270,15 +291,24 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                   { icon: Plug2, label: "New connection", keys: ["⌘", "K"] },
                   { icon: Terminal, label: "Run query", keys: ["⇧", "⏎"] },
                   { icon: Database, label: "Switch table", keys: ["⌥", "⇥"] },
-                  { icon: LayoutPanelLeft, label: "Toggle sidebar", keys: ["⌘", "B"] },
+                  {
+                    icon: LayoutPanelLeft,
+                    label: "Toggle sidebar",
+                    keys: ["⌘", "B"],
+                  },
                 ].map((shortcut, i) => (
                   <div
                     key={i}
                     className="flex items-center justify-between rounded-lg border border-slate-800/90 dark:border-slate-800/90 bg-slate-950/70 dark:bg-slate-950/70 px-2.5 py-2"
                   >
                     <div className="flex items-center gap-1.5">
-                      <shortcut.icon className="h-3.5 w-3.5 text-slate-300" strokeWidth={1.5} />
-                      <span className="text-slate-200/90">{shortcut.label}</span>
+                      <shortcut.icon
+                        className="h-3.5 w-3.5 text-slate-300"
+                        strokeWidth={1.5}
+                      />
+                      <span className="text-slate-200/90">
+                        {shortcut.label}
+                      </span>
                     </div>
                     <div className="inline-flex items-center gap-1 rounded-md border border-slate-700/80 dark:border-slate-700/80 bg-slate-900/80 dark:bg-slate-900/80 px-1.5 py-0.5 text-[0.64rem] text-slate-200/90">
                       {shortcut.keys.map((key, j) => (
@@ -301,14 +331,16 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                     <span className="text-[0.74rem] font-medium uppercase tracking-[0.18em] text-amber-200/90">
                       workspace layout
                     </span>
-                    <span className="text-slate-100/90">Dock panels anywhere</span>
+                    <span className="text-slate-100/90">
+                      Dock panels anywhere
+                    </span>
                   </div>
                 </div>
 
                 <p className="text-slate-300/80 text-[0.8rem] leading-relaxed">
-                  DB Hive starts with a clean canvas. Once connected, you can dock the schema
-                  browser, query editor, and result grid into a layout that matches how you
-                  think.
+                  DB Hive starts with a clean canvas. Once connected, you can
+                  dock the schema browser, query editor, and result grid into a
+                  layout that matches how you think.
                 </p>
 
                 <ul className="mt-1 space-y-1 text-[0.78rem] text-slate-300/80 leading-relaxed">
@@ -318,7 +350,9 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-sm bg-amber-300/60"></span>
-                    <span>Collapse sidebars to focus on schemas or results.</span>
+                    <span>
+                      Collapse sidebars to focus on schemas or results.
+                    </span>
                   </li>
                   <li className="flex items-center gap-2">
                     <span className="h-1.5 w-1.5 rounded-sm bg-amber-300/40"></span>
