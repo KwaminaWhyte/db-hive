@@ -237,12 +237,17 @@ impl DatabaseDriver for SqliteDriver {
                 let default_value: Option<String> = row.get(4)?; // dflt_value
                 let is_primary_key: i32 = row.get(5)?; // pk
 
+                // SQLite auto-increment: INTEGER PRIMARY KEY or has AUTOINCREMENT in type
+                let is_auto_increment = (is_primary_key > 0 && data_type.to_uppercase() == "INTEGER")
+                    || data_type.to_uppercase().contains("AUTOINCREMENT");
+
                 Ok(ColumnInfo {
                     name,
                     data_type,
                     nullable: not_null == 0,
                     default_value,
                     is_primary_key: is_primary_key > 0,
+                    is_auto_increment,
                 })
             })
             .map_err(|e| DbError::QueryError(format!("Failed to query columns: {}", e)))?;

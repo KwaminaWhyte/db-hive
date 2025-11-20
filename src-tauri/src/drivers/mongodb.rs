@@ -418,6 +418,7 @@ impl DatabaseDriver for MongoDbDriver {
                     nullable: true, // MongoDB fields are always nullable
                     default_value: None,
                     is_primary_key: key == "_id",
+                    is_auto_increment: key == "_id", // MongoDB _id is auto-generated
                 })
                 .collect()
         } else {
@@ -428,6 +429,7 @@ impl DatabaseDriver for MongoDbDriver {
                 nullable: false,
                 default_value: None,
                 is_primary_key: true,
+                is_auto_increment: true, // MongoDB _id is auto-generated
             }]
         };
 

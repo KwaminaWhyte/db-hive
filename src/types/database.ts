@@ -242,6 +242,9 @@ export interface ColumnInfo {
 
   /** Whether this column is part of the primary key */
   isPrimaryKey: boolean;
+
+  /** Whether this column is auto-increment/serial (MySQL AUTO_INCREMENT, PostgreSQL SERIAL) */
+  isAutoIncrement: boolean;
 }
 
 /**

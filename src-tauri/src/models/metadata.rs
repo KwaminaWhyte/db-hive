@@ -130,6 +130,9 @@ pub struct ColumnInfo {
 
     /// Whether this column is part of the primary key
     pub is_primary_key: bool,
+
+    /// Whether this column is auto-increment/serial (MySQL AUTO_INCREMENT, PostgreSQL SERIAL)
+    pub is_auto_increment: bool,
 }
 
 impl ColumnInfo {
@@ -141,6 +144,7 @@ impl ColumnInfo {
             nullable,
             default_value: None,
             is_primary_key: false,
+            is_auto_increment: false,
         }
     }
 
@@ -158,6 +162,7 @@ impl ColumnInfo {
             nullable,
             default_value,
             is_primary_key,
+            is_auto_increment: false,
         }
     }
 }
