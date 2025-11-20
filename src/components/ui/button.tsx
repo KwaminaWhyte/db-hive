@@ -9,16 +9,15 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        default: "border border-amber-300/70 bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 text-slate-950 font-medium shadow-[0_4px_12px_rgba(251,191,36,0.3)] hover:-translate-y-[1px] active:translate-y-[1px] dark:text-slate-950",
+        default: "bg-primary text-primary-foreground hover:bg-primary/90 shadow-sm",
         destructive:
-          "bg-red-500/80 hover:bg-red-500 text-white font-medium border-0 focus-visible:ring-red-500/20 dark:bg-red-500/80 dark:hover:bg-red-500",
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow-sm",
         outline:
-          "border border-slate-700/60 bg-slate-900/60 text-slate-200 hover:bg-slate-900/90 hover:border-amber-300/40 shadow-xs dark:bg-slate-900/60 dark:border-slate-700/60 dark:text-slate-200 dark:hover:bg-slate-900/90 dark:hover:border-amber-300/40",
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground shadow-xs",
         secondary:
-          "bg-slate-800/60 text-slate-200 hover:bg-slate-800/90 border border-slate-700/60 dark:bg-slate-800/60 dark:text-slate-200 dark:hover:bg-slate-800/90",
-        ghost:
-          "hover:bg-slate-800/80 hover:text-amber-300 dark:hover:bg-slate-800/80 dark:hover:text-amber-300",
-        link: "text-amber-300 underline-offset-4 hover:underline dark:text-amber-300",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
