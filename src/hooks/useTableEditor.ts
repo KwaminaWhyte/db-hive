@@ -450,13 +450,21 @@ export function useTableEditor({ columns, rows }: UseTableEditorOptions) {
       }
     }
 
-    // Skip UUID primary keys (char/varchar with common UUID naming)
-    // Common patterns: id (36 char), uuid, guid, etc.
+    // Skip UUID primary keys ONLY if they have a default value (like DEFAULT UUID())
+    // If no default, we need to generate the UUID in the application
     if (col.isPrimaryKey &&
         (lowerType.includes('char') || lowerType.includes('uuid')) &&
         (lowerName === 'id' || lowerName === 'uuid' || lowerName === 'guid' || lowerName.endsWith('_id'))) {
-      console.log(`[shouldSkipColumnInInsert] ✓ Skipping ${col.name}: UUID/GUID primary key`);
-      return true;
+      // Only skip if there's a default UUID generator
+      if (col.defaultValue &&
+          (col.defaultValue.toLowerCase().includes('uuid') ||
+           col.defaultValue.toLowerCase().includes('gen_random_uuid'))) {
+        console.log(`[shouldSkipColumnInInsert] ✓ Skipping ${col.name}: UUID/GUID primary key with default`);
+        return true;
+      }
+      // Don't skip - need to provide UUID value
+      console.log(`[shouldSkipColumnInInsert] ✗ NOT skipping ${col.name}: UUID primary key WITHOUT default (must provide value)`);
+      return false;
     }
 
     // Skip common auto-generated timestamp columns
@@ -499,7 +507,19 @@ export function useTableEditor({ columns, rows }: UseTableEditorOptions) {
             return;
           }
 
-          const value = newRow.values.get(col.name);
+          let value = newRow.values.get(col.name);
+
+          // Generate UUID for UUID primary keys that don't have a value
+          if ((value === null || value === undefined) &&
+              col.isPrimaryKey &&
+              (col.dataType.toLowerCase().includes('char') || col.dataType.toLowerCase().includes('uuid')) &&
+              (col.name.toLowerCase() === 'id' || col.name.toLowerCase() === 'uuid' ||
+               col.name.toLowerCase() === 'guid' || col.name.toLowerCase().endsWith('_id'))) {
+            // Generate a v4 UUID
+            value = crypto.randomUUID();
+            console.log(`[generateInsertStatements] Generated UUID for ${col.name}:`, value);
+          }
+
           console.log(`[generateInsertStatements] Column ${col.name} value:`, value);
 
           columnNames.push(quoteIdentifier(col.name));
