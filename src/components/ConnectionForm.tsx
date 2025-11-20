@@ -166,9 +166,16 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     if (!formData.host?.trim()) {
       return "Host is required";
     }
-    if (!formData.username?.trim()) {
+
+    // MongoDB allows optional username/password for local connections
+    // PostgreSQL, MySQL, and SQL Server require username
+    if (
+      formData.driver !== "MongoDb" &&
+      !formData.username?.trim()
+    ) {
       return "Username is required";
     }
+
     if (
       formData.port !== undefined &&
       (formData.port < 0 || formData.port > 65535)
@@ -189,9 +196,13 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       return;
     }
 
-    // SQLite doesn't require password
-    if (formData.driver !== "Sqlite" && !password) {
-      setError("Password is required to test connection");
+    // SQLite and local MongoDB don't require password
+    // Only require password for PostgreSQL and MySQL
+    if (
+      (formData.driver === "Postgres" || formData.driver === "MySql") &&
+      !password
+    ) {
+      setError("Password is required for this database type");
       return;
     }
 
@@ -204,7 +215,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         driver: formData.driver!,
         host: formData.host!,
         port: formData.port!,
-        username: formData.username!,
+        username: formData.username || "",
         database: formData.database || null,
         sslMode: formData.sslMode!,
         passwordKeyringKey: null,
@@ -266,7 +277,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         driver: formData.driver!,
         host: formData.host!,
         port: formData.port!,
-        username: formData.username!,
+        username: formData.username || "",
         database: formData.database || null,
         sslMode: formData.sslMode!,
         passwordKeyringKey: null,
@@ -447,7 +458,8 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
               {/* Username */}
               <div className="space-y-2">
                 <Label htmlFor="username">
-                  Username <span className="text-destructive">*</span>
+                  Username {formData.driver !== "MongoDb" && <span className="text-destructive">*</span>}
+                  {formData.driver === "MongoDb" && <span className="text-muted-foreground">(optional)</span>}
                 </Label>
                 <Input
                   type="text"
@@ -455,8 +467,8 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
                   name="username"
                   value={formData.username || ""}
                   onChange={handleChange}
-                  placeholder="postgres"
-                  required
+                  placeholder={formData.driver === "MongoDb" ? "root (optional)" : "postgres"}
+                  required={formData.driver !== "MongoDb"}
                 />
               </div>
 

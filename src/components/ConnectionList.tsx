@@ -104,20 +104,70 @@ export const ConnectionList: FC<ConnectionListProps> = ({
           setConnectingId(null);
         }
       } else {
-        // No saved password, show password prompt
+        // No saved password
+        // For MongoDB and SQLite, try connecting without password
+        if (profile.driver === "MongoDb" || profile.driver === "Sqlite") {
+          setConnectingId(profile.id);
+          setError(null);
+
+          try {
+            const connectionId = await invoke<string>("connect_to_database", {
+              profileId: profile.id,
+              password: "",
+            });
+
+            // Success - notify parent component
+            onConnected?.(connectionId, profile);
+          } catch (err) {
+            const errorMessage =
+              typeof err === "string"
+                ? err
+                : (err as any)?.message || String(err);
+            setError(`Failed to connect: ${errorMessage}`);
+          } finally {
+            setConnectingId(null);
+          }
+        } else {
+          // For other databases, show password prompt
+          setPasswordPrompt({
+            profileId: profile.id,
+            profileName: profile.name,
+          });
+          setPassword("");
+        }
+      }
+    } catch (err) {
+      // If fetching saved password fails
+      // For MongoDB and SQLite, try connecting without password
+      if (profile.driver === "MongoDb" || profile.driver === "Sqlite") {
+        setConnectingId(profile.id);
+        setError(null);
+
+        try {
+          const connectionId = await invoke<string>("connect_to_database", {
+            profileId: profile.id,
+            password: "",
+          });
+
+          // Success - notify parent component
+          onConnected?.(connectionId, profile);
+        } catch (err) {
+          const errorMessage =
+            typeof err === "string"
+              ? err
+              : (err as any)?.message || String(err);
+          setError(`Failed to connect: ${errorMessage}`);
+        } finally {
+          setConnectingId(null);
+        }
+      } else {
+        // For other databases, show password prompt
         setPasswordPrompt({
           profileId: profile.id,
           profileName: profile.name,
         });
         setPassword("");
       }
-    } catch (err) {
-      // If fetching saved password fails, show password prompt
-      setPasswordPrompt({
-        profileId: profile.id,
-        profileName: profile.name,
-      });
-      setPassword("");
     }
   };
 
