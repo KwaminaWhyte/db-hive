@@ -38,6 +38,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Uses `crypto.randomUUID()` to generate RFC 4122 compliant v4 UUIDs
   - Only skips UUID columns if database has UUID generation function (e.g., `DEFAULT UUID()`)
   - Prevents "cannot be null" errors for UUID primary keys
+- **Timestamp column handling (Critical)**:
+  - Timestamp columns (`created_at`, `updated_at`) without defaults now have timestamps auto-generated
+  - Uses `new Date().toISOString()` to generate current timestamp in SQL format
+  - Only skips timestamp columns if database has default (e.g., `DEFAULT CURRENT_TIMESTAMP`)
+  - Prevents "cannot be null" errors for required timestamp columns
 - Auto-generated columns (id, created_at, updated_at) no longer cause "cannot be null" errors
 - New rows now skip auto-increment and auto-timestamp columns in INSERT statements
 - PostgreSQL boolean values now correctly generate unquoted literals (true/false instead of 'true'/'false')
@@ -78,12 +83,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Enhanced `shouldSkipColumnInInsert()`**:
     - Now checks `col.isAutoIncrement` field FIRST (most reliable)
     - UUID primary keys now only skipped if they have database default value
-    - Falls back to heuristics for timestamp columns
+    - Timestamp columns now only skipped if they have database default value
+    - Checks for CURRENT_TIMESTAMP, now(), getdate(), and other timestamp functions
     - Removed redundant primary key + numeric type check (now handled by backend)
-  - **Enhanced `generateInsertStatements()`** with UUID generation:
+  - **Enhanced `generateInsertStatements()`** with auto-generation:
     - Auto-generates UUIDs using `crypto.randomUUID()` for UUID columns without values
+    - Auto-generates timestamps using `new Date().toISOString()` for timestamp columns
     - Smart column detection and proper type handling
-    - Generates RFC 4122 compliant v4 UUIDs when needed
+    - Generates RFC 4122 compliant v4 UUIDs and SQL-formatted timestamps
   - Enhanced `generateUpdateStatements()` with proper boolean value formatting
   - Updated `discardChanges()` to clear new rows
   - Updated `getCellValue()` and `applyChange()` to handle negative row indices
