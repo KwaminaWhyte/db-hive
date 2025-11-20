@@ -758,22 +758,67 @@ pub async fn get_tables(
 - [x] Implement metadata refresh button in editor ✅
 - [x] Implement invalidation strategy for metadata cache (5-minute expiry + manual refresh) ✅
 
-### Milestone 2.4: Table Editor (Weeks 22-24)
+### Milestone 2.4: Table Editor (Weeks 22-24) 🚧 IN PROGRESS
 
-**Inline Editing**
+**Inline Editing** ✅ COMPLETED (v0.3.1 & v0.4.0)
 
-- [ ] Build editable data grid
-- [ ] Track cell changes
-- [ ] Generate UPDATE/INSERT/DELETE statements
-- [ ] Show transaction preview
-- [ ] Implement commit/rollback UI
+- [x] Build editable data grid ✅
+- [x] Track cell changes ✅
+- [x] Generate UPDATE/INSERT/DELETE statements ✅
+- [x] Show transaction preview with SQL syntax highlighting ✅
+- [x] Implement commit/rollback UI ✅
 
-**Bulk Operations**
+**Bulk Operations** ✅ COMPLETED (v0.4.0)
 
-- [ ] Add row selection
-- [ ] Implement bulk delete
-- [ ] Add "Add Row" functionality
-- [ ] Support NULL handling
+- [x] Add row selection (checkboxes, select all, visual feedback) ✅
+- [x] Implement bulk delete (confirmation dialog, transaction-based) ✅
+- [x] Add "Add Row" functionality with INSERT statement generation ✅
+- [x] Support NULL handling (in EditableCell and UPDATE statements) ✅
+- [x] Auto-skip auto-generated columns (id, created_at, updated_at) ✅
+- [x] Increase table result limit to 35 rows (server-side pagination) ✅
+
+**Implementation Details (v0.4.0):**
+
+- **Enhanced Transaction Preview**:
+  - SQL syntax highlighting (keywords, strings, numbers, operators)
+  - Statistics bar showing modified rows, changed cells, operation breakdown
+  - Color-coded statement type badges (UPDATE/INSERT/DELETE)
+
+- **Row Selection System**:
+  - Checkbox column in edit mode with select all functionality
+  - Individual row selection with visual feedback (bg-muted)
+  - Selection count badge and "Delete Selected" button in toolbar
+  - `useTableEditor` hook manages selection state
+
+- **Bulk Delete**:
+  - AlertDialog confirmation with row count
+  - `generateDeleteStatements()` using primary key WHERE clauses
+  - Database-specific transaction syntax (BEGIN vs START TRANSACTION)
+  - Auto-refresh after deletion with error handling
+
+- **Add Row Functionality**:
+  - "Add Row" button in toolbar (visible only in edit mode)
+  - New rows rendered at top with green visual indicator
+  - Remove button (X) to delete new rows before commit
+  - Smart column detection: auto-skips id, created_at, updated_at, and auto-increment columns
+  - `generateInsertStatements()` creates INSERT SQL with proper NULL handling
+  - Transaction support for mixed INSERT + UPDATE operations
+
+- **UX Improvements**:
+  - Post-commit state clearing (discardChanges clears both edits and new rows)
+  - "Review Changes" button properly reflects pending changes
+  - Page size increased to 35 rows with server-side pagination
+
+- **Components Created/Enhanced**:
+  - `TransactionPreview.tsx` - Enhanced with highlighting and stats
+  - `checkbox.tsx` - Radix UI checkbox wrapper
+  - `EditableCell.tsx` - Inline cell editing with type conversion
+  - `useTableEditor.ts` - Selection, change tracking, and new row management
+
+**Technical Notes**:
+- Pagination is server-side (LIMIT/OFFSET in SQL), not frontend
+- Auto-generation detection uses column name patterns and default value analysis
+- New rows use negative IDs to differentiate from existing rows
 
 ### Milestone 2.5: SQL Import/Export (Week 25)
 

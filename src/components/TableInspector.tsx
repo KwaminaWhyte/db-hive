@@ -5,6 +5,17 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   Table,
   TableBody,
@@ -24,6 +35,8 @@ import {
   Copy,
   Edit3,
   Save,
+  Trash2,
+  Plus,
 } from "lucide-react";
 import { TableSchema, QueryExecutionResult } from "@/types";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -57,7 +70,7 @@ export function TableInspector({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("data");
   const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize] = useState(20);
+  const [pageSize] = useState(35);
   const [totalRows, setTotalRows] = useState<number | null>(null);
   const [selectedRow, setSelectedRow] = useState<any[] | null>(null);
   const [showRowViewer, setShowRowViewer] = useState(false);
@@ -65,6 +78,8 @@ export function TableInspector({
   const [showTransactionPreview, setShowTransactionPreview] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitError, setCommitError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Initialize table editor hook
   const editor = useTableEditor({
@@ -229,7 +244,17 @@ export function TableInspector({
 
   // Handle commit changes
   const handleCommit = async () => {
-    if (editor.getTotalChanges() === 0) {
+    const totalChanges = editor.getTotalChanges();
+    const newRowsCount = editor.newRows.size;
+
+    console.log('[handleCommit] Starting commit with:', {
+      totalChanges,
+      newRowsCount,
+      newRowsKeys: Array.from(editor.newRows.keys()),
+      changesKeys: Array.from(editor.changes.keys()),
+    });
+
+    if (totalChanges === 0 && newRowsCount === 0) {
       toast.error('No changes to commit');
       return;
     }
@@ -240,9 +265,32 @@ export function TableInspector({
       setIsCommitting(true);
       setCommitError(null);
 
-      // Generate UPDATE statements
-      const statements = editor.generateUpdateStatements(schema, tableName, quoteIdentifier);
+      // Generate all statements
+      const statements: string[] = [];
 
+      // Add INSERT statements for new rows
+      if (newRowsCount > 0) {
+        console.log('[handleCommit] About to generate INSERT statements for', newRowsCount, 'new rows');
+        const insertStatements = editor.generateInsertStatements(schema, tableName, quoteIdentifier);
+        console.log(`[handleCommit] Generated ${insertStatements.length} INSERT statements:`, insertStatements);
+        statements.push(...insertStatements);
+      }
+
+      // Add UPDATE statements for modified cells
+      if (totalChanges > 0) {
+        const updateStatements = editor.generateUpdateStatements(schema, tableName, quoteIdentifier);
+        console.log(`Generated ${updateStatements.length} UPDATE statements:`, updateStatements);
+        statements.push(...updateStatements);
+      }
+
+      if (statements.length === 0) {
+        toast.error('No changes to commit');
+        return;
+      }
+
+      console.log(`Total statements to execute: ${statements.length}`);
+
+      // Wrap in transaction
       if (driverType === 'MySql') {
         combinedSQL = `START TRANSACTION;\n${statements.join('\n')}\nCOMMIT;`;
       } else if (driverType === 'Sqlite') {
@@ -257,12 +305,15 @@ export function TableInspector({
         combinedSQL = `BEGIN;\n${statements.join('\n')}\nCOMMIT;`;
       }
 
+      console.log('Executing SQL transaction:', combinedSQL);
+
       await invoke('execute_query', {
         connectionId,
         sql: combinedSQL,
       });
 
-      toast.success(`Successfully committed ${editor.getTotalChanges()} changes`);
+      const message = `Successfully committed ${newRowsCount + totalChanges} ${newRowsCount + totalChanges === 1 ? 'change' : 'changes'}`;
+      toast.success(message);
 
       // Clear changes and refresh data
       editor.discardChanges();
@@ -284,6 +335,55 @@ export function TableInspector({
     editor.discardChanges();
     setShowTransactionPreview(false);
     toast.info('Changes discarded');
+  };
+
+  // Handle bulk delete
+  const handleBulkDelete = async () => {
+    if (editor.selectedRows.size === 0) {
+      toast.error('No rows selected');
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      setCommitError(null);
+
+      // Generate DELETE statements
+      const statements = editor.generateDeleteStatements(schema, tableName, quoteIdentifier);
+
+      // Execute statements in a transaction
+      let combinedSQL = '';
+      if (driverType === 'MySql') {
+        combinedSQL = `START TRANSACTION;\n${statements.join('\n')}\nCOMMIT;`;
+      } else if (driverType === 'Sqlite') {
+        combinedSQL = `BEGIN TRANSACTION;\n${statements.join('\n')}\nCOMMIT;`;
+      } else if (driverType === 'MongoDb') {
+        toast.error('Bulk delete is not yet supported for MongoDB');
+        return;
+      } else {
+        // PostgreSQL and SQL Server
+        combinedSQL = `BEGIN;\n${statements.join('\n')}\nCOMMIT;`;
+      }
+
+      await invoke('execute_query', {
+        connectionId,
+        sql: combinedSQL,
+      });
+
+      toast.success(`Successfully deleted ${editor.selectedRows.size} row${editor.selectedRows.size > 1 ? 's' : ''}`);
+
+      // Clear selection and refresh data
+      editor.clearSelection();
+      setShowDeleteConfirm(false);
+      fetchSampleData();
+    } catch (err) {
+      const errorMessage = typeof err === 'string' ? err : (err as any)?.message || String(err);
+      console.error('Bulk delete failed:', errorMessage);
+      setCommitError(`Failed to delete rows: ${errorMessage}`);
+      toast.error(`Failed to delete rows: ${errorMessage}`);
+    } finally {
+      setIsDeleting(false);
+    }
   };
 
   // Toggle edit mode
@@ -369,10 +469,10 @@ export function TableInspector({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {editor.getTotalChanges() > 0 && (
+          {(editor.getTotalChanges() > 0 || editor.newRows.size > 0) && (
             <>
               <Badge variant="default" className="mr-2">
-                {editor.getTotalChanges()} {editor.getTotalChanges() === 1 ? 'change' : 'changes'}
+                {editor.getTotalChanges() + editor.newRows.size} {editor.getTotalChanges() + editor.newRows.size === 1 ? 'change' : 'changes'}
               </Badge>
               <Button
                 variant="outline"
@@ -383,6 +483,36 @@ export function TableInspector({
                 Review Changes
               </Button>
             </>
+          )}
+          {editMode && editor.selectedRows.size > 0 && (
+            <>
+              <Badge variant="secondary" className="mr-2">
+                {editor.selectedRows.size} {editor.selectedRows.size === 1 ? 'row' : 'rows'} selected
+              </Badge>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowDeleteConfirm(true)}
+                disabled={isDeleting}
+              >
+                <Trash2 className="h-4 w-4 mr-1" />
+                {isDeleting ? 'Deleting...' : 'Delete Selected'}
+              </Button>
+            </>
+          )}
+          {editMode && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                editor.addRow();
+                toast.success('New row added');
+              }}
+              title="Add a new row"
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Add Row
+            </Button>
           )}
           <Button
             variant={editMode ? "default" : "outline"}
@@ -453,19 +583,29 @@ export function TableInspector({
                               <Table>
                           <TableHeader className="sticky top-0 bg-background border-b z-10">
                             <TableRow>
+                              <TableHead className="w-12 text-center">
+                                <Checkbox
+                                  checked={editor.selectedRows.size > 0 && editor.selectedRows.size === sampleData.rows.length + editor.newRows.size}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      editor.selectAll();
+                                    } else {
+                                      editor.clearSelection();
+                                    }
+                                  }}
+                                  aria-label="Select all rows"
+                                />
+                              </TableHead>
                               <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
-                              {sampleData.columns.map((col) => {
-                                const columnInfo = tableSchema?.columns.find(c => c.name === col);
+                              {(tableSchema?.columns || []).map((columnInfo) => {
                                 return (
-                                  <TableHead key={col} className="whitespace-nowrap group">
+                                  <TableHead key={columnInfo.name} className="whitespace-nowrap group">
                                     <div className="flex items-center justify-between gap-2">
                                       <div className="flex flex-col gap-0.5">
-                                        <span className="font-medium text-foreground">{col}</span>
-                                        {columnInfo && (
-                                          <span className="text-[10px] font-normal text-muted-foreground">
-                                            {columnInfo.dataType.toUpperCase()}
-                                          </span>
-                                        )}
+                                        <span className="font-medium text-foreground">{columnInfo.name}</span>
+                                        <span className="text-[10px] font-normal text-muted-foreground">
+                                          {columnInfo.dataType.toUpperCase()}
+                                        </span>
                                       </div>
                                       <Button
                                         variant="ghost"
@@ -473,9 +613,9 @@ export function TableInspector({
                                         className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          copyColumnValues(col);
+                                          copyColumnValues(columnInfo.name);
                                         }}
-                                        title={`Copy column "${col}"`}
+                                        title={`Copy column "${columnInfo.name}"`}
                                       >
                                         <Copy className="h-3 w-3" />
                                       </Button>
@@ -486,14 +626,86 @@ export function TableInspector({
                             </TableRow>
                           </TableHeader>
                           <TableBody>
+                            {/* Render new rows first */}
+                            {Array.from(editor.newRows.values()).map((newRow) => {
+                              const newRowIndex = newRow.tempId; // negative number
+                              const isSelected = editor.selectedRows.has(newRowIndex);
+                              return (
+                                <TableRow
+                                  key={`new-${newRowIndex}`}
+                                  className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''} bg-green-500/10 border-l-2 border-l-green-500`}
+                                  title="New row (not yet committed)"
+                                >
+                                  <TableCell className="w-12 text-center">
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onCheckedChange={() => editor.toggleRowSelection(newRowIndex)}
+                                      aria-label={`Select new row`}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <Plus className="h-3 w-3 text-green-600" />
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 w-5 p-0 opacity-100 hover:bg-destructive/20"
+                                        onClick={() => {
+                                          editor.removeNewRow(newRowIndex);
+                                          toast.info('New row removed');
+                                        }}
+                                        title="Remove new row"
+                                      >
+                                        <X className="h-3 w-3 text-destructive" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                  {(tableSchema?.columns || []).map((columnInfo, cellIndex) => {
+                                    const isEditing = editor.editingCell?.rowIndex === newRowIndex &&
+                                                     editor.editingCell?.columnIndex === cellIndex;
+                                    const cellValue = newRow.values.get(columnInfo.name);
+
+                                    return (
+                                      <TableCell key={cellIndex} className="p-0">
+                                        <EditableCell
+                                          value={cellValue}
+                                          rowIndex={newRowIndex}
+                                          columnName={columnInfo.name}
+                                          columnIndex={cellIndex}
+                                          isEditing={isEditing}
+                                          isModified={false}
+                                          dataType={columnInfo.dataType}
+                                          nullable={columnInfo.nullable}
+                                          onStartEdit={editor.startEdit}
+                                          onChange={editor.applyChange}
+                                          onCancelEdit={editor.cancelEdit}
+                                        />
+                                      </TableCell>
+                                    );
+                                  })}
+                                </TableRow>
+                              );
+                            })}
+
+                            {/* Render existing rows */}
                             {sampleData.rows.map((row, rowIndex) => {
                               const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
+                              const isSelected = editor.selectedRows.has(rowIndex);
                               return (
                                 <TableRow
                                   key={rowIndex}
-                                  className="hover:bg-muted/50 group"
+                                  className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
                                   title="Double-click to view row details"
                                 >
+                                  {editMode && (
+                                    <TableCell className="w-12 text-center">
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
+                                        aria-label={`Select row ${absoluteRowNumber}`}
+                                      />
+                                    </TableCell>
+                                  )}
                                   <TableCell
                                     className="w-12 text-center text-xs text-muted-foreground font-mono"
                                     onDoubleClick={!editMode ? () => {
@@ -560,7 +772,7 @@ export function TableInspector({
                         <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
                         <Panel defaultSize={35} minSize={25} maxSize={60}>
                           <RowJsonViewer
-                            columns={sampleData.columns}
+                            columns={sampleData.columns.length > 0 ? sampleData.columns : tableSchema?.columns.map(c => c.name) || []}
                             row={selectedRow}
                             onClose={() => {
                               setShowRowViewer(false);
@@ -575,19 +787,29 @@ export function TableInspector({
                   <Table>
                       <TableHeader className="sticky top-0 bg-background border-b z-10">
                         <TableRow>
+                          <TableHead className="w-12 text-center">
+                            <Checkbox
+                              checked={editor.selectedRows.size > 0 && editor.selectedRows.size === sampleData.rows.length + editor.newRows.size}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  editor.selectAll();
+                                } else {
+                                  editor.clearSelection();
+                                }
+                              }}
+                              aria-label="Select all rows"
+                            />
+                          </TableHead>
                           <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
-                          {sampleData.columns.map((col) => {
-                            const columnInfo = tableSchema?.columns.find(c => c.name === col);
+                          {(tableSchema?.columns || []).map((columnInfo) => {
                             return (
-                              <TableHead key={col} className="whitespace-nowrap group">
+                              <TableHead key={columnInfo.name} className="whitespace-nowrap group">
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex flex-col gap-0.5">
-                                    <span className="font-medium text-foreground">{col}</span>
-                                    {columnInfo && (
-                                      <span className="text-[10px] font-normal text-muted-foreground">
-                                        {columnInfo.dataType.toUpperCase()}
-                                      </span>
-                                    )}
+                                    <span className="font-medium text-foreground">{columnInfo.name}</span>
+                                    <span className="text-[10px] font-normal text-muted-foreground">
+                                      {columnInfo.dataType.toUpperCase()}
+                                    </span>
                                   </div>
                                   <Button
                                     variant="ghost"
@@ -595,9 +817,9 @@ export function TableInspector({
                                     className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      copyColumnValues(col);
+                                      copyColumnValues(columnInfo.name);
                                     }}
-                                    title={`Copy column "${col}"`}
+                                    title={`Copy column "${columnInfo.name}"`}
                                   >
                                     <Copy className="h-3 w-3" />
                                   </Button>
@@ -608,14 +830,84 @@ export function TableInspector({
                         </TableRow>
                       </TableHeader>
                       <TableBody>
+                        {/* Render new rows first */}
+                        {Array.from(editor.newRows.values()).map((newRow) => {
+                          const newRowIndex = newRow.tempId; // negative number
+                          const isSelected = editor.selectedRows.has(newRowIndex);
+                          return (
+                            <TableRow
+                              key={`new-${newRowIndex}`}
+                              className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''} bg-green-500/10 border-l-2 border-l-green-500`}
+                              title="New row (not yet committed)"
+                            >
+                              <TableCell className="w-12 text-center">
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={() => editor.toggleRowSelection(newRowIndex)}
+                                  aria-label={`Select new row`}
+                                />
+                              </TableCell>
+                              <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
+                                <div className="flex items-center justify-center gap-1">
+                                  <Plus className="h-3 w-3 text-green-600" />
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-5 w-5 p-0 opacity-100 hover:bg-destructive/20"
+                                    onClick={() => {
+                                      editor.removeNewRow(newRowIndex);
+                                      toast.info('New row removed');
+                                    }}
+                                    title="Remove new row"
+                                  >
+                                    <X className="h-3 w-3 text-destructive" />
+                                  </Button>
+                                </div>
+                              </TableCell>
+                              {(tableSchema?.columns || []).map((columnInfo, cellIndex) => {
+                                const isEditing = editor.editingCell?.rowIndex === newRowIndex &&
+                                                 editor.editingCell?.columnIndex === cellIndex;
+                                const cellValue = newRow.values.get(columnInfo.name);
+
+                                return (
+                                  <TableCell key={cellIndex} className="p-0">
+                                    <EditableCell
+                                      value={cellValue}
+                                      rowIndex={newRowIndex}
+                                      columnName={columnInfo.name}
+                                      columnIndex={cellIndex}
+                                      isEditing={isEditing}
+                                      isModified={false}
+                                      dataType={columnInfo.dataType}
+                                      nullable={columnInfo.nullable}
+                                      onStartEdit={editor.startEdit}
+                                      onChange={editor.applyChange}
+                                      onCancelEdit={editor.cancelEdit}
+                                    />
+                                  </TableCell>
+                                );
+                              })}
+                            </TableRow>
+                          );
+                        })}
+
+                        {/* Render existing rows */}
                         {sampleData.rows.map((row, rowIndex) => {
                           const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
+                          const isSelected = editor.selectedRows.has(rowIndex);
                           return (
                             <TableRow
                               key={rowIndex}
-                              className="hover:bg-muted/50 group"
+                              className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
                               title="Double-click to view row details"
                             >
+                              <TableCell className="w-12 text-center">
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
+                                  aria-label={`Select row ${absoluteRowNumber}`}
+                                />
+                              </TableCell>
                               <TableCell
                                 className="w-12 text-center text-xs text-muted-foreground font-mono"
                                 onDoubleClick={!editMode ? () => {
@@ -733,12 +1025,25 @@ export function TableInspector({
                     <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
                     <Panel defaultSize={30} minSize={20} maxSize={50}>
                       <TransactionPreview
-                        statements={editor.getTotalChanges() > 0 ? editor.generateUpdateStatements(schema, tableName, quoteIdentifier) : []}
+                        statements={(() => {
+                          const statements: string[] = [];
+                          // Add INSERT statements for new rows
+                          if (editor.newRows.size > 0) {
+                            statements.push(...editor.generateInsertStatements(schema, tableName, quoteIdentifier));
+                          }
+                          // Add UPDATE statements for modified cells
+                          if (editor.getTotalChanges() > 0) {
+                            statements.push(...editor.generateUpdateStatements(schema, tableName, quoteIdentifier));
+                          }
+                          return statements;
+                        })()}
                         isExecuting={isCommitting}
                         onCommit={handleCommit}
                         onDiscard={handleDiscard}
                         onClose={() => setShowTransactionPreview(false)}
                         error={commitError}
+                        totalChanges={editor.getTotalChanges() + editor.newRows.size}
+                        modifiedRows={editor.changes.size + editor.newRows.size}
                       />
                     </Panel>
                   </PanelGroup>
@@ -752,18 +1057,15 @@ export function TableInspector({
                               <TableHeader className="sticky top-0 bg-background border-b z-10">
                                 <TableRow>
                                   <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
-                                  {sampleData.columns.map((col) => {
-                                    const columnInfo = tableSchema?.columns.find(c => c.name === col);
+                                  {(tableSchema?.columns || []).map((columnInfo) => {
                                     return (
-                                      <TableHead key={col} className="whitespace-nowrap group">
+                                      <TableHead key={columnInfo.name} className="whitespace-nowrap group">
                                         <div className="flex items-center justify-between gap-2">
                                           <div className="flex flex-col gap-0.5">
-                                            <span className="font-medium text-foreground">{col}</span>
-                                            {columnInfo && (
-                                              <span className="text-[10px] font-normal text-muted-foreground">
-                                                {columnInfo.dataType.toUpperCase()}
-                                              </span>
-                                            )}
+                                            <span className="font-medium text-foreground">{columnInfo.name}</span>
+                                            <span className="text-[10px] font-normal text-muted-foreground">
+                                              {columnInfo.dataType.toUpperCase()}
+                                            </span>
                                           </div>
                                           <Button
                                             variant="ghost"
@@ -771,9 +1073,9 @@ export function TableInspector({
                                             className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                             onClick={(e) => {
                                               e.stopPropagation();
-                                              copyColumnValues(col);
+                                              copyColumnValues(columnInfo.name);
                                             }}
-                                            title={`Copy column "${col}"`}
+                                            title={`Copy column "${columnInfo.name}"`}
                                           >
                                             <Copy className="h-3 w-3" />
                                           </Button>
@@ -883,19 +1185,31 @@ export function TableInspector({
                         <Table>
                           <TableHeader className="sticky top-0 bg-background border-b z-10">
                             <TableRow>
+                              {editMode && (
+                                <TableHead className="w-12 text-center">
+                                  <Checkbox
+                                    checked={editor.selectedRows.size === sampleData.rows.length && sampleData.rows.length > 0}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        editor.selectAll();
+                                      } else {
+                                        editor.clearSelection();
+                                      }
+                                    }}
+                                    aria-label="Select all rows"
+                                  />
+                                </TableHead>
+                              )}
                               <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
-                              {sampleData.columns.map((col) => {
-                                const columnInfo = tableSchema?.columns.find(c => c.name === col);
+                              {(tableSchema?.columns || []).map((columnInfo) => {
                                 return (
-                                  <TableHead key={col} className="whitespace-nowrap group">
+                                  <TableHead key={columnInfo.name} className="whitespace-nowrap group">
                                     <div className="flex items-center justify-between gap-2">
                                       <div className="flex flex-col gap-0.5">
-                                        <span className="font-medium text-foreground">{col}</span>
-                                        {columnInfo && (
-                                          <span className="text-[10px] font-normal text-muted-foreground">
-                                            {columnInfo.dataType.toUpperCase()}
-                                          </span>
-                                        )}
+                                        <span className="font-medium text-foreground">{columnInfo.name}</span>
+                                        <span className="text-[10px] font-normal text-muted-foreground">
+                                          {columnInfo.dataType.toUpperCase()}
+                                        </span>
                                       </div>
                                       <Button
                                         variant="ghost"
@@ -903,9 +1217,9 @@ export function TableInspector({
                                         className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                                         onClick={(e) => {
                                           e.stopPropagation();
-                                          copyColumnValues(col);
+                                          copyColumnValues(columnInfo.name);
                                         }}
-                                        title={`Copy column "${col}"`}
+                                        title={`Copy column "${columnInfo.name}"`}
                                       >
                                         <Copy className="h-3 w-3" />
                                       </Button>
@@ -916,14 +1230,86 @@ export function TableInspector({
                             </TableRow>
                           </TableHeader>
                           <TableBody>
+                            {/* Render new rows first */}
+                            {Array.from(editor.newRows.values()).map((newRow) => {
+                              const newRowIndex = newRow.tempId; // negative number
+                              const isSelected = editor.selectedRows.has(newRowIndex);
+                              return (
+                                <TableRow
+                                  key={`new-${newRowIndex}`}
+                                  className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''} bg-green-500/10 border-l-2 border-l-green-500`}
+                                  title="New row (not yet committed)"
+                                >
+                                  <TableCell className="w-12 text-center">
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onCheckedChange={() => editor.toggleRowSelection(newRowIndex)}
+                                      aria-label={`Select new row`}
+                                    />
+                                  </TableCell>
+                                  <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
+                                    <div className="flex items-center justify-center gap-1">
+                                      <Plus className="h-3 w-3 text-green-600" />
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-5 w-5 p-0 opacity-100 hover:bg-destructive/20"
+                                        onClick={() => {
+                                          editor.removeNewRow(newRowIndex);
+                                          toast.info('New row removed');
+                                        }}
+                                        title="Remove new row"
+                                      >
+                                        <X className="h-3 w-3 text-destructive" />
+                                      </Button>
+                                    </div>
+                                  </TableCell>
+                                  {(tableSchema?.columns || []).map((columnInfo, cellIndex) => {
+                                    const isEditing = editor.editingCell?.rowIndex === newRowIndex &&
+                                                     editor.editingCell?.columnIndex === cellIndex;
+                                    const cellValue = newRow.values.get(columnInfo.name);
+
+                                    return (
+                                      <TableCell key={cellIndex} className="p-0">
+                                        <EditableCell
+                                          value={cellValue}
+                                          rowIndex={newRowIndex}
+                                          columnName={columnInfo.name}
+                                          columnIndex={cellIndex}
+                                          isEditing={isEditing}
+                                          isModified={false}
+                                          dataType={columnInfo.dataType}
+                                          nullable={columnInfo.nullable}
+                                          onStartEdit={editor.startEdit}
+                                          onChange={editor.applyChange}
+                                          onCancelEdit={editor.cancelEdit}
+                                        />
+                                      </TableCell>
+                                    );
+                                  })}
+                                </TableRow>
+                              );
+                            })}
+
+                            {/* Render existing rows */}
                             {sampleData.rows.map((row, rowIndex) => {
                               const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
+                              const isSelected = editor.selectedRows.has(rowIndex);
                               return (
                                 <TableRow
                                   key={rowIndex}
-                                  className="hover:bg-muted/50 group"
+                                  className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
                                   title="Double-click to view row details"
                                 >
+                                  {editMode && (
+                                    <TableCell className="w-12 text-center">
+                                      <Checkbox
+                                        checked={isSelected}
+                                        onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
+                                        aria-label={`Select row ${absoluteRowNumber}`}
+                                      />
+                                    </TableCell>
+                                  )}
                                   <TableCell
                                     className="w-12 text-center text-xs text-muted-foreground font-mono"
                                     onDoubleClick={!editMode ? () => {
@@ -1188,6 +1574,28 @@ export function TableInspector({
           </ScrollArea>
         </TabsContent>
       </Tabs>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {editor.selectedRows.size} {editor.selectedRows.size === 1 ? 'Row' : 'Rows'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the selected {editor.selectedRows.size === 1 ? 'row' : 'rows'} from the table.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? 'Deleting...' : 'Delete'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -215,16 +215,24 @@ impl DatabaseDriver for PostgresDriver {
         // Try to execute as a query first (for SELECT statements)
         match self.client.query(sql, &[]).await {
             Ok(rows) => {
-                if rows.is_empty() {
-                    return Ok(QueryResult::empty());
-                }
-
-                // Extract column names
-                let columns: Vec<String> = rows[0]
-                    .columns()
-                    .iter()
-                    .map(|col| col.name().to_string())
-                    .collect();
+                // Extract column names from the statement, even if there are no rows
+                let columns: Vec<String> = if rows.is_empty() {
+                    // For empty result sets, we need to execute the query to get column metadata
+                    match self.client.prepare(sql).await {
+                        Ok(statement) => statement
+                            .columns()
+                            .iter()
+                            .map(|col| col.name().to_string())
+                            .collect(),
+                        Err(_) => vec![], // If preparation fails, return empty columns
+                    }
+                } else {
+                    rows[0]
+                        .columns()
+                        .iter()
+                        .map(|col| col.name().to_string())
+                        .collect()
+                };
 
                 // Convert rows to JSON
                 let data: Vec<Vec<serde_json::Value>> =
@@ -341,7 +349,7 @@ impl DatabaseDriver for PostgresDriver {
             .await
             .map_err(|e| DbError::QueryError(format!("Failed to fetch tables: {}", e)))?;
 
-        let tables: Vec<TableInfo> = rows
+        let mut tables: Vec<TableInfo> = rows
             .iter()
             .map(|row| {
                 let table_schema: String = row.get(0);
@@ -356,6 +364,17 @@ impl DatabaseDriver for PostgresDriver {
                 }
             })
             .collect();
+
+        // Fetch row counts for tables (not views) using pg_class.reltuples
+        for table in tables.iter_mut() {
+            if table.table_type == "TABLE" {
+                let count_query = "SELECT reltuples::bigint FROM pg_class WHERE relname = $1 AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)";
+
+                if let Ok(row) = self.client.query_one(count_query, &[&table.name, &schema]).await {
+                    table.row_count = row.get::<_, Option<i64>>(0).map(|v| v.max(0) as u64);
+                }
+            }
+        }
 
         Ok(tables)
     }
@@ -400,12 +419,20 @@ impl DatabaseDriver for PostgresDriver {
                 let default_value: Option<String> = row.get(3);
                 let is_primary_key: bool = row.get(4);
 
+                // Check if column is auto-increment (serial types or nextval in default)
+                let is_auto_increment = data_type.to_lowercase().contains("serial")
+                    || default_value
+                        .as_ref()
+                        .map(|dv| dv.to_lowercase().contains("nextval"))
+                        .unwrap_or(false);
+
                 ColumnInfo {
                     name,
                     data_type,
                     nullable,
                     default_value,
                     is_primary_key,
+                    is_auto_increment,
                 }
             })
             .collect();

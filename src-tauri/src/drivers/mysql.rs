@@ -161,7 +161,7 @@ impl DatabaseDriver for MysqlDriver {
         let column_query = format!(
             "SELECT
                 COLUMN_NAME,
-                DATA_TYPE,
+                COLUMN_TYPE,
                 IS_NULLABLE,
                 COLUMN_DEFAULT,
                 COLUMN_KEY,
@@ -180,12 +180,13 @@ impl DatabaseDriver for MysqlDriver {
         let columns: Vec<ColumnInfo> = column_rows
             .into_iter()
             .map(
-                |(name, data_type, is_nullable, default_value, column_key, _extra)| ColumnInfo {
+                |(name, column_type, is_nullable, default_value, column_key, extra)| ColumnInfo {
                     name,
-                    data_type,
+                    data_type: column_type,
                     nullable: is_nullable == "YES",
                     default_value,
                     is_primary_key: column_key == "PRI",
+                    is_auto_increment: extra.to_lowercase().contains("auto_increment"),
                 },
             )
             .collect();
