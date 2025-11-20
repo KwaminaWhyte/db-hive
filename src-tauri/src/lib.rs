@@ -1,5 +1,6 @@
 // Module declarations
 mod commands;
+mod credentials;
 mod drivers;
 mod models;
 mod ssh;

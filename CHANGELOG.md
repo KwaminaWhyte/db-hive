@@ -8,6 +8,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **OS Keyring Credential Encryption (Critical Security Fix)**:
+  - Passwords now stored securely in OS-native credential storage
+  - macOS: Keychain integration
+  - Windows: Credential Manager integration
+  - Linux: Secret Service API (libsecret) integration
+  - Service name: "com.dbhive.app"
+  - Automatic migration from plaintext storage to keyring
+  - Fallback mechanism for backward compatibility during migration
+  - Full credential lifecycle: save, retrieve, delete, and check existence
+
 - **Add Row Functionality**:
   - "Add Row" button in table toolbar (visible only in edit mode)
   - New rows rendered at top of table with green visual indicator
@@ -54,6 +64,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - discardChanges() now clears both cell edits and new rows
 
 ### Technical Details
+
+#### Security Implementation
+- **Credential Manager Module** (`src-tauri/src/credentials/mod.rs`):
+  - New `CredentialManager` struct with static methods for keyring operations
+  - `save_password()`: Stores password in OS keyring using connection_id as key
+  - `get_password()`: Retrieves password from OS keyring, returns `Option<String>`
+  - `delete_password()`: Removes password from OS keyring, idempotent operation
+  - `has_password()`: Checks if password exists in keyring
+  - Uses `keyring` crate v3.6 for cross-platform compatibility
+  - Proper error handling with `DbError::CredentialError` variant
+
+- **Updated Connection Commands** (`src-tauri/src/commands/connection.rs`):
+  - `get_saved_password()`: Now checks keyring first, falls back to in-memory store for migration
+  - `save_password()`: Saves to keyring and removes from plaintext store automatically
+  - `delete_connection_profile()`: Deletes password from keyring when profile is removed
+  - Seamless migration path from plaintext to encrypted storage
+
+- **Error Handling** (`src-tauri/src/models/error.rs`):
+  - Added `CredentialError(String)` variant to `DbError` enum
+  - Serializes as `"credential"` kind for frontend error handling
+  - Comprehensive error messages for keyring operations
 
 #### Type System Changes
 - Added `isAutoIncrement: boolean` field to `ColumnInfo` interface (`src/types/database.ts`)
@@ -516,8 +547,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - No ER diagram generator
 
 ### Security Notes
-- Passwords currently stored in plaintext in persistent store (temporary solution)
-- Future releases will use OS keyring for secure password storage
+- **Passwords now stored securely in OS-native keyring** (as of Unreleased version)
+- Automatic migration from plaintext to encrypted storage on password save
 - All user input is validated before SQL execution
 - No SQL injection vulnerabilities detected
 
