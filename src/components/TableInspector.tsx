@@ -145,26 +145,42 @@ export function TableInspector({
       // Calculate offset based on current page
       const offset = (currentPage - 1) * pageSize;
 
-      // Fetch total row count if not already fetched
-      if (totalRows === null) {
-        try {
-          const countResult = await invoke<QueryExecutionResult>("execute_query", {
-            connectionId,
-            sql: `SELECT COUNT(*) FROM ${quoteIdentifier(schema)}.${quoteIdentifier(tableName)}`,
-          });
-          const count = countResult.rows[0]?.[0];
-          setTotalRows(typeof count === 'number' ? count : parseInt(String(count)) || 0);
-        } catch (err) {
-          console.error("Failed to fetch row count:", err);
-          // Continue without total count
+      let result: QueryExecutionResult;
+
+      if (driverType === 'MongoDb') {
+        // MongoDB uses different query syntax
+        // Collection name is the tableName
+        result = await invoke<QueryExecutionResult>("execute_query", {
+          connectionId,
+          sql: `db.${tableName}.find({})`,
+        });
+        // Note: MongoDB pagination will be added when we support .limit() and .skip()
+        // For now, return all documents (up to driver's internal limit)
+        setTotalRows(null);
+      } else {
+        // SQL databases
+        // Fetch total row count if not already fetched
+        if (totalRows === null) {
+          try {
+            const countResult = await invoke<QueryExecutionResult>("execute_query", {
+              connectionId,
+              sql: `SELECT COUNT(*) FROM ${quoteIdentifier(schema)}.${quoteIdentifier(tableName)}`,
+            });
+            const count = countResult.rows[0]?.[0];
+            setTotalRows(typeof count === 'number' ? count : parseInt(String(count)) || 0);
+          } catch (err) {
+            console.error("Failed to fetch row count:", err);
+            // Continue without total count
+          }
         }
+
+        // Fetch paginated data
+        result = await invoke<QueryExecutionResult>("execute_query", {
+          connectionId,
+          sql: `SELECT * FROM ${quoteIdentifier(schema)}.${quoteIdentifier(tableName)} LIMIT ${pageSize} OFFSET ${offset}`,
+        });
       }
 
-      // Fetch paginated data
-      const result = await invoke<QueryExecutionResult>("execute_query", {
-        connectionId,
-        sql: `SELECT * FROM ${quoteIdentifier(schema)}.${quoteIdentifier(tableName)} LIMIT ${pageSize} OFFSET ${offset}`,
-      });
       setSampleData(result);
     } catch (err) {
       const errorMessage =

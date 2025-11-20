@@ -499,9 +499,13 @@ pub async fn switch_database(
             let driver = MysqlDriver::connect(opts).await?;
             Arc::new(driver)
         }
+        DbDriver::MongoDb => {
+            let driver = MongoDbDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
         _ => {
             return Err(DbError::InternalError(
-                "Database switching only supported for PostgreSQL, MySQL, and SQLite currently".to_string(),
+                "Database switching only supported for PostgreSQL, MySQL, SQLite, and MongoDB currently".to_string(),
             ))
         }
     };
