@@ -414,8 +414,8 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Next Priorities:**
 - Complete SSH tunnel UI integration
-- Query plan visualizer (PostgreSQL EXPLAIN)
 - Connection wizard & dashboard (Phase 3)
+- Advanced query features (parameterized queries, query templates)
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns
