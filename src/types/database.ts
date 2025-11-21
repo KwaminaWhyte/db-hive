@@ -282,6 +282,41 @@ export interface IndexInfo {
 }
 
 /**
+ * Foreign key information
+ *
+ * Represents a foreign key constraint that references another table.
+ * This is used for ER diagrams and understanding table relationships.
+ */
+export interface ForeignKeyInfo {
+  /** Foreign key constraint name */
+  name: string;
+
+  /** Table that contains this foreign key */
+  table: string;
+
+  /** Schema of the table that contains this foreign key */
+  schema: string;
+
+  /** Columns in this table that make up the foreign key */
+  columns: string[];
+
+  /** Referenced table name */
+  referencedTable: string;
+
+  /** Schema of the referenced table */
+  referencedSchema: string;
+
+  /** Columns in the referenced table */
+  referencedColumns: string[];
+
+  /** ON DELETE action (CASCADE, SET NULL, RESTRICT, NO ACTION, etc.) */
+  onDelete?: string | null;
+
+  /** ON UPDATE action (CASCADE, SET NULL, RESTRICT, NO ACTION, etc.) */
+  onUpdate?: string | null;
+}
+
+/**
  * Complete table schema
  *
  * Contains all metadata about a table

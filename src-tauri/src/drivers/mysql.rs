@@ -4,7 +4,7 @@ use mysql_async::{Conn, OptsBuilder, Pool};
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
-use crate::models::{DbError, ColumnInfo, DatabaseInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema};
+use crate::models::{DbError, ColumnInfo, DatabaseInfo, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema};
 use crate::drivers::{ConnectionOptions, DatabaseDriver, QueryResult};
 
 pub struct MysqlDriver {
@@ -248,6 +248,89 @@ impl DatabaseDriver for MysqlDriver {
             columns,
             indexes,
         })
+    }
+
+    async fn get_foreign_keys(&self, schema: &str) -> Result<Vec<ForeignKeyInfo>, DbError> {
+        let query = r#"
+            SELECT
+                kcu.CONSTRAINT_NAME as name,
+                kcu.TABLE_NAME as `table`,
+                kcu.TABLE_SCHEMA as `schema`,
+                kcu.COLUMN_NAME as column_name,
+                kcu.REFERENCED_TABLE_NAME as referenced_table,
+                kcu.REFERENCED_TABLE_SCHEMA as referenced_schema,
+                kcu.REFERENCED_COLUMN_NAME as referenced_column,
+                rc.UPDATE_RULE as on_update,
+                rc.DELETE_RULE as on_delete
+            FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
+            JOIN INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS rc
+                ON kcu.CONSTRAINT_NAME = rc.CONSTRAINT_NAME
+                AND kcu.TABLE_SCHEMA = rc.CONSTRAINT_SCHEMA
+            WHERE kcu.REFERENCED_TABLE_NAME IS NOT NULL
+                AND kcu.TABLE_SCHEMA = ?
+            ORDER BY kcu.TABLE_NAME, kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION
+        "#;
+
+        let mut conn = self
+            .pool
+            .get_conn()
+            .await
+            .map_err(|e| DbError::ConnectionError(format!("Failed to get connection: {}", e)))?;
+
+        let rows: Vec<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+        )> = conn
+            .exec(query, (schema,))
+            .await
+            .map_err(|e| DbError::QueryError(format!("Failed to fetch foreign keys: {}", e)))?;
+
+        // Group foreign keys by constraint name (for composite foreign keys)
+        use std::collections::HashMap;
+        let mut fk_map: HashMap<String, (ForeignKeyInfo, Vec<String>, Vec<String>)> =
+            HashMap::new();
+
+        for (fk_name, table, schema, column, ref_table, ref_schema, ref_column, on_update, on_delete) in rows {
+            fk_map
+                .entry(fk_name.clone())
+                .and_modify(|(_, cols, ref_cols)| {
+                    cols.push(column.clone());
+                    ref_cols.push(ref_column.clone());
+                })
+                .or_insert_with(|| {
+                    let fk = ForeignKeyInfo {
+                        name: fk_name,
+                        table,
+                        schema,
+                        columns: vec![],
+                        referenced_table: ref_table,
+                        referenced_schema: ref_schema,
+                        referenced_columns: vec![],
+                        on_delete: Some(on_delete),
+                        on_update: Some(on_update),
+                    };
+                    (fk, vec![column], vec![ref_column])
+                });
+        }
+
+        // Convert HashMap to Vec, filling in the columns
+        let foreign_keys: Vec<ForeignKeyInfo> = fk_map
+            .into_iter()
+            .map(|(_, (mut fk, cols, ref_cols))| {
+                fk.columns = cols;
+                fk.referenced_columns = ref_cols;
+                fk
+            })
+            .collect();
+
+        Ok(foreign_keys)
     }
 
     async fn close(&self) -> Result<(), DbError> {

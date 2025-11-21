@@ -8,7 +8,7 @@ use tokio_postgres::{Client, NoTls};
 
 use super::{ConnectionOptions, DatabaseDriver, QueryResult};
 use crate::models::{
-    ColumnInfo, DatabaseInfo, DbError, IndexInfo, SchemaInfo, TableInfo, TableSchema,
+    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
 
 /// PostgreSQL database driver
@@ -497,6 +497,90 @@ impl DatabaseDriver for PostgresDriver {
             columns,
             indexes,
         })
+    }
+
+    async fn get_foreign_keys(&self, schema: &str) -> Result<Vec<ForeignKeyInfo>, DbError> {
+        let query = r#"
+            SELECT
+                tc.constraint_name as name,
+                tc.table_name as table,
+                tc.table_schema as schema,
+                kcu.column_name,
+                ccu.table_name AS referenced_table,
+                ccu.table_schema AS referenced_schema,
+                ccu.column_name AS referenced_column,
+                rc.update_rule as on_update,
+                rc.delete_rule as on_delete
+            FROM information_schema.table_constraints AS tc
+            JOIN information_schema.key_column_usage AS kcu
+                ON tc.constraint_name = kcu.constraint_name
+                AND tc.table_schema = kcu.table_schema
+            JOIN information_schema.constraint_column_usage AS ccu
+                ON ccu.constraint_name = tc.constraint_name
+                AND ccu.table_schema = tc.table_schema
+            JOIN information_schema.referential_constraints AS rc
+                ON tc.constraint_name = rc.constraint_name
+                AND tc.table_schema = rc.constraint_schema
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+                AND tc.table_schema = $1
+            ORDER BY tc.table_name, tc.constraint_name, kcu.ordinal_position
+        "#;
+
+        let rows = self
+            .client
+            .query(query, &[&schema])
+            .await
+            .map_err(|e| DbError::QueryError(format!("Failed to fetch foreign keys: {}", e)))?;
+
+        // Group foreign keys by constraint name (for composite foreign keys)
+        use std::collections::HashMap;
+        let mut fk_map: HashMap<String, (ForeignKeyInfo, Vec<String>, Vec<String>)> =
+            HashMap::new();
+
+        for row in rows {
+            let fk_name: String = row.get("name");
+            let table: String = row.get("table");
+            let schema: String = row.get("schema");
+            let column: String = row.get("column_name");
+            let ref_table: String = row.get("referenced_table");
+            let ref_schema: String = row.get("referenced_schema");
+            let ref_column: String = row.get("referenced_column");
+            let on_update: Option<String> = row.get("on_update");
+            let on_delete: Option<String> = row.get("on_delete");
+
+            fk_map
+                .entry(fk_name.clone())
+                .and_modify(|(_, cols, ref_cols)| {
+                    cols.push(column.clone());
+                    ref_cols.push(ref_column.clone());
+                })
+                .or_insert_with(|| {
+                    let fk = ForeignKeyInfo {
+                        name: fk_name,
+                        table,
+                        schema,
+                        columns: vec![],
+                        referenced_table: ref_table,
+                        referenced_schema: ref_schema,
+                        referenced_columns: vec![],
+                        on_delete,
+                        on_update,
+                    };
+                    (fk, vec![column], vec![ref_column])
+                });
+        }
+
+        // Convert HashMap to Vec, filling in the columns
+        let foreign_keys: Vec<ForeignKeyInfo> = fk_map
+            .into_iter()
+            .map(|(_, (mut fk, cols, ref_cols))| {
+                fk.columns = cols;
+                fk.referenced_columns = ref_cols;
+                fk
+            })
+            .collect();
+
+        Ok(foreign_keys)
     }
 
     async fn close(&self) -> Result<(), DbError> {

@@ -1,6 +1,6 @@
 [package]
 name = "db-hive"
-version = "0.4.0"
+version = "0.5.0-beta"
 description = "A Tauri App"
 authors = ["KwaminaWhyte"]
 edition = "2021"

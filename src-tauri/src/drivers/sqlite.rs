@@ -9,7 +9,7 @@ use std::sync::{Arc, Mutex as StdMutex};
 
 use super::{ConnectionOptions, DatabaseDriver, QueryResult};
 use crate::models::{
-    ColumnInfo, DatabaseInfo, DbError, IndexInfo, SchemaInfo, TableInfo, TableSchema,
+    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
 
 /// SQLite database driver
@@ -318,6 +318,91 @@ impl DatabaseDriver for SqliteDriver {
             columns,
             indexes,
         })
+    }
+
+    async fn get_foreign_keys(&self, schema: &str) -> Result<Vec<ForeignKeyInfo>, DbError> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| DbError::InternalError(format!("Failed to lock connection: {}", e)))?;
+
+        // Get all tables in the schema
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+            .map_err(|e| DbError::QueryError(format!("Failed to query tables: {}", e)))?;
+
+        let table_names: Result<Vec<String>, _> = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| DbError::QueryError(format!("Failed to get tables: {}", e)))?
+            .collect();
+
+        let table_names = table_names
+            .map_err(|e| DbError::QueryError(format!("Failed to read table names: {}", e)))?;
+
+        let mut foreign_keys = Vec::new();
+
+        // For each table, get its foreign keys using PRAGMA foreign_key_list
+        for table_name in table_names {
+            let mut stmt = conn
+                .prepare(&format!("PRAGMA foreign_key_list(\"{}\")", table_name))
+                .map_err(|e| DbError::QueryError(format!("Failed to prepare foreign key query: {}", e)))?;
+
+            let fk_rows: Result<Vec<(i64, i64, String, String, String, String, String)>, _> = stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, i64>(0)?,  // id (identifies this foreign key)
+                        row.get::<_, i64>(1)?,  // seq (sequence number for multi-column FKs)
+                        row.get::<_, String>(2)?, // table (referenced table)
+                        row.get::<_, String>(3)?, // from (column in this table)
+                        row.get::<_, String>(4)?, // to (column in referenced table)
+                        row.get::<_, String>(5)?, // on_update
+                        row.get::<_, String>(6)?, // on_delete
+                    ))
+                })
+                .map_err(|e| DbError::QueryError(format!("Failed to query foreign keys: {}", e)))?
+                .collect();
+
+            let fk_rows = fk_rows
+                .map_err(|e| DbError::QueryError(format!("Failed to read foreign key data: {}", e)))?;
+
+            // Group foreign keys by id (for composite foreign keys)
+            use std::collections::HashMap;
+            let mut fk_map: HashMap<i64, (String, Vec<String>, Vec<String>, String, String)> =
+                HashMap::new();
+
+            for (id, _seq, ref_table, from_col, to_col, on_update, on_delete) in fk_rows {
+                fk_map
+                    .entry(id)
+                    .and_modify(|(_, cols, ref_cols, _, _)| {
+                        cols.push(from_col.clone());
+                        ref_cols.push(to_col.clone());
+                    })
+                    .or_insert((
+                        ref_table,
+                        vec![from_col],
+                        vec![to_col],
+                        on_update,
+                        on_delete,
+                    ));
+            }
+
+            // Convert to ForeignKeyInfo structs
+            for (id, (ref_table, cols, ref_cols, on_update, on_delete)) in fk_map {
+                foreign_keys.push(ForeignKeyInfo {
+                    name: format!("{}_{}_fkey", table_name, id),
+                    table: table_name.clone(),
+                    schema: schema.to_string(),
+                    columns: cols,
+                    referenced_table: ref_table,
+                    referenced_schema: schema.to_string(), // SQLite doesn't have schemas like PostgreSQL
+                    referenced_columns: ref_cols,
+                    on_delete: Some(on_delete),
+                    on_update: Some(on_update),
+                });
+            }
+        }
+
+        Ok(foreign_keys)
     }
 
     async fn close(&self) -> Result<(), DbError> {

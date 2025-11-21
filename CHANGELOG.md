@@ -113,7 +113,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - camelCase conversion for Rust snake_case fields
       - Sonner toast integration for user notifications
 
-- **SSH Tunneling Infrastructure** (In Progress, 2025-11-20):
+- **SSH Tunneling** (Completed, 2025-11-21):
   - Complete SSH tunnel management system using russh library
   - Password and private key authentication methods
   - Automatic local port assignment for tunnel endpoints
@@ -121,7 +121,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Tunnel lifecycle management (create, close, check existence)
   - Support for OpenSSH and PEM format private keys
   - Task-based listener pattern with graceful shutdown
-  - Note: SSH handler trait implementation pending russh API investigation
+  - Frontend integration: Collapsible SSH configuration section in ConnectionForm
+  - UI components: SSH host/port/username inputs, auth method selector, password/key file pickers
+  - Automatic temporary tunnel creation for connection testing
+  - Seamless integration with test_connection_command, connect_to_database, and disconnect_from_database
+  - Fixed thread safety issues with Arc<Mutex<>> cloning pattern for async operations
+
+- **ER Diagram Generator** (Completed, 2025-11-21):
+  - Interactive entity-relationship diagram visualization
+  - Foreign key relationship mapping across all supported databases (PostgreSQL, MySQL, SQLite)
+  - Custom table nodes displaying columns, primary keys, and foreign keys
+  - Animated relationship edges showing column mappings
+  - ReactFlow integration with zoom, pan, and minimap controls
+  - Automatic grid layout with 3-column positioning
+  - SVG export functionality for diagram preservation
+  - Backend foreign key introspection:
+    - PostgreSQL: `information_schema` joins with composite FK support
+    - MySQL: `INFORMATION_SCHEMA.KEY_COLUMN_USAGE` with referential constraints
+    - SQLite: `PRAGMA foreign_key_list` per-table iteration
+    - MongoDB: Returns empty list (no foreign key support)
+  - Frontend integration: "View ER Diagram" button in SchemaExplorer
+  - Amber/honey themed design matching application aesthetic
+  - Loading and error states with retry functionality
 
 - **OS Keyring Credential Encryption (Critical Security Fix)**:
   - Passwords now stored securely in OS-native credential storage

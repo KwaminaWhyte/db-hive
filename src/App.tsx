@@ -4,6 +4,7 @@ import { ConnectionList } from "./components/ConnectionList";
 import { SchemaExplorer } from "./components/SchemaExplorer";
 import { TableInspector } from "./components/TableInspector";
 import { QueryPanel } from "./components/QueryPanel";
+import { ERDiagram } from "./components/ERDiagram";
 import { ModeToggle } from "./components/mode-toggle";
 import { WelcomeScreen } from "./components/WelcomeScreen";
 import { SettingsPage } from "./components/SettingsPage";
@@ -37,6 +38,8 @@ function App() {
   const [activeTableId, setActiveTableId] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [pendingQuery, setPendingQuery] = useState<string | null>(null);
+  const [showERDiagram, setShowERDiagram] = useState(false);
+  const [erDiagramSchema, setErDiagramSchema] = useState<string>("");
 
   // Handle successful profile save
   const handleProfileSaved = () => {
@@ -73,11 +76,25 @@ function App() {
     setActiveConnectionProfile(undefined);
     setOpenTables([]);
     setActiveTableId(null);
+    setShowERDiagram(false);
+    setErDiagramSchema("");
+  };
+
+  // Handle ER Diagram open
+  const handleOpenERDiagram = (schema: string) => {
+    setShowERDiagram(true);
+    setErDiagramSchema(schema);
+    // Close all table tabs when showing ER diagram
+    setOpenTables([]);
+    setActiveTableId(null);
   };
 
   // Handle table selection - open in new tab or switch to existing tab
   const handleTableSelect = (schema: string, tableName: string) => {
     const tableId = `${schema}.${tableName}`;
+
+    // Close ER diagram if open
+    setShowERDiagram(false);
 
     // Check if table is already open
     const existingTable = openTables.find((t) => t.id === tableId);
@@ -162,6 +179,7 @@ function App() {
             onDatabaseChange={handleDatabaseChange}
             selectedTable={activeTableId ? activeTableId.split(".")[1] : null}
             onExecuteQuery={handleExecuteGeneratedQuery}
+            onOpenERDiagram={handleOpenERDiagram}
           />
         ) : (
           <ConnectionList
@@ -176,9 +194,15 @@ function App() {
       {/* Main Content Area - Tabs */}
       <div className="flex-1 overflow-hidden">
         {activeConnectionId ? (
-          // When connected, show table tabs and table inspector
+          // When connected, show ER diagram, table tabs, or query panel
           <div className="h-full flex flex-col">
-            {openTables.length > 0 ? (
+            {showERDiagram ? (
+              // Show ER Diagram
+              <ERDiagram
+                connectionId={activeConnectionId}
+                schema={erDiagramSchema}
+              />
+            ) : openTables.length > 0 ? (
               <>
                 {/* Table Tabs */}
                 <div className="flex-1 flex flex-col overflow-hidden">

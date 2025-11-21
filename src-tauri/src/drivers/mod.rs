@@ -8,7 +8,7 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use crate::models::{
-    DatabaseInfo, DbError, SchemaInfo, TableInfo, TableSchema,
+    DatabaseInfo, DbError, ForeignKeyInfo, SchemaInfo, TableInfo, TableSchema,
 };
 
 pub mod mongodb;
@@ -195,6 +195,18 @@ pub trait DatabaseDriver: Send + Sync {
     ///
     /// Returns complete table schema including columns and indexes.
     async fn get_table_schema(&self, schema: &str, table: &str) -> Result<TableSchema, DbError>;
+
+    /// Get foreign key relationships for a schema
+    ///
+    /// # Arguments
+    ///
+    /// * `schema` - Schema name to query foreign keys from
+    ///
+    /// # Returns
+    ///
+    /// Returns a list of all foreign key constraints in the specified schema.
+    /// This is used for ER diagram generation and understanding table relationships.
+    async fn get_foreign_keys(&self, schema: &str) -> Result<Vec<ForeignKeyInfo>, DbError>;
 
     /// Close the database connection
     ///
