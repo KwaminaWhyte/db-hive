@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **SSH Tunnel UI Integration** (2025-11-21):
+  - Complete SSH tunnel configuration through the UI
+  - Separate SSH password handling from database passwords
+  - SSH passwords stored securely in OS keyring (separate from database passwords)
+  - Support for both password and private key authentication methods
+  - Automatic SSH password retrieval from keyring when connecting
+  - SSH configuration form with collapsible section in ConnectionForm
+  - Fields: SSH host, port, username, auth method, password/private key, local port
+  - SSH tunnel lifecycle management (create on connect, close on disconnect)
+  - Backend commands: `save_ssh_password`, `get_ssh_password`
+  - SSH passwords use profile_id + "-ssh" suffix for keyring storage
+  - Full integration with test connection and actual connection flows
+
 - **Custom Window Titlebar & Menu System** (2025-11-21):
   - Replaced native window decorations with custom titlebar
   - Professional window menu system with File, View, Window, and Help menus
@@ -37,6 +50,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Proper cleanup with event listener removal
 
 ### Fixed
+
+- **Custom Titlebar Event Handling** (2025-11-21):
+  - Fixed titlebar menu buttons and window controls becoming unresponsive
+  - Moved drag handler from parent div to logo and app name elements only
+  - Prevents drag events from capturing clicks intended for menu buttons
+  - Added required Tauri window control permissions to capabilities
+  - Window controls (minimize, maximize, close, drag) now work correctly
 
 - **Settings Page Navigation** (2025-11-21):
   - Settings now returns to previous route instead of always going to welcome
