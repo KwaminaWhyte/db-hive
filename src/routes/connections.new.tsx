@@ -12,7 +12,7 @@ function NewConnectionRoute() {
   const navigate = useNavigate({ from: "/connections/new" });
 
   return (
-    <>
+    <div className="flex-1 h-full relative">
       {/* Top Controls */}
       <div className="fixed top-4 left-4 z-50">
         <Button
@@ -43,6 +43,6 @@ function NewConnectionRoute() {
           onSuccess={() => navigate({ to: "/connections" })}
         />
       </div>
-    </>
+    </div>
   );
 }
