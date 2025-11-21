@@ -141,11 +141,10 @@ impl PostgresDriver {
                         .unwrap_or(serde_json::Value::Null)
                 },
                 "json" | "jsonb" => {
-                    // Get JSON as string and parse it
-                    row.try_get::<_, Option<String>>(i)
+                    // With the with-serde_json-1 feature, tokio-postgres can deserialize JSON directly
+                    row.try_get::<_, Option<serde_json::Value>>(i)
                         .ok()
                         .flatten()
-                        .and_then(|s| serde_json::from_str(&s).ok())
                         .unwrap_or(serde_json::Value::Null)
                 },
                 // For unknown types, try to get as string
