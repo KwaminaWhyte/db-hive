@@ -139,11 +139,17 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Import with transaction support & error handling
 - [x] SqlExportDialog & SqlImportDialog components
 
-### Milestone 2.6: Query Plan Visualizer
-- [ ] PostgreSQL EXPLAIN (ANALYZE, FORMAT JSON) parser
-- [ ] Visual query plan tree with cost highlighting
+### Milestone 2.6: Query Plan Visualizer ✅ COMPLETED (2025-11-21)
+- [x] PostgreSQL EXPLAIN (ANALYZE, FORMAT JSON) parser
+- [x] Visual query plan tree with cost highlighting
+- [x] QueryPlanVisualizer component with tree visualization
+- [x] Cost-based color coding (green/yellow/red)
+- [x] Detailed node metrics (costs, rows, execution time)
+- [x] Expand/collapse functionality
+- [x] Support for index scans, joins, filters
+- [x] TypeScript types for query plan structures
 
-### Milestone 2.7: ER Diagram Generator
+### Milestone 2.7: ER Diagram Generator ✅ COMPLETED
 - [x] Foreign key relationship parsing (PostgreSQL, MySQL, SQLite)
 - [x] Dagre automatic hierarchical layout with top-to-bottom flow
 - [x] ReactFlow integration with Handle components for proper connections
@@ -153,6 +159,37 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Performance optimizations: No edge animations, smart minimap coloring
 - [x] UI integration: Popover menu for actions, control panel
 - [x] Optimized spacing (180px horizontal, 250px vertical)
+
+### Milestone 2.8: Router Migration ✅ COMPLETED (2025-11-21)
+
+**TanStack Router Implementation**
+
+- [x] Migrated from React Router to TanStack Router v1.139.0
+- [x] Type-safe routing with search params validation
+- [x] File-based routing structure with 10 routes:
+  - [x] `__root.tsx` - Root layout with providers
+  - [x] `index.tsx` - Welcome screen
+  - [x] `connections.tsx` - Side-by-side connection management
+  - [x] `settings.tsx` - Settings page
+  - [x] `_connected/route.tsx` - Connected layout with schema explorer
+  - [x] `_connected/query.tsx` - Multi-tab query panel
+  - [x] `_connected/table.$schema.$tableName/route.tsx` - Table route parent
+  - [x] `_connected/table.$schema.$tableName/index.tsx` - Table redirect to tabs
+  - [x] `_connected/er-diagram.$schema.tsx` - ER diagram viewer
+  - [x] `_connected/visualization.tsx` - Visualization route
+- [x] URL-based multi-table tabs system:
+  - [x] Tab IDs: `query-{timestamp}` and `table-{schema}.{tableName}`
+  - [x] Search params: `?tabs=query-1,table-public.users&active=0`
+  - [x] Tab bar with close buttons and Plus button
+- [x] Per-tab state preservation:
+  - [x] TabContext with React Context API
+  - [x] LocalStorage persistence per connection
+  - [x] Automatic save/restore on connection change
+  - [x] SQL content preservation across tab switches
+- [x] Component rendering optimization:
+  - [x] All tabs rendered simultaneously with absolute positioning
+  - [x] CSS show/hide instead of mount/unmount
+  - [x] No content loss on tab switching
 
 ---
 
@@ -364,6 +401,10 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ Phase 0: Architecture & Setup
 - ✅ Phase 1: MVP Development (Connection management, SQL editor, schema browser, table editor)
 - ✅ Milestone 2.1-2.5: MySQL/MongoDB drivers, autocomplete, table editing, SQL import/export
+- ✅ Milestone 2.7: ER Diagram Generator (2025-11-20)
+- ✅ Milestone 2.8: Router Migration with TanStack Router (2025-11-21)
+- ✅ Settings & Configuration (2025-11-20)
+- ✅ Native Window & System Tray (2025-11-21)
 
 **In Progress:**
 - 🚧 Milestone 2.2: SSH Tunneling (infrastructure complete, UI integration pending)
@@ -371,9 +412,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 **Next Priorities:**
 - Complete SSH tunnel UI integration
 - Query plan visualizer (PostgreSQL EXPLAIN)
-- ER diagram generator
 - Connection wizard & dashboard (Phase 3)
-- Settings & Configuration ✅ COMPLETED (2025-11-20)
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns

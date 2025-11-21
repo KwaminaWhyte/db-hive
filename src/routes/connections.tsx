@@ -88,8 +88,32 @@ function ConnectionsRoute() {
             // Store connection in context
             setConnection(connectionId, profile);
 
-            // Navigate to query panel with default query tab (use timestamp for unique ID)
-            navigate({ to: "/query", search: { tabs: `query-${Date.now()}`, active: 0 } });
+            // Try to restore tabs from localStorage for this connection
+            const storageKey = `db-hive-tabs-${connectionId}`;
+            const saved = localStorage.getItem(storageKey);
+
+            let tabsParam = `query-${Date.now()}`;
+            let activeIndex = 0;
+
+            if (saved) {
+              try {
+                const parsed = JSON.parse(saved);
+                const states = parsed.states || {};
+                const tabIds = Object.keys(states);
+
+                if (tabIds.length > 0) {
+                  // Restore previous tabs
+                  tabsParam = tabIds.join(",");
+                  // Keep active index as 0 (first tab) for consistency
+                  activeIndex = 0;
+                }
+              } catch (error) {
+                console.error("Failed to restore tabs:", error);
+              }
+            }
+
+            // Navigate to query panel with restored or default tabs
+            navigate({ to: "/query", search: { tabs: tabsParam, active: activeIndex } });
           }}
         />
       </div>
