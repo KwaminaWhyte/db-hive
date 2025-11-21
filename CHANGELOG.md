@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Native Window Enhancements & System Tray** (2025-11-21):
+  - **Window Configuration**:
+    - Added minimum window dimensions (1000x700px) for better usability
+    - Window now centers on screen at startup
+    - Configured window controls (resizable, maximizable, minimizable, closable)
+    - Added explicit window behavior configuration (decorations, transparency, taskbar, always-on-top)
+
+  - **System Tray Integration**:
+    - System tray icon using application's default icon
+    - Tray menu with Show/Hide and Quit actions
+    - Click tray icon to toggle window visibility
+    - Menu opens on right-click (left-click toggles window)
+    - Window can be hidden to system tray instead of closing
+    - Quick access to application from system tray
+
+  - **Event Handling**:
+    - Left-click tray icon shows/hides window with focus management
+    - Menu events properly handle show/hide and quit actions
+    - Smooth window visibility toggling with proper focus restoration
+
+  - **Technical Implementation**:
+    - Enabled `tray-icon` feature in Tauri dependencies
+    - Implemented helper function for window visibility management
+    - Used `TrayIconBuilder` with menu and event handlers
+    - Integrated with existing application state and window management
+
 ## [0.5.0-beta] - 2025-11-21
 
 ### Fixed

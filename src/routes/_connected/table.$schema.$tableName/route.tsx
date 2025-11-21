@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Outlet } from "@tanstack/react-router";
 
 /**
  * Table Layout Route
@@ -15,6 +15,6 @@ export const Route = createFileRoute("/_connected/table/$schema/$tableName")({
   component: () => {
     // This is just a pass-through layout
     // The actual content is in the index route
-    return null;
+    return <Outlet />;
   },
 });
