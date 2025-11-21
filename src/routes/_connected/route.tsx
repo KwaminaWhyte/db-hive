@@ -47,9 +47,34 @@ function ConnectedLayout() {
   };
 
   const handleTableSelect = (schema: string, tableName: string) => {
+    // Get current tabs from query route search params
+    const tableId = `${schema}.${tableName}`;
+
+    // Navigate to query route with the table added to tabs
+    // We'll check if it's already open in the query route component
     navigate({
-      to: "/table/$schema/$tableName",
-      params: { schema, tableName },
+      to: "/query",
+      search: (prev) => {
+        const currentTabs = prev.tabs ? prev.tabs.split(",") : ["query"];
+
+        // Check if table is already open
+        const existingIndex = currentTabs.indexOf(tableId);
+
+        if (existingIndex >= 0) {
+          // Table already open, just switch to it
+          return {
+            tabs: prev.tabs || "query",
+            active: existingIndex,
+          };
+        }
+
+        // Add new table tab
+        const newTabs = [...currentTabs, tableId];
+        return {
+          tabs: newTabs.join(","),
+          active: newTabs.length - 1, // Switch to new tab
+        };
+      },
     });
   };
 

@@ -1,11 +1,10 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { TableInspector } from "@/components/TableInspector";
-import { useConnectionContext } from "@/contexts/ConnectionContext";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 /**
- * Table Inspector Route
+ * Table Inspector Route (Legacy - Redirects to Query with Tabs)
  *
- * Displays table data with pagination, filtering, and sorting.
+ * This route now redirects to the query route with multi-tab support.
+ * Direct navigation to /table/{schema}/{tableName} will open the table in a new tab.
  *
  * URL: /_connected/table/{schema}/{tableName}
  *
@@ -13,30 +12,19 @@ import { useConnectionContext } from "@/contexts/ConnectionContext";
  * - schema: string (database schema name)
  * - tableName: string (table name)
  *
- * Note: Pagination and filtering are handled internally by TableInspector component
+ * Redirects to: /query?tabs=query,{schema}.{tableName}&active=1
  */
 export const Route = createFileRoute("/_connected/table/$schema/$tableName/")({
-  component: TableInspectorRoute,
+  beforeLoad: ({ params }) => {
+    // Redirect to query route with this table in a tab
+    const tableId = `${params.schema}.${params.tableName}`;
+
+    throw redirect({
+      to: "/query",
+      search: {
+        tabs: `query,${tableId}`,
+        active: 1, // Make the table tab active
+      },
+    });
+  },
 });
-
-function TableInspectorRoute() {
-  const { schema, tableName } = Route.useParams();
-  const { connectionId, connectionProfile } = useConnectionContext();
-  const navigate = useNavigate();
-
-  const handleClose = () => {
-    navigate({ to: "/query" });
-  };
-
-  return (
-    <div className="flex-1 h-full">
-      <TableInspector
-        connectionId={connectionId!}
-        schema={schema}
-        tableName={tableName}
-        onClose={handleClose}
-        driverType={connectionProfile?.driver}
-      />
-    </div>
-  );
-}
