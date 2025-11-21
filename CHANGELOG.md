@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Per-Database Tab Persistence** (2025-11-21):
+  - Tabs now persist independently per database (not per connection)
+  - Each database maintains its own set of open tabs
+  - Switching databases automatically restores that database's tabs
+  - Tab states stored with `connectionId + currentDatabase` key in localStorage
+  - Active tabs automatically load their data on restoration
+
+- **Query Plan Visualizer Integration** (2025-11-21):
+  - Integrated QueryPlanVisualizer into QueryPanel component
+  - Automatic detection of EXPLAIN queries
+  - Toggle buttons to switch between "Results" and "Query Plan" views
+  - Automatically switches to Query Plan view when EXPLAIN succeeds
+  - Parses PostgreSQL `EXPLAIN (ANALYZE, FORMAT JSON)` output
+  - Visual tree display of query execution plan with costs and timings
+
+### Fixed
+
+- **PostgreSQL JSON/JSONB Support** (2025-11-21):
+  - Enabled `with-serde_json-1` feature in tokio-postgres
+  - PostgreSQL driver now properly deserializes JSON and JSONB column types
+  - EXPLAIN queries with FORMAT JSON now return proper JSON data (not NULL)
+  - Query Plan Visualizer can now display EXPLAIN output correctly
+
 ## [0.6.0-beta] - 2025-11-21
 
 ### Added

@@ -148,6 +148,9 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Expand/collapse functionality
 - [x] Support for index scans, joins, filters
 - [x] TypeScript types for query plan structures
+- [x] Integration into QueryPanel with toggle UI (2025-11-21)
+- [x] Automatic EXPLAIN query detection
+- [x] PostgreSQL JSON/JSONB type support in driver (2025-11-21)
 
 ### Milestone 2.7: ER Diagram Generator ✅ COMPLETED
 - [x] Foreign key relationship parsing (PostgreSQL, MySQL, SQLite)
