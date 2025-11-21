@@ -12,7 +12,7 @@ function SettingsRoute() {
   const navigate = useNavigate({ from: "/settings" });
 
   return (
-    <>
+    <div className="flex-1 h-full relative">
       {/* Back Button */}
       <div className="fixed top-4 left-4 z-50">
         <Button
@@ -31,6 +31,6 @@ function SettingsRoute() {
       </div>
 
       <SettingsPage />
-    </>
+    </div>
   );
 }

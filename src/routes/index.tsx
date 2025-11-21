@@ -12,7 +12,7 @@ function WelcomeScreenRoute() {
   const navigate = useNavigate();
 
   return (
-    <>
+    <div className="flex-1 flex h-full relative">
       {/* Top Right Controls */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         <Button
@@ -35,6 +35,6 @@ function WelcomeScreenRoute() {
           window.open("https://github.com/KwaminaWhyte/db-hive/wiki", "_blank");
         }}
       />
-    </>
+    </div>
   );
 }

@@ -18,7 +18,7 @@ function ConnectionsRoute() {
   const isExactMatch = matches[matches.length - 1]?.id === "/connections";
 
   return (
-    <>
+    <div className="flex-1 flex h-full relative">
       {/* Top Right Controls */}
       <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
         <Button
@@ -71,6 +71,6 @@ function ConnectionsRoute() {
         // Show child routes (new/edit) when navigating to them
         <Outlet />
       )}
-    </>
+    </div>
   );
 }
