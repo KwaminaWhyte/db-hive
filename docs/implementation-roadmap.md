@@ -152,7 +152,56 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Automatic EXPLAIN query detection
 - [x] PostgreSQL JSON/JSONB type support in driver (2025-11-21)
 
-### Milestone 2.7: ER Diagram Generator ✅ COMPLETED
+### Milestone 2.7: Visual Query Builder
+
+**Drag-and-Drop SQL Query Builder**
+
+- [ ] **Core Query Builder Engine:**
+  - [ ] Query builder state management (tables, columns, joins, filters, sorting)
+  - [ ] SQL generation from query builder state
+  - [ ] Support for SELECT, INSERT, UPDATE, DELETE queries
+  - [ ] Real-time SQL preview as user builds query
+
+- [ ] **Visual Query Canvas:**
+  - [ ] Table selector dropdown with schema organization
+  - [ ] Draggable table cards showing columns and types
+  - [ ] Visual join line creation (drag from column to column)
+  - [ ] Join type selector (INNER, LEFT, RIGHT, FULL OUTER)
+  - [ ] Auto-suggest joins based on foreign keys
+  - [ ] Pan and zoom canvas controls
+
+- [ ] **Column Selection & Transformation:**
+  - [ ] Multi-select columns with checkboxes
+  - [ ] Column alias input
+  - [ ] Aggregate functions (COUNT, SUM, AVG, MIN, MAX)
+  - [ ] DISTINCT toggle
+  - [ ] Column ordering (drag to reorder)
+
+- [ ] **Filter Builder:**
+  - [ ] Visual WHERE clause builder with condition groups
+  - [ ] Support for AND/OR logic operators
+  - [ ] Condition operators (=, !=, >, <, >=, <=, LIKE, IN, IS NULL)
+  - [ ] Value input with type validation
+  - [ ] Nested condition groups
+  - [ ] HAVING clause support for aggregations
+
+- [ ] **Additional Features:**
+  - [ ] GROUP BY column selection
+  - [ ] ORDER BY with ASC/DESC toggle
+  - [ ] LIMIT and OFFSET inputs
+  - [ ] Switch between Query Builder and SQL Editor modes
+  - [ ] Import SQL query to visual builder (SQL parser)
+  - [ ] Export query builder state to JSON
+  - [ ] Save query templates
+
+- [ ] **UI/UX:**
+  - [ ] Split view: Query Builder (top) + Generated SQL (bottom)
+  - [ ] "Run Query" button to execute generated SQL
+  - [ ] Syntax highlighting for generated SQL
+  - [ ] Responsive layout for different screen sizes
+  - [ ] Keyboard shortcuts for common actions
+
+### Milestone 2.8: ER Diagram Generator ✅ COMPLETED
 - [x] Foreign key relationship parsing (PostgreSQL, MySQL, SQLite)
 - [x] Dagre automatic hierarchical layout with top-to-bottom flow
 - [x] ReactFlow integration with Handle components for proper connections
@@ -163,7 +212,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] UI integration: Popover menu for actions, control panel
 - [x] Optimized spacing (180px horizontal, 250px vertical)
 
-### Milestone 2.8: Router Migration ✅ COMPLETED (2025-11-21)
+### Milestone 2.9: Router Migration ✅ COMPLETED (2025-11-21)
 
 **TanStack Router Implementation**
 

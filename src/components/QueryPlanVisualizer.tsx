@@ -12,7 +12,7 @@
  * - Execution time metrics
  */
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +35,8 @@ export function QueryPlanVisualizer({
   loading,
   error,
 }: QueryPlanVisualizerProps) {
+  const [allExpanded, setAllExpanded] = useState<boolean | null>(null);
+
   if (loading) {
     return (
       <Card className="p-6">
@@ -83,45 +85,88 @@ export function QueryPlanVisualizer({
 
   return (
     <div className="space-y-4">
-      {/* Metrics Header */}
+      {/* Metrics Header - Enhanced with cards */}
       {(planResult.planningTime || planResult.executionTime) && (
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-medium">Execution Metrics</h3>
-            <div className="flex items-center gap-4 text-sm">
-              {planResult.planningTime !== undefined && (
-                <div>
-                  <span className="text-muted-foreground">Planning:</span>{" "}
-                  <span className="font-mono font-medium">
-                    {planResult.planningTime.toFixed(3)}ms
-                  </span>
-                </div>
-              )}
-              {planResult.executionTime !== undefined && (
-                <div>
-                  <span className="text-muted-foreground">Execution:</span>{" "}
-                  <span className="font-mono font-medium">
-                    {planResult.executionTime.toFixed(3)}ms
-                  </span>
-                </div>
-              )}
-              {planResult.totalTime !== undefined && (
-                <div>
-                  <span className="text-muted-foreground">Total:</span>{" "}
-                  <span className="font-mono font-medium text-primary">
-                    {planResult.totalTime.toFixed(3)}ms
-                  </span>
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {planResult.planningTime !== undefined && (
+            <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
+              <div className="flex flex-col">
+                <span className="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wider">Planning</span>
+                <span className="text-2xl font-mono font-bold text-blue-900 dark:text-blue-100 mt-1">
+                  {planResult.planningTime.toFixed(3)}ms
+                </span>
+              </div>
+            </Card>
+          )}
+          {planResult.executionTime !== undefined && (
+            <Card className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800">
+              <div className="flex flex-col">
+                <span className="text-xs font-medium text-purple-600 dark:text-purple-400 uppercase tracking-wider">Execution</span>
+                <span className="text-2xl font-mono font-bold text-purple-900 dark:text-purple-100 mt-1">
+                  {planResult.executionTime.toFixed(3)}ms
+                </span>
+              </div>
+            </Card>
+          )}
+          {planResult.totalTime !== undefined && (
+            <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800">
+              <div className="flex flex-col">
+                <span className="text-xs font-medium text-green-600 dark:text-green-400 uppercase tracking-wider">Total Time</span>
+                <span className="text-2xl font-mono font-bold text-green-900 dark:text-green-100 mt-1">
+                  {planResult.totalTime.toFixed(3)}ms
+                </span>
+              </div>
+            </Card>
+          )}
+        </div>
       )}
 
-      {/* Plan Tree */}
+      {/* Plan Tree - Enhanced header with expand/collapse all */}
       <Card className="p-4">
-        <h3 className="text-sm font-medium mb-4">Query Plan</h3>
-        <PlanNode node={planResult.plan} depth={0} />
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-medium flex items-center gap-2">
+            <Info className="h-4 w-4 text-muted-foreground" />
+            Query Execution Plan
+          </h3>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAllExpanded(true)}
+              className="text-xs"
+            >
+              Expand All
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAllExpanded(false)}
+              className="text-xs"
+            >
+              Collapse All
+            </Button>
+          </div>
+        </div>
+        <PlanNode node={planResult.plan} depth={0} allExpanded={allExpanded} />
+      </Card>
+
+      {/* Legend */}
+      <Card className="p-4 bg-muted/30">
+        <h4 className="text-xs font-medium mb-2 text-muted-foreground uppercase tracking-wider">Cost Legend</h4>
+        <div className="flex items-center gap-4 text-xs">
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            <span>Low Cost (&lt; 10)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+            <span>Medium Cost (10-100)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+            <span>High Cost (&gt; 100)</span>
+          </div>
+        </div>
       </Card>
     </div>
   );
@@ -130,10 +175,18 @@ export function QueryPlanVisualizer({
 interface PlanNodeProps {
   node: QueryPlanNode;
   depth: number;
+  allExpanded: boolean | null;
 }
 
-function PlanNode({ node, depth }: PlanNodeProps) {
+function PlanNode({ node, depth, allExpanded }: PlanNodeProps) {
   const [expanded, setExpanded] = useState(true);
+
+  // Handle expand/collapse all
+  React.useEffect(() => {
+    if (allExpanded !== null) {
+      setExpanded(allExpanded);
+    }
+  }, [allExpanded]);
   const hasChildren = node.plans && node.plans.length > 0;
 
   // Calculate cost level for color coding
@@ -151,11 +204,17 @@ function PlanNode({ node, depth }: PlanNodeProps) {
     high: "text-red-600 dark:text-red-400",
   };
 
+  const borderColors = {
+    low: "border-l-green-500",
+    medium: "border-l-yellow-500",
+    high: "border-l-red-500",
+  };
+
   return (
     <div className="space-y-2">
       <div
-        className={`flex items-start gap-2 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors ${
-          depth === 0 ? "border-primary" : ""
+        className={`flex items-start gap-2 p-3 rounded-lg border border-l-4 bg-card hover:bg-accent/50 transition-all hover:shadow-md ${
+          depth === 0 ? "border-primary shadow-sm" : borderColors[costLevel]
         }`}
         style={{ marginLeft: `${depth * 24}px` }}
       >
@@ -269,7 +328,7 @@ function PlanNode({ node, depth }: PlanNodeProps) {
       {hasChildren && expanded && (
         <div className="space-y-2">
           {node.plans!.map((childNode, index) => (
-            <PlanNode key={index} node={childNode} depth={depth + 1} />
+            <PlanNode key={index} node={childNode} depth={depth + 1} allExpanded={allExpanded} />
           ))}
         </div>
       )}
