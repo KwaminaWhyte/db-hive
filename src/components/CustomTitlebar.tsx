@@ -94,9 +94,12 @@ export function CustomTitlebar() {
   return (
     <div className="flex items-center justify-between h-10 bg-background border-b border-border select-none">
       {/* Left: Logo and Menu */}
-      <div className="flex items-center gap-2 px-3" onMouseDown={handleDragStart}>
-        {/* App Logo - Small version */}
-        <div className="relative h-6 w-6 rounded border border-amber-300/40 bg-gradient-to-br from-amber-300/40 via-amber-400/25 to-amber-500/30">
+      <div className="flex items-center gap-2 px-3">
+        {/* App Logo - Small version with drag region */}
+        <div
+          className="relative h-6 w-6 rounded border border-amber-300/40 bg-gradient-to-br from-amber-300/40 via-amber-400/25 to-amber-500/30 cursor-move"
+          onMouseDown={handleDragStart}
+        >
           <div className="absolute inset-[15%] rounded bg-slate-950/90 dark:bg-slate-950/90 border border-amber-200/30 flex items-center justify-center">
             <div className="relative h-full w-full flex items-center justify-center">
               <div className="absolute h-[70%] w-[70%] border border-amber-300/40 rounded rotate-6"></div>
@@ -110,8 +113,13 @@ export function CustomTitlebar() {
           </div>
         </div>
 
-        {/* App Name */}
-        <span className="text-sm font-medium text-foreground">DB Hive</span>
+        {/* App Name - Also draggable */}
+        <span
+          className="text-sm font-medium text-foreground cursor-move"
+          onMouseDown={handleDragStart}
+        >
+          DB Hive
+        </span>
 
         {/* Menu Bar */}
         <div className="flex items-center gap-1 ml-4">
