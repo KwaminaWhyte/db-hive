@@ -47,32 +47,31 @@ function ConnectedLayout() {
   };
 
   const handleTableSelect = (schema: string, tableName: string) => {
-    // Get current tabs from query route search params
-    const tableId = `${schema}.${tableName}`;
+    // Create table tab ID
+    const tableId = `table-${schema}.${tableName}`;
 
     // Navigate to query route with the table added to tabs
-    // We'll check if it's already open in the query route component
     navigate({
       to: "/query",
       search: (prev) => {
-        const currentTabs = prev.tabs ? prev.tabs.split(",") : ["query"];
+        const currentTabIds = prev.tabs ? prev.tabs.split(",") : [`query-${Date.now()}`];
 
         // Check if table is already open
-        const existingIndex = currentTabs.indexOf(tableId);
+        const existingIndex = currentTabIds.indexOf(tableId);
 
         if (existingIndex >= 0) {
           // Table already open, just switch to it
           return {
-            tabs: prev.tabs || "query",
+            tabs: prev.tabs || currentTabIds[0],
             active: existingIndex,
           };
         }
 
         // Add new table tab
-        const newTabs = [...currentTabs, tableId];
+        const newTabIds = [...currentTabIds, tableId];
         return {
-          tabs: newTabs.join(","),
-          active: newTabs.length - 1, // Switch to new tab
+          tabs: newTabIds.join(","),
+          active: newTabIds.length - 1, // Switch to new tab
         };
       },
     });

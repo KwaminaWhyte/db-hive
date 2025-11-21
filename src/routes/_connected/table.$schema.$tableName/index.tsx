@@ -17,12 +17,13 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 export const Route = createFileRoute("/_connected/table/$schema/$tableName/")({
   beforeLoad: ({ params }) => {
     // Redirect to query route with this table in a tab
-    const tableId = `${params.schema}.${params.tableName}`;
+    const tableId = `table-${params.schema}.${params.tableName}`;
+    const queryTabId = `query-${Date.now()}`;
 
     throw redirect({
       to: "/query",
       search: {
-        tabs: `query,${tableId}`,
+        tabs: `${queryTabId},${tableId}`,
         active: 1, // Make the table tab active
       },
     });

@@ -1,7 +1,8 @@
 import { Outlet, createRootRoute } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/router-devtools";
 import { ThemeProvider, useTheme } from "@/components/theme-provider";
-import { ConnectionProvider } from "@/contexts/ConnectionContext";
+import { ConnectionProvider, useConnectionContext } from "@/contexts/ConnectionContext";
+import { TabProvider } from "@/contexts/TabContext";
 import { Toaster } from "sonner";
 
 function RootComponent() {
@@ -20,11 +21,21 @@ function RootComponent() {
   );
 }
 
+function WithTabProvider() {
+  const { connectionId } = useConnectionContext();
+
+  return (
+    <TabProvider connectionId={connectionId}>
+      <RootComponent />
+    </TabProvider>
+  );
+}
+
 export const Route = createRootRoute({
   component: () => (
     <ThemeProvider defaultTheme="dark" storageKey="db-hive-theme">
       <ConnectionProvider>
-        <RootComponent />
+        <WithTabProvider />
       </ConnectionProvider>
     </ThemeProvider>
   ),

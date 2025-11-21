@@ -88,8 +88,8 @@ function ConnectionsRoute() {
             // Store connection in context
             setConnection(connectionId, profile);
 
-            // Navigate to query panel with default query tab
-            navigate({ to: "/query", search: { tabs: "query", active: 0 } });
+            // Navigate to query panel with default query tab (use timestamp for unique ID)
+            navigate({ to: "/query", search: { tabs: `query-${Date.now()}`, active: 0 } });
           }}
         />
       </div>
