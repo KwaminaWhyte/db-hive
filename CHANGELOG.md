@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0-beta] - 2025-11-21
+
 ### Fixed
 
 - **Light Theme Compatibility** (2025-11-20):
@@ -128,21 +130,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Fixed thread safety issues with Arc<Mutex<>> cloning pattern for async operations
 
 - **ER Diagram Generator** (Completed, 2025-11-21):
-  - Interactive entity-relationship diagram visualization
-  - Foreign key relationship mapping across all supported databases (PostgreSQL, MySQL, SQLite)
-  - Custom table nodes displaying columns, primary keys, and foreign keys
-  - Animated relationship edges showing column mappings
-  - ReactFlow integration with zoom, pan, and minimap controls
-  - Automatic grid layout with 3-column positioning
-  - SVG export functionality for diagram preservation
-  - Backend foreign key introspection:
+  - **Interactive Entity-Relationship Diagram Visualization**:
+    - ReactFlow integration with zoom (0.05x-1.5x), pan, drag, and interactive controls
+    - Dagre automatic hierarchical layout algorithm with top-to-bottom flow
+    - Optimized spacing: 180px horizontal, 250px vertical between nodes
+    - Network-simplex ranker for optimal hierarchical positioning
+    - Custom table nodes (300px width) with proper Handle components for edge connections
+    - Smart column display: Max 10 columns with "+N more" overflow indicator
+    - Junction table detection (M:N relationships) with blue theme and "M:N" badge
+    - Hover effects and smooth shadow transitions on nodes
+    - Professional PK/FK badges with rounded backgrounds (amber/blue)
+
+  - **Performance & Visual Optimizations**:
+    - Disabled edge animations for better performance with complex schemas (37+ relationships)
+    - Smart minimap with color coding (blue for junction tables, amber for regular)
+    - Custom background: Amber dots at 15% opacity
+    - Smooth fitView animation (800ms) with proper timing (150ms delay)
+    - Extended zoom range for detailed inspection and overview
+    - No console logging for cleaner debugging experience
+
+  - **UI Integration**:
+    - Popover menu (⋮) in SchemaExplorer for space-efficient actions
+    - "View ER Diagram", "Export SQL", "Import SQL" consolidated in dropdown
+    - Positioned next to database selector for easy access
+    - Control panel with Refresh and Export SVG buttons
+    - Loading and error states with retry functionality
+
+  - **Backend Foreign Key Introspection**:
     - PostgreSQL: `information_schema` joins with composite FK support
     - MySQL: `INFORMATION_SCHEMA.KEY_COLUMN_USAGE` with referential constraints
     - SQLite: `PRAGMA foreign_key_list` per-table iteration
     - MongoDB: Returns empty list (no foreign key support)
-  - Frontend integration: "View ER Diagram" button in SchemaExplorer
-  - Amber/honey themed design matching application aesthetic
-  - Loading and error states with retry functionality
+    - Handles circular references with greedy acyclicer algorithm
 
 - **OS Keyring Credential Encryption (Critical Security Fix)**:
   - Passwords now stored securely in OS-native credential storage

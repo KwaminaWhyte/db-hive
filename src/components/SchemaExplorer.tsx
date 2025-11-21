@@ -23,6 +23,11 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Database,
   Table2,
   Eye,
@@ -40,6 +45,7 @@ import {
   Upload,
   Download,
   Network,
+  MoreVertical,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 import { SqlExportDialog } from "./SqlExportDialog";
@@ -292,81 +298,96 @@ export function SchemaExplorer({
 
   return (
     <div className="h-full flex flex-col">
-      {/* Header with Disconnect Button */}
+      {/* Header with Database Selector and Actions */}
       <div className="border-b p-4">
-        {/* Database Selector */}
+        {/* Database Selector with Actions Menu */}
         <div className="mb-3">
           <div className="text-xs text-muted-foreground mb-1">Database</div>
-          {loadingDatabases ? (
-            <Skeleton className="h-10 w-full rounded-md" />
-          ) : databases.length > 0 ? (
-            <Select
-              value={selectedDatabase}
-              onValueChange={handleDatabaseChange}
-            >
-              <SelectTrigger className="w-full">
-                <div className="flex items-center gap-2">
-                  <Database className="h-4 w-4 text-muted-foreground" />
-                  <SelectValue placeholder="Select a database" />
+          <div className="flex items-center gap-2">
+            {loadingDatabases ? (
+              <Skeleton className="h-10 w-full rounded-md" />
+            ) : databases.length > 0 ? (
+              <Select
+                value={selectedDatabase}
+                onValueChange={handleDatabaseChange}
+              >
+                <SelectTrigger className="flex-1">
+                  <div className="flex items-center gap-2">
+                    <Database className="h-4 w-4 text-muted-foreground" />
+                    <SelectValue placeholder="Select a database" />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {databases.map((db) => (
+                    <SelectItem key={db} value={db}>
+                      <div className="flex items-center gap-2">
+                        {db === connectedDatabase && (
+                          <span className="text-xs text-green-600">●</span>
+                        )}
+                        <span>{db}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md flex-1">
+                <Database className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">{connectedDatabase}</span>
+              </div>
+            )}
+
+            {/* Actions Menu Popover */}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  title="Database actions"
+                >
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-56 p-2" align="end">
+                <div className="space-y-1">
+                  {/* View ER Diagram */}
+                  {onOpenERDiagram && selectedSchema && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => onOpenERDiagram(selectedSchema)}
+                    >
+                      <Network className="h-4 w-4 mr-2" />
+                      View ER Diagram ({selectedSchema})
+                    </Button>
+                  )}
+
+                  {/* Export */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => setShowExportDialog(true)}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Export SQL
+                  </Button>
+
+                  {/* Import */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => setShowImportDialog(true)}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Import SQL
+                  </Button>
                 </div>
-              </SelectTrigger>
-              <SelectContent>
-                {databases.map((db) => (
-                  <SelectItem key={db} value={db}>
-                    <div className="flex items-center gap-2">
-                      {db === connectedDatabase && (
-                        <span className="text-xs text-green-600">●</span>
-                      )}
-                      <span>{db}</span>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          ) : (
-            <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-md">
-              <Database className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">{connectedDatabase}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Action Buttons */}
-        <div className="space-y-2 mt-3">
-          {/* ER Diagram Button */}
-          {onOpenERDiagram && selectedSchema && (
-            <Button
-              variant="default"
-              size="sm"
-              className="w-full bg-amber-600 hover:bg-amber-700 text-white"
-              onClick={() => onOpenERDiagram(selectedSchema)}
-              title={`View ER Diagram for schema: ${selectedSchema}`}
-            >
-              <Network className="h-4 w-4 mr-2" />
-              View ER Diagram ({selectedSchema})
-            </Button>
-          )}
-
-          {/* Import/Export Buttons */}
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => setShowExportDialog(true)}
-            >
-              <Download className="h-4 w-4 mr-2" />
-              Export
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => setShowImportDialog(true)}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Import
-            </Button>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
       </div>

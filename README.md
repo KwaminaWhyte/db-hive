@@ -2,7 +2,7 @@
 
 > A modern, cross-platform database client built with Tauri 2.0 and React 19
 
-![Version](https://img.shields.io/badge/version-0.1.0--mvp-blue)
+![Version](https://img.shields.io/badge/version-0.5.0--beta-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Overview
@@ -65,15 +65,44 @@ DB-Hive is a professional database client application designed to compete with i
   - Error boundary for graceful error handling
   - Toast notifications for user feedback
 
+- **SSH Tunneling**
+  - Secure remote database connections through SSH
+  - Password and private key authentication (OpenSSH/PEM)
+  - Automatic local port assignment
+  - Async bidirectional data forwarding
+  - Collapsible configuration in connection form
+
+- **ER Diagram Generator**
+  - Interactive entity-relationship diagram visualization
+  - Automatic hierarchical layout with dagre algorithm
+  - Foreign key relationship mapping (PostgreSQL, MySQL, SQLite)
+  - Junction table detection with smart color coding
+  - Zoom (0.05x-1.5x), pan, drag, and minimap controls
+  - SVG export functionality
+  - Column limiting with overflow indicators
+  - Professional node styling with PK/FK badges
+
+- **Data Import/Export**
+  - SQL export with configurable options (DROP, CREATE, INSERT)
+  - Schema and table filtering for targeted exports
+  - Transaction-safe SQL import with rollback support
+  - Continue-on-error mode for partial recovery
+  - Progress feedback and detailed error reporting
+
+- **Settings & Configuration**
+  - Comprehensive settings management system
+  - General, Appearance, Query Execution, Keyboard Shortcuts sections
+  - Persistent storage with Tauri Store plugin
+  - Theme mode (Light, Dark, System)
+  - Query timeout, max rows, auto-commit configuration
+
 ### 🚧 Planned Features
 
 - MongoDB support
 - SQL Server support
-- SSH tunneling
 - Advanced SQL autocomplete
 - Table data editing
 - Query plan visualizer
-- ER diagram generator
 - Plugin system
 
 ## Technology Stack
