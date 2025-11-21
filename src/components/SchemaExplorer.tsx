@@ -334,15 +334,16 @@ export function SchemaExplorer({
         {/* Action Buttons */}
         <div className="space-y-2 mt-3">
           {/* ER Diagram Button */}
-          {onOpenERDiagram && selectedDatabase && (
+          {onOpenERDiagram && selectedSchema && (
             <Button
               variant="default"
               size="sm"
               className="w-full bg-amber-600 hover:bg-amber-700 text-white"
-              onClick={() => onOpenERDiagram(selectedDatabase)}
+              onClick={() => onOpenERDiagram(selectedSchema)}
+              title={`View ER Diagram for schema: ${selectedSchema}`}
             >
               <Network className="h-4 w-4 mr-2" />
-              View ER Diagram
+              View ER Diagram ({selectedSchema})
             </Button>
           )}
 
