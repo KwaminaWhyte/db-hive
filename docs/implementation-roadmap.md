@@ -114,11 +114,16 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] MySQL/MariaDB driver with metadata queries
 - [x] MongoDB driver with CRUD operations & query parser
 
-### Milestone 2.2: SSH Tunneling 🚧 IN PROGRESS
+### Milestone 2.2: SSH Tunneling ✅ COMPLETED (2025-11-21)
 - [x] SSH tunnel manager with password/key auth
 - [x] Tunnel lifecycle management
-- [ ] Connection command integration (TODO)
-- [ ] SSH configuration UI (TODO)
+- [x] Connection command integration with separate SSH password handling
+- [x] SSH configuration UI with collapsible form section
+- [x] SSH password storage in OS keyring (separate from database passwords)
+- [x] Backend commands: save_ssh_password, get_ssh_password
+- [x] Automatic SSH password retrieval when connecting
+- [x] Support for both password and private key authentication
+- [x] Full integration with ConnectionForm and ConnectionList
 
 ### Milestone 2.3: Advanced SQL Autocomplete ✅ COMPLETED
 - [x] Metadata cache with 5-minute expiration
@@ -462,13 +467,15 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ **Global Keyboard Shortcuts System** (2025-11-21)
 - ✅ **Window State Persistence** (2025-11-21)
 
-**In Progress:**
-- 🚧 Milestone 2.2: SSH Tunneling (infrastructure complete, UI integration pending)
+**Recently Completed (2025-11-21):**
+- ✅ Milestone 2.2: SSH Tunneling - Full UI integration with secure password storage
+- ✅ Custom Window Titlebar & Menu System - Professional titlebar with keyboard shortcuts
+- ✅ Window State Persistence - Automatic save/restore of window position and size
 
 **Next 3 Priorities:**
-1. **Complete SSH Tunnel UI Integration** - Wire up SSH configuration form with tunnel manager backend, test connections through tunnels
-2. **Connection Wizard & Dashboard** - Multi-step connection setup with visual feedback, connection testing, and profile management (Phase 3, Milestone 3.1)
-3. **Visual Query Builder** - Drag-and-drop query construction interface with table/column selectors (Milestone 2.8 - now renamed from 2.7)
+1. **Connection Wizard & Dashboard** - Multi-step connection setup with visual feedback, connection testing, and profile management (Phase 3, Milestone 3.1)
+2. **Visual Query Builder** - Drag-and-drop query construction interface with table/column selectors (Milestone 2.8 - now renamed from 2.7)
+3. **SQL Server Driver Integration** - Complete SQL Server driver implementation with metadata queries and Windows authentication support (Milestone 2.1)
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns
