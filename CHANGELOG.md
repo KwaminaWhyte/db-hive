@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Connection Organization & Management** (2025-11-21):
+  - Folder field in ConnectionForm for organizing connections
+  - Environment field (Local, Staging, Production) for connection tagging
+  - Tree view with collapsible folders in ConnectionList
+  - Folder icons and connection counts displayed in folder headers
+  - Combobox for folder selection with search and create new functionality
+  - Automatic folder extraction from existing connections
+  - Connections without folders appear at bottom (ungrouped)
+  - Connection list auto-refresh after creating/editing profiles
+
+- **Title Bar Layout Fix** (2025-11-21):
+  - Fixed custom titlebar overlapping with connection info bar
+  - Connection info bar now positioned correctly below titlebar
+  - Proper padding for main content area (accounts for both bars)
+  - Clean visual hierarchy maintained on database query page
+
 - **SSH Tunnel UI Integration** (2025-11-21):
   - Complete SSH tunnel configuration through the UI
   - Separate SSH password handling from database passwords
