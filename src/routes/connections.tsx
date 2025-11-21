@@ -1,21 +1,55 @@
-import { createFileRoute, useNavigate, Outlet, useMatches } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ConnectionList } from "@/components/ConnectionList";
+import { ConnectionForm } from "@/components/ConnectionForm";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
 import { Settings } from "lucide-react";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { ConnectionProfile } from "@/types/database";
 
+// Define search params validation
 export const Route = createFileRoute("/connections")({
+  validateSearch: (search: Record<string, unknown>): { mode?: "new" | "edit"; profileId?: string } => {
+    return {
+      mode: search.mode as "new" | "edit" | undefined,
+      profileId: search.profileId as string | undefined,
+    };
+  },
   component: ConnectionsRoute,
 });
 
 function ConnectionsRoute() {
   const navigate = useNavigate({ from: "/connections" });
   const { setConnection } = useConnectionContext();
-  const matches = useMatches();
+  const { mode, profileId } = Route.useSearch();
+  const [editProfile, setEditProfile] = useState<ConnectionProfile | undefined>();
+  const [loading, setLoading] = useState(false);
 
-  // Check if we're at the exact /connections route or a child route
-  const isExactMatch = matches[matches.length - 1]?.id === "/connections";
+  // Load profile data when in edit mode
+  useEffect(() => {
+    if (mode === "edit" && profileId) {
+      setLoading(true);
+      invoke<ConnectionProfile[]>("list_connection_profiles")
+        .then((profiles) => {
+          const profile = profiles.find((p) => p.id === profileId);
+          setEditProfile(profile);
+        })
+        .catch((err) => {
+          console.error("Failed to load profile:", err);
+          // Navigate back to connections if profile not found
+          navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } });
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    } else {
+      setEditProfile(undefined);
+    }
+  }, [mode, profileId, navigate]);
+
+  const showForm = mode === "new" || mode === "edit";
 
   return (
     <div className="flex-1 flex h-full relative">
@@ -37,29 +71,34 @@ function ConnectionsRoute() {
           onEdit={(profile) => {
             if (profile) {
               navigate({
-                to: "/connections/$profileId/edit",
-                params: { profileId: profile.id },
+                to: "/connections",
+                search: { mode: "edit", profileId: profile.id },
               });
             } else {
-              navigate({ to: "/connections/new" });
+              navigate({ to: "/connections", search: { mode: "new", profileId: undefined } });
             }
           }}
           onProfilesChange={() => {
-            // Router will handle refresh
+            // Reload if we're in edit mode
+            if (mode === "edit" && profileId) {
+              navigate({ to: "/connections", search: { mode: "edit", profileId } });
+            }
           }}
           onConnected={(connectionId, profile) => {
             // Store connection in context
             setConnection(connectionId, profile);
-            // Navigate to query panel (will create in Phase 4)
+
+            // Phase 4 will implement /_connected routes
+            // For now, show a success message
             console.log("Connected:", connectionId);
-            // TODO: navigate({ to: "/query" })
+            alert(`Successfully connected to ${profile.name}!\n\nQuery panel will be available in Phase 4 of the TanStack Router migration.`);
           }}
         />
       </div>
 
       {/* Right side - show placeholder or form */}
-      {isExactMatch ? (
-        // Show placeholder when at /connections exactly
+      {!showForm ? (
+        // Show placeholder when no mode is set
         <div className="flex-1 flex items-center justify-center">
           <div className="text-center text-muted-foreground">
             <p className="text-lg">Select a connection to get started</p>
@@ -67,9 +106,38 @@ function ConnectionsRoute() {
           </div>
         </div>
       ) : (
-        // Show child routes (new/edit form) on the right
-        <div className="flex-1 overflow-hidden">
-          <Outlet />
+        // Show form on the right
+        <div className="flex-1 overflow-y-auto p-6">
+          <div className="mb-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold">
+                {mode === "edit" ? "Edit Connection" : "New Connection"}
+              </h2>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } })}
+              >
+                Cancel
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground mt-1">
+              {mode === "edit"
+                ? `Update connection: ${editProfile?.name || ""}`
+                : "Create a new database connection"}
+            </p>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="text-muted-foreground">Loading...</div>
+            </div>
+          ) : (
+            <ConnectionForm
+              profile={mode === "edit" ? editProfile : undefined}
+              onSuccess={() => navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } })}
+            />
+          )}
         </div>
       )}
     </div>

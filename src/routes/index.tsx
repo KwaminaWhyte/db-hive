@@ -26,8 +26,8 @@ function WelcomeScreenRoute() {
       </div>
 
       <WelcomeScreen
-        onNewConnection={() => navigate({ to: "/connections/new" })}
-        onRecentConnections={() => navigate({ to: "/connections" })}
+        onNewConnection={() => navigate({ to: "/connections", search: { mode: "new", profileId: undefined } })}
+        onRecentConnections={() => navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } })}
         onViewSample={() => {
           console.log("View sample clicked");
         }}
