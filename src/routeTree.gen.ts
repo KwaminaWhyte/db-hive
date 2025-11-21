@@ -12,8 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ConnectionsRouteImport } from './routes/connections'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ConnectionsNewRouteImport } from './routes/connections.new'
-import { Route as ConnectionsProfileIdEditRouteImport } from './routes/connections.$profileId.edit'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -30,67 +28,34 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ConnectionsNewRoute = ConnectionsNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => ConnectionsRoute,
-} as any)
-const ConnectionsProfileIdEditRoute =
-  ConnectionsProfileIdEditRouteImport.update({
-    id: '/$profileId/edit',
-    path: '/$profileId/edit',
-    getParentRoute: () => ConnectionsRoute,
-  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/connections': typeof ConnectionsRouteWithChildren
+  '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
-  '/connections/new': typeof ConnectionsNewRoute
-  '/connections/$profileId/edit': typeof ConnectionsProfileIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/connections': typeof ConnectionsRouteWithChildren
+  '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
-  '/connections/new': typeof ConnectionsNewRoute
-  '/connections/$profileId/edit': typeof ConnectionsProfileIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/connections': typeof ConnectionsRouteWithChildren
+  '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
-  '/connections/new': typeof ConnectionsNewRoute
-  '/connections/$profileId/edit': typeof ConnectionsProfileIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/connections'
-    | '/settings'
-    | '/connections/new'
-    | '/connections/$profileId/edit'
+  fullPaths: '/' | '/connections' | '/settings'
   fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/connections'
-    | '/settings'
-    | '/connections/new'
-    | '/connections/$profileId/edit'
-  id:
-    | '__root__'
-    | '/'
-    | '/connections'
-    | '/settings'
-    | '/connections/new'
-    | '/connections/$profileId/edit'
+  to: '/' | '/connections' | '/settings'
+  id: '__root__' | '/' | '/connections' | '/settings'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  ConnectionsRoute: typeof ConnectionsRouteWithChildren
+  ConnectionsRoute: typeof ConnectionsRoute
   SettingsRoute: typeof SettingsRoute
 }
 
@@ -117,40 +82,12 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/connections/new': {
-      id: '/connections/new'
-      path: '/new'
-      fullPath: '/connections/new'
-      preLoaderRoute: typeof ConnectionsNewRouteImport
-      parentRoute: typeof ConnectionsRoute
-    }
-    '/connections/$profileId/edit': {
-      id: '/connections/$profileId/edit'
-      path: '/$profileId/edit'
-      fullPath: '/connections/$profileId/edit'
-      preLoaderRoute: typeof ConnectionsProfileIdEditRouteImport
-      parentRoute: typeof ConnectionsRoute
-    }
   }
 }
 
-interface ConnectionsRouteChildren {
-  ConnectionsNewRoute: typeof ConnectionsNewRoute
-  ConnectionsProfileIdEditRoute: typeof ConnectionsProfileIdEditRoute
-}
-
-const ConnectionsRouteChildren: ConnectionsRouteChildren = {
-  ConnectionsNewRoute: ConnectionsNewRoute,
-  ConnectionsProfileIdEditRoute: ConnectionsProfileIdEditRoute,
-}
-
-const ConnectionsRouteWithChildren = ConnectionsRoute._addFileChildren(
-  ConnectionsRouteChildren,
-)
-
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  ConnectionsRoute: ConnectionsRouteWithChildren,
+  ConnectionsRoute: ConnectionsRoute,
   SettingsRoute: SettingsRoute,
 }
 export const routeTree = rootRouteImport
