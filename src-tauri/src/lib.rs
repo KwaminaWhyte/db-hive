@@ -140,6 +140,8 @@ pub fn run() {
             commands::connection::list_connection_profiles,
             commands::connection::get_saved_password,
             commands::connection::save_password,
+            commands::connection::save_ssh_password,
+            commands::connection::get_ssh_password,
             commands::connection::connect_to_database,
             commands::connection::disconnect_from_database,
             commands::connection::switch_database,

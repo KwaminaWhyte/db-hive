@@ -97,6 +97,47 @@ impl CredentialManager {
             None => Ok(false),
         }
     }
+
+    /// Save an SSH password to the OS keyring
+    ///
+    /// # Arguments
+    /// * `connection_id` - Unique identifier for the connection
+    /// * `password` - SSH password to store
+    ///
+    /// # Returns
+    /// * `Ok(())` on success
+    /// * `Err(DbError)` on failure
+    pub fn save_ssh_password(connection_id: &str, password: &str) -> Result<(), DbError> {
+        let ssh_key = format!("{}-ssh", connection_id);
+        Self::save_password(&ssh_key, password)
+    }
+
+    /// Retrieve an SSH password from the OS keyring
+    ///
+    /// # Arguments
+    /// * `connection_id` - Unique identifier for the connection
+    ///
+    /// # Returns
+    /// * `Ok(Some(password))` if password exists
+    /// * `Ok(None)` if password not found
+    /// * `Err(DbError)` on other errors
+    pub fn get_ssh_password(connection_id: &str) -> Result<Option<String>, DbError> {
+        let ssh_key = format!("{}-ssh", connection_id);
+        Self::get_password(&ssh_key)
+    }
+
+    /// Delete an SSH password from the OS keyring
+    ///
+    /// # Arguments
+    /// * `connection_id` - Unique identifier for the connection
+    ///
+    /// # Returns
+    /// * `Ok(())` on success or if entry doesn't exist
+    /// * `Err(DbError)` on other errors
+    pub fn delete_ssh_password(connection_id: &str) -> Result<(), DbError> {
+        let ssh_key = format!("{}-ssh", connection_id);
+        Self::delete_password(&ssh_key)
+    }
 }
 
 #[cfg(test)]

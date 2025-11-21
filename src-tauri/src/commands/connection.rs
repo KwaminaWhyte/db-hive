@@ -22,7 +22,8 @@ use crate::state::AppState;
 /// # Arguments
 ///
 /// * `profile` - Connection profile with database settings
-/// * `password` - Password for authentication (not stored in profile)
+/// * `password` - Password for database authentication (not stored in profile)
+/// * `ssh_password` - Optional password for SSH authentication (when using password auth method)
 /// * `state` - Application state (for SSH tunnel manager)
 ///
 /// # Returns
@@ -38,6 +39,7 @@ use crate::state::AppState;
 pub async fn test_connection_command(
     profile: ConnectionProfile,
     password: String,
+    ssh_password: Option<String>,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<ConnectionStatus, DbError> {
     // Check if SSH tunnel is configured
@@ -45,8 +47,8 @@ pub async fn test_connection_command(
         // Create temporary SSH tunnel for testing
         let temp_id = format!("test-{}", Uuid::new_v4());
 
-        let ssh_password = match ssh_config.auth_method {
-            crate::models::connection::SshAuthMethod::Password => Some(password.clone()),
+        let ssh_auth_password = match ssh_config.auth_method {
+            crate::models::connection::SshAuthMethod::Password => ssh_password.clone(),
             crate::models::connection::SshAuthMethod::PrivateKey => None,
         };
 
@@ -60,7 +62,7 @@ pub async fn test_connection_command(
                 .create_tunnel(
                     temp_id.clone(),
                     ssh_config,
-                    ssh_password,
+                    ssh_auth_password,
                     profile.host.clone(),
                     profile.port,
                 )
@@ -367,6 +369,52 @@ pub fn save_password(
     Ok(())
 }
 
+/// Save SSH password to OS keyring
+///
+/// This command securely stores an SSH password in the OS keyring for later retrieval.
+/// The password is associated with a connection profile ID.
+///
+/// # Arguments
+///
+/// * `profile_id` - Connection profile ID
+/// * `ssh_password` - SSH password to store
+///
+/// # Returns
+///
+/// Returns Ok(()) if successful
+///
+/// # Security Note
+///
+/// SSH passwords are stored securely in the OS keyring with a "-ssh" suffix:
+/// - macOS: Keychain
+/// - Windows: Credential Manager
+/// - Linux: Secret Service API (libsecret)
+#[tauri::command]
+pub fn save_ssh_password(
+    profile_id: String,
+    ssh_password: String,
+) -> Result<(), DbError> {
+    // Save to OS keyring
+    crate::credentials::CredentialManager::save_ssh_password(&profile_id, &ssh_password)?;
+    Ok(())
+}
+
+/// Get saved SSH password for a profile
+///
+/// This command retrieves an SSH password from the OS keyring.
+///
+/// # Arguments
+///
+/// * `profile_id` - Connection profile ID
+///
+/// # Returns
+///
+/// Returns `Some(password)` if found, `None` if not found
+#[tauri::command]
+pub fn get_ssh_password(profile_id: String) -> Result<Option<String>, DbError> {
+    crate::credentials::CredentialManager::get_ssh_password(&profile_id)
+}
+
 /// Connect to a database using a saved profile
 ///
 /// This command establishes an active database connection using the credentials
@@ -376,7 +424,8 @@ pub fn save_password(
 /// # Arguments
 ///
 /// * `profile_id` - ID of the profile to use for connection
-/// * `password` - Password for authentication
+/// * `password` - Password for database authentication
+/// * `ssh_password` - Optional password for SSH authentication (when using password auth method)
 /// * `state` - Application state
 ///
 /// # Returns
@@ -391,6 +440,7 @@ pub fn save_password(
 pub async fn connect_to_database(
     profile_id: String,
     password: String,
+    ssh_password: Option<String>,
     state: State<'_, Mutex<AppState>>,
     app: AppHandle,
 ) -> Result<String, DbError> {
@@ -413,10 +463,9 @@ pub async fn connect_to_database(
             state_guard.ssh_tunnel_manager.clone()
         };
 
-        // TODO: Get SSH password from keyring or prompt
-        // For now, we'll require password auth method to provide it via the UI
-        let ssh_password = match ssh_config.auth_method {
-            crate::models::connection::SshAuthMethod::Password => Some(password.clone()),
+        // Use SSH password parameter for password auth, none for private key auth
+        let ssh_auth_password = match ssh_config.auth_method {
+            crate::models::connection::SshAuthMethod::Password => ssh_password.clone(),
             crate::models::connection::SshAuthMethod::PrivateKey => None,
         };
 
@@ -424,7 +473,7 @@ pub async fn connect_to_database(
             .create_tunnel(
                 profile_id.clone(),
                 ssh_config,
-                ssh_password,
+                ssh_auth_password,
                 profile.host.clone(),
                 profile.port,
             )

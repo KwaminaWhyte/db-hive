@@ -78,6 +78,18 @@ export const ConnectionList: FC<ConnectionListProps> = ({
         profileId: profile.id,
       });
 
+      // Get SSH password if SSH tunnel is configured with password auth
+      let sshPassword: string | null = null;
+      if (profile.sshTunnel && profile.sshTunnel.authMethod === "Password") {
+        try {
+          sshPassword = await invoke<string | null>("get_ssh_password", {
+            profileId: profile.id,
+          });
+        } catch (err) {
+          console.error("Failed to get SSH password:", err);
+        }
+      }
+
       if (savedPassword) {
         setConnectingId(profile.id);
         setError(null);
@@ -86,6 +98,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
           const connectionId = await invoke<string>("connect_to_database", {
             profileId: profile.id,
             password: savedPassword,
+            sshPassword,
           });
 
           onConnected?.(connectionId, profile);
@@ -107,6 +120,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
             const connectionId = await invoke<string>("connect_to_database", {
               profileId: profile.id,
               password: "",
+              sshPassword,
             });
 
             onConnected?.(connectionId, profile);
@@ -136,6 +150,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
           const connectionId = await invoke<string>("connect_to_database", {
             profileId: profile.id,
             password: "",
+            sshPassword: null,
           });
 
           onConnected?.(connectionId, profile);
@@ -166,12 +181,25 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     setError(null);
 
     try {
+      // Get SSH password if SSH tunnel is configured with password auth
+      const profile = profiles.find((p) => p.id === passwordPrompt.profileId);
+      let sshPassword: string | null = null;
+      if (profile?.sshTunnel && profile.sshTunnel.authMethod === "Password") {
+        try {
+          sshPassword = await invoke<string | null>("get_ssh_password", {
+            profileId: passwordPrompt.profileId,
+          });
+        } catch (err) {
+          console.error("Failed to get SSH password:", err);
+        }
+      }
+
       const connectionId = await invoke<string>("connect_to_database", {
         profileId: passwordPrompt.profileId,
         password,
+        sshPassword,
       });
 
-      const profile = profiles.find((p) => p.id === passwordPrompt.profileId);
       if (profile) {
         onConnected?.(connectionId, profile);
       }
