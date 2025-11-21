@@ -49,15 +49,16 @@ const TabContext = createContext<TabContextValue | undefined>(undefined);
 interface TabProviderProps {
   children: ReactNode;
   connectionId: string | null;
+  currentDatabase: string | null;
 }
 
-export function TabProvider({ children, connectionId }: TabProviderProps) {
+export function TabProvider({ children, connectionId, currentDatabase }: TabProviderProps) {
   const [tabStates, setTabStates] = useState<Record<string, TabState>>({});
 
-  // Load tab states from localStorage when connection changes
+  // Load tab states from localStorage when connection OR database changes
   useEffect(() => {
-    if (connectionId) {
-      const storageKey = `db-hive-tabs-${connectionId}`;
+    if (connectionId && currentDatabase) {
+      const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
       const saved = localStorage.getItem(storageKey);
 
       if (saved) {
@@ -67,20 +68,26 @@ export function TabProvider({ children, connectionId }: TabProviderProps) {
         } catch (error) {
           console.error("Failed to parse saved tab states:", error);
         }
+      } else {
+        // No saved tabs for this database, clear current tabs
+        setTabStates({});
       }
+    } else {
+      // No connection or database, clear tabs
+      setTabStates({});
     }
-  }, [connectionId]);
+  }, [connectionId, currentDatabase]);
 
   // Save tab states to localStorage whenever they change
   useEffect(() => {
-    if (connectionId && Object.keys(tabStates).length > 0) {
-      const storageKey = `db-hive-tabs-${connectionId}`;
+    if (connectionId && currentDatabase && Object.keys(tabStates).length > 0) {
+      const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
       localStorage.setItem(storageKey, JSON.stringify({
         states: tabStates,
         timestamp: Date.now(),
       }));
     }
-  }, [tabStates, connectionId]);
+  }, [tabStates, connectionId, currentDatabase]);
 
   const getTabState = useCallback((tabId: string) => {
     return tabStates[tabId];

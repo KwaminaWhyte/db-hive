@@ -44,10 +44,53 @@ function QueryPanelRoute() {
   const navigate = useNavigate();
   const { tabs: tabsParam, active: activeIndex } = Route.useSearch();
   const { connectionId, connectionProfile, currentDatabase } = useConnectionContext();
-  const { getTabState, createTabState, removeTabState } = useTabContext();
+  const { getTabState, createTabState, removeTabState, getAllTabStates } = useTabContext();
 
   // Parse tab IDs from URL
   const tabIds = tabsParam.split(",").filter(Boolean);
+
+  // Restore tabs when database changes
+  useEffect(() => {
+    if (connectionId && currentDatabase) {
+      const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
+      const saved = localStorage.getItem(storageKey);
+
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const states = parsed.states || {};
+          const savedTabIds = Object.keys(states);
+
+          if (savedTabIds.length > 0) {
+            // Only update if current tabs don't match saved tabs
+            const currentTabsString = tabIds.sort().join(",");
+            const savedTabsString = savedTabIds.sort().join(",");
+
+            if (currentTabsString !== savedTabsString) {
+              // Navigate with restored tabs
+              navigate({
+                to: "/query",
+                search: { tabs: savedTabIds.join(","), active: 0 },
+                replace: true,
+              });
+            }
+          }
+        } catch (error) {
+          console.error("Failed to restore tabs for database:", error);
+        }
+      } else {
+        // No saved tabs for this database - create default query tab if no tabs exist
+        if (tabIds.length === 0 || (tabIds.length === 1 && tabIds[0] === "")) {
+          const newTabId = `query-${Date.now()}`;
+          navigate({
+            to: "/query",
+            search: { tabs: newTabId, active: 0 },
+            replace: true,
+          });
+        }
+      }
+    }
+  }, [connectionId, currentDatabase]); // Only run when database changes
 
   // Initialize tab states if they don't exist
   useEffect(() => {

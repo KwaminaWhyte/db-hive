@@ -22,10 +22,10 @@ function RootComponent() {
 }
 
 function WithTabProvider() {
-  const { connectionId } = useConnectionContext();
+  const { connectionId, currentDatabase } = useConnectionContext();
 
   return (
-    <TabProvider connectionId={connectionId}>
+    <TabProvider connectionId={connectionId} currentDatabase={currentDatabase}>
       <RootComponent />
     </TabProvider>
   );
