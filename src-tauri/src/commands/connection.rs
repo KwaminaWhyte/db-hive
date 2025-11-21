@@ -16,12 +16,14 @@ use crate::state::AppState;
 ///
 /// This command attempts to establish a connection to the database using the
 /// provided profile settings. It does not save the profile or maintain the
-/// connection after testing.
+/// connection after testing. If SSH tunnel is configured, it will create a
+/// temporary tunnel for the test and clean it up afterward.
 ///
 /// # Arguments
 ///
 /// * `profile` - Connection profile with database settings
 /// * `password` - Password for authentication (not stored in profile)
+/// * `state` - Application state (for SSH tunnel manager)
 ///
 /// # Returns
 ///
@@ -36,11 +38,46 @@ use crate::state::AppState;
 pub async fn test_connection_command(
     profile: ConnectionProfile,
     password: String,
+    state: State<'_, Mutex<AppState>>,
 ) -> Result<ConnectionStatus, DbError> {
+    // Check if SSH tunnel is configured
+    let (actual_host, actual_port, temp_tunnel_id) = if let Some(ssh_config) = &profile.ssh_tunnel {
+        // Create temporary SSH tunnel for testing
+        let temp_id = format!("test-{}", Uuid::new_v4());
+
+        let ssh_password = match ssh_config.auth_method {
+            crate::models::connection::SshAuthMethod::Password => Some(password.clone()),
+            crate::models::connection::SshAuthMethod::PrivateKey => None,
+        };
+
+        let local_port = {
+            let tunnel_manager = {
+                let state_guard = state.lock().unwrap();
+                state_guard.ssh_tunnel_manager.clone()
+            };
+
+            tunnel_manager
+                .create_tunnel(
+                    temp_id.clone(),
+                    ssh_config,
+                    ssh_password,
+                    profile.host.clone(),
+                    profile.port,
+                )
+                .await?
+        };
+
+        // Connect to localhost:local_port instead of the original host:port
+        ("127.0.0.1".to_string(), local_port, Some(temp_id))
+    } else {
+        // No SSH tunnel, use direct connection
+        (profile.host.clone(), profile.port, None)
+    };
+
     // Build connection options from profile
     let opts = ConnectionOptions {
-        host: profile.host.clone(),
-        port: profile.port,
+        host: actual_host,
+        port: actual_port,
         username: profile.username.clone(),
         password: Some(password),
         database: profile.database.clone(),
@@ -48,7 +85,7 @@ pub async fn test_connection_command(
     };
 
     // Test connection based on driver type
-    match profile.driver {
+    let result = match profile.driver {
         DbDriver::Postgres => {
             let driver = PostgresDriver::connect(opts).await?;
             driver.test_connection().await?;
@@ -72,7 +109,21 @@ pub async fn test_connection_command(
         DbDriver::SqlServer => Err(DbError::InternalError(
             "SQL Server driver not yet implemented".to_string(),
         )),
+    };
+
+    // Clean up temporary SSH tunnel if it was created
+    if let Some(tunnel_id) = temp_tunnel_id {
+        let tunnel_manager = {
+            let state_guard = state.lock().unwrap();
+            state_guard.ssh_tunnel_manager.clone()
+        };
+
+        if tunnel_manager.has_tunnel(&tunnel_id).await {
+            let _ = tunnel_manager.close_tunnel(&tunnel_id).await;
+        }
     }
+
+    result
 }
 
 /// Create a new connection profile
@@ -354,10 +405,42 @@ pub async fn connect_to_database(
             .clone()
     };
 
+    // Check if SSH tunnel is configured
+    let (actual_host, actual_port) = if let Some(ssh_config) = &profile.ssh_tunnel {
+        // Create SSH tunnel
+        let tunnel_manager = {
+            let state_guard = state.lock().unwrap();
+            state_guard.ssh_tunnel_manager.clone()
+        };
+
+        // TODO: Get SSH password from keyring or prompt
+        // For now, we'll require password auth method to provide it via the UI
+        let ssh_password = match ssh_config.auth_method {
+            crate::models::connection::SshAuthMethod::Password => Some(password.clone()),
+            crate::models::connection::SshAuthMethod::PrivateKey => None,
+        };
+
+        let local_port = tunnel_manager
+            .create_tunnel(
+                profile_id.clone(),
+                ssh_config,
+                ssh_password,
+                profile.host.clone(),
+                profile.port,
+            )
+            .await?;
+
+        // Connect to localhost:local_port instead of the original host:port
+        ("127.0.0.1".to_string(), local_port)
+    } else {
+        // No SSH tunnel, use direct connection
+        (profile.host.clone(), profile.port)
+    };
+
     // Build connection options from profile
     let opts = ConnectionOptions {
-        host: profile.host.clone(),
-        port: profile.port,
+        host: actual_host,
+        port: actual_port,
         username: profile.username.clone(),
         password: Some(password.clone()),
         database: profile.database.clone(),
@@ -405,7 +488,8 @@ pub async fn connect_to_database(
 /// Disconnect from a database
 ///
 /// This command closes an active database connection and removes it from
-/// the application state.
+/// the application state. If an SSH tunnel was created for this connection,
+/// it will also be closed.
 ///
 /// # Arguments
 ///
@@ -433,6 +517,18 @@ pub async fn disconnect_from_database(
 
     // Close the connection
     connection.close().await?;
+
+    // Close SSH tunnel if one exists
+    {
+        let tunnel_manager = {
+            let state_guard = state.lock().unwrap();
+            state_guard.ssh_tunnel_manager.clone()
+        };
+
+        if tunnel_manager.has_tunnel(&connection_id).await {
+            tunnel_manager.close_tunnel(&connection_id).await?;
+        }
+    }
 
     Ok(())
 }

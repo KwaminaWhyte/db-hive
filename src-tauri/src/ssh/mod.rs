@@ -42,6 +42,7 @@ impl client::Handler for SshClientHandler {
 /// SSH Tunnel Manager
 ///
 /// Manages SSH tunnel connections for database access
+#[derive(Clone)]
 pub struct SshTunnelManager {
     /// Active tunnels indexed by connection ID
     tunnels: Arc<Mutex<HashMap<String, TunnelInfo>>>,

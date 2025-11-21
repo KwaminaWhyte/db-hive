@@ -6,14 +6,17 @@ import { TableInspector } from "./components/TableInspector";
 import { QueryPanel } from "./components/QueryPanel";
 import { ModeToggle } from "./components/mode-toggle";
 import { WelcomeScreen } from "./components/WelcomeScreen";
+import { SettingsPage } from "./components/SettingsPage";
 import { ConnectionProfile, QueryExecutionResult } from "./types/database";
 import { invoke } from "@tauri-apps/api/core";
-import { X } from "lucide-react";
+import { X, Settings } from "lucide-react";
 import { Toaster } from "sonner";
 import { useTheme } from "./components/theme-provider";
+import { Button } from "./components/ui/button";
 
 function App() {
   const { theme } = useTheme();
+  const [showSettings, setShowSettings] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<
     ConnectionProfile | null | undefined
   >(undefined);
@@ -131,13 +134,25 @@ function App() {
 
   return (
     <div className="flex h-screen w-full bg-background">
-      {/* Theme Toggle - Top Right Corner */}
-      <div className="fixed top-4 right-4 z-50">
+      {/* Top Right Controls */}
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setShowSettings(!showSettings)}
+        >
+          <Settings className="size-4" />
+        </Button>
         <ModeToggle />
       </div>
 
-      {/* Left Sidebar - Connection List or Schema Explorer */}
-      <div className="w-80 border-r overflow-y-auto">
+      {/* Show Settings Page or Main App */}
+      {showSettings ? (
+        <SettingsPage />
+      ) : (
+        <>
+          {/* Left Sidebar - Connection List or Schema Explorer */}
+          <div className="w-80 border-r overflow-y-auto">
         {activeConnectionId && activeConnectionProfile ? (
           <SchemaExplorer
             connectionId={activeConnectionId}
@@ -257,6 +272,8 @@ function App() {
           />
         )}
       </div>
+        </>
+      )}
       <Toaster
         richColors
         position="bottom-right"

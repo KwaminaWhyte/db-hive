@@ -7,6 +7,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Light Theme Compatibility** (2025-11-20):
+  - Fixed text visibility issues in light mode across all pages
+  - Root cause: Hardcoded dark theme colors (text-slate-100, bg-slate-900, etc.) in UI components
+  - Solution: Systematically replaced all hardcoded colors with semantic CSS variables
+  - Components updated with theme-aware colors:
+    - `button.tsx` - bg-primary, text-primary-foreground, bg-accent, hover states
+    - `input.tsx` - text-foreground, bg-background, border-input, focus states
+    - `select.tsx` - SelectTrigger, SelectContent, SelectItem with semantic colors
+    - `card.tsx` - bg-card, text-card-foreground
+    - `dialog.tsx` - bg-background, border-border, close button styling
+    - `label.tsx` - Removed hardcoded text-slate-200, uses inherited foreground color
+  - All components now work perfectly in both light and dark themes
+  - Semantic CSS variables automatically adapt based on theme mode
+
+### Added
+
+- **Settings & Configuration System** (2025-11-20):
+  - **Backend Implementation** (369 lines):
+    - Complete settings data model with 4 sub-sections
+    - `AppSettings` struct with `GeneralSettings`, `ThemeSettings`, `QuerySettings`, `ShortcutsSettings`
+    - Tauri commands: `get_settings`, `update_settings`, `reset_settings`
+    - Persistent storage via Tauri Store plugin (settings.json)
+    - Default settings implementation with unit tests
+    - camelCase serialization for TypeScript compatibility
+
+  - **Frontend Implementation** (691 lines):
+    - **SettingsPage Component**: Comprehensive settings management UI
+      - Sidebar navigation with 4 sections (General, Appearance, Query Execution, Keyboard Shortcuts)
+      - Card-based layout with form controls
+      - Save Changes and Reset to Defaults buttons
+      - Toast notifications for user feedback
+
+    - **General Settings Section**:
+      - Language selector (English, Spanish, French, German)
+      - Startup behavior options (Connection List, Last Connection, Default Connection, Query Editor)
+      - Auto-save connections toggle
+      - Telemetry opt-in toggle
+
+    - **Appearance Settings Section**:
+      - Theme mode selector (Light, Dark, System)
+      - Accent color picker with hex color input
+      - Editor font size slider (10-24px)
+      - Editor font family input
+      - Editor options: line numbers, minimap, word wrap toggles
+
+    - **Query Execution Settings Section**:
+      - Query timeout configuration (0-300 seconds, 0 = no timeout)
+      - Max rows limit (100-100,000)
+      - Auto-commit toggle
+      - Confirm destructive queries toggle (DELETE/DROP confirmation)
+      - Auto-save to history toggle
+      - Max history entries limit (50-2,000)
+      - Auto-format SQL toggle
+
+    - **Keyboard Shortcuts Section**:
+      - Read-only display of all shortcuts organized by category
+      - Editor shortcuts: Execute Query, Clear Editor, Format SQL, Save Snippet
+      - Navigation shortcuts: New Tab, Close Tab, Toggle Sidebar, Search, Open Settings, Show Shortcuts
+      - Monospace badge display for shortcut keys
+
+    - **Integration**:
+      - Settings button in App top-right corner (next to theme toggle)
+      - TypeScript types: `AppSettings`, `GeneralSettings`, `ThemeSettings`, `QuerySettings`, `ShortcutsSettings`
+      - Type definitions: `StartupBehavior`, `ThemeMode`
+      - `defaultSettings` object with complete default values
+
 ### Added
 - **SQL Database Import/Export** (2025-11-20):
   - **Backend Implementation** (400+ lines):
