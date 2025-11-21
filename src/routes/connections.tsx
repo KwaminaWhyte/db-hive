@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Outlet, useMatches } from "@tanstack/react-router";
 import { ConnectionList } from "@/components/ConnectionList";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,10 @@ export const Route = createFileRoute("/connections")({
 function ConnectionsRoute() {
   const navigate = useNavigate({ from: "/connections" });
   const { setConnection } = useConnectionContext();
+  const matches = useMatches();
+
+  // Check if we're at the exact /connections route or a child route
+  const isExactMatch = matches[matches.length - 1]?.id === "/connections";
 
   return (
     <>
@@ -27,38 +31,46 @@ function ConnectionsRoute() {
         <ModeToggle />
       </div>
 
-      <div className="w-80 border-r overflow-y-auto">
-        <ConnectionList
-          onEdit={(profile) => {
-            if (profile) {
-              navigate({
-                to: "/connections/$profileId/edit",
-                params: { profileId: profile.id },
-              });
-            } else {
-              navigate({ to: "/connections/new" });
-            }
-          }}
-          onProfilesChange={() => {
-            // Router will handle refresh
-          }}
-          onConnected={(connectionId, profile) => {
-            // Store connection in context
-            setConnection(connectionId, profile);
-            // Navigate to query panel (will create in Phase 4)
-            console.log("Connected:", connectionId);
-            // TODO: navigate({ to: "/query" })
-          }}
-        />
-      </div>
+      {isExactMatch ? (
+        // Show connection list when at /connections exactly
+        <>
+          <div className="w-80 border-r overflow-y-auto">
+            <ConnectionList
+              onEdit={(profile) => {
+                if (profile) {
+                  navigate({
+                    to: "/connections/$profileId/edit",
+                    params: { profileId: profile.id },
+                  });
+                } else {
+                  navigate({ to: "/connections/new" });
+                }
+              }}
+              onProfilesChange={() => {
+                // Router will handle refresh
+              }}
+              onConnected={(connectionId, profile) => {
+                // Store connection in context
+                setConnection(connectionId, profile);
+                // Navigate to query panel (will create in Phase 4)
+                console.log("Connected:", connectionId);
+                // TODO: navigate({ to: "/query" })
+              }}
+            />
+          </div>
 
-      {/* Right side - show welcome message or instructions */}
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center text-muted-foreground">
-          <p className="text-lg">Select a connection to get started</p>
-          <p className="text-sm mt-2">or create a new connection</p>
-        </div>
-      </div>
+          {/* Right side - show welcome message or instructions */}
+          <div className="flex-1 flex items-center justify-center">
+            <div className="text-center text-muted-foreground">
+              <p className="text-lg">Select a connection to get started</p>
+              <p className="text-sm mt-2">or create a new connection</p>
+            </div>
+          </div>
+        </>
+      ) : (
+        // Show child routes (new/edit) when navigating to them
+        <Outlet />
+      )}
     </>
   );
 }

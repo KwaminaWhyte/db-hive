@@ -32,7 +32,7 @@ function WelcomeScreenRoute() {
           console.log("View sample clicked");
         }}
         onOpenDocs={() => {
-          window.open("https://github.com/anthropics/db-hive/wiki", "_blank");
+          window.open("https://github.com/KwaminaWhyte/db-hive/wiki", "_blank");
         }}
       />
     </>
