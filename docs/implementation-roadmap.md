@@ -144,9 +144,15 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Visual query plan tree with cost highlighting
 
 ### Milestone 2.7: ER Diagram Generator
-- [ ] Foreign key relationship parsing
-- [ ] Graph layout with dagre
-- [ ] Zoom/pan controls & PNG/SVG export
+- [x] Foreign key relationship parsing (PostgreSQL, MySQL, SQLite)
+- [x] Dagre automatic hierarchical layout with top-to-bottom flow
+- [x] ReactFlow integration with Handle components for proper connections
+- [x] Zoom (0.05x-1.5x), pan, drag controls
+- [x] SVG export functionality
+- [x] Smart node styling: Junction table detection, column limiting (max 10)
+- [x] Performance optimizations: No edge animations, smart minimap coloring
+- [x] UI integration: Popover menu for actions, control panel
+- [x] Optimized spacing (180px horizontal, 250px vertical)
 
 ---
 
