@@ -122,6 +122,42 @@ pub struct ConnectionProfile {
 
     /// Optional folder/group for organizing connections in the UI
     pub folder: Option<String>,
+
+    /// Last connected timestamp (Unix timestamp in seconds)
+    #[serde(default)]
+    pub last_connected_at: Option<i64>,
+
+    /// Total connection count (how many times this connection was used)
+    #[serde(default)]
+    pub connection_count: u32,
+
+    /// Favorite/starred status for quick access
+    #[serde(default)]
+    pub is_favorite: bool,
+
+    /// Connection color tag for visual organization (hex color like "#3b82f6")
+    #[serde(default)]
+    pub color: Option<String>,
+
+    /// Notes/description about this connection
+    #[serde(default)]
+    pub description: Option<String>,
+
+    /// Created timestamp (Unix timestamp in seconds)
+    #[serde(default = "current_timestamp")]
+    pub created_at: i64,
+
+    /// Last modified timestamp (Unix timestamp in seconds)
+    #[serde(default = "current_timestamp")]
+    pub updated_at: i64,
+}
+
+/// Helper function to get current Unix timestamp
+fn current_timestamp() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64
 }
 
 impl ConnectionProfile {
@@ -143,6 +179,7 @@ impl ConnectionProfile {
         port: u16,
         username: String,
     ) -> Self {
+        let now = current_timestamp();
         Self {
             id,
             name,
@@ -155,6 +192,13 @@ impl ConnectionProfile {
             ssl_mode: SslMode::default(),
             ssh_tunnel: None,
             folder: None,
+            last_connected_at: None,
+            connection_count: 0,
+            is_favorite: false,
+            color: None,
+            description: None,
+            created_at: now,
+            updated_at: now,
         }
     }
 

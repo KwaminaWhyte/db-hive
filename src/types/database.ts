@@ -87,6 +87,57 @@ export interface ConnectionProfile {
 
   /** Optional folder/group for organizing connections in the UI */
   folder?: string | null;
+
+  /** Last connected timestamp (Unix timestamp in seconds) */
+  lastConnectedAt?: number | null;
+
+  /** Total connection count (how many times this connection was used) */
+  connectionCount: number;
+
+  /** Favorite/starred status for quick access */
+  isFavorite: boolean;
+
+  /** Connection color tag for visual organization (hex color like "#3b82f6") */
+  color?: string | null;
+
+  /** Notes/description about this connection */
+  description?: string | null;
+
+  /** Created timestamp (Unix timestamp in seconds) */
+  createdAt: number;
+
+  /** Last modified timestamp (Unix timestamp in seconds) */
+  updatedAt: number;
+}
+
+/**
+ * Connection folder for organization
+ */
+export interface ConnectionFolder {
+  /** Folder name */
+  name: string;
+  /** Optional color for the folder */
+  color?: string;
+  /** Whether the folder is expanded in the UI */
+  isExpanded: boolean;
+  /** Number of connections in this folder */
+  connectionCount: number;
+}
+
+/**
+ * Connection statistics
+ */
+export interface ConnectionStats {
+  /** Total number of connections */
+  totalConnections: number;
+  /** Number of favorite connections */
+  favoriteCount: number;
+  /** Number of recently used connections */
+  recentCount: number;
+  /** Number of folders */
+  folderCount: number;
+  /** Most frequently used connection */
+  mostUsedConnection?: ConnectionProfile;
 }
 
 /**
