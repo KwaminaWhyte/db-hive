@@ -2,29 +2,30 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { QueryPanel } from "@/components/QueryPanel";
 import { TableInspector } from "@/components/TableInspector";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
+import { useTabContext } from "@/contexts/TabContext";
 import { invoke } from "@tauri-apps/api/core";
 import { QueryExecutionResult } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { X, Plus } from "lucide-react";
+import { useEffect } from "react";
 
 /**
  * Query Panel Route with Multi-Tab Support
  *
  * SQL editor interface with support for multiple tabs (queries and table inspectors).
  *
- * URL: /_connected/query?tabs=query,public.users,public.orders&active=0
+ * URL: /_connected/query?tabs=query-1,table-public.users&active=0
  *
  * Search Params:
- * - tabs: Comma-separated list of tab identifiers
- *   - "query" = SQL editor tab
- *   - "schema.tableName" = Table inspector tab
+ * - tabs: Comma-separated list of tab IDs
  * - active: Index of active tab (0-based, default 0)
  *
  * Features:
- * - Multiple tabs support
+ * - Multiple tabs with unique IDs
  * - Mix of query editors and table inspectors
- * - URL-based state (preserves tabs on refresh/back/forward)
- * - Tab close with automatic switching
+ * - Per-tab state preservation (SQL content, filters, etc.)
+ * - LocalStorage persistence per connection
+ * - All tabs stay mounted (no content loss on switch)
  */
 export const Route = createFileRoute("/_connected/query")({
   validateSearch: (search: Record<string, unknown>): {
@@ -32,7 +33,7 @@ export const Route = createFileRoute("/_connected/query")({
     active: number;
   } => {
     return {
-      tabs: (search.tabs as string) || "query",
+      tabs: (search.tabs as string) || "query-0",
       active: Number(search.active) || 0,
     };
   },
@@ -43,10 +44,37 @@ function QueryPanelRoute() {
   const navigate = useNavigate();
   const { tabs: tabsParam, active: activeIndex } = Route.useSearch();
   const { connectionId, connectionProfile, currentDatabase } = useConnectionContext();
+  const { getTabState, createTabState, removeTabState } = useTabContext();
 
-  // Parse tabs from URL
-  const tabs = tabsParam.split(",").filter(Boolean);
-  const activeTab = tabs[activeIndex] || tabs[0];
+  // Parse tab IDs from URL
+  const tabIds = tabsParam.split(",").filter(Boolean);
+
+  // Initialize tab states if they don't exist
+  useEffect(() => {
+    tabIds.forEach((tabId) => {
+      const existing = getTabState(tabId);
+      if (!existing) {
+        // Create initial state for this tab
+        if (tabId.startsWith("query-")) {
+          createTabState({
+            id: tabId,
+            type: "query",
+            label: "Query",
+            sql: "",
+          });
+        } else if (tabId.startsWith("table-")) {
+          const [schema, tableName] = tabId.replace("table-", "").split(".");
+          createTabState({
+            id: tabId,
+            type: "table",
+            label: `${schema}.${tableName}`,
+            schema,
+            tableName,
+          });
+        }
+      }
+    });
+  }, [tabIds, getTabState, createTabState]);
 
   const handleExecuteQuery = async (sql: string): Promise<QueryExecutionResult> => {
     try {
@@ -61,16 +89,28 @@ function QueryPanelRoute() {
   };
 
   const handleCloseTab = (index: number) => {
-    const newTabs = tabs.filter((_, i) => i !== index);
+    const tabId = tabIds[index];
+    const newTabIds = tabIds.filter((_, i) => i !== index);
 
-    if (newTabs.length === 0) {
+    if (newTabIds.length === 0) {
       // If no tabs left, create a default query tab
+      const newTabId = `query-${Date.now()}`;
+      createTabState({
+        id: newTabId,
+        type: "query",
+        label: "Query",
+        sql: "",
+      });
+
       navigate({
         to: "/query",
-        search: { tabs: "query", active: 0 },
+        search: { tabs: newTabId, active: 0 },
       });
       return;
     }
+
+    // Remove tab state
+    removeTabState(tabId);
 
     // Adjust active index if needed
     let newActive = activeIndex;
@@ -85,7 +125,7 @@ function QueryPanelRoute() {
     navigate({
       to: "/query",
       search: {
-        tabs: newTabs.join(","),
+        tabs: newTabIds.join(","),
         active: newActive,
       },
     });
@@ -102,25 +142,27 @@ function QueryPanelRoute() {
   };
 
   const handleAddQueryTab = () => {
-    const newTabs = [...tabs, "query"];
+    const newTabId = `query-${Date.now()}`;
+    createTabState({
+      id: newTabId,
+      type: "query",
+      label: "Query",
+      sql: "",
+    });
+
+    const newTabIds = [...tabIds, newTabId];
     navigate({
       to: "/query",
       search: {
-        tabs: newTabs.join(","),
-        active: newTabs.length - 1,
+        tabs: newTabIds.join(","),
+        active: newTabIds.length - 1,
       },
     });
   };
 
-  const getTabLabel = (tab: string) => {
-    if (tab === "query") return "Query";
-    const [schema, tableName] = tab.split(".");
-    return `${schema}.${tableName}`;
-  };
-
-  const handleTableClose = () => {
-    // When table inspector's close button is clicked
-    handleCloseTab(activeIndex);
+  const getTabLabel = (tabId: string) => {
+    const state = getTabState(tabId);
+    return state?.label || tabId;
   };
 
   return (
@@ -128,9 +170,9 @@ function QueryPanelRoute() {
       {/* Tab Bar */}
       <div className="border-b border-border bg-background">
         <div className="flex items-center gap-1 px-2 py-1">
-          {tabs.map((tab, index) => (
+          {tabIds.map((tabId, index) => (
             <div
-              key={`${tab}-${index}`}
+              key={tabId}
               className={`
                 group relative flex items-center gap-2 px-3 py-1.5 rounded-t-lg cursor-pointer
                 transition-colors
@@ -142,8 +184,8 @@ function QueryPanelRoute() {
               `}
               onClick={() => handleSwitchTab(index)}
             >
-              <span className="text-sm font-medium">{getTabLabel(tab)}</span>
-              {tabs.length > 1 && (
+              <span className="text-sm font-medium">{getTabLabel(tabId)}</span>
+              {tabIds.length > 1 && (
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -171,29 +213,39 @@ function QueryPanelRoute() {
         </div>
       </div>
 
-      {/* Active Tab Content */}
-      <div className="flex-1 overflow-hidden">
-        {activeTab === "query" ? (
-          <QueryPanel
-            connectionId={connectionId}
-            connectionProfile={connectionProfile}
-            currentDatabase={currentDatabase}
-            onExecuteQuery={handleExecuteQuery}
-          />
-        ) : (
-          (() => {
-            const [schema, tableName] = activeTab.split(".");
-            return (
-              <TableInspector
-                connectionId={connectionId!}
-                schema={schema}
-                tableName={tableName}
-                onClose={handleTableClose}
-                driverType={connectionProfile?.driver}
-              />
-            );
-          })()
-        )}
+      {/* Tab Content - Render ALL tabs but hide inactive ones */}
+      <div className="flex-1 overflow-hidden relative">
+        {tabIds.map((tabId, index) => {
+          const tabState = getTabState(tabId);
+          if (!tabState) return null;
+
+          const isActive = index === activeIndex;
+
+          return (
+            <div
+              key={tabId}
+              className={`absolute inset-0 ${isActive ? "block" : "hidden"}`}
+            >
+              {tabState.type === "query" ? (
+                <QueryPanel
+                  connectionId={connectionId}
+                  connectionProfile={connectionProfile}
+                  currentDatabase={currentDatabase}
+                  onExecuteQuery={handleExecuteQuery}
+                  pendingQuery={tabState.sql || null}
+                />
+              ) : (
+                <TableInspector
+                  connectionId={connectionId!}
+                  schema={tabState.schema!}
+                  tableName={tabState.tableName!}
+                  onClose={() => handleCloseTab(index)}
+                  driverType={connectionProfile?.driver}
+                />
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
