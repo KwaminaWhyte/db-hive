@@ -241,7 +241,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Use card layout with toggles, dropdowns, text inputs ✅
 - [ ] Implement keyboard shortcuts customization modal (TODO: Future enhancement)
 
-### Milestone 3.5: Logs & Activity Monitor
+### Milestone 3.6: Logs & Activity Monitor
 
 **Session Monitoring Dashboard** (discovered from redesign.md)
 
@@ -255,7 +255,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Export logs to file
 - [ ] Technical but clean UI design
 
-### Milestone 3.6: Plugin Marketplace
+### Milestone 3.7: Plugin Marketplace
 
 **In-App Plugin Discovery** (discovered from redesign.md)
 
@@ -272,7 +272,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Add plugin update notifications
 - [ ] Create plugin developer documentation
 
-### Milestone 3.7: Keyboard Shortcuts Cheat Sheet
+### Milestone 3.8: Keyboard Shortcuts Cheat Sheet
 
 **Interactive Shortcuts Guide** (discovered from redesign.md)
 
@@ -285,7 +285,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Add "?" hotkey to open shortcuts modal
 - [ ] Make shortcuts customizable (link to Settings)
 
-### Milestone 3.8: Error & Empty States
+### Milestone 3.9: Error & Empty States
 
 **Friendly Error Handling** (discovered from redesign.md)
 
@@ -301,7 +301,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
   - [ ] No search results
 - [ ] Use illustrations and helpful calls-to-action
 
-### Milestone 3.9: About Page
+### Milestone 3.10: About Page
 
 **Application Information** (discovered from redesign.md)
 
