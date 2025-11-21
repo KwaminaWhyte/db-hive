@@ -64,7 +64,7 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
   onOpenDocs,
 }) => {
   return (
-    <div className="min-h-screen bg-background text-foreground antialiased flex items-stretch justify-center relative overflow-hidden">
+    <div className="min-h-screen bg-background w-full text-foreground antialiased flex items-stretch justify-center relative overflow-hidden">
       {/* Main shell */}
       <div className="relative z-10 flex w-full items-stretch justify-center">
         <section className="w-full md:w-3/5 flex flex-col justify-between border-b md:border-b-0 md:border-r border-border">
