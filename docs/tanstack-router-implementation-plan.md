@@ -1,15 +1,15 @@
 # TanStack Router Implementation Plan for DB-Hive
 
-**Document Version:** 1.2
+**Document Version:** 1.3
 **Date:** 2025-11-21
-**Status:** Phase 1-4 Complete (75% Done) ✅
-**Last Updated:** 2025-11-21 11:45 AM
+**Status:** Phase 1-4 Complete + Tab System Implemented (85% Done) ✅
+**Last Updated:** 2025-11-21 02:30 PM
 
 ---
 
 ## 🚀 Quick Status
 
-**Overall Progress:** 75% Complete (4/6 Phases Done)
+**Overall Progress:** 85% Complete (4/6 Phases Done + Tab System)
 
 | Phase                                  | Status         | Completion |
 | -------------------------------------- | -------------- | ---------- |
@@ -17,13 +17,15 @@
 | Phase 2: Core Infrastructure           | ✅ Complete    | 100%       |
 | Phase 3: Settings & Connections Routes | ✅ Complete    | 100%       |
 | Phase 4: Connected Routes              | ✅ Complete    | 100%       |
-| Phase 5: Component Refactoring         | ⏳ In Progress | 0%         |
+| Phase 4.5: Multi-Tab System            | ✅ Complete    | 100%       |
+| Phase 5: Component Refactoring         | ⏳ Next        | 0%         |
 | Phase 6: Testing & Cleanup             | ⏳ Pending     | 0%         |
 
-**Latest Commit:** `e8289a5` - fix: refactor connection editing to use search params
-**Branch:** `feature/tanstack-router`
+**Latest Commit:** `9c3dc77` - feat: implement per-tab state preservation and localStorage persistence
+**Branch:** `main`
 **Build Status:** ✅ Passing (0 errors)
 **Routes Working:** 10/10 ✅
+**Tab System:** ✅ Fully Functional
 
 ---
 
@@ -78,16 +80,28 @@ This plan outlines the complete migration of DB-Hive from manual state-based nav
 2. `7cf4fe3` - Phase 3: Settings & connections routes
 3. `fa86850` - feat: implement side-by-side layout for connection management
 4. `e8289a5` - fix: refactor connection editing to use search params
-5. [Next] Phase 4: Connected routes implementation
+5. `cc13297` - fix: ER Diagram now shows relationships correctly
+6. `b9b5096` - feat: SSH Tunneling & ER Diagram Generator v0.5.0-beta
+7. `9c3dc77` - feat: implement per-tab state preservation and localStorage persistence
 
 **Routes Implemented:** 10/10 routes complete ✅
 
 - ✅ `/` - Welcome screen
 - ✅ `/settings` - Settings page
 - ✅ `/connections` - Connection list with inline forms (search params)
-- ✅ `/_connected/query` - SQL query panel
-- ✅ `/_connected/table/$schema/$tableName` - Table inspector
+- ✅ `/_connected/query` - SQL query panel with multi-tab support
+- ✅ `/_connected/table/$schema/$tableName` - Table inspector (redirects to tabs)
 - ✅ `/_connected/er-diagram/$schema` - ER diagram viewer
+
+**Multi-Tab System Features:** ✅
+
+- ✅ URL-based tab management (`?tabs=query-1,table-public.users&active=0`)
+- ✅ Per-tab state preservation (SQL content, filters, pagination)
+- ✅ LocalStorage persistence per connection
+- ✅ All tabs stay mounted (no content loss on switch)
+- ✅ Tab bar with close buttons and Plus button
+- ✅ Unique tab IDs (`query-{timestamp}`, `table-{schema}.{tableName}`)
+- ✅ Automatic tab initialization from URL
 
 **Benefits Achieved:**
 
@@ -95,6 +109,8 @@ This plan outlines the complete migration of DB-Hive from manual state-based nav
 - Zero TypeScript errors
 - Type-safe navigation working
 - Route tree auto-generation working
+- Multi-table tabs fully functional
+- Tab state persists across app restarts
 
 ---
 
@@ -891,6 +907,255 @@ export const Route = createRootRouteWithContext<RouterContext>()({
   ),
 })
 ```
+
+---
+
+## Phase 4.5: Multi-Tab System Implementation ✅ COMPLETED
+
+### 4.5.1 Overview
+
+Implemented a comprehensive multi-tab system for query editors and table inspectors with URL-based state management and persistence.
+
+### 4.5.2 TabContext Implementation
+
+**File:** `src/contexts/TabContext.tsx` (NEW - 136 lines)
+
+**Features:**
+- Per-tab state management with React Context API
+- LocalStorage persistence per connection
+- Automatic save/restore on connection change
+- Support for two tab types: `query` and `table`
+
+**Tab State Interface:**
+```typescript
+export interface TabState {
+  id: string;                    // Unique tab ID
+  type: "query" | "table";       // Tab type
+  label: string;                 // Display label
+  sql?: string;                  // For query tabs
+  schema?: string;               // For table tabs
+  tableName?: string;            // For table tabs
+  page?: number;                 // Pagination
+  limit?: number;
+  filter?: string;
+  sortBy?: string;
+  sortOrder?: "asc" | "desc";
+}
+```
+
+**Key Methods:**
+- `getTabState(id: string)` - Retrieve tab state by ID
+- `updateTabState(id: string, updates: Partial<TabState>)` - Update tab state
+- `createTabState(state: TabState)` - Create new tab
+- `removeTabState(id: string)` - Remove tab from storage
+
+**Persistence Strategy:**
+- Storage key: `db-hive-tabs-${connectionId}`
+- Automatic save on state change
+- Automatic load on connection change
+- Timestamps for debugging
+
+### 4.5.3 URL-Based Tab Management
+
+**Route:** `src/routes/_connected/query.tsx` (REWRITTEN - 253 lines)
+
+**URL Structure:**
+```
+/query?tabs=query-1234567890,table-public.users&active=0
+```
+
+**Search Params:**
+- `tabs` (string): Comma-separated tab IDs
+- `active` (number): Index of active tab (0-based)
+
+**Tab ID Format:**
+- Query tabs: `query-{timestamp}`
+- Table tabs: `table-{schema}.{tableName}`
+
+**Example:**
+```typescript
+// Single query tab
+/query?tabs=query-1700000000000&active=0
+
+// Multiple tabs (query + table)
+/query?tabs=query-1700000000000,table-public.users&active=1
+
+// Multiple tables
+/query?tabs=query-1700000000000,table-public.users,table-public.orders&active=2
+```
+
+### 4.5.4 Rendering Strategy
+
+**Problem:** Tab switching caused component remount and content loss
+
+**Solution:** Render ALL tabs simultaneously, hide inactive ones with CSS
+
+```typescript
+<div className="flex-1 overflow-hidden relative">
+  {tabIds.map((tabId, index) => {
+    const isActive = index === activeIndex;
+    return (
+      <div
+        key={tabId}
+        className={`absolute inset-0 ${isActive ? "block" : "hidden"}`}
+      >
+        {/* QueryPanel or TableInspector */}
+      </div>
+    );
+  })}
+</div>
+```
+
+**Benefits:**
+- Components stay mounted
+- Internal state preserved
+- SQL editor content preserved
+- Table filters preserved
+- No re-fetching on tab switch
+
+### 4.5.5 Tab Initialization
+
+**Automatic Creation:**
+```typescript
+useEffect(() => {
+  tabIds.forEach((tabId) => {
+    const existing = getTabState(tabId);
+    if (!existing) {
+      if (tabId.startsWith("query-")) {
+        createTabState({
+          id: tabId,
+          type: "query",
+          label: "Query",
+          sql: "",
+        });
+      } else if (tabId.startsWith("table-")) {
+        const [schema, tableName] = tabId.replace("table-", "").split(".");
+        createTabState({
+          id: tabId,
+          type: "table",
+          label: `${schema}.${tableName}`,
+          schema,
+          tableName,
+        });
+      }
+    }
+  });
+}, [tabIds, getTabState, createTabState]);
+```
+
+### 4.5.6 Tab Bar UI
+
+**Features:**
+- Tab pills with active/inactive states
+- Close button (only if more than 1 tab)
+- Plus button to add new query tabs
+- Hover states and transitions
+
+**Implementation:**
+```typescript
+<div className="border-b border-border bg-background">
+  <div className="flex items-center gap-1 px-2 py-1">
+    {tabIds.map((tabId, index) => (
+      <div
+        key={tabId}
+        className={`group relative flex items-center gap-2 px-3 py-1.5 rounded-t-lg cursor-pointer ${
+          index === activeIndex
+            ? "bg-accent text-foreground border-b-2 border-primary"
+            : "hover:bg-accent/50 text-muted-foreground"
+        }`}
+        onClick={() => handleSwitchTab(index)}
+      >
+        <span className="text-sm font-medium">{getTabLabel(tabId)}</span>
+        {tabIds.length > 1 && (
+          <button onClick={(e) => { e.stopPropagation(); handleCloseTab(index); }}>
+            <X className="h-3 w-3" />
+          </button>
+        )}
+      </div>
+    ))}
+    <Button variant="ghost" size="sm" onClick={handleAddQueryTab}>
+      <Plus className="h-4 w-4" />
+    </Button>
+  </div>
+</div>
+```
+
+### 4.5.7 Integration with Schema Explorer
+
+**File:** `src/routes/_connected/route.tsx` (MODIFIED)
+
+**Check for Existing Tabs:**
+```typescript
+const handleTableSelect = (schema: string, tableName: string) => {
+  const tableId = `table-${schema}.${tableName}`;
+
+  navigate({
+    to: "/query",
+    search: (prev) => {
+      const currentTabIds = prev.tabs ? prev.tabs.split(",") : [`query-${Date.now()}`];
+      const existingIndex = currentTabIds.indexOf(tableId);
+
+      if (existingIndex >= 0) {
+        // Table already open, just switch to it
+        return { tabs: prev.tabs, active: existingIndex };
+      }
+
+      // Add new table tab
+      const newTabIds = [...currentTabIds, tableId];
+      return { tabs: newTabIds.join(","), active: newTabIds.length - 1 };
+    },
+  });
+};
+```
+
+### 4.5.8 Root Provider Integration
+
+**File:** `src/routes/__root.tsx` (MODIFIED)
+
+**Added TabProvider:**
+```typescript
+function WithTabProvider() {
+  const { connectionId } = useConnectionContext();
+  return (
+    <TabProvider connectionId={connectionId}>
+      <RootComponent />
+    </TabProvider>
+  );
+}
+
+export const Route = createRootRoute({
+  component: () => (
+    <ThemeProvider defaultTheme="dark" storageKey="db-hive-theme">
+      <ConnectionProvider>
+        <WithTabProvider />
+      </ConnectionProvider>
+    </ThemeProvider>
+  ),
+});
+```
+
+### 4.5.9 Benefits Achieved
+
+**User Experience:**
+- ✅ No content loss on tab switching
+- ✅ SQL editor preserves content
+- ✅ Table filters/pagination preserved
+- ✅ Tab state persists across app restarts
+- ✅ Multiple tables can be open simultaneously
+- ✅ Intuitive tab management (close, add, switch)
+
+**Technical:**
+- ✅ URL-driven state management
+- ✅ Type-safe tab operations
+- ✅ Per-connection storage isolation
+- ✅ Automatic cleanup on connection change
+- ✅ Efficient rendering (all tabs mounted)
+
+**Code Quality:**
+- ✅ Clean separation of concerns
+- ✅ Reusable TabContext
+- ✅ TypeScript type safety
+- ✅ Well-documented interfaces
 
 ---
 

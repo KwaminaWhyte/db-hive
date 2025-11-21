@@ -174,6 +174,100 @@ export interface QueryExecutionResult {
 }
 
 /**
+ * Query Plan Node
+ *
+ * Represents a node in the PostgreSQL EXPLAIN query plan tree
+ */
+export interface QueryPlanNode {
+  /** Node type (e.g., "Seq Scan", "Index Scan", "Hash Join") */
+  nodeType: string;
+
+  /** Relation name (table name) if applicable */
+  relationName?: string;
+
+  /** Schema name if applicable */
+  schema?: string;
+
+  /** Alias used in the query */
+  alias?: string;
+
+  /** Startup cost */
+  startupCost?: number;
+
+  /** Total cost */
+  totalCost?: number;
+
+  /** Plan rows (estimated) */
+  planRows?: number;
+
+  /** Plan width (estimated row size in bytes) */
+  planWidth?: number;
+
+  /** Actual startup time (if ANALYZE was used) */
+  actualStartupTime?: number;
+
+  /** Actual total time (if ANALYZE was used) */
+  actualTotalTime?: number;
+
+  /** Actual rows (if ANALYZE was used) */
+  actualRows?: number;
+
+  /** Actual loops (if ANALYZE was used) */
+  actualLoops?: number;
+
+  /** Index name if using index scan */
+  indexName?: string;
+
+  /** Index condition */
+  indexCond?: string;
+
+  /** Filter condition */
+  filter?: string;
+
+  /** Rows removed by filter */
+  rowsRemovedByFilter?: number;
+
+  /** Join type (e.g., "Inner", "Left", "Right") */
+  joinType?: string;
+
+  /** Hash condition */
+  hashCond?: string;
+
+  /** Child plans */
+  plans?: QueryPlanNode[];
+
+  /** Additional properties from PostgreSQL */
+  [key: string]: any;
+}
+
+/**
+ * Query Plan Result
+ *
+ * Contains the parsed EXPLAIN output
+ */
+export interface QueryPlanResult {
+  /** Root node of the query plan tree */
+  plan: QueryPlanNode;
+
+  /** Planning time in milliseconds (if ANALYZE was used) */
+  planningTime?: number;
+
+  /** Execution time in milliseconds (if ANALYZE was used) */
+  executionTime?: number;
+
+  /** Total execution time including planning */
+  totalTime?: number;
+
+  /** Triggers executed (if ANALYZE was used) */
+  triggers?: Array<{
+    triggerName: string;
+    relationName: string;
+    time: number;
+    calls: number;
+  }>;
+}
+
+/**
  * Query error
  *
  * Extends DbError with query-specific information

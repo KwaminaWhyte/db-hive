@@ -7,7 +7,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0-beta] - 2025-11-21
+
 ### Added
+
+- **Tab Persistence Across App Restarts** (2025-11-21):
+  - Tab states now restore automatically when reconnecting to a database
+  - Previous tabs (queries and tables) persist in localStorage
+  - Seamless experience when closing and reopening the app
+  - First tab automatically selected on reconnection
+
+- **Query Plan Visualizer Component** (2025-11-21):
+  - New QueryPlanVisualizer component for displaying PostgreSQL EXPLAIN output
+  - Tree visualization of query plan nodes with expand/collapse
+  - Cost highlighting (green/yellow/red based on cost levels)
+  - Detailed metrics display:
+    - Startup and total costs
+    - Estimated vs actual rows
+    - Execution time per node
+    - Index usage and conditions
+  - Filter and join condition display
+  - Support for both EXPLAIN and EXPLAIN ANALYZE
+  - TypeScript types for QueryPlanNode and QueryPlanResult
+  - JSON parser for PostgreSQL EXPLAIN (FORMAT JSON) output
+  - Ready for integration into QueryPanel
+
+- **TanStack Router Migration & Multi-Tab System** (2025-11-21):
+  - **Router Implementation**:
+    - Migrated from React Router to TanStack Router v1.139.0
+    - Type-safe routing with compile-time validation
+    - File-based routing structure with 10 routes
+    - Search params validation with automatic type inference
+    - Browser back/forward navigation support
+    - Deep linking support for all routes
+
+  - **Route Structure**:
+    - `__root.tsx` - Root layout with theme and connection providers
+    - `index.tsx` - Welcome screen
+    - `connections.tsx` - Side-by-side connection management
+    - `settings.tsx` - Settings page
+    - `_connected/route.tsx` - Connected layout with navigation guard
+    - `_connected/query.tsx` - Multi-tab query panel
+    - `_connected/table.$schema.$tableName/` - Table inspector routes
+    - `_connected/er-diagram.$schema.tsx` - ER diagram viewer
+    - `_connected/visualization.tsx` - Visualization route
+
+  - **Multi-Tab System**:
+    - **URL-Based Tab Management**:
+      - Tab state in URL search params: `?tabs=query-1,table-public.users&active=0`
+      - Tab IDs: `query-{timestamp}` for queries, `table-{schema}.{tableName}` for tables
+      - Comma-separated tab list with active index
+
+    - **TabContext Implementation** (136 lines):
+      - React Context API for per-tab state management
+      - LocalStorage persistence per connection (`db-hive-tabs-${connectionId}`)
+      - Automatic save/restore on connection change
+      - Support for query and table tab types
+      - Tab state includes: SQL content, filters, pagination, sorting
+
+    - **Component Rendering Strategy**:
+      - All tabs rendered simultaneously with absolute positioning
+      - CSS show/hide instead of mount/unmount
+      - Preserves component state across tab switches
+      - No content loss when switching tabs
+      - SQL editor content preserved
+      - Table filters and pagination preserved
+
+    - **Tab Bar UI**:
+      - Tab pills with active/inactive states
+      - Close button per tab (hidden if only 1 tab)
+      - Plus button to add new query tabs
+      - Hover states and smooth transitions
+      - Tab labels derived from tab state
+
+    - **Integration Features**:
+      - Schema Explorer integration for opening tables
+      - Checks for already-open tables before creating new tabs
+      - Default query tab created on connection
+      - Tab persistence across app restarts
+
+  - **Code Quality Improvements**:
+    - App.tsx reduced from 310 lines → 26 lines (92% reduction)
+    - Removed 10+ useState hooks for navigation state
+    - Removed 10+ handler functions
+    - Type-safe navigation throughout application
+    - Clean separation of concerns
+
+  - **Benefits**:
+    - ✅ No content loss on tab switching
+    - ✅ URL state persistence
+    - ✅ Browser navigation works (back/forward)
+    - ✅ Deep linking support
+    - ✅ Multi-table tabs fully functional
+    - ✅ Tab state persists across app restarts
 
 - **Native Window Enhancements & System Tray** (2025-11-21):
   - **Window Configuration**:
