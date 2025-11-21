@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
-use crate::models::{DatabaseInfo, DbError, SchemaInfo, TableInfo, TableSchema};
+use crate::models::{DatabaseInfo, DbError, ForeignKeyInfo, SchemaInfo, TableInfo, TableSchema};
 use crate::state::{AppState, MetadataCache};
 
 /// Get list of databases for a connection
@@ -137,6 +137,38 @@ pub async fn get_table_schema(
 
     // Call the driver method
     connection.get_table_schema(&schema, &table).await
+}
+
+/// Get foreign key relationships for a schema
+///
+/// Returns all foreign key constraints in the specified schema.
+/// This is used for ER diagram generation and understanding table relationships.
+///
+/// # Arguments
+/// * `connection_id` - UUID of the active connection
+/// * `schema` - Name of the schema to query foreign keys from
+/// * `state` - Application state containing active connections
+///
+/// # Returns
+/// * `Ok(Vec<ForeignKeyInfo>)` - List of foreign key constraints
+/// * `Err(DbError)` - If connection not found or query fails
+#[tauri::command]
+pub async fn get_foreign_keys(
+    connection_id: String,
+    schema: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<ForeignKeyInfo>, DbError> {
+    // Clone the Arc<dyn DatabaseDriver> before awaiting to avoid holding the lock across await
+    let connection = {
+        let state = state.lock().unwrap();
+        state
+            .get_connection(&connection_id)
+            .ok_or_else(|| DbError::ConnectionError("Connection not found".to_string()))?
+            .clone()
+    };
+
+    // Call the driver method
+    connection.get_foreign_keys(&schema).await
 }
 
 /// Response for autocomplete metadata
@@ -373,6 +405,10 @@ mod tests {
                 "TABLE".to_string(),
             );
             Ok(TableSchema::new(table, vec![], vec![]))
+        }
+
+        async fn get_foreign_keys(&self, _schema: &str) -> Result<Vec<ForeignKeyInfo>, DbError> {
+            Ok(vec![])
         }
 
         async fn close(&self) -> Result<(), DbError> {

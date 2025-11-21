@@ -13,7 +13,7 @@ use mongodb::{
 use serde_json::Value as JsonValue;
 
 use super::{ConnectionOptions, DatabaseDriver, QueryResult};
-use crate::models::{ColumnInfo, DatabaseInfo, DbError, IndexInfo, SchemaInfo, TableInfo, TableSchema};
+use crate::models::{ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema};
 
 /// MongoDB database driver
 ///
@@ -451,6 +451,16 @@ impl DatabaseDriver for MongoDbDriver {
             columns,
             indexes,
         })
+    }
+
+    async fn get_foreign_keys(&self, _schema: &str) -> Result<Vec<ForeignKeyInfo>, DbError> {
+        // MongoDB doesn't have traditional foreign key constraints
+        // Foreign key relationships in MongoDB are typically implemented at the application level
+        // or through schema validation rules, but are not enforced at the database level
+        // like they are in SQL databases.
+        //
+        // Future enhancement: Could parse JSON schema validators to detect referenced fields
+        Ok(Vec::new())
     }
 
     async fn close(&self) -> Result<(), DbError> {

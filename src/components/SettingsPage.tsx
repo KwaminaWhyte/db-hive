@@ -8,7 +8,6 @@ import {
   Keyboard,
   Save,
   RotateCcw,
-  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "./ui/button";
@@ -89,13 +88,6 @@ export function SettingsPage() {
     setSettings((prev) => ({
       ...prev,
       query: { ...prev.query, [key]: value },
-    }));
-  };
-
-  const updateShortcutsSettings = (key: keyof AppSettings["shortcuts"], value: any) => {
-    setSettings((prev) => ({
-      ...prev,
-      shortcuts: { ...prev.shortcuts, [key]: value },
     }));
   };
 

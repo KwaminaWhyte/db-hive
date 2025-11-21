@@ -39,6 +39,7 @@ import {
   FolderOpen,
   Upload,
   Download,
+  Network,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 import { SqlExportDialog } from "./SqlExportDialog";
@@ -52,6 +53,7 @@ interface SchemaExplorerProps {
   onDatabaseChange?: (database: string) => void;
   selectedTable?: string | null;
   onExecuteQuery?: (sql: string) => void;
+  onOpenERDiagram?: (schema: string) => void;
 }
 
 export function SchemaExplorer({
@@ -62,6 +64,7 @@ export function SchemaExplorer({
   onDatabaseChange,
   selectedTable,
   onExecuteQuery,
+  onOpenERDiagram,
 }: SchemaExplorerProps) {
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("");
@@ -328,26 +331,42 @@ export function SchemaExplorer({
           )}
         </div>
 
-        {/* Import/Export Buttons */}
-        <div className="flex gap-2 mt-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={() => setShowExportDialog(true)}
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="flex-1"
-            onClick={() => setShowImportDialog(true)}
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Import
-          </Button>
+        {/* Action Buttons */}
+        <div className="space-y-2 mt-3">
+          {/* ER Diagram Button */}
+          {onOpenERDiagram && selectedDatabase && (
+            <Button
+              variant="default"
+              size="sm"
+              className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => onOpenERDiagram(selectedDatabase)}
+            >
+              <Network className="h-4 w-4 mr-2" />
+              View ER Diagram
+            </Button>
+          )}
+
+          {/* Import/Export Buttons */}
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setShowExportDialog(true)}
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={() => setShowImportDialog(true)}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+          </div>
         </div>
       </div>
 
