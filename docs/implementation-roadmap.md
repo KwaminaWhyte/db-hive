@@ -453,18 +453,22 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ Phase 0: Architecture & Setup
 - ✅ Phase 1: MVP Development (Connection management, SQL editor, schema browser, table editor)
 - ✅ Milestone 2.1-2.5: MySQL/MongoDB drivers, autocomplete, table editing, SQL import/export
+- ✅ Milestone 2.6: Query Plan Visualizer (2025-11-21)
 - ✅ Milestone 2.7: ER Diagram Generator (2025-11-20)
-- ✅ Milestone 2.8: Router Migration with TanStack Router (2025-11-21)
+- ✅ Milestone 2.9: Router Migration with TanStack Router (2025-11-21)
 - ✅ Settings & Configuration (2025-11-20)
 - ✅ Native Window & System Tray (2025-11-21)
+- ✅ **Custom Window Titlebar & Menu System** (2025-11-21)
+- ✅ **Global Keyboard Shortcuts System** (2025-11-21)
+- ✅ **Window State Persistence** (2025-11-21)
 
 **In Progress:**
 - 🚧 Milestone 2.2: SSH Tunneling (infrastructure complete, UI integration pending)
 
-**Next Priorities:**
-- Complete SSH tunnel UI integration
-- Connection wizard & dashboard (Phase 3)
-- Advanced query features (parameterized queries, query templates)
+**Next 3 Priorities:**
+1. **Complete SSH Tunnel UI Integration** - Wire up SSH configuration form with tunnel manager backend, test connections through tunnels
+2. **Connection Wizard & Dashboard** - Multi-step connection setup with visual feedback, connection testing, and profile management (Phase 3, Milestone 3.1)
+3. **Visual Query Builder** - Drag-and-drop query construction interface with table/column selectors (Milestone 2.8 - now renamed from 2.7)
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns
