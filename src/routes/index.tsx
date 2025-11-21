@@ -1,8 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { WelcomeScreen } from "@/components/WelcomeScreen";
-import { ModeToggle } from "@/components/mode-toggle";
-import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
+import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 export const Route = createFileRoute("/")({
   component: WelcomeScreenRoute,
@@ -11,20 +9,37 @@ export const Route = createFileRoute("/")({
 function WelcomeScreenRoute() {
   const navigate = useNavigate();
 
+  // Wire up keyboard shortcuts for welcome page
+  useRouteShortcuts([
+    {
+      key: "⌘+K",
+      handler: () => navigate({ to: "/connections", search: { mode: "new", profileId: undefined } }),
+      description: "New connection",
+    },
+    {
+      key: "Ctrl+K",
+      handler: () => navigate({ to: "/connections", search: { mode: "new", profileId: undefined } }),
+      description: "New connection",
+    },
+    {
+      key: "⌘+R",
+      handler: () => navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } }),
+      description: "Recent connections",
+    },
+    {
+      key: "Ctrl+R",
+      handler: () => navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } }),
+      description: "Recent connections",
+    },
+    {
+      key: "?",
+      handler: () => window.open("https://github.com/KwaminaWhyte/db-hive/wiki", "_blank"),
+      description: "Documentation",
+    },
+  ]);
+
   return (
     <div className="flex-1 flex h-full relative">
-      {/* Top Right Controls */}
-      <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => navigate({ to: "/settings" })}
-        >
-          <Settings className="size-4" />
-        </Button>
-        <ModeToggle />
-      </div>
-
       <WelcomeScreen
         onNewConnection={() => navigate({ to: "/connections", search: { mode: "new", profileId: undefined } })}
         onRecentConnections={() => navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } })}

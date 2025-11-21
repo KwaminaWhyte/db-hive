@@ -1,9 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ConnectionList } from "@/components/ConnectionList";
 import { ConnectionForm } from "@/components/ConnectionForm";
-import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
-import { Settings } from "lucide-react";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -53,18 +51,6 @@ function ConnectionsRoute() {
 
   return (
     <div className="flex-1 flex h-full relative">
-      {/* Top Right Controls */}
-      <div className="fixed top-4 right-4 z-50 flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => navigate({ to: "/settings" })}
-        >
-          <Settings className="size-4" />
-        </Button>
-        <ModeToggle />
-      </div>
-
       {/* Left Sidebar - Always visible */}
       <div className="w-80 border-r overflow-y-auto">
         <ConnectionList
