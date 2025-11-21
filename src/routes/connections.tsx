@@ -31,45 +31,46 @@ function ConnectionsRoute() {
         <ModeToggle />
       </div>
 
-      {isExactMatch ? (
-        // Show connection list when at /connections exactly
-        <>
-          <div className="w-80 border-r overflow-y-auto">
-            <ConnectionList
-              onEdit={(profile) => {
-                if (profile) {
-                  navigate({
-                    to: "/connections/$profileId/edit",
-                    params: { profileId: profile.id },
-                  });
-                } else {
-                  navigate({ to: "/connections/new" });
-                }
-              }}
-              onProfilesChange={() => {
-                // Router will handle refresh
-              }}
-              onConnected={(connectionId, profile) => {
-                // Store connection in context
-                setConnection(connectionId, profile);
-                // Navigate to query panel (will create in Phase 4)
-                console.log("Connected:", connectionId);
-                // TODO: navigate({ to: "/query" })
-              }}
-            />
-          </div>
+      {/* Left Sidebar - Always visible */}
+      <div className="w-80 border-r overflow-y-auto">
+        <ConnectionList
+          onEdit={(profile) => {
+            if (profile) {
+              navigate({
+                to: "/connections/$profileId/edit",
+                params: { profileId: profile.id },
+              });
+            } else {
+              navigate({ to: "/connections/new" });
+            }
+          }}
+          onProfilesChange={() => {
+            // Router will handle refresh
+          }}
+          onConnected={(connectionId, profile) => {
+            // Store connection in context
+            setConnection(connectionId, profile);
+            // Navigate to query panel (will create in Phase 4)
+            console.log("Connected:", connectionId);
+            // TODO: navigate({ to: "/query" })
+          }}
+        />
+      </div>
 
-          {/* Right side - show welcome message or instructions */}
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center text-muted-foreground">
-              <p className="text-lg">Select a connection to get started</p>
-              <p className="text-sm mt-2">or create a new connection</p>
-            </div>
+      {/* Right side - show placeholder or form */}
+      {isExactMatch ? (
+        // Show placeholder when at /connections exactly
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center text-muted-foreground">
+            <p className="text-lg">Select a connection to get started</p>
+            <p className="text-sm mt-2">or create a new connection</p>
           </div>
-        </>
+        </div>
       ) : (
-        // Show child routes (new/edit) when navigating to them
-        <Outlet />
+        // Show child routes (new/edit form) on the right
+        <div className="flex-1 overflow-hidden">
+          <Outlet />
+        </div>
       )}
     </div>
   );
