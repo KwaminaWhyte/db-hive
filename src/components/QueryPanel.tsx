@@ -2,6 +2,8 @@ import { FC, useState, useEffect } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { SQLEditor } from './SQLEditor';
 import { ResultsViewer } from './ResultsViewer';
+import { QueryPlanVisualizer, parseExplainJson } from './QueryPlanVisualizer';
+import type { QueryPlanResult } from '@/types/database';
 import { HistoryPanel } from './HistoryPanel';
 import { SnippetSidebar } from './SnippetSidebar';
 import { QueryExecutionResult, ConnectionProfile } from '@/types/database';
@@ -63,6 +65,10 @@ export const QueryPanel: FC<QueryPanelProps> = ({
   ]);
   const [activeTabId, setActiveTabId] = useState('tab-1');
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+
+  // Query Plan Visualizer state
+  const [queryPlan, setQueryPlan] = useState<QueryPlanResult | null>(null);
+  const [showPlanView, setShowPlanView] = useState(false);
 
   // Get the active tab
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
@@ -151,6 +157,33 @@ export const QueryPanel: FC<QueryPanelProps> = ({
         results: result,
         loading: false,
       });
+
+      // Check if this is an EXPLAIN query and try to parse the plan
+      const trimmedSql = sqlToExecute.trim().toUpperCase();
+      if (trimmedSql.startsWith('EXPLAIN')) {
+        try {
+          // Check if result has JSON data (PostgreSQL EXPLAIN FORMAT JSON)
+          if (result.rows.length > 0 && result.rows[0].length > 0) {
+            const firstCell = result.rows[0][0];
+            // PostgreSQL EXPLAIN (FORMAT JSON) returns JSON in first column
+            if (typeof firstCell === 'object' || typeof firstCell === 'string') {
+              const jsonData = typeof firstCell === 'string' ? JSON.parse(firstCell) : firstCell;
+              const planResult = parseExplainJson(jsonData);
+              setQueryPlan(planResult);
+              setShowPlanView(true); // Automatically show plan view
+            }
+          }
+        } catch (parseError) {
+          console.error('Failed to parse EXPLAIN output:', parseError);
+          // Not a valid EXPLAIN JSON, just show regular results
+          setQueryPlan(null);
+          setShowPlanView(false);
+        }
+      } else {
+        // Not an EXPLAIN query, clear plan
+        setQueryPlan(null);
+        setShowPlanView(false);
+      }
 
       const executionTime = Date.now() - startTime;
 
@@ -292,14 +325,46 @@ export const QueryPanel: FC<QueryPanelProps> = ({
 
           {/* Results Viewer Panel */}
           <Panel defaultSize={60} minSize={30} className="relative">
-            <ResultsViewer
-              columns={activeTab.results?.columns || []}
-              rows={activeTab.results?.rows || []}
-              rowsAffected={activeTab.results?.rowsAffected || null}
-              loading={activeTab.loading}
-              error={activeTab.error}
-              executionTime={activeTab.results?.executionTime}
-            />
+            {/* View Toggle for EXPLAIN queries */}
+            {queryPlan && (
+              <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
+                <button
+                  onClick={() => setShowPlanView(false)}
+                  className={`px-3 py-1 text-sm rounded ${
+                    !showPlanView
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Results
+                </button>
+                <button
+                  onClick={() => setShowPlanView(true)}
+                  className={`px-3 py-1 text-sm rounded ${
+                    showPlanView
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Query Plan
+                </button>
+              </div>
+            )}
+
+            {showPlanView && queryPlan ? (
+              <div className="h-full overflow-auto p-4">
+                <QueryPlanVisualizer planResult={queryPlan} />
+              </div>
+            ) : (
+              <ResultsViewer
+                columns={activeTab.results?.columns || []}
+                rows={activeTab.results?.rows || []}
+                rowsAffected={activeTab.results?.rowsAffected || null}
+                loading={activeTab.loading}
+                error={activeTab.error}
+                executionTime={activeTab.results?.executionTime}
+              />
+            )}
           </Panel>
         </PanelGroup>
       </Panel>
