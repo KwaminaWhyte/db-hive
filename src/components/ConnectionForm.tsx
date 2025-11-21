@@ -1,11 +1,13 @@
 import { FC, useState, useEffect, FormEvent, ChangeEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
 import {
   ConnectionProfile,
   DbDriver,
   SslMode,
+  SshConfig,
+  SshAuthMethod,
   ConnectionStatus,
   getDefaultPort,
   getDriverDisplayName,
@@ -57,6 +59,19 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<string | null>(null);
 
+  // SSH Tunnel state
+  const [sshEnabled, setSshEnabled] = useState(!!profile?.sshTunnel);
+  const [sshConfig, setSshConfig] = useState<Partial<SshConfig>>({
+    host: profile?.sshTunnel?.host || "",
+    port: profile?.sshTunnel?.port || 22,
+    username: profile?.sshTunnel?.username || "",
+    authMethod: profile?.sshTunnel?.authMethod || "Password",
+    privateKeyPath: profile?.sshTunnel?.privateKeyPath || "",
+    localPort: profile?.sshTunnel?.localPort || 0,
+  });
+  const [sshPassword, setSshPassword] = useState("");
+  const [showSshPassword, setShowSshPassword] = useState(false);
+
   // Update form data when profile prop changes
   useEffect(() => {
     setFormData({
@@ -69,8 +84,21 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       database: profile?.database || "",
       sslMode: profile?.sslMode || "Prefer",
     });
-    // Clear password and status when switching profiles
+
+    // Update SSH state
+    setSshEnabled(!!profile?.sshTunnel);
+    setSshConfig({
+      host: profile?.sshTunnel?.host || "",
+      port: profile?.sshTunnel?.port || 22,
+      username: profile?.sshTunnel?.username || "",
+      authMethod: profile?.sshTunnel?.authMethod || "Password",
+      privateKeyPath: profile?.sshTunnel?.privateKeyPath || "",
+      localPort: profile?.sshTunnel?.localPort || 0,
+    });
+
+    // Clear passwords and status when switching profiles
     setPassword("");
+    setSshPassword("");
     setError(null);
     setTestStatus(null);
   }, [profile]);
@@ -115,6 +143,25 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     }
   };
 
+  // Handle SSH config changes
+  const handleSshChange = (
+    e: ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+
+    if (name === "port" || name === "localPort") {
+      setSshConfig((prev) => ({
+        ...prev,
+        [name]: parseInt(value, 10) || 0,
+      }));
+    } else {
+      setSshConfig((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
+  };
+
   // Handle file picker for SQLite
   const handleBrowseFile = async () => {
     try {
@@ -142,6 +189,36 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     } catch (err) {
       console.error("Failed to open file picker:", err);
       setError("Failed to open file picker");
+    }
+  };
+
+  // Handle file picker for SSH private key
+  const handleBrowseKeyFile = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        filters: [
+          {
+            name: "SSH Private Key",
+            extensions: ["pem", "key", ""],
+          },
+          {
+            name: "All Files",
+            extensions: ["*"],
+          },
+        ],
+      });
+
+      if (selected && typeof selected === "string") {
+        setSshConfig((prev) => ({
+          ...prev,
+          privateKeyPath: selected,
+        }));
+      }
+    } catch (err) {
+      console.error("Failed to open file picker:", err);
+      setError("Failed to open SSH key file picker");
     }
   };
 
@@ -209,6 +286,19 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     setLoading(true);
 
     try {
+      // Build SSH config if enabled
+      const sshTunnel: SshConfig | null = sshEnabled && sshConfig.host && sshConfig.username
+        ? {
+            host: sshConfig.host,
+            port: sshConfig.port || 22,
+            username: sshConfig.username,
+            authMethod: (sshConfig.authMethod as SshAuthMethod) || "Password",
+            privateKeyPath: sshConfig.privateKeyPath || null,
+            keyPassphraseKeyringKey: null, // TODO: Implement key passphrase storage
+            localPort: sshConfig.localPort || 0,
+          }
+        : null;
+
       const testProfile: ConnectionProfile = {
         id: formData.id || "",
         name: formData.name!,
@@ -219,7 +309,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         database: formData.database || null,
         sslMode: formData.sslMode!,
         passwordKeyringKey: null,
-        sshTunnel: null,
+        sshTunnel,
         folder: null,
       };
 
@@ -271,6 +361,19 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     setLoading(true);
 
     try {
+      // Build SSH config if enabled
+      const sshTunnel: SshConfig | null = sshEnabled && sshConfig.host && sshConfig.username
+        ? {
+            host: sshConfig.host,
+            port: sshConfig.port || 22,
+            username: sshConfig.username,
+            authMethod: (sshConfig.authMethod as SshAuthMethod) || "Password",
+            privateKeyPath: sshConfig.privateKeyPath || null,
+            keyPassphraseKeyringKey: null, // TODO: Implement key passphrase storage
+            localPort: sshConfig.localPort || 0,
+          }
+        : null;
+
       const saveProfile: ConnectionProfile = {
         id: formData.id || "",
         name: formData.name!,
@@ -281,7 +384,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         database: formData.database || null,
         sslMode: formData.sslMode!,
         passwordKeyringKey: null,
-        sshTunnel: null,
+        sshTunnel,
         folder: null,
       };
 
@@ -542,6 +645,173 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              {/* SSH Tunnel Configuration */}
+              <div className="space-y-3 pt-2">
+                <div
+                  className="flex items-center gap-2 cursor-pointer select-none"
+                  onClick={() => setSshEnabled(!sshEnabled)}
+                >
+                  {sshEnabled ? (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                  )}
+                  <Label className="cursor-pointer">
+                    SSH Tunnel <span className="text-muted-foreground">(optional)</span>
+                  </Label>
+                </div>
+
+                {sshEnabled && (
+                  <div className="space-y-4 pl-6 pt-2 border-l-2 border-border">
+                    {/* SSH Host and Port */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="col-span-2 space-y-2">
+                        <Label htmlFor="ssh-host">
+                          SSH Host <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          type="text"
+                          id="ssh-host"
+                          name="host"
+                          value={sshConfig.host || ""}
+                          onChange={handleSshChange}
+                          placeholder="ssh.example.com"
+                          required={sshEnabled}
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="ssh-port">
+                          SSH Port <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          type="number"
+                          id="ssh-port"
+                          name="port"
+                          value={sshConfig.port || 22}
+                          onChange={handleSshChange}
+                          min="0"
+                          max="65535"
+                          required={sshEnabled}
+                        />
+                      </div>
+                    </div>
+
+                    {/* SSH Username */}
+                    <div className="space-y-2">
+                      <Label htmlFor="ssh-username">
+                        SSH Username <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        type="text"
+                        id="ssh-username"
+                        name="username"
+                        value={sshConfig.username || ""}
+                        onChange={handleSshChange}
+                        placeholder="ubuntu"
+                        required={sshEnabled}
+                      />
+                    </div>
+
+                    {/* SSH Auth Method */}
+                    <div className="space-y-2">
+                      <Label htmlFor="ssh-auth-method">Authentication Method</Label>
+                      <Select
+                        value={sshConfig.authMethod || "Password"}
+                        onValueChange={(value) =>
+                          handleSshChange({
+                            target: { name: "authMethod", value },
+                          } as ChangeEvent<HTMLSelectElement>)
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select auth method" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Password">Password</SelectItem>
+                          <SelectItem value="PrivateKey">Private Key</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* SSH Password or Private Key */}
+                    {sshConfig.authMethod === "Password" ? (
+                      <div className="space-y-2">
+                        <Label htmlFor="ssh-password">SSH Password</Label>
+                        <div className="relative">
+                          <Input
+                            type={showSshPassword ? "text" : "password"}
+                            id="ssh-password"
+                            name="ssh-password"
+                            value={sshPassword}
+                            onChange={(e) => setSshPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="pr-10"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                            onClick={() => setShowSshPassword(!showSshPassword)}
+                          >
+                            {showSshPassword ? (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <Eye className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <Label htmlFor="ssh-key-path">
+                          Private Key File <span className="text-destructive">*</span>
+                        </Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="text"
+                            id="ssh-key-path"
+                            name="privateKeyPath"
+                            value={sshConfig.privateKeyPath || ""}
+                            onChange={handleSshChange}
+                            placeholder="/path/to/id_rsa"
+                            required={sshEnabled && sshConfig.authMethod === "PrivateKey"}
+                            className="flex-1"
+                          />
+                          <Button type="button" variant="outline" onClick={handleBrowseKeyFile}>
+                            Browse
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          Path to your SSH private key file
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Local Port (Optional) */}
+                    <div className="space-y-2">
+                      <Label htmlFor="local-port">
+                        Local Port <span className="text-muted-foreground">(0 = auto-assign)</span>
+                      </Label>
+                      <Input
+                        type="number"
+                        id="local-port"
+                        name="localPort"
+                        value={sshConfig.localPort || 0}
+                        onChange={handleSshChange}
+                        min="0"
+                        max="65535"
+                        placeholder="0"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Leave as 0 to automatically assign a free port
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

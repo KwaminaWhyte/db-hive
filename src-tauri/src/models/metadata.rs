@@ -198,6 +198,92 @@ impl IndexInfo {
     }
 }
 
+/// Foreign key information
+///
+/// Represents a foreign key constraint that references another table.
+/// This is used for ER diagrams and understanding table relationships.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ForeignKeyInfo {
+    /// Foreign key constraint name
+    pub name: String,
+
+    /// Table that contains this foreign key
+    pub table: String,
+
+    /// Schema of the table that contains this foreign key
+    pub schema: String,
+
+    /// Columns in this table that make up the foreign key
+    pub columns: Vec<String>,
+
+    /// Referenced table name
+    pub referenced_table: String,
+
+    /// Schema of the referenced table
+    pub referenced_schema: String,
+
+    /// Columns in the referenced table
+    pub referenced_columns: Vec<String>,
+
+    /// ON DELETE action (CASCADE, SET NULL, RESTRICT, NO ACTION, etc.)
+    pub on_delete: Option<String>,
+
+    /// ON UPDATE action (CASCADE, SET NULL, RESTRICT, NO ACTION, etc.)
+    pub on_update: Option<String>,
+}
+
+impl ForeignKeyInfo {
+    /// Create a new ForeignKeyInfo with minimal details
+    pub fn new(
+        name: String,
+        table: String,
+        schema: String,
+        columns: Vec<String>,
+        referenced_table: String,
+        referenced_schema: String,
+        referenced_columns: Vec<String>,
+    ) -> Self {
+        Self {
+            name,
+            table,
+            schema,
+            columns,
+            referenced_table,
+            referenced_schema,
+            referenced_columns,
+            on_delete: None,
+            on_update: None,
+        }
+    }
+
+    /// Create a ForeignKeyInfo with all details including actions
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_actions(
+        name: String,
+        table: String,
+        schema: String,
+        columns: Vec<String>,
+        referenced_table: String,
+        referenced_schema: String,
+        referenced_columns: Vec<String>,
+        on_delete: Option<String>,
+        on_update: Option<String>,
+    ) -> Self {
+        Self {
+            name,
+            table,
+            schema,
+            columns,
+            referenced_table,
+            referenced_schema,
+            referenced_columns,
+            on_delete,
+            on_update,
+        }
+    }
+}
+
 /// Complete table schema
 ///
 /// Contains all metadata about a table, including columns and indexes.

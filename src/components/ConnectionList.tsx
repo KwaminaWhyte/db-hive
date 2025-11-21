@@ -218,17 +218,17 @@ export const ConnectionList: FC<ConnectionListProps> = ({
   if (loading) {
     return (
       <div className="h-full flex flex-col bg-background">
-        <div className="p-4 border-b border-slate-800/70">
-          <Skeleton className="h-10 w-full rounded-xl bg-slate-800/50" />
+        <div className="p-4 border-b border-border">
+          <Skeleton className="h-10 w-full rounded-xl" />
           <div className="mt-4 space-y-2">
-            <Skeleton className="h-6 w-48 rounded-lg bg-slate-800/40" />
-            <Skeleton className="h-4 w-32 rounded-md bg-slate-800/30" />
+            <Skeleton className="h-6 w-48 rounded-lg" />
+            <Skeleton className="h-4 w-32 rounded-md" />
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
           {[1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-20 rounded-xl bg-slate-800/40" />
+            <Skeleton key={i} className="h-20 rounded-xl" />
           ))}
         </div>
       </div>
@@ -239,23 +239,23 @@ export const ConnectionList: FC<ConnectionListProps> = ({
   const getDriverColor = (driver: DbDriver) => {
     const driverName = getDriverDisplayName(driver).toLowerCase();
     if (driverName.includes("postgresql")) {
-      return "bg-blue-500/20 border-blue-500/40 text-blue-300";
+      return "bg-blue-500/20 border-blue-500/40 text-blue-600 dark:text-blue-300";
     } else if (driverName.includes("mysql")) {
-      return "bg-orange-500/20 border-orange-500/40 text-orange-300";
+      return "bg-orange-500/20 border-orange-500/40 text-orange-600 dark:text-orange-300";
     } else if (driverName.includes("sqlite")) {
-      return "bg-green-500/20 border-green-500/40 text-green-300";
+      return "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300";
     } else if (driverName.includes("mongodb")) {
-      return "bg-emerald-500/20 border-emerald-500/40 text-emerald-300";
+      return "bg-emerald-500/20 border-emerald-500/40 text-emerald-600 dark:text-emerald-300";
     } else if (driverName.includes("sql server")) {
-      return "bg-red-500/20 border-red-500/40 text-red-300";
+      return "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300";
     }
-    return "bg-amber-300/10 border-amber-300/30 text-amber-200";
+    return "bg-amber-300/10 border-amber-300/30 text-amber-700 dark:text-amber-200";
   };
 
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
-      <div className="p-4 border-b border-slate-800/70">
+      <div className="p-4 border-b border-border">
         <Button
           size="sm"
           onClick={() => onEdit?.(null)}
@@ -267,8 +267,8 @@ export const ConnectionList: FC<ConnectionListProps> = ({
 
         <div className="flex justify-between items-center w-full mt-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-100">Connections</h2>
-            <p className="text-xs text-slate-400">
+            <h2 className="text-lg font-semibold text-foreground">Connections</h2>
+            <p className="text-xs text-muted-foreground">
               {profiles.length} saved
             </p>
           </div>
@@ -276,15 +276,15 @@ export const ConnectionList: FC<ConnectionListProps> = ({
             variant="ghost"
             size="icon"
             onClick={loadProfiles}
-            className="h-8 w-8 rounded-lg border border-slate-700/60 bg-slate-900/60 hover:bg-slate-900/90 hover:border-amber-300/40 transition-colors"
+            className="h-8 w-8 rounded-lg border border-border bg-background/60 hover:bg-accent hover:border-amber-500/40 transition-colors"
           >
-            <RefreshCw className="h-4 w-4 text-slate-300" strokeWidth={1.5} />
+            <RefreshCw className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
           </Button>
         </div>
       </div>
 
       {error && (
-        <div className="mx-4 mt-4 rounded-xl bg-red-500/10 border border-red-500/30 p-3 text-sm text-red-200">
+        <div className="mx-4 mt-4 rounded-xl bg-red-500/10 border border-red-500/30 p-3 text-sm text-red-900 dark:text-red-200">
           {error}
         </div>
       )}
@@ -293,11 +293,11 @@ export const ConnectionList: FC<ConnectionListProps> = ({
       <div className="flex-1 overflow-y-auto">
         {profiles.length === 0 ? (
           <div className="p-8 text-center">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-amber-300/30 bg-amber-300/10 mb-4">
-              <Database className="h-8 w-8 text-amber-300" strokeWidth={1.5} />
+            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-amber-500/30 bg-amber-500/10 mb-4">
+              <Database className="h-8 w-8 text-amber-600 dark:text-amber-300" strokeWidth={1.5} />
             </div>
-            <p className="text-slate-300 text-sm font-medium">No connections yet</p>
-            <p className="text-slate-400 text-xs mt-1">
+            <p className="text-foreground text-sm font-medium">No connections yet</p>
+            <p className="text-muted-foreground text-xs mt-1">
               Create your first connection to get started
             </p>
           </div>
@@ -311,37 +311,37 @@ export const ConnectionList: FC<ConnectionListProps> = ({
               return (
                 <div
                   key={profile.id}
-                  className="group relative rounded-xl border border-slate-800/70 bg-slate-900/60 hover:bg-slate-900/90 hover:border-amber-300/30 transition-all cursor-pointer"
+                  className="group relative rounded-xl border border-border bg-card hover:bg-accent hover:border-amber-500/30 transition-all cursor-pointer"
                   onDoubleClick={() => handleConnectClick(profile)}
                   title="Double-click to connect"
                 >
                   <div className="p-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-start gap-3 flex-1">
-                        <div className="mt-0.5 h-5 w-5 rounded-lg border border-amber-300/40 bg-amber-300/10 flex items-center justify-center">
-                          <Server className="h-3 w-3 text-amber-300" strokeWidth={1.5} />
+                        <div className="mt-0.5 h-5 w-5 rounded-lg border border-amber-500/40 bg-amber-500/10 flex items-center justify-center">
+                          <Server className="h-3 w-3 text-amber-600 dark:text-amber-300" strokeWidth={1.5} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-sm text-slate-100 truncate">
+                            <span className="font-medium text-sm text-foreground truncate">
                               {profile.name}
                             </span>
                             <span className={`text-[10px] px-2 py-0.5 rounded-full border ${colorClass} font-medium`}>
                               {driverName}
                             </span>
                             {isConnecting && (
-                              <span className="text-xs text-amber-300 animate-pulse">
+                              <span className="text-xs text-amber-600 dark:text-amber-300 animate-pulse">
                                 Connecting...
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-slate-400 flex items-center gap-2">
+                          <div className="text-xs text-muted-foreground flex items-center gap-2">
                             <span>
                               {profile.host}:{profile.port}
                             </span>
                             {profile.database && (
                               <>
-                                <span className="text-slate-600">•</span>
+                                <span className="text-border">•</span>
                                 <span>{profile.database}</span>
                               </>
                             )}
@@ -352,7 +352,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 rounded-lg hover:bg-slate-800/80 hover:text-amber-300"
+                          className="h-7 w-7 rounded-lg hover:bg-accent hover:text-amber-600 dark:hover:text-amber-300"
                           onClick={(e) => {
                             e.stopPropagation();
                             onEdit?.(profile);
@@ -364,7 +364,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 rounded-lg hover:bg-red-500/20 hover:text-red-300"
+                          className="h-7 w-7 rounded-lg hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-300"
                           onClick={(e) => {
                             e.stopPropagation();
                             handleDeleteClick(profile);
@@ -388,18 +388,18 @@ export const ConnectionList: FC<ConnectionListProps> = ({
         open={!!passwordPrompt}
         onOpenChange={(open) => !open && setPasswordPrompt(null)}
       >
-        <DialogContent className="bg-slate-900 border-slate-800/70">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-slate-100">
+            <DialogTitle>
               Connect to {passwordPrompt?.profileName}
             </DialogTitle>
-            <DialogDescription className="text-slate-400">
+            <DialogDescription>
               Enter the password to connect to this database.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2 py-4">
-            <Label htmlFor="connect-password" className="text-slate-200">
+            <Label htmlFor="connect-password">
               Password
             </Label>
             <Input
@@ -414,7 +414,6 @@ export const ConnectionList: FC<ConnectionListProps> = ({
               }}
               placeholder="Enter password"
               autoFocus
-              className="rounded-lg border-slate-700/60 bg-slate-950/60 text-slate-100"
             />
           </div>
 
@@ -422,14 +421,12 @@ export const ConnectionList: FC<ConnectionListProps> = ({
             <Button
               variant="outline"
               onClick={() => setPasswordPrompt(null)}
-              className="rounded-lg border-slate-700/60 bg-slate-900/60 text-slate-200 hover:bg-slate-900/90"
             >
               Cancel
             </Button>
             <Button
               onClick={handleConnect}
               disabled={!password || connectingId !== null}
-              className="rounded-lg bg-gradient-to-r from-amber-400 via-amber-300 to-amber-400 text-slate-950 font-medium shadow-[0_4px_12px_rgba(251,191,36,0.3)]"
             >
               {connectingId ? "Connecting..." : "Connect"}
             </Button>
@@ -442,10 +439,10 @@ export const ConnectionList: FC<ConnectionListProps> = ({
         open={!!deletePrompt}
         onOpenChange={(open) => !open && setDeletePrompt(null)}
       >
-        <DialogContent className="bg-slate-900 border-slate-800/70">
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-slate-100">Delete Connection</DialogTitle>
-            <DialogDescription className="text-slate-400">
+            <DialogTitle>Delete Connection</DialogTitle>
+            <DialogDescription>
               Are you sure you want to delete "{deletePrompt?.profileName}"?
               This action cannot be undone.
             </DialogDescription>
@@ -455,13 +452,12 @@ export const ConnectionList: FC<ConnectionListProps> = ({
             <Button
               variant="outline"
               onClick={() => setDeletePrompt(null)}
-              className="rounded-lg border-slate-700/60 bg-slate-900/60 text-slate-200 hover:bg-slate-900/90"
             >
               Cancel
             </Button>
             <Button
               onClick={handleDeleteConfirm}
-              className="rounded-lg bg-red-500/80 hover:bg-red-500 text-white font-medium"
+              variant="destructive"
             >
               Delete
             </Button>

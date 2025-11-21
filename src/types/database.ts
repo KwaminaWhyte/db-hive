@@ -24,13 +24,28 @@ export type SslMode =
   | 'Require';
 
 /**
+ * SSH authentication method
+ */
+export type SshAuthMethod = 'Password' | 'PrivateKey';
+
+/**
  * SSH tunnel configuration
  */
 export interface SshConfig {
+  /** SSH server hostname or IP address */
   host: string;
+  /** SSH server port (typically 22) */
   port: number;
+  /** SSH username */
   username: string;
-  privateKeyPath: string;
+  /** Authentication method (password or private key) */
+  authMethod: SshAuthMethod;
+  /** Path to the private key file (only used with PrivateKey auth) */
+  privateKeyPath?: string | null;
+  /** Passphrase for encrypted private keys (optional) */
+  keyPassphraseKeyringKey?: string | null;
+  /** Local port to bind the tunnel to (0 = auto-assign) */
+  localPort: number;
 }
 
 /**

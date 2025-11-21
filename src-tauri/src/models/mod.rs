@@ -7,9 +7,11 @@ pub mod connection;
 pub mod error;
 pub mod history;
 pub mod metadata;
+pub mod settings;
 
 // Re-export commonly used types for convenience
 pub use connection::{ConnectionProfile, ConnectionStatus, DbDriver};
 pub use error::DbError;
 pub use history::{QueryHistory, QuerySnippet};
-pub use metadata::{ColumnInfo, DatabaseInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema};
+pub use metadata::{ColumnInfo, DatabaseInfo, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema};
+pub use settings::AppSettings;
