@@ -316,6 +316,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       const status = await invoke<ConnectionStatus>("test_connection_command", {
         profile: testProfile,
         password,
+        sshPassword: sshEnabled && sshConfig.authMethod === "Password" ? sshPassword : null,
       });
 
       if (status === "Connected") {
@@ -328,6 +329,14 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
               profileId: testProfile.id,
               password,
             });
+
+            // Save SSH password if enabled and using password auth
+            if (sshEnabled && sshConfig.authMethod === "Password" && sshPassword) {
+              await invoke("save_ssh_password", {
+                profileId: testProfile.id,
+                sshPassword,
+              });
+            }
           } catch (err) {
             console.error("Failed to save password:", err);
             // Don't show error to user, connection test was successful
@@ -410,6 +419,14 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
             profileId,
             password,
           });
+
+          // Save SSH password if enabled and using password auth
+          if (sshEnabled && sshConfig.authMethod === "Password" && sshPassword) {
+            await invoke("save_ssh_password", {
+              profileId,
+              sshPassword,
+            });
+          }
         } catch (err) {
           console.error("Failed to save password:", err);
           // Don't show error to user, profile was saved successfully
