@@ -19,10 +19,12 @@ import { Separator } from "./ui/separator";
 import { ScrollArea } from "./ui/scroll-area";
 import type { AppSettings } from "@/types";
 import { defaultSettings } from "@/types";
+import { useTheme } from "./theme-provider";
 
 type SettingsSection = "general" | "theme" | "query" | "shortcuts";
 
 export function SettingsPage() {
+  const { setTheme } = useTheme();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [activeSection, setActiveSection] = useState<SettingsSection>("general");
   const [isLoading, setIsLoading] = useState(true);
@@ -82,6 +84,11 @@ export function SettingsPage() {
       ...prev,
       theme: { ...prev.theme, [key]: value },
     }));
+
+    // Apply theme change immediately if mode is changed
+    if (key === "mode") {
+      setTheme(value as "light" | "dark" | "system");
+    }
   };
 
   const updateQuerySettings = (key: keyof AppSettings["query"], value: any) => {

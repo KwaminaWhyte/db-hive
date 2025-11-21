@@ -44,7 +44,7 @@ function QueryPanelRoute() {
   const navigate = useNavigate();
   const { tabs: tabsParam, active: activeIndex } = Route.useSearch();
   const { connectionId, connectionProfile, currentDatabase } = useConnectionContext();
-  const { getTabState, createTabState, removeTabState, getAllTabStates } = useTabContext();
+  const { getTabState, createTabState, removeTabState } = useTabContext();
 
   // Parse tab IDs from URL
   const tabIds = tabsParam.split(",").filter(Boolean);

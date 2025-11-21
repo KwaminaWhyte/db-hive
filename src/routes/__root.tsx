@@ -1,16 +1,49 @@
-import { Outlet, createRootRoute } from "@tanstack/react-router";
+import { Outlet, createRootRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/router-devtools";
 import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { ConnectionProvider, useConnectionContext } from "@/contexts/ConnectionContext";
 import { TabProvider } from "@/contexts/TabContext";
+import { CustomTitlebar } from "@/components/CustomTitlebar";
 import { Toaster } from "sonner";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 function RootComponent() {
   const { theme } = useTheme();
+  const navigate = useNavigate();
+  const router = useRouter();
+
+  // Global keyboard shortcuts (work across all routes)
+  useKeyboardShortcuts([
+    {
+      key: "Ctrl+,",
+      handler: () => {
+        const currentPath = router.state.location.pathname;
+        sessionStorage.setItem("db-hive-previous-route", currentPath);
+        navigate({ to: "/settings" });
+      },
+      description: "Open settings",
+    },
+    {
+      key: "⌘+,",
+      handler: () => {
+        const currentPath = router.state.location.pathname;
+        sessionStorage.setItem("db-hive-previous-route", currentPath);
+        navigate({ to: "/settings" });
+      },
+      description: "Open settings",
+    },
+  ]);
 
   return (
-    <div className="flex h-screen w-full bg-background">
-      <Outlet />
+    <div className="flex flex-col h-screen w-full bg-background">
+      {/* Custom Titlebar */}
+      <CustomTitlebar />
+
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        <Outlet />
+      </div>
+
       <Toaster
         richColors
         position="bottom-right"
