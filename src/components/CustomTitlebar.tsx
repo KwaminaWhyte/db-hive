@@ -8,9 +8,9 @@
  * - Window controls (minimize, maximize, close)
  */
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
-import { Window } from "@tauri-apps/api/window";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Minus, Square, X, ChevronDown } from "lucide-react";
 import { Button } from "./ui/button";
 import {
@@ -31,20 +31,57 @@ export function CustomTitlebar() {
   const { setTheme } = useTheme();
   const [isMaximized, setIsMaximized] = useState(false);
 
-  const appWindow = Window.getCurrent();
+  const appWindow = getCurrentWindow();
+
+  // Check if window is maximized on mount
+  useEffect(() => {
+    const checkMaximized = async () => {
+      try {
+        const maximized = await appWindow.isMaximized();
+        setIsMaximized(maximized);
+      } catch (error) {
+        console.error("Failed to check maximized state:", error);
+      }
+    };
+    checkMaximized();
+  }, [appWindow]);
 
   const handleMinimize = async () => {
-    await appWindow.minimize();
+    try {
+      await appWindow.minimize();
+    } catch (error) {
+      console.error("Failed to minimize window:", error);
+    }
   };
 
   const handleMaximize = async () => {
-    await appWindow.toggleMaximize();
-    const maximized = await appWindow.isMaximized();
-    setIsMaximized(maximized);
+    try {
+      await appWindow.toggleMaximize();
+      const maximized = await appWindow.isMaximized();
+      setIsMaximized(maximized);
+    } catch (error) {
+      console.error("Failed to toggle maximize:", error);
+    }
   };
 
   const handleClose = async () => {
-    await appWindow.close();
+    try {
+      await appWindow.close();
+    } catch (error) {
+      console.error("Failed to close window:", error);
+    }
+  };
+
+  // Handle window dragging
+  const handleDragStart = async (e: React.MouseEvent) => {
+    // Only start dragging on left mouse button
+    if (e.button === 0) {
+      try {
+        await appWindow.startDragging();
+      } catch (error) {
+        console.error("Failed to start dragging:", error);
+      }
+    }
   };
 
   const handleNavigateToSettings = () => {
@@ -55,12 +92,9 @@ export function CustomTitlebar() {
   };
 
   return (
-    <div
-      data-tauri-drag-region
-      className="flex items-center justify-between h-10 bg-background border-b border-border select-none"
-    >
+    <div className="flex items-center justify-between h-10 bg-background border-b border-border select-none">
       {/* Left: Logo and Menu */}
-      <div className="flex items-center gap-2 px-3">
+      <div className="flex items-center gap-2 px-3" onMouseDown={handleDragStart}>
         {/* App Logo - Small version */}
         <div className="relative h-6 w-6 rounded border border-amber-300/40 bg-gradient-to-br from-amber-300/40 via-amber-400/25 to-amber-500/30">
           <div className="absolute inset-[15%] rounded bg-slate-950/90 dark:bg-slate-950/90 border border-amber-200/30 flex items-center justify-center">

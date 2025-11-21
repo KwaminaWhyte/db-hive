@@ -6,11 +6,19 @@ import { TabProvider } from "@/contexts/TabContext";
 import { CustomTitlebar } from "@/components/CustomTitlebar";
 import { Toaster } from "sonner";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { setupWindowStatePersistence } from "@/utils/windowState";
+import { useEffect } from "react";
 
 function RootComponent() {
   const { theme } = useTheme();
   const navigate = useNavigate();
   const router = useRouter();
+
+  // Setup window state persistence
+  useEffect(() => {
+    const cleanup = setupWindowStatePersistence();
+    return cleanup;
+  }, []);
 
   // Global keyboard shortcuts (work across all routes)
   useKeyboardShortcuts([

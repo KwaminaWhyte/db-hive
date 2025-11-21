@@ -1,9 +1,8 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { SchemaExplorer } from "@/components/SchemaExplorer";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
-import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
-import { Settings, LogOut, Database } from "lucide-react";
+import { LogOut, Database } from "lucide-react";
 
 /**
  * Connected Layout Route
@@ -86,48 +85,37 @@ function ConnectedLayout() {
 
   return (
     <div className="flex-1 flex h-full relative">
-      {/* Top Bar */}
-      <div className="fixed top-0 left-0 right-0 h-14 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 z-50">
+      {/* Connection Info Bar - Slim bar below titlebar */}
+      <div className="fixed top-0 left-0 right-0 h-8 border-b border-border bg-accent/30 z-40">
         <div className="flex items-center justify-between h-full px-4">
           {/* Left: Connection Info */}
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-accent/50 border border-border">
-              <Database className="size-4 text-muted-foreground" />
-              <span className="text-sm font-medium">{connectionProfile.name}</span>
-              {currentDatabase && (
-                <>
-                  <span className="text-muted-foreground">/</span>
-                  <span className="text-sm text-muted-foreground">{currentDatabase}</span>
-                </>
-              )}
-            </div>
+          <div className="flex items-center gap-2">
+            <Database className="size-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium">{connectionProfile.name}</span>
+            {currentDatabase && (
+              <>
+                <span className="text-xs text-muted-foreground">/</span>
+                <span className="text-xs text-muted-foreground">{currentDatabase}</span>
+              </>
+            )}
           </div>
 
-          {/* Right: Controls */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDisconnect}
-              title="Disconnect"
-            >
-              <LogOut className="size-4 mr-2" />
-              Disconnect
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => navigate({ to: "/settings" })}
-            >
-              <Settings className="size-4" />
-            </Button>
-            <ModeToggle />
-          </div>
+          {/* Right: Disconnect Button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDisconnect}
+            className="h-6 px-2 text-xs"
+            title="Disconnect"
+          >
+            <LogOut className="size-3 mr-1" />
+            Disconnect
+          </Button>
         </div>
       </div>
 
-      {/* Main Content Area (with top padding for fixed header) */}
-      <div className="flex-1 flex pt-14">
+      {/* Main Content Area (with top padding for connection bar) */}
+      <div className="flex-1 flex pt-8">
         {/* Left Sidebar - Schema Explorer */}
         <div className="w-80 border-r overflow-y-auto">
           <SchemaExplorer
