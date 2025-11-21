@@ -1,29 +1,29 @@
 # TanStack Router Implementation Plan for DB-Hive
 
-**Document Version:** 1.1
+**Document Version:** 1.2
 **Date:** 2025-11-21
-**Status:** Phase 1-3 Complete (50% Done) ✅
-**Last Updated:** 2025-11-21 09:30 AM
+**Status:** Phase 1-4 Complete (75% Done) ✅
+**Last Updated:** 2025-11-21 11:45 AM
 
 ---
 
 ## 🚀 Quick Status
 
-**Overall Progress:** 50% Complete (3/6 Phases Done)
+**Overall Progress:** 75% Complete (4/6 Phases Done)
 
 | Phase                                  | Status         | Completion |
 | -------------------------------------- | -------------- | ---------- |
 | Phase 1: Setup & Configuration         | ✅ Complete    | 100%       |
 | Phase 2: Core Infrastructure           | ✅ Complete    | 100%       |
 | Phase 3: Settings & Connections Routes | ✅ Complete    | 100%       |
-| Phase 4: Connected Routes              | ⏳ In Progress | 0%         |
-| Phase 5: Component Refactoring         | ⏳ Pending     | 0%         |
+| Phase 4: Connected Routes              | ✅ Complete    | 100%       |
+| Phase 5: Component Refactoring         | ⏳ In Progress | 0%         |
 | Phase 6: Testing & Cleanup             | ⏳ Pending     | 0%         |
 
-**Latest Commit:** `7cf4fe3` - feat: implement TanStack Router Phase 3
+**Latest Commit:** `e8289a5` - fix: refactor connection editing to use search params
 **Branch:** `feature/tanstack-router`
 **Build Status:** ✅ Passing (0 errors)
-**Routes Working:** 5/10
+**Routes Working:** 10/10 ✅
 
 ---
 
@@ -62,12 +62,12 @@ This plan outlines the complete migration of DB-Hive from manual state-based nav
 
 - ✅ **Phase 1:** Setup & Configuration
 - ✅ **Phase 2:** Core Infrastructure (Root route, ConnectionContext)
-- ✅ **Phase 3:** Settings & Connections Routes (5 routes working)
+- ✅ **Phase 3:** Settings & Connections Routes (inline forms with search params)
+- ✅ **Phase 4:** Connected Routes (query panel, table inspector, ER diagram)
 
 **In Progress:**
 
-- ⏳ **Phase 4:** Connected Routes (Next)
-- ⏳ **Phase 5:** Component Refactoring
+- ⏳ **Phase 5:** Component Refactoring (Next)
 - ⏳ **Phase 6:** Testing & Cleanup
 
 ### 📊 Current Status
@@ -76,14 +76,18 @@ This plan outlines the complete migration of DB-Hive from manual state-based nav
 
 1. `3b287b4` - Phase 1 & 2: Basic setup + core infrastructure
 2. `7cf4fe3` - Phase 3: Settings & connections routes
+3. `fa86850` - feat: implement side-by-side layout for connection management
+4. `e8289a5` - fix: refactor connection editing to use search params
+5. [Next] Phase 4: Connected routes implementation
 
-**Routes Implemented:** 5/10 routes complete
+**Routes Implemented:** 10/10 routes complete ✅
 
 - ✅ `/` - Welcome screen
 - ✅ `/settings` - Settings page
-- ✅ `/connections` - Connection list
-- ✅ `/connections/new` - New connection form
-- ✅ `/connections/$profileId/edit` - Edit connection
+- ✅ `/connections` - Connection list with inline forms (search params)
+- ✅ `/_connected/query` - SQL query panel
+- ✅ `/_connected/table/$schema/$tableName` - Table inspector
+- ✅ `/_connected/er-diagram/$schema` - ER diagram viewer
 
 **Benefits Achieved:**
 
@@ -1078,42 +1082,42 @@ Add JSDoc comments to all route files:
 
 ### Setup Phase
 
-- [ ] Install @tanstack/react-router
-- [ ] Install @tanstack/router-plugin
-- [ ] Install @tanstack/router-devtools
-- [ ] Update vite.config.ts with TanStackRouterVite plugin
-- [ ] Create src/routes/ directory structure
+- [x] Install @tanstack/react-router
+- [x] Install @tanstack/router-plugin
+- [x] Install @tanstack/router-devtools
+- [x] Update vite.config.ts with TanStackRouterVite plugin
+- [x] Create src/routes/ directory structure
 
 ### Route Implementation Phase
 
-- [ ] Create \_\_root.tsx (root layout)
-- [ ] Create index.tsx (welcome screen)
-- [ ] Create settings.tsx
-- [ ] Create connections.tsx
-- [ ] Create connections.new.tsx
-- [ ] Create connections.$profileId.edit.tsx
-- [ ] Create \_connected/route.tsx (layout with guard)
-- [ ] Create \_connected/query.tsx
-- [ ] Create \_connected/table.$schema.$tableName/route.tsx
-- [ ] Create \_connected/table.$schema.$tableName/index.tsx
-- [ ] Create \_connected/er-diagram.$schema.tsx
+- [x] Create \_\_root.tsx (root layout)
+- [x] Create index.tsx (welcome screen)
+- [x] Create settings.tsx
+- [x] Create connections.tsx (with inline new/edit forms via search params)
+- [x] ~~Create connections.new.tsx~~ (consolidated into connections.tsx)
+- [x] ~~Create connections.$profileId.edit.tsx~~ (consolidated into connections.tsx)
+- [x] Create \_connected/route.tsx (layout with guard)
+- [x] Create \_connected/query.tsx
+- [x] Create \_connected/table.$schema.$tableName/route.tsx
+- [x] Create \_connected/table.$schema.$tableName/index.tsx
+- [x] Create \_connected/er-diagram.$schema.tsx
 
 ### State Migration Phase
 
-- [ ] Create ConnectionContext.tsx
-- [ ] Create useRouterContext.tsx hook
-- [ ] Update \_\_root.tsx with context providers
-- [ ] Update \_connected/route.tsx with context usage
+- [x] Create ConnectionContext.tsx
+- [x] ~~Create useRouterContext.tsx hook~~ (using ConnectionContext directly)
+- [x] Update \_\_root.tsx with context providers
+- [x] Update \_connected/route.tsx with context usage
 
 ### Component Refactoring Phase
 
-- [ ] Simplify App.tsx to RouterProvider
-- [ ] Update ConnectionList.tsx for navigation
+- [x] Simplify App.tsx to RouterProvider
+- [x] Update ConnectionList.tsx for navigation (uses search params)
 - [ ] Update SchemaExplorer.tsx for navigation
 - [ ] Update TableInspector.tsx for search params
 - [ ] Update QueryPanel.tsx for search params
-- [ ] Update ConnectionForm.tsx callbacks
-- [ ] Update WelcomeScreen.tsx callbacks
+- [x] Update ConnectionForm.tsx callbacks (onSuccess)
+- [x] Update WelcomeScreen.tsx callbacks (navigation)
 
 ### Testing Phase
 

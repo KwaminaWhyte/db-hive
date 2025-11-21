@@ -209,7 +209,24 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Grid-based canvas with snap-to-grid
 - [ ] Save/load ERD layouts
 
-### Milestone 3.4: Settings & Configuration ✅ COMPLETED (2025-11-20)
+### Milestone 3.4: Native Window & System Tray ✅ COMPLETED (2025-11-21)
+
+**Custom Window Decorations & Tray Integration**
+
+- [x] Enable tray-icon feature in Cargo.toml
+- [x] Configure custom window titlebar (decorations: false)
+- [x] Implement system tray icon with application icon
+- [x] Create system tray menu with:
+  - [x] Show/Hide Window action
+  - [x] Open Settings action
+  - [x] Separator
+  - [x] Quit action
+- [x] Handle tray menu events (show/hide, settings, quit)
+- [x] Handle tray click events (double-click to show window)
+- [x] Window minimize-to-tray behavior
+- [x] Native window feel with custom controls
+
+### Milestone 3.5: Settings & Configuration ✅ COMPLETED (2025-11-20)
 
 **Application Settings Page** (discovered from redesign.md)
 
