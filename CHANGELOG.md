@@ -9,6 +9,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Custom Window Titlebar & Menu System** (2025-11-21):
+  - Replaced native window decorations with custom titlebar
+  - Professional window menu system with File, View, Window, and Help menus
+  - Settings and Theme access moved from fixed buttons to menu items
+  - Window controls (minimize, maximize/restore, close) with proper Tauri API
+  - Drag-to-move functionality with startDragging() API
+  - Window position and size persistence across app restarts
+  - Slim connection info bar (32px) for database pages
+  - Visual hierarchy: titlebar → connection bar → content
+
+- **Global Keyboard Shortcuts System** (2025-11-21):
+  - Comprehensive keyboard shortcuts throughout the application
+  - Welcome Page: Ctrl/Cmd+K (new connection), Ctrl/Cmd+R (recent), ? (docs)
+  - Query Panel: Ctrl/Cmd+T (new tab), Ctrl/Cmd+W (close tab)
+  - Global: Ctrl/Cmd+, (open settings from anywhere)
+  - Smart behavior: shortcuts ignore input fields and textareas
+  - Cross-platform support (Ctrl on Windows/Linux, Cmd on macOS)
+  - useKeyboardShortcuts and useRouteShortcuts hooks
+
+- **Window State Persistence** (2025-11-21):
+  - Automatic save of window position, size, and maximized state
+  - localStorage-based persistence with debounced auto-save
+  - Restores window state on app startup
+  - Listens to window resize and move events
+  - Saves state before window close via beforeunload
+  - Proper cleanup with event listener removal
+
+### Fixed
+
+- **Settings Page Navigation** (2025-11-21):
+  - Settings now returns to previous route instead of always going to welcome
+  - Uses sessionStorage to track route before opening settings
+  - Works correctly from Welcome, Connections, and Query pages
+  - Theme changes in Settings now apply immediately to entire app
+
 - **Per-Database Tab Persistence** (2025-11-21):
   - Tabs now persist independently per database (not per connection)
   - Each database maintains its own set of open tabs
