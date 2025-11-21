@@ -16,7 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Pencil, Trash, Database, Server, Plus, RefreshCw } from "lucide-react";
+import { Pencil, Trash, Database, Server, Plus, RefreshCw, ChevronRight, ChevronDown, FolderOpen, Folder } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface ConnectionListProps {
@@ -46,6 +46,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     profileName: string;
   } | null>(null);
   const [password, setPassword] = useState("");
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // Load profiles on mount
   useEffect(() => {
@@ -69,6 +70,38 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // Organize profiles by folder
+  const organizeProfilesByFolder = () => {
+    const folderMap = new Map<string, ConnectionProfile[]>();
+    const noFolderProfiles: ConnectionProfile[] = [];
+
+    profiles.forEach((profile) => {
+      if (profile.folder) {
+        if (!folderMap.has(profile.folder)) {
+          folderMap.set(profile.folder, []);
+        }
+        folderMap.get(profile.folder)!.push(profile);
+      } else {
+        noFolderProfiles.push(profile);
+      }
+    });
+
+    return { folderMap, noFolderProfiles };
+  };
+
+  // Toggle folder expansion
+  const toggleFolder = (folderName: string) => {
+    setExpandedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(folderName)) {
+        next.delete(folderName);
+      } else {
+        next.add(folderName);
+      }
+      return next;
+    });
   };
 
   // Handle connect button click
@@ -331,82 +364,135 @@ export const ConnectionList: FC<ConnectionListProps> = ({
           </div>
         ) : (
           <div className="p-4 space-y-2">
-            {profiles.map((profile) => {
-              const colorClass = getDriverColor(profile.driver);
-              const driverName = getDriverDisplayName(profile.driver);
-              const isConnecting = connectingId === profile.id;
+            {(() => {
+              const { folderMap, noFolderProfiles } = organizeProfilesByFolder();
 
-              return (
-                <div
-                  key={profile.id}
-                  className="group relative rounded-xl border border-border bg-card hover:bg-accent hover:border-amber-500/30 transition-all cursor-pointer"
-                  onDoubleClick={() => handleConnectClick(profile)}
-                  title="Double-click to connect"
-                >
-                  <div className="p-3">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start gap-3 flex-1">
-                        <div className="mt-0.5 h-5 w-5 rounded-lg border border-amber-500/40 bg-amber-500/10 flex items-center justify-center">
-                          <Server className="h-3 w-3 text-amber-600 dark:text-amber-300" strokeWidth={1.5} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-medium text-sm text-foreground truncate">
-                              {profile.name}
-                            </span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full border ${colorClass} font-medium`}>
-                              {driverName}
-                            </span>
-                            {isConnecting && (
-                              <span className="text-xs text-amber-600 dark:text-amber-300 animate-pulse">
-                                Connecting...
+              // Render helper for connection profile
+              const renderProfile = (profile: ConnectionProfile) => {
+                const colorClass = getDriverColor(profile.driver);
+                const driverName = getDriverDisplayName(profile.driver);
+                const isConnecting = connectingId === profile.id;
+
+                return (
+                  <div
+                    key={profile.id}
+                    className="group relative rounded-xl border border-border bg-card hover:bg-accent hover:border-amber-500/30 transition-all cursor-pointer"
+                    onDoubleClick={() => handleConnectClick(profile)}
+                    title="Double-click to connect"
+                  >
+                    <div className="p-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3 flex-1">
+                          <div className="mt-0.5 h-5 w-5 rounded-lg border border-amber-500/40 bg-amber-500/10 flex items-center justify-center">
+                            <Server className="h-3 w-3 text-amber-600 dark:text-amber-300" strokeWidth={1.5} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="font-medium text-sm text-foreground truncate">
+                                {profile.name}
                               </span>
-                            )}
-                          </div>
-                          <div className="text-xs text-muted-foreground flex items-center gap-2">
-                            <span>
-                              {profile.host}:{profile.port}
-                            </span>
-                            {profile.database && (
-                              <>
-                                <span className="text-border">•</span>
-                                <span>{profile.database}</span>
-                              </>
-                            )}
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full border ${colorClass} font-medium`}>
+                                {driverName}
+                              </span>
+                              {isConnecting && (
+                                <span className="text-xs text-amber-600 dark:text-amber-300 animate-pulse">
+                                  Connecting...
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground flex items-center gap-2">
+                              <span>
+                                {profile.host}:{profile.port}
+                              </span>
+                              {profile.database && (
+                                <>
+                                  <span className="text-border">•</span>
+                                  <span>{profile.database}</span>
+                                </>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-lg hover:bg-accent hover:text-amber-600 dark:hover:text-amber-300"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit?.(profile);
-                          }}
-                          title="Edit"
-                        >
-                          <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 rounded-lg hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-300"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteClick(profile);
-                          }}
-                          title="Delete"
-                        >
-                          <Trash className="h-3.5 w-3.5" strokeWidth={1.5} />
-                        </Button>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 rounded-lg hover:bg-accent hover:text-amber-600 dark:hover:text-amber-300"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onEdit?.(profile);
+                            }}
+                            title="Edit"
+                          >
+                            <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 rounded-lg hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-300"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteClick(profile);
+                            }}
+                            title="Delete"
+                          >
+                            <Trash className="h-3.5 w-3.5" strokeWidth={1.5} />
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
+                );
+              };
+
+              return (
+                <>
+                  {/* Render folders */}
+                  {Array.from(folderMap.entries())
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([folderName, folderProfiles]) => {
+                      const isExpanded = expandedFolders.has(folderName);
+
+                      return (
+                        <div key={`folder-${folderName}`}>
+                          {/* Folder Header */}
+                          <div
+                            className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent cursor-pointer transition-colors"
+                            onClick={() => toggleFolder(folderName)}
+                          >
+                            {isExpanded ? (
+                              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            {isExpanded ? (
+                              <FolderOpen className="h-4 w-4 text-amber-600 dark:text-amber-300" />
+                            ) : (
+                              <Folder className="h-4 w-4 text-amber-600 dark:text-amber-300" />
+                            )}
+                            <span className="text-sm font-medium text-foreground">
+                              {folderName}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              ({folderProfiles.length})
+                            </span>
+                          </div>
+
+                          {/* Folder Contents */}
+                          {isExpanded && (
+                            <div className="ml-6 mt-1 space-y-2">
+                              {folderProfiles.map(renderProfile)}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {/* Render connections without folders */}
+                  {noFolderProfiles.map(renderProfile)}
+                </>
               );
-            })}
+            })()}
           </div>
         )}
       </div>

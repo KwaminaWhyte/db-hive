@@ -234,7 +234,7 @@ export function CustomTitlebar() {
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled>
-                About DB Hive v0.6.0-beta
+                About DB Hive v0.7.0-beta
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

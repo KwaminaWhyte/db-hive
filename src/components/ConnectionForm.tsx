@@ -1,7 +1,7 @@
 import { FC, useState, useEffect, FormEvent, ChangeEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { Eye, EyeOff, ChevronDown, ChevronRight } from "lucide-react";
+import { Eye, EyeOff, ChevronDown, ChevronRight, Check, ChevronsUpDown, FolderOpen } from "lucide-react";
 import {
   ConnectionProfile,
   DbDriver,
@@ -9,6 +9,7 @@ import {
   SshConfig,
   SshAuthMethod,
   ConnectionStatus,
+  Environment,
   getDefaultPort,
   getDriverDisplayName,
 } from "../types/database";
@@ -29,6 +30,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface ConnectionFormProps {
   /** Existing profile to edit, or undefined for new profile */
@@ -51,6 +57,8 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     username: profile?.username || "",
     database: profile?.database || "",
     sslMode: profile?.sslMode || "Prefer",
+    folder: profile?.folder || null,
+    environment: profile?.environment || null,
   });
 
   const [password, setPassword] = useState("");
@@ -58,6 +66,11 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<string | null>(null);
+
+  // Folder management state
+  const [existingFolders, setExistingFolders] = useState<string[]>([]);
+  const [folderOpen, setFolderOpen] = useState(false);
+  const [folderSearchValue, setFolderSearchValue] = useState("");
 
   // SSH Tunnel state
   const [sshEnabled, setSshEnabled] = useState(!!profile?.sshTunnel);
@@ -72,6 +85,24 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   const [sshPassword, setSshPassword] = useState("");
   const [showSshPassword, setShowSshPassword] = useState(false);
 
+  // Load existing folders on mount
+  useEffect(() => {
+    const loadFolders = async () => {
+      try {
+        const profiles = await invoke<ConnectionProfile[]>("list_connection_profiles");
+        const folders = profiles
+          .filter((p) => p.folder)
+          .map((p) => p.folder!)
+          .filter((value, index, self) => self.indexOf(value) === index) // unique
+          .sort();
+        setExistingFolders(folders);
+      } catch (error) {
+        console.error("Failed to load folders:", error);
+      }
+    };
+    loadFolders();
+  }, []);
+
   // Update form data when profile prop changes
   useEffect(() => {
     setFormData({
@@ -83,6 +114,8 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       username: profile?.username || "",
       database: profile?.database || "",
       sslMode: profile?.sslMode || "Prefer",
+      folder: profile?.folder || null,
+      environment: profile?.environment || null,
     });
 
     // Update SSH state
@@ -311,6 +344,14 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         passwordKeyringKey: null,
         sshTunnel,
         folder: null,
+        environment: null,
+        lastConnectedAt: null,
+        connectionCount: 0,
+        isFavorite: false,
+        color: null,
+        description: null,
+        createdAt: Math.floor(Date.now() / 1000),
+        updatedAt: Math.floor(Date.now() / 1000),
       };
 
       const status = await invoke<ConnectionStatus>("test_connection_command", {
@@ -394,7 +435,17 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         sslMode: formData.sslMode!,
         passwordKeyringKey: null,
         sshTunnel,
-        folder: null,
+        folder: formData.folder || null,
+        environment: formData.environment || null,
+
+        // Metadata fields - preserve existing values when editing, use defaults for new profiles
+        lastConnectedAt: profile?.lastConnectedAt || null,
+        connectionCount: profile?.connectionCount || 0,
+        isFavorite: profile?.isFavorite || false,
+        color: profile?.color || null,
+        description: profile?.description || null,
+        createdAt: profile?.createdAt || Math.floor(Date.now() / 1000),
+        updatedAt: Math.floor(Date.now() / 1000),
       };
 
       let profileId: string;
@@ -512,6 +563,135 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Organization: Folder and Environment - Side by side */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Folder */}
+            <div className="space-y-2">
+              <Label htmlFor="folder">Folder</Label>
+              <Popover open={folderOpen} onOpenChange={setFolderOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={folderOpen}
+                    className="w-full justify-between"
+                  >
+                    {formData.folder ? (
+                      <span className="flex items-center gap-2">
+                        <FolderOpen className="h-4 w-4" />
+                        {formData.folder}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Select or create folder...</span>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[200px] p-0">
+                  <div className="p-2">
+                    <Input
+                      placeholder="Search or create folder..."
+                      value={folderSearchValue}
+                      onChange={(e) => setFolderSearchValue(e.target.value)}
+                      className="mb-2"
+                    />
+                    {/* None option */}
+                    <Button
+                      variant="ghost"
+                      className="w-full justify-start text-sm"
+                      onClick={() => {
+                        setFormData({ ...formData, folder: null });
+                        setFolderOpen(false);
+                        setFolderSearchValue("");
+                      }}
+                    >
+                      <Check
+                        className={`mr-2 h-4 w-4 ${
+                          !formData.folder ? "opacity-100" : "opacity-0"
+                        }`}
+                      />
+                      None
+                    </Button>
+                    {/* Existing folders filtered by search */}
+                    {existingFolders
+                      .filter((folder) =>
+                        folder.toLowerCase().includes(folderSearchValue.toLowerCase())
+                      )
+                      .map((folder) => (
+                        <Button
+                          key={folder}
+                          variant="ghost"
+                          className="w-full justify-start text-sm"
+                          onClick={() => {
+                            setFormData({ ...formData, folder });
+                            setFolderOpen(false);
+                            setFolderSearchValue("");
+                          }}
+                        >
+                          <Check
+                            className={`mr-2 h-4 w-4 ${
+                              formData.folder === folder ? "opacity-100" : "opacity-0"
+                            }`}
+                          />
+                          <FolderOpen className="mr-2 h-4 w-4" />
+                          {folder}
+                        </Button>
+                      ))}
+                    {/* Create new folder option */}
+                    {folderSearchValue &&
+                      !existingFolders.some(
+                        (f) => f.toLowerCase() === folderSearchValue.toLowerCase()
+                      ) && (
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start text-sm border-t mt-2 pt-2"
+                          onClick={() => {
+                            setFormData({ ...formData, folder: folderSearchValue });
+                            setExistingFolders([...existingFolders, folderSearchValue].sort());
+                            setFolderOpen(false);
+                            setFolderSearchValue("");
+                          }}
+                        >
+                          <Check className="mr-2 h-4 w-4 opacity-0" />
+                          Create "{folderSearchValue}"
+                        </Button>
+                      )}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <p className="text-xs text-muted-foreground">
+                Group connections in folders
+              </p>
+            </div>
+
+            {/* Environment */}
+            <div className="space-y-2">
+              <Label htmlFor="environment">Environment</Label>
+              <Select
+                value={formData.environment || "none"}
+                onValueChange={(value) =>
+                  setFormData({
+                    ...formData,
+                    environment: value === "none" ? null : (value as Environment),
+                  })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select environment..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">None</SelectItem>
+                  <SelectItem value="Local">Local</SelectItem>
+                  <SelectItem value="Staging">Staging</SelectItem>
+                  <SelectItem value="Production">Production</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Tag connection environment
+              </p>
+            </div>
           </div>
 
           {/* SQLite File Path */}

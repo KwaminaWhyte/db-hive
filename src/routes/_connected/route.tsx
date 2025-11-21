@@ -36,13 +36,19 @@ function ConnectedLayout() {
 
   // Guard: If not connected, redirect to connections page
   if (!connectionId || !connectionProfile) {
-    navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } });
+    navigate({
+      to: "/connections",
+      search: { mode: undefined, profileId: undefined },
+    });
     return null;
   }
 
   const handleDisconnect = () => {
     disconnect();
-    navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } });
+    navigate({
+      to: "/connections",
+      search: { mode: undefined, profileId: undefined },
+    });
   };
 
   const handleTableSelect = (schema: string, tableName: string) => {
@@ -53,7 +59,9 @@ function ConnectedLayout() {
     navigate({
       to: "/query",
       search: (prev) => {
-        const currentTabIds = prev.tabs ? prev.tabs.split(",") : [`query-${Date.now()}`];
+        const currentTabIds = prev.tabs
+          ? prev.tabs.split(",")
+          : [`query-${Date.now()}`];
 
         // Check if table is already open
         const existingIndex = currentTabIds.indexOf(tableId);
@@ -86,16 +94,20 @@ function ConnectedLayout() {
   return (
     <div className="flex-1 flex h-full relative">
       {/* Connection Info Bar - Slim bar below titlebar */}
-      <div className="fixed top-0 left-0 right-0 h-8 border-b border-border bg-accent/30 z-40">
+      <div className="fixed top-10 left-0 right-0 h-8 border-b border-border bg-accent/30 z-40">
         <div className="flex items-center justify-between h-full px-4">
           {/* Left: Connection Info */}
           <div className="flex items-center gap-2">
             <Database className="size-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium">{connectionProfile.name}</span>
+            <span className="text-xs font-medium">
+              {connectionProfile.name}
+            </span>
             {currentDatabase && (
               <>
                 <span className="text-xs text-muted-foreground">/</span>
-                <span className="text-xs text-muted-foreground">{currentDatabase}</span>
+                <span className="text-xs text-muted-foreground">
+                  {currentDatabase}
+                </span>
               </>
             )}
           </div>
@@ -114,7 +126,7 @@ function ConnectedLayout() {
         </div>
       </div>
 
-      {/* Main Content Area (with top padding for connection bar) */}
+      {/* Main Content Area (with top padding for titlebar + connection bar) */}
       <div className="flex-1 flex pt-8">
         {/* Left Sidebar - Schema Explorer */}
         <div className="w-80 border-r overflow-y-auto">

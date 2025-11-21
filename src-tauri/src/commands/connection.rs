@@ -531,6 +531,12 @@ pub async fn connect_to_database(
         state.save_passwords_to_store(&app)?;
     }
 
+    // Record successful connection (update metadata)
+    if let Err(e) = record_connection(profile_id.clone(), state, app.clone()) {
+        eprintln!("Warning: Failed to record connection metadata: {}", e);
+        // Don't fail the connection if metadata recording fails
+    }
+
     Ok(profile_id)
 }
 
@@ -694,6 +700,269 @@ pub async fn switch_database(
     }
 
     Ok(connection_id)
+}
+
+/// Record a successful connection (update metadata)
+///
+/// This command updates connection metadata after a successful connection,
+/// including incrementing the connection count and updating the last connected timestamp.
+///
+/// # Arguments
+///
+/// * `profile_id` - ID of the profile that was connected
+/// * `state` - Application state
+/// * `app` - Application handle
+///
+/// # Returns
+///
+/// Returns `Ok(())` if successful
+#[tauri::command]
+pub fn record_connection(
+    profile_id: String,
+    state: State<'_, Mutex<AppState>>,
+    app: AppHandle,
+) -> Result<(), DbError> {
+    let mut state_guard = state.lock().unwrap();
+
+    // Find the profile and update metadata
+    if let Some(profile) = state_guard.get_profile_mut(&profile_id) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        profile.last_connected_at = Some(now);
+        profile.connection_count += 1;
+        profile.updated_at = now;
+
+        // Save updated profiles
+        drop(state_guard); // Release lock before saving
+        let state_guard = state.lock().unwrap();
+        state_guard.save_profiles_to_store(&app)?;
+
+        Ok(())
+    } else {
+        Err(DbError::NotFound(format!("Profile with ID {} not found", profile_id)))
+    }
+}
+
+/// Toggle favorite status for a connection profile
+///
+/// # Arguments
+///
+/// * `profile_id` - ID of the profile to toggle
+/// * `state` - Application state
+/// * `app` - Application handle
+///
+/// # Returns
+///
+/// Returns the new favorite status (true if now favorite, false if unfavorited)
+#[tauri::command]
+pub fn toggle_favorite(
+    profile_id: String,
+    state: State<'_, Mutex<AppState>>,
+    app: AppHandle,
+) -> Result<bool, DbError> {
+    let mut state_guard = state.lock().unwrap();
+
+    if let Some(profile) = state_guard.get_profile_mut(&profile_id) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        profile.is_favorite = !profile.is_favorite;
+        profile.updated_at = now;
+
+        let new_status = profile.is_favorite;
+
+        // Save updated profiles
+        drop(state_guard);
+        let state_guard = state.lock().unwrap();
+        state_guard.save_profiles_to_store(&app)?;
+
+        Ok(new_status)
+    } else {
+        Err(DbError::NotFound(format!("Profile with ID {} not found", profile_id)))
+    }
+}
+
+/// Update connection folder
+///
+/// Moves a connection to a different folder or removes it from a folder.
+///
+/// # Arguments
+///
+/// * `profile_id` - ID of the profile to update
+/// * `folder` - New folder name (None to remove from folder)
+/// * `state` - Application state
+/// * `app` - Application handle
+///
+/// # Returns
+///
+/// Returns `Ok(())` if successful
+#[tauri::command]
+pub fn update_connection_folder(
+    profile_id: String,
+    folder: Option<String>,
+    state: State<'_, Mutex<AppState>>,
+    app: AppHandle,
+) -> Result<(), DbError> {
+    let mut state_guard = state.lock().unwrap();
+
+    if let Some(profile) = state_guard.get_profile_mut(&profile_id) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
+        profile.folder = folder;
+        profile.updated_at = now;
+
+        // Save updated profiles
+        drop(state_guard);
+        let state_guard = state.lock().unwrap();
+        state_guard.save_profiles_to_store(&app)?;
+
+        Ok(())
+    } else {
+        Err(DbError::NotFound(format!("Profile with ID {} not found", profile_id)))
+    }
+}
+
+/// Get connection statistics
+///
+/// Calculates and returns statistics about all saved connection profiles.
+///
+/// # Arguments
+///
+/// * `state` - Application state
+///
+/// # Returns
+///
+/// Returns connection statistics including total count, favorite count, etc.
+#[tauri::command]
+pub fn get_connection_stats(
+    state: State<'_, Mutex<AppState>>,
+) -> Result<serde_json::Value, DbError> {
+    let state_guard = state.lock().unwrap();
+    let profiles = state_guard.list_profiles();
+
+    let total_connections = profiles.len();
+    let favorite_count = profiles.iter().filter(|p| p.is_favorite).count();
+    let recent_count = profiles.iter().filter(|p| p.last_connected_at.is_some()).count();
+
+    // Get unique folders
+    let folders: std::collections::HashSet<String> = profiles
+        .iter()
+        .filter_map(|p| p.folder.clone())
+        .collect();
+    let folder_count = folders.len();
+
+    // Find most used connection
+    let most_used_connection = profiles
+        .iter()
+        .max_by_key(|p| p.connection_count)
+        .cloned();
+
+    Ok(serde_json::json!({
+        "totalConnections": total_connections,
+        "favoriteCount": favorite_count,
+        "recentCount": recent_count,
+        "folderCount": folder_count,
+        "mostUsedConnection": most_used_connection,
+    }))
+}
+
+/// Get recent connections
+///
+/// Returns the most recently used connections, sorted by last_connected_at.
+///
+/// # Arguments
+///
+/// * `limit` - Maximum number of connections to return
+/// * `state` - Application state
+///
+/// # Returns
+///
+/// Returns a list of recently used connection profiles
+#[tauri::command]
+pub fn get_recent_connections(
+    limit: usize,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<Vec<crate::models::ConnectionProfile>, DbError> {
+    let state_guard = state.lock().unwrap();
+    let mut profiles: Vec<crate::models::ConnectionProfile> = state_guard
+        .list_profiles()
+        .into_iter()
+        .filter(|p| p.last_connected_at.is_some())
+        .cloned()
+        .collect();
+
+    // Sort by last_connected_at (most recent first)
+    profiles.sort_by(|a, b| {
+        b.last_connected_at
+            .unwrap_or(0)
+            .cmp(&a.last_connected_at.unwrap_or(0))
+    });
+
+    // Take only the requested number
+    profiles.truncate(limit);
+
+    Ok(profiles)
+}
+
+/// Duplicate a connection profile
+///
+/// Creates a copy of an existing connection profile with a new ID and name.
+///
+/// # Arguments
+///
+/// * `profile_id` - ID of the profile to duplicate
+/// * `state` - Application state
+/// * `app` - Application handle
+///
+/// # Returns
+///
+/// Returns the ID of the newly created profile
+#[tauri::command]
+pub fn duplicate_connection(
+    profile_id: String,
+    state: State<'_, Mutex<AppState>>,
+    app: AppHandle,
+) -> Result<String, DbError> {
+    let mut state_guard = state.lock().unwrap();
+
+    // Get the profile to duplicate
+    let original = state_guard
+        .get_profile(&profile_id)
+        .ok_or_else(|| DbError::NotFound(format!("Profile with ID {} not found", profile_id)))?
+        .clone();
+
+    // Create a new profile with duplicated settings
+    let new_id = uuid::Uuid::new_v4().to_string();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+
+    let mut new_profile = original;
+    new_profile.id = new_id.clone();
+    new_profile.name = format!("{} (Copy)", new_profile.name);
+    new_profile.last_connected_at = None;
+    new_profile.connection_count = 0;
+    new_profile.created_at = now;
+    new_profile.updated_at = now;
+
+    // Add the new profile
+    state_guard.add_profile(new_profile);
+
+    // Save profiles
+    drop(state_guard);
+    let state_guard = state.lock().unwrap();
+    state_guard.save_profiles_to_store(&app)?;
+
+    Ok(new_id)
 }
 
 #[cfg(test)]

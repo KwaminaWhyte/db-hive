@@ -29,6 +29,11 @@ export type SslMode =
 export type SshAuthMethod = 'Password' | 'PrivateKey';
 
 /**
+ * Connection environment type
+ */
+export type Environment = 'Local' | 'Staging' | 'Production';
+
+/**
  * SSH tunnel configuration
  */
 export interface SshConfig {
@@ -87,6 +92,9 @@ export interface ConnectionProfile {
 
   /** Optional folder/group for organizing connections in the UI */
   folder?: string | null;
+
+  /** Environment type (Local, Staging, Production) */
+  environment?: Environment | null;
 
   /** Last connected timestamp (Unix timestamp in seconds) */
   lastConnectedAt?: number | null;
