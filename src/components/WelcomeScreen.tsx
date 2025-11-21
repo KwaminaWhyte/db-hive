@@ -225,7 +225,7 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                 </Button>
 
                 <a
-                  href="https://github.com/anthropics/db-hive"
+                  href="https://github.com/KwaminaWhyte/db-hive"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 hover:text-amber-600 dark:hover:text-amber-200 transition-colors"
@@ -304,9 +304,7 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                   <span className="text-[0.74rem] font-medium uppercase tracking-[0.18em] text-amber-600 dark:text-amber-200/90">
                     workspace layout
                   </span>
-                  <span className="text-foreground">
-                    Dock panels anywhere
-                  </span>
+                  <span className="text-foreground">Dock panels anywhere</span>
                 </div>
               </div>
 

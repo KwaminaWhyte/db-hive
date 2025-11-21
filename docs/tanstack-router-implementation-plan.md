@@ -11,14 +11,14 @@
 
 **Overall Progress:** 50% Complete (3/6 Phases Done)
 
-| Phase | Status | Completion |
-|-------|--------|------------|
-| Phase 1: Setup & Configuration | ✅ Complete | 100% |
-| Phase 2: Core Infrastructure | ✅ Complete | 100% |
-| Phase 3: Settings & Connections Routes | ✅ Complete | 100% |
-| Phase 4: Connected Routes | ⏳ In Progress | 0% |
-| Phase 5: Component Refactoring | ⏳ Pending | 0% |
-| Phase 6: Testing & Cleanup | ⏳ Pending | 0% |
+| Phase                                  | Status         | Completion |
+| -------------------------------------- | -------------- | ---------- |
+| Phase 1: Setup & Configuration         | ✅ Complete    | 100%       |
+| Phase 2: Core Infrastructure           | ✅ Complete    | 100%       |
+| Phase 3: Settings & Connections Routes | ✅ Complete    | 100%       |
+| Phase 4: Connected Routes              | ⏳ In Progress | 0%         |
+| Phase 5: Component Refactoring         | ⏳ Pending     | 0%         |
+| Phase 6: Testing & Cleanup             | ⏳ Pending     | 0%         |
 
 **Latest Commit:** `7cf4fe3` - feat: implement TanStack Router Phase 3
 **Branch:** `feature/tanstack-router`
@@ -49,6 +49,7 @@
 This plan outlines the complete migration of DB-Hive from manual state-based navigation to **TanStack Router** with file-based routing.
 
 ### 🎯 Migration Goals
+
 - **Replace 10+ useState hooks** with URL-based navigation
 - **Enable type-safe routing** with compile-time validation
 - **Support browser back/forward** navigation naturally
@@ -58,11 +59,13 @@ This plan outlines the complete migration of DB-Hive from manual state-based nav
 ### ✅ Progress: 50% Complete (Phases 1-3 Done)
 
 **Completed:**
+
 - ✅ **Phase 1:** Setup & Configuration
 - ✅ **Phase 2:** Core Infrastructure (Root route, ConnectionContext)
 - ✅ **Phase 3:** Settings & Connections Routes (5 routes working)
 
 **In Progress:**
+
 - ⏳ **Phase 4:** Connected Routes (Next)
 - ⏳ **Phase 5:** Component Refactoring
 - ⏳ **Phase 6:** Testing & Cleanup
@@ -70,10 +73,12 @@ This plan outlines the complete migration of DB-Hive from manual state-based nav
 ### 📊 Current Status
 
 **Commits Made:**
+
 1. `3b287b4` - Phase 1 & 2: Basic setup + core infrastructure
 2. `7cf4fe3` - Phase 3: Settings & connections routes
 
 **Routes Implemented:** 5/10 routes complete
+
 - ✅ `/` - Welcome screen
 - ✅ `/settings` - Settings page
 - ✅ `/connections` - Connection list
@@ -81,6 +86,7 @@ This plan outlines the complete migration of DB-Hive from manual state-based nav
 - ✅ `/connections/$profileId/edit` - Edit connection
 
 **Benefits Achieved:**
+
 - App.tsx reduced from 310 lines → 26 lines (92% reduction)
 - Zero TypeScript errors
 - Type-safe navigation working
@@ -95,11 +101,19 @@ This plan outlines the complete migration of DB-Hive from manual state-based nav
 ```typescript
 // Navigation state (10 pieces of state!)
 const [showSettings, setShowSettings] = useState(false);
-const [selectedProfile, setSelectedProfile] = useState<ConnectionProfile | null | undefined>(undefined);
-const [activeConnectionId, setActiveConnectionId] = useState<string | null>(null);
-const [activeConnectionProfile, setActiveConnectionProfile] = useState<ConnectionProfile | undefined>(undefined);
+const [selectedProfile, setSelectedProfile] = useState<
+  ConnectionProfile | null | undefined
+>(undefined);
+const [activeConnectionId, setActiveConnectionId] = useState<string | null>(
+  null
+);
+const [activeConnectionProfile, setActiveConnectionProfile] = useState<
+  ConnectionProfile | undefined
+>(undefined);
 const [currentDatabase, setCurrentDatabase] = useState<string>("");
-const [openTables, setOpenTables] = useState<Array<{schema: string; tableName: string; id: string}>>([]);
+const [openTables, setOpenTables] = useState<
+  Array<{ schema: string; tableName: string; id: string }>
+>([]);
 const [activeTableId, setActiveTableId] = useState<string | null>(null);
 const [pendingQuery, setPendingQuery] = useState<string | null>(null);
 const [showERDiagram, setShowERDiagram] = useState(false);
@@ -183,26 +197,26 @@ routes/
 ```typescript
 // Navigate to table with type-safe params
 navigate({
-  to: '/table/$schema/$tableName',
+  to: "/table/$schema/$tableName",
   params: {
-    schema: 'public',      // ✓ TypeScript validates
-    tableName: 'users'
+    schema: "public", // ✓ TypeScript validates
+    tableName: "users",
   },
   search: {
-    page: 1,               // ✓ Type-checked
+    page: 1, // ✓ Type-checked
     limit: 50,
-    filter: 'active'
-  }
-})
+    filter: "active",
+  },
+});
 
 // TypeScript error if params are wrong
 navigate({
-  to: '/table/$schema/$tableName',
+  to: "/table/$schema/$tableName",
   params: {
-    schema: 'public'
+    schema: "public",
     // ❌ Error: tableName is required
-  }
-})
+  },
+});
 ```
 
 ---
@@ -230,7 +244,7 @@ import path from "path";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { TanStackRouterVite } from '@tanstack/router-plugin/vite' // NEW
+import { TanStackRouterVite } from "@tanstack/router-plugin/vite"; // NEW
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
@@ -239,7 +253,7 @@ export default defineConfig(async () => ({
   plugins: [
     TanStackRouterVite(), // NEW - Must be before react()
     react(),
-    tailwindcss()
+    tailwindcss(),
   ],
 
   resolve: {
@@ -342,7 +356,7 @@ function WelcomeScreenRoute() {
         console.log('View sample clicked')
       }}
       onOpenDocs={() => {
-        window.open('https://github.com/anthropics/db-hive/wiki', '_blank')
+        window.open('https://github.com/KwaminaWhyte/db-hive/wiki', '_blank')
       }}
     />
   )
@@ -818,15 +832,15 @@ export function useConnectionContext() {
 **File:** `src/hooks/useRouterContext.tsx`
 
 ```typescript
-import { useConnectionContext } from '@/contexts/ConnectionContext'
+import { useConnectionContext } from "@/contexts/ConnectionContext";
 
 export function useRouterContext() {
-  const connectionContext = useConnectionContext()
+  const connectionContext = useConnectionContext();
 
   return {
     connectionId: connectionContext.connectionId,
     connectionProfile: connectionContext.connectionProfile,
-  }
+  };
 }
 ```
 
@@ -992,9 +1006,11 @@ bun run build
 ### 6.1 Remove Old Code
 
 **Files to delete:**
+
 - None (App.tsx gets simplified but not deleted)
 
 **Code to remove from App.tsx:**
+
 ```typescript
 // Remove all these useState declarations:
 - const [showSettings, setShowSettings] = useState(false)
@@ -1023,12 +1039,14 @@ bun run build
 ### 6.2 Update Documentation
 
 **Update CLAUDE.md:**
+
 - Add section on TanStack Router architecture
 - Document route structure
 - Document type-safe navigation patterns
 - Update state management section
 
 **Update README.md:**
+
 - Update features list (add URL-based navigation)
 - Add deep linking examples
 - Update screenshots with URLs visible
@@ -1059,6 +1077,7 @@ Add JSDoc comments to all route files:
 ## Implementation Checklist
 
 ### Setup Phase
+
 - [ ] Install @tanstack/react-router
 - [ ] Install @tanstack/router-plugin
 - [ ] Install @tanstack/router-devtools
@@ -1066,25 +1085,28 @@ Add JSDoc comments to all route files:
 - [ ] Create src/routes/ directory structure
 
 ### Route Implementation Phase
-- [ ] Create __root.tsx (root layout)
+
+- [ ] Create \_\_root.tsx (root layout)
 - [ ] Create index.tsx (welcome screen)
 - [ ] Create settings.tsx
 - [ ] Create connections.tsx
 - [ ] Create connections.new.tsx
 - [ ] Create connections.$profileId.edit.tsx
-- [ ] Create _connected/route.tsx (layout with guard)
-- [ ] Create _connected/query.tsx
-- [ ] Create _connected/table.$schema.$tableName/route.tsx
-- [ ] Create _connected/table.$schema.$tableName/index.tsx
-- [ ] Create _connected/er-diagram.$schema.tsx
+- [ ] Create \_connected/route.tsx (layout with guard)
+- [ ] Create \_connected/query.tsx
+- [ ] Create \_connected/table.$schema.$tableName/route.tsx
+- [ ] Create \_connected/table.$schema.$tableName/index.tsx
+- [ ] Create \_connected/er-diagram.$schema.tsx
 
 ### State Migration Phase
+
 - [ ] Create ConnectionContext.tsx
 - [ ] Create useRouterContext.tsx hook
-- [ ] Update __root.tsx with context providers
-- [ ] Update _connected/route.tsx with context usage
+- [ ] Update \_\_root.tsx with context providers
+- [ ] Update \_connected/route.tsx with context usage
 
 ### Component Refactoring Phase
+
 - [ ] Simplify App.tsx to RouterProvider
 - [ ] Update ConnectionList.tsx for navigation
 - [ ] Update SchemaExplorer.tsx for navigation
@@ -1094,6 +1116,7 @@ Add JSDoc comments to all route files:
 - [ ] Update WelcomeScreen.tsx callbacks
 
 ### Testing Phase
+
 - [ ] Test welcome screen navigation
 - [ ] Test settings page navigation
 - [ ] Test connection list navigation
@@ -1109,6 +1132,7 @@ Add JSDoc comments to all route files:
 - [ ] Test in packaged app
 
 ### Cleanup Phase
+
 - [ ] Remove old state management code from App.tsx
 - [ ] Remove unused handler functions
 - [ ] Remove unused props from components
@@ -1118,6 +1142,7 @@ Add JSDoc comments to all route files:
 - [ ] Update CHANGELOG.md
 
 ### Final Validation
+
 - [ ] Code review (all routes)
 - [ ] Performance testing
 - [ ] Memory leak testing
@@ -1181,28 +1206,31 @@ Add JSDoc comments to all route files:
 
 ### Breakdown
 
-| Phase | Tasks | Estimated Time |
-|-------|-------|----------------|
-| **Phase 1: Setup** | Install deps, configure Vite/TS | 1-2 hours |
-| **Phase 2: Routes** | Create all route files | 4-5 hours |
-| **Phase 3: State Migration** | Context setup, refactor state | 2-3 hours |
-| **Phase 4: Components** | Refactor components for routing | 3-4 hours |
-| **Phase 5: Testing** | Manual testing, validation | 1-2 hours |
-| **Phase 6: Cleanup** | Remove old code, documentation | 1 hour |
+| Phase                        | Tasks                           | Estimated Time |
+| ---------------------------- | ------------------------------- | -------------- |
+| **Phase 1: Setup**           | Install deps, configure Vite/TS | 1-2 hours      |
+| **Phase 2: Routes**          | Create all route files          | 4-5 hours      |
+| **Phase 3: State Migration** | Context setup, refactor state   | 2-3 hours      |
+| **Phase 4: Components**      | Refactor components for routing | 3-4 hours      |
+| **Phase 5: Testing**         | Manual testing, validation      | 1-2 hours      |
+| **Phase 6: Cleanup**         | Remove old code, documentation  | 1 hour         |
 
 ### Recommended Approach
 
 **Option A: All at Once (2 days)**
+
 - Day 1: Phases 1-3 (setup, routes, state migration)
 - Day 2: Phases 4-6 (components, testing, cleanup)
 
 **Option B: Incremental (4 days, safer)**
+
 - Day 1: Phase 1 (setup only, test TanStack Router works)
 - Day 2: Phase 2 (implement routes, test routing)
 - Day 3: Phases 3-4 (state migration + component refactoring)
 - Day 4: Phases 5-6 (testing + cleanup)
 
 **Option C: Feature Branch (recommended)**
+
 - Create feature branch: `feature/tanstack-router`
 - Implement all phases
 - Test thoroughly
@@ -1317,6 +1345,7 @@ git commit -m "revert: rollback TanStack Router migration"
 ### Partial Rollback
 
 If only specific routes are problematic:
+
 - Keep TanStack Router installed
 - Keep working routes
 - Temporarily render problematic components in old style
