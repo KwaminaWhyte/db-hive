@@ -88,10 +88,8 @@ function ConnectionsRoute() {
             // Store connection in context
             setConnection(connectionId, profile);
 
-            // Phase 4 will implement /_connected routes
-            // For now, show a success message
-            console.log("Connected:", connectionId);
-            alert(`Successfully connected to ${profile.name}!\n\nQuery panel will be available in Phase 4 of the TanStack Router migration.`);
+            // Navigate to query panel
+            navigate({ to: "/query" });
           }}
         />
       </div>

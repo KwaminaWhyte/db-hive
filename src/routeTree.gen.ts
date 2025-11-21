@@ -11,7 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ConnectionsRouteImport } from './routes/connections'
+import { Route as ConnectedRouteRouteImport } from './routes/_connected/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ConnectedQueryRouteImport } from './routes/_connected/query'
+import { Route as ConnectedErDiagramSchemaRouteImport } from './routes/_connected/er-diagram.$schema'
+import { Route as ConnectedTableSchemaTableNameRouteRouteImport } from './routes/_connected/table.$schema.$tableName/route'
+import { Route as ConnectedTableSchemaTableNameIndexRouteImport } from './routes/_connected/table.$schema.$tableName/index'
 
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
@@ -23,38 +28,100 @@ const ConnectionsRoute = ConnectionsRouteImport.update({
   path: '/connections',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ConnectedRouteRoute = ConnectedRouteRouteImport.update({
+  id: '/_connected',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ConnectedQueryRoute = ConnectedQueryRouteImport.update({
+  id: '/query',
+  path: '/query',
+  getParentRoute: () => ConnectedRouteRoute,
+} as any)
+const ConnectedErDiagramSchemaRoute =
+  ConnectedErDiagramSchemaRouteImport.update({
+    id: '/er-diagram/$schema',
+    path: '/er-diagram/$schema',
+    getParentRoute: () => ConnectedRouteRoute,
+  } as any)
+const ConnectedTableSchemaTableNameRouteRoute =
+  ConnectedTableSchemaTableNameRouteRouteImport.update({
+    id: '/table/$schema/$tableName',
+    path: '/table/$schema/$tableName',
+    getParentRoute: () => ConnectedRouteRoute,
+  } as any)
+const ConnectedTableSchemaTableNameIndexRoute =
+  ConnectedTableSchemaTableNameIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => ConnectedTableSchemaTableNameRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
+  '/query': typeof ConnectedQueryRoute
+  '/er-diagram/$schema': typeof ConnectedErDiagramSchemaRoute
+  '/table/$schema/$tableName': typeof ConnectedTableSchemaTableNameRouteRouteWithChildren
+  '/table/$schema/$tableName/': typeof ConnectedTableSchemaTableNameIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
+  '/query': typeof ConnectedQueryRoute
+  '/er-diagram/$schema': typeof ConnectedErDiagramSchemaRoute
+  '/table/$schema/$tableName': typeof ConnectedTableSchemaTableNameIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_connected': typeof ConnectedRouteRouteWithChildren
   '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
+  '/_connected/query': typeof ConnectedQueryRoute
+  '/_connected/er-diagram/$schema': typeof ConnectedErDiagramSchemaRoute
+  '/_connected/table/$schema/$tableName': typeof ConnectedTableSchemaTableNameRouteRouteWithChildren
+  '/_connected/table/$schema/$tableName/': typeof ConnectedTableSchemaTableNameIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/connections' | '/settings'
+  fullPaths:
+    | '/'
+    | '/connections'
+    | '/settings'
+    | '/query'
+    | '/er-diagram/$schema'
+    | '/table/$schema/$tableName'
+    | '/table/$schema/$tableName/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/connections' | '/settings'
-  id: '__root__' | '/' | '/connections' | '/settings'
+  to:
+    | '/'
+    | '/connections'
+    | '/settings'
+    | '/query'
+    | '/er-diagram/$schema'
+    | '/table/$schema/$tableName'
+  id:
+    | '__root__'
+    | '/'
+    | '/_connected'
+    | '/connections'
+    | '/settings'
+    | '/_connected/query'
+    | '/_connected/er-diagram/$schema'
+    | '/_connected/table/$schema/$tableName'
+    | '/_connected/table/$schema/$tableName/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ConnectedRouteRoute: typeof ConnectedRouteRouteWithChildren
   ConnectionsRoute: typeof ConnectionsRoute
   SettingsRoute: typeof SettingsRoute
 }
@@ -75,6 +142,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConnectionsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_connected': {
+      id: '/_connected'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof ConnectedRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -82,11 +156,72 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_connected/query': {
+      id: '/_connected/query'
+      path: '/query'
+      fullPath: '/query'
+      preLoaderRoute: typeof ConnectedQueryRouteImport
+      parentRoute: typeof ConnectedRouteRoute
+    }
+    '/_connected/er-diagram/$schema': {
+      id: '/_connected/er-diagram/$schema'
+      path: '/er-diagram/$schema'
+      fullPath: '/er-diagram/$schema'
+      preLoaderRoute: typeof ConnectedErDiagramSchemaRouteImport
+      parentRoute: typeof ConnectedRouteRoute
+    }
+    '/_connected/table/$schema/$tableName': {
+      id: '/_connected/table/$schema/$tableName'
+      path: '/table/$schema/$tableName'
+      fullPath: '/table/$schema/$tableName'
+      preLoaderRoute: typeof ConnectedTableSchemaTableNameRouteRouteImport
+      parentRoute: typeof ConnectedRouteRoute
+    }
+    '/_connected/table/$schema/$tableName/': {
+      id: '/_connected/table/$schema/$tableName/'
+      path: '/'
+      fullPath: '/table/$schema/$tableName/'
+      preLoaderRoute: typeof ConnectedTableSchemaTableNameIndexRouteImport
+      parentRoute: typeof ConnectedTableSchemaTableNameRouteRoute
+    }
   }
 }
 
+interface ConnectedTableSchemaTableNameRouteRouteChildren {
+  ConnectedTableSchemaTableNameIndexRoute: typeof ConnectedTableSchemaTableNameIndexRoute
+}
+
+const ConnectedTableSchemaTableNameRouteRouteChildren: ConnectedTableSchemaTableNameRouteRouteChildren =
+  {
+    ConnectedTableSchemaTableNameIndexRoute:
+      ConnectedTableSchemaTableNameIndexRoute,
+  }
+
+const ConnectedTableSchemaTableNameRouteRouteWithChildren =
+  ConnectedTableSchemaTableNameRouteRoute._addFileChildren(
+    ConnectedTableSchemaTableNameRouteRouteChildren,
+  )
+
+interface ConnectedRouteRouteChildren {
+  ConnectedQueryRoute: typeof ConnectedQueryRoute
+  ConnectedErDiagramSchemaRoute: typeof ConnectedErDiagramSchemaRoute
+  ConnectedTableSchemaTableNameRouteRoute: typeof ConnectedTableSchemaTableNameRouteRouteWithChildren
+}
+
+const ConnectedRouteRouteChildren: ConnectedRouteRouteChildren = {
+  ConnectedQueryRoute: ConnectedQueryRoute,
+  ConnectedErDiagramSchemaRoute: ConnectedErDiagramSchemaRoute,
+  ConnectedTableSchemaTableNameRouteRoute:
+    ConnectedTableSchemaTableNameRouteRouteWithChildren,
+}
+
+const ConnectedRouteRouteWithChildren = ConnectedRouteRoute._addFileChildren(
+  ConnectedRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ConnectedRouteRoute: ConnectedRouteRouteWithChildren,
   ConnectionsRoute: ConnectionsRoute,
   SettingsRoute: SettingsRoute,
 }
