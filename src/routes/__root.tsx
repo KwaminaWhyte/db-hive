@@ -1,14 +1,8 @@
-import { Outlet, createRootRouteWithContext } from "@tanstack/react-router";
+import { Outlet, createRootRoute } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/router-devtools";
 import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { ConnectionProvider } from "@/contexts/ConnectionContext";
 import { Toaster } from "sonner";
-import { ConnectionProfile } from "@/types/database";
-
-interface RouterContext {
-  connectionId: string | null;
-  connectionProfile: ConnectionProfile | undefined;
-}
 
 function RootComponent() {
   const { theme } = useTheme();
@@ -26,7 +20,7 @@ function RootComponent() {
   );
 }
 
-export const Route = createRootRouteWithContext<RouterContext>()({
+export const Route = createRootRoute({
   component: () => (
     <ThemeProvider defaultTheme="dark" storageKey="db-hive-theme">
       <ConnectionProvider>

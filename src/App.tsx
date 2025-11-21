@@ -1,5 +1,4 @@
 import { RouterProvider, createRouter } from "@tanstack/react-router";
-import { useConnectionContext } from "@/contexts/ConnectionContext";
 
 // Import the generated route tree
 import { routeTree } from "./routeTree.gen";
@@ -21,9 +20,7 @@ declare module "@tanstack/react-router" {
 }
 
 function App() {
-  const context = useConnectionContext();
-
-  return <RouterProvider router={router} context={context} />;
+  return <RouterProvider router={router} />;
 }
 
 export default App;
