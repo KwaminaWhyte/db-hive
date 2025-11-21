@@ -8,6 +8,7 @@ import { QueryExecutionResult } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { X, Plus } from "lucide-react";
 import { useEffect } from "react";
+import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 /**
  * Query Panel Route with Multi-Tab Support
@@ -207,6 +208,30 @@ function QueryPanelRoute() {
     const state = getTabState(tabId);
     return state?.label || tabId;
   };
+
+  // Keyboard shortcuts for query panel
+  useRouteShortcuts([
+    {
+      key: "Ctrl+T",
+      handler: handleAddQueryTab,
+      description: "New query tab",
+    },
+    {
+      key: "⌘+T",
+      handler: handleAddQueryTab,
+      description: "New query tab",
+    },
+    {
+      key: "Ctrl+W",
+      handler: () => handleCloseTab(activeIndex),
+      description: "Close current tab",
+    },
+    {
+      key: "⌘+W",
+      handler: () => handleCloseTab(activeIndex),
+      description: "Close current tab",
+    },
+  ]);
 
   return (
     <div className="flex-1 h-full flex flex-col">
