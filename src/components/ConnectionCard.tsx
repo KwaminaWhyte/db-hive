@@ -31,7 +31,7 @@ export function ConnectionCard({
 }: ConnectionCardProps) {
   const [isHovered, setIsHovered] = useState(false);
 
-  const getDriverIcon = (driver: string) => {
+  const getDriverIcon = () => {
     // You could add driver-specific icons here
     return <Database className="size-8" />;
   };
@@ -89,7 +89,7 @@ export function ConnectionCard({
               profile.driver
             )} text-white`}
           >
-            {getDriverIcon(profile.driver)}
+            {getDriverIcon()}
           </div>
 
           <div className="flex-1 min-w-0">
