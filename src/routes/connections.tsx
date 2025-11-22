@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ConnectionList } from "@/components/ConnectionList";
+import { EnhancedConnectionList } from "@/components/EnhancedConnectionList";
 import { ConnectionForm } from "@/components/ConnectionForm";
 import { Button } from "@/components/ui/button";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
@@ -53,9 +53,9 @@ function ConnectionsRoute() {
 
   return (
     <div className="flex-1 flex h-full relative">
-      {/* Left Sidebar - Connection List */}
-      <div className="w-80 border-r overflow-y-auto">
-        <ConnectionList
+      {/* Left Sidebar - Enhanced Connection List */}
+      <div className="w-96 border-r overflow-y-auto">
+        <EnhancedConnectionList
           key={listKey}
           onEdit={(profile) => {
             if (profile) {
