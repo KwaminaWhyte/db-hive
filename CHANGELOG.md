@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0-beta] - 2025-11-22
+
+### Fixed
+
+- **Tab Management & Persistence** (2025-11-22):
+  - Fixed query tabs accumulating and not properly closing
+  - Fixed tabs reappearing after being closed when app is relaunched
+  - Fixed localStorage format inconsistency between components
+  - Unified all tab storage to use TabContext format `{ states: {...}, timestamp: ... }`
+  - Implemented URL as single source of truth for active tabs
+  - Added sync effect to remove zombie tabs from TabContext that aren't in URL
+  - Fixed "tabs.filter is not a function" error in handleCloseTab
+  - Fixed duplicate query tabs being created from Visual Query Builder
+  - Visual Query Builder now reuses existing query tabs instead of creating new ones
+  - Tab state properly syncs between URL, TabContext, and localStorage
+
+- **Activity Monitor Layout** (2025-11-22):
+  - Fixed Activity Monitor statistics panel being cut off horizontally
+  - Changed grid layout from `lg:grid-cols-4` to `grid-cols-2` for better fit
+  - Fixed horizontal overflow in ActivityStats component
+
+- **Visual Query Builder Execution** (2025-11-22):
+  - Fixed Visual Query Builder not automatically populating SQL in query panel
+  - Query Builder now navigates to query tab with SQL pre-filled
+  - Execute button properly switches to query view and shows results
+
 ### Added
 
 - **Activity Logging & Monitoring** (2025-11-22):
