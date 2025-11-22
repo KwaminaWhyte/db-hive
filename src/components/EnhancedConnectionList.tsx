@@ -31,7 +31,6 @@ import {
   Clock,
   HardDrive,
   Cloud,
-  Filter,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConnectionCard } from "./ConnectionCard";
@@ -71,7 +70,6 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>("list");
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [driverFilter, setDriverFilter] = useState<DbDriver | "all">("all");
 
   // Load profiles on mount
   useEffect(() => {
@@ -153,13 +151,8 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
       );
     }
 
-    // Apply driver filter
-    if (driverFilter !== "all") {
-      filtered = filtered.filter((p) => p.driver === driverFilter);
-    }
-
     return filtered;
-  }, [profiles, category, searchQuery, driverFilter]);
+  }, [profiles, category, searchQuery]);
 
   // Handle connect button click
   const handleConnectClick = async (profile: ConnectionProfile) => {
