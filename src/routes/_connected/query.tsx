@@ -179,8 +179,15 @@ function QueryPanelRoute() {
       if (saved) {
         try {
           const tabs = JSON.parse(saved);
-          const updatedTabs = tabs.filter((t: any) => t.id !== tabId);
-          localStorage.setItem(storageKey, JSON.stringify(updatedTabs));
+          // Validate that tabs is actually an array
+          if (Array.isArray(tabs)) {
+            const updatedTabs = tabs.filter((t: any) => t.id !== tabId);
+            localStorage.setItem(storageKey, JSON.stringify(updatedTabs));
+          } else {
+            // Invalid data format - reset to empty array
+            console.warn("Invalid localStorage format, resetting tabs");
+            localStorage.setItem(storageKey, JSON.stringify([]));
+          }
         } catch (error) {
           console.error("Failed to update localStorage:", error);
         }
