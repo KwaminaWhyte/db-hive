@@ -193,7 +193,7 @@ export const ActivityStats: FC<ActivityStatsProps> = ({ stats, loading }) => {
   return (
     <div className="flex flex-col gap-6">
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4">
         <SummaryCard
           icon={<Activity className="h-5 w-5" />}
           label="Total Queries"
@@ -222,7 +222,7 @@ export const ActivityStats: FC<ActivityStatsProps> = ({ stats, loading }) => {
       </div>
 
       {/* Query Type Breakdown & Status Breakdown */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 grid-cols-1">
         {/* Query Type Breakdown */}
         <div className="flex flex-col gap-4 rounded-lg border bg-card p-4 text-card-foreground">
           <h3 className="text-lg font-semibold">Query Types</h3>

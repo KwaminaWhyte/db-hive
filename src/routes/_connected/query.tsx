@@ -146,6 +146,22 @@ function QueryPanelRoute() {
         sql: "",
       });
 
+      // Save to localStorage
+      if (connectionId && currentDatabase) {
+        const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
+        localStorage.setItem(
+          storageKey,
+          JSON.stringify([
+            {
+              id: newTabId,
+              type: "query",
+              name: "Query",
+              sql: "",
+            },
+          ])
+        );
+      }
+
       navigate({
         to: "/query",
         search: { tabs: newTabId, active: 0 },
@@ -155,6 +171,21 @@ function QueryPanelRoute() {
 
     // Remove tab state
     removeTabState(tabId);
+
+    // Update localStorage - remove the closed tab
+    if (connectionId && currentDatabase) {
+      const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        try {
+          const tabs = JSON.parse(saved);
+          const updatedTabs = tabs.filter((t: any) => t.id !== tabId);
+          localStorage.setItem(storageKey, JSON.stringify(updatedTabs));
+        } catch (error) {
+          console.error("Failed to update localStorage:", error);
+        }
+      }
+    }
 
     // Adjust active index if needed
     let newActive = activeIndex;
