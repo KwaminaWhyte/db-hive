@@ -45,7 +45,7 @@ function QueryPanelRoute() {
   const navigate = useNavigate();
   const { tabs: tabsParam, active: activeIndex } = Route.useSearch();
   const { connectionId, connectionProfile, currentDatabase } = useConnectionContext();
-  const { getTabState, createTabState, removeTabState } = useTabContext();
+  const { getTabState, createTabState, removeTabState, getAllTabStates } = useTabContext();
 
   // Parse tab IDs from URL
   const tabIds = tabsParam.split(",").filter(Boolean);
@@ -56,19 +56,26 @@ function QueryPanelRoute() {
       const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
       const saved = localStorage.getItem(storageKey);
 
+      console.log('[Restore] Checking for saved tabs:', { storageKey, hasSaved: !!saved, currentTabIds: tabIds });
+
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           const states = parsed.states || {};
           const savedTabIds = Object.keys(states);
 
+          console.log('[Restore] Found saved tabs:', { savedTabIds, currentTabIds: tabIds });
+
           if (savedTabIds.length > 0) {
             // Only update if current tabs don't match saved tabs
             const currentTabsString = tabIds.sort().join(",");
             const savedTabsString = savedTabIds.sort().join(",");
 
+            console.log('[Restore] Comparing:', { currentTabsString, savedTabsString, match: currentTabsString === savedTabsString });
+
             if (currentTabsString !== savedTabsString) {
               // Navigate with restored tabs
+              console.log('[Restore] Restoring tabs from localStorage');
               navigate({
                 to: "/query",
                 search: { tabs: savedTabIds.join(","), active: 0 },
@@ -81,8 +88,10 @@ function QueryPanelRoute() {
         }
       } else {
         // No saved tabs for this database - create default query tab if no tabs exist
+        console.log('[Restore] No saved tabs, checking if need to create default');
         if (tabIds.length === 0 || (tabIds.length === 1 && tabIds[0] === "")) {
           const newTabId = `query-${Date.now()}`;
+          console.log('[Restore] Creating default tab:', newTabId);
           navigate({
             to: "/query",
             search: { tabs: newTabId, active: 0 },
@@ -93,11 +102,26 @@ function QueryPanelRoute() {
     }
   }, [connectionId, currentDatabase]); // Only run when database changes
 
-  // Initialize tab states if they don't exist
+  // Sync TabContext with URL tabs (remove tabs not in URL, add missing tabs)
   useEffect(() => {
+    const allStates = getAllTabStates();
+    const allTabIds = Object.keys(allStates);
+
+    console.log('[Sync] Syncing TabContext with URL:', { urlTabs: tabIds, contextTabs: allTabIds });
+
+    // Remove tabs from TabContext that are not in URL
+    allTabIds.forEach((tabId) => {
+      if (!tabIds.includes(tabId)) {
+        console.log('[Sync] Removing extra tab from TabContext:', tabId);
+        removeTabState(tabId);
+      }
+    });
+
+    // Add tabs from URL that are not in TabContext
     tabIds.forEach((tabId) => {
       const existing = getTabState(tabId);
       if (!existing) {
+        console.log('[Sync] Creating missing tab in TabContext:', tabId);
         // Create initial state for this tab
         if (tabId.startsWith("query-")) {
           createTabState({
@@ -118,7 +142,7 @@ function QueryPanelRoute() {
         }
       }
     });
-  }, [tabIds, getTabState, createTabState]);
+  }, [tabIds, getTabState, createTabState, getAllTabStates, removeTabState]);
 
   const handleExecuteQuery = async (sql: string): Promise<QueryExecutionResult> => {
     try {
@@ -135,6 +159,8 @@ function QueryPanelRoute() {
   const handleCloseTab = (index: number) => {
     const tabId = tabIds[index];
     const newTabIds = tabIds.filter((_, i) => i !== index);
+
+    console.log('[handleCloseTab] Closing tab:', { tabId, index, currentTabIds: tabIds, newTabIds });
 
     if (newTabIds.length === 0) {
       // If no tabs left, create a default query tab
@@ -172,30 +198,9 @@ function QueryPanelRoute() {
       return;
     }
 
-    // Remove tab state
+    // Remove tab state (TabContext will auto-save to localStorage)
+    console.log('[handleCloseTab] Removing tab state for:', tabId);
     removeTabState(tabId);
-
-    // Update localStorage - remove the closed tab (TabContext format)
-    if (connectionId && currentDatabase) {
-      const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          const tabStates = parsed.states || {};
-
-          // Remove the closed tab from states
-          delete tabStates[tabId];
-
-          localStorage.setItem(storageKey, JSON.stringify({
-            states: tabStates,
-            timestamp: Date.now(),
-          }));
-        } catch (error) {
-          console.error("Failed to update localStorage:", error);
-        }
-      }
-    }
 
     // Adjust active index if needed
     let newActive = activeIndex;
