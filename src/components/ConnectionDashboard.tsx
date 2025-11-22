@@ -434,8 +434,8 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
           <Skeleton className="h-12 w-64 mb-2" />
           <Skeleton className="h-6 w-96" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6">
+          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((i) => (
             <Skeleton key={i} className="h-48 rounded-xl" />
           ))}
         </div>
@@ -450,7 +450,7 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
       <div className="border-b border-border bg-card/50">
-        <div className="container max-w-screen-2xl mx-auto px-8 py-6">
+        <div className="w-full px-8 py-6">
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-3xl font-bold text-foreground">Database Connections</h1>
@@ -608,7 +608,7 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
       </div>
 
       {error && (
-        <div className="container max-w-screen-2xl mx-auto px-8 pt-4">
+        <div className="w-full px-8 pt-4">
           <div className="rounded-xl bg-destructive/10 border border-destructive/30 p-4 text-sm text-destructive">
             {error}
           </div>
@@ -617,7 +617,7 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
 
       {/* Connection Grid/List */}
       <div className="flex-1 overflow-y-auto">
-        <div className="container max-w-screen-2xl mx-auto px-8 py-6">
+        <div className="w-full px-8 py-6">
           {filteredProfiles.length === 0 ? (
             <div className="py-16 text-center">
               <div className="inline-flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-primary/30 bg-primary/10 mb-4">
@@ -641,7 +641,7 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
               )}
             </div>
           ) : viewMode === "grid" ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6">
               {filteredProfiles.map((profile) => (
                 <ConnectionCard
                   key={profile.id}
