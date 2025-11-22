@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Visual Query Builder** (2025-11-22):
+  - Complete drag-and-drop SQL query builder interface at /visual-query route
+  - Query builder state management with useReducer pattern (20+ action types)
+  - Real-time SQL generation with database-specific syntax (PostgreSQL, MySQL, SQLite, SQL Server, MongoDB)
+  - Query validation with error messages
+  - **Table Selection**: Schema-organized dropdown, lazy loading, search functionality, auto-generated unique aliases
+  - **Column Selection**: Multi-select with drag-and-drop reordering, alias editing, aggregate functions (COUNT, SUM, AVG, MIN, MAX, COUNT_DISTINCT), DISTINCT toggle
+  - **JOIN Builder**: All JOIN types (INNER, LEFT, RIGHT, FULL OUTER, CROSS), foreign key auto-suggestions, visual join management with color-coded badges
+  - **Filter Builder**: WHERE clause builder with nested condition groups (up to 3 levels), AND/OR operators, all comparison operators (=, !=, >, <, >=, <=, LIKE, NOT LIKE, IN, NOT IN, IS NULL, IS NOT NULL, BETWEEN), type-aware value inputs
+  - **GROUP BY Panel**: Column selection with validation warnings for non-aggregated columns
+  - **HAVING Builder**: Aggregate condition builder for filtered groups
+  - **ORDER BY Panel**: ASC/DESC toggle with drag-and-drop reordering
+  - **LIMIT/OFFSET Controls**: Pagination inputs with validation and preview calculation
+  - **Split View UI**: Resizable panels with query builder (left) and Monaco Editor SQL preview (right)
+  - **Integration**: Added to View menu in CustomTitlebar, executes queries with results navigation
+  - Types defined in `/src/types/queryBuilder.ts` (11 core types, 264 lines)
+  - SQL generation in `/src/lib/sqlGenerator.ts` (409 lines with database-specific quoting)
+  - State management in `/src/hooks/useQueryBuilder.ts` (328 lines)
+  - 7 specialized components in `/src/components/queryBuilder/`
+
 - **SQL Server Driver Support** (2025-11-22):
   - Complete Microsoft SQL Server driver implementation using tiberius
   - SQL Server authentication support (SQL Server logins)

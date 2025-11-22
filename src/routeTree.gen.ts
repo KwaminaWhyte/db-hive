@@ -13,6 +13,7 @@ import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ConnectionsRouteImport } from './routes/connections'
 import { Route as ConnectedRouteRouteImport } from './routes/_connected/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ConnectedVisualQueryRouteImport } from './routes/_connected/visual-query'
 import { Route as ConnectedQueryRouteImport } from './routes/_connected/query'
 import { Route as ConnectedErDiagramSchemaRouteImport } from './routes/_connected/er-diagram.$schema'
 import { Route as ConnectedTableSchemaTableNameRouteRouteImport } from './routes/_connected/table.$schema.$tableName/route'
@@ -36,6 +37,11 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ConnectedVisualQueryRoute = ConnectedVisualQueryRouteImport.update({
+  id: '/visual-query',
+  path: '/visual-query',
+  getParentRoute: () => ConnectedRouteRoute,
 } as any)
 const ConnectedQueryRoute = ConnectedQueryRouteImport.update({
   id: '/query',
@@ -66,6 +72,7 @@ export interface FileRoutesByFullPath {
   '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
   '/query': typeof ConnectedQueryRoute
+  '/visual-query': typeof ConnectedVisualQueryRoute
   '/er-diagram/$schema': typeof ConnectedErDiagramSchemaRoute
   '/table/$schema/$tableName': typeof ConnectedTableSchemaTableNameRouteRouteWithChildren
   '/table/$schema/$tableName/': typeof ConnectedTableSchemaTableNameIndexRoute
@@ -75,6 +82,7 @@ export interface FileRoutesByTo {
   '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
   '/query': typeof ConnectedQueryRoute
+  '/visual-query': typeof ConnectedVisualQueryRoute
   '/er-diagram/$schema': typeof ConnectedErDiagramSchemaRoute
   '/table/$schema/$tableName': typeof ConnectedTableSchemaTableNameIndexRoute
 }
@@ -85,6 +93,7 @@ export interface FileRoutesById {
   '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
   '/_connected/query': typeof ConnectedQueryRoute
+  '/_connected/visual-query': typeof ConnectedVisualQueryRoute
   '/_connected/er-diagram/$schema': typeof ConnectedErDiagramSchemaRoute
   '/_connected/table/$schema/$tableName': typeof ConnectedTableSchemaTableNameRouteRouteWithChildren
   '/_connected/table/$schema/$tableName/': typeof ConnectedTableSchemaTableNameIndexRoute
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/connections'
     | '/settings'
     | '/query'
+    | '/visual-query'
     | '/er-diagram/$schema'
     | '/table/$schema/$tableName'
     | '/table/$schema/$tableName/'
@@ -105,6 +115,7 @@ export interface FileRouteTypes {
     | '/connections'
     | '/settings'
     | '/query'
+    | '/visual-query'
     | '/er-diagram/$schema'
     | '/table/$schema/$tableName'
   id:
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/connections'
     | '/settings'
     | '/_connected/query'
+    | '/_connected/visual-query'
     | '/_connected/er-diagram/$schema'
     | '/_connected/table/$schema/$tableName'
     | '/_connected/table/$schema/$tableName/'
@@ -155,6 +167,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_connected/visual-query': {
+      id: '/_connected/visual-query'
+      path: '/visual-query'
+      fullPath: '/visual-query'
+      preLoaderRoute: typeof ConnectedVisualQueryRouteImport
+      parentRoute: typeof ConnectedRouteRoute
     }
     '/_connected/query': {
       id: '/_connected/query'
@@ -204,12 +223,14 @@ const ConnectedTableSchemaTableNameRouteRouteWithChildren =
 
 interface ConnectedRouteRouteChildren {
   ConnectedQueryRoute: typeof ConnectedQueryRoute
+  ConnectedVisualQueryRoute: typeof ConnectedVisualQueryRoute
   ConnectedErDiagramSchemaRoute: typeof ConnectedErDiagramSchemaRoute
   ConnectedTableSchemaTableNameRouteRoute: typeof ConnectedTableSchemaTableNameRouteRouteWithChildren
 }
 
 const ConnectedRouteRouteChildren: ConnectedRouteRouteChildren = {
   ConnectedQueryRoute: ConnectedQueryRoute,
+  ConnectedVisualQueryRoute: ConnectedVisualQueryRoute,
   ConnectedErDiagramSchemaRoute: ConnectedErDiagramSchemaRoute,
   ConnectedTableSchemaTableNameRouteRoute:
     ConnectedTableSchemaTableNameRouteRouteWithChildren,
