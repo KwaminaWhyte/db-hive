@@ -59,8 +59,6 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
   const [exporting, setExporting] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "json" | "raw">("grid");
 
-  console.log("ResultsViewer rendered with", rows.length, "rows");
-
   // Copy helper functions
   const copyToClipboard = useCallback(async (text: string, message: string) => {
     try {
@@ -71,26 +69,37 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
     }
   }, []);
 
-  const copyCellValue = useCallback(async (value: any) => {
-    console.log("copyCellValue called with:", value);
-    const text = value === null ? 'NULL' : String(value);
-    await copyToClipboard(text, "Cell value copied to clipboard");
-  }, [copyToClipboard]);
+  const copyCellValue = useCallback(
+    async (value: any) => {
+      const text = value === null ? "NULL" : String(value);
+      await copyToClipboard(text, "Cell value copied to clipboard");
+    },
+    [copyToClipboard]
+  );
 
-  const copyRowValues = useCallback(async (rowIndex: number) => {
-    const row = rows[rowIndex];
-    const text = row.map((v) => (v === null ? 'NULL' : String(v))).join('\t');
-    await copyToClipboard(text, `Row ${rowIndex + 1} copied to clipboard`);
-  }, [rows, copyToClipboard]);
+  const copyRowValues = useCallback(
+    async (rowIndex: number) => {
+      const row = rows[rowIndex];
+      const text = row.map((v) => (v === null ? "NULL" : String(v))).join("\t");
+      await copyToClipboard(text, `Row ${rowIndex + 1} copied to clipboard`);
+    },
+    [rows, copyToClipboard]
+  );
 
-  const copyColumnValues = useCallback(async (columnIndex: number) => {
-    const columnValues = rows.map((row) => {
-      const value = row[columnIndex];
-      return value === null ? 'NULL' : String(value);
-    });
-    const text = columnValues.join('\n');
-    await copyToClipboard(text, `Column "${columns[columnIndex]}" copied to clipboard`);
-  }, [rows, columns, copyToClipboard]);
+  const copyColumnValues = useCallback(
+    async (columnIndex: number) => {
+      const columnValues = rows.map((row) => {
+        const value = row[columnIndex];
+        return value === null ? "NULL" : String(value);
+      });
+      const text = columnValues.join("\n");
+      await copyToClipboard(
+        text,
+        `Column "${columns[columnIndex]}" copied to clipboard`
+      );
+    },
+    [rows, columns, copyToClipboard]
+  );
 
   // Handle CSV export
   const handleExportCSV = async () => {
@@ -112,7 +121,6 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
           columns,
           rows,
         });
-        console.log("Exported to CSV:", filePath);
       }
     } catch (err) {
       console.error("Failed to export CSV:", err);
@@ -142,7 +150,6 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
           columns,
           rows,
         });
-        console.log("Exported to JSON:", filePath);
       }
     } catch (err) {
       console.error("Failed to export JSON:", err);
@@ -167,7 +174,6 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
             size="sm"
             className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={(e) => {
-              console.log("Column copy button clicked for:", colName);
               e.stopPropagation();
               copyColumnValues(index);
             }}
@@ -184,20 +190,30 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
         let isTruncated = false;
 
         if (value === null) {
-          cellString = 'NULL';
-          displayValue = <span className="text-muted-foreground italic">NULL</span>;
+          cellString = "NULL";
+          displayValue = (
+            <span className="text-muted-foreground italic">NULL</span>
+          );
         } else if (value === undefined) {
-          cellString = 'undefined';
-          displayValue = <span className="text-muted-foreground italic">undefined</span>;
+          cellString = "undefined";
+          displayValue = (
+            <span className="text-muted-foreground italic">undefined</span>
+          );
         } else if (typeof value === "object") {
           cellString = JSON.stringify(value);
           isTruncated = cellString.length > 100;
-          const displayString = isTruncated ? cellString.substring(0, 100) + '...' : cellString;
-          displayValue = <span className="text-xs font-mono truncate">{displayString}</span>;
+          const displayString = isTruncated
+            ? cellString.substring(0, 100) + "..."
+            : cellString;
+          displayValue = (
+            <span className="text-xs font-mono truncate">{displayString}</span>
+          );
         } else {
           cellString = String(value);
           isTruncated = cellString.length > 100;
-          const displayString = isTruncated ? cellString.substring(0, 100) + '...' : cellString;
+          const displayString = isTruncated
+            ? cellString.substring(0, 100) + "..."
+            : cellString;
           displayValue = <span className="truncate">{displayString}</span>;
         }
 
@@ -209,14 +225,11 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
           <div
             className="cursor-pointer hover:bg-muted/50 -mx-4 -my-2 px-4 py-2 transition-colors"
             onClick={() => {
-              console.log("Cell clicked, value:", value);
               copyCellValue(value);
             }}
             title={tooltipText}
           >
-            <div className="truncate max-w-md">
-              {displayValue}
-            </div>
+            <div className="truncate max-w-md">{displayValue}</div>
           </div>
         );
       },
@@ -276,35 +289,37 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
     // First escape HTML to prevent XSS
     const escapeHtml = (str: string) => {
       return str
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;');
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
     };
 
     const escaped = escapeHtml(json);
 
     // Replace with spans for different token types
-    return escaped
-      // Numbers (must come before strings to avoid matching inside classes)
-      .replace(/:\s*(-?\d+\.?\d*)/g, (_match, p1) => {
-        return `: <span style="color: #fb923c">${p1}</span>`;
-      })
-      // Property keys (followed by colon)
-      .replace(/"([^"]+)"(\s*):/g, (_match, p1, p2) => {
-        return `<span style="color: #60a5fa">"${p1}"</span>${p2}:`;
-      })
-      // String values
-      .replace(/:\s*"([^"]*)"/g, (_match, p1) => {
-        return `: <span style="color: #4ade80">"${p1}"</span>`;
-      })
-      // Booleans
-      .replace(/:\s*(true|false)/g, (_match, p1) => {
-        return `: <span style="color: #c084fc">${p1}</span>`;
-      })
-      // Null
-      .replace(/:\s*(null)/g, (_match, p1) => {
-        return `: <span style="color: #f87171">${p1}</span>`;
-      });
+    return (
+      escaped
+        // Numbers (must come before strings to avoid matching inside classes)
+        .replace(/:\s*(-?\d+\.?\d*)/g, (_match, p1) => {
+          return `: <span style="color: #fb923c">${p1}</span>`;
+        })
+        // Property keys (followed by colon)
+        .replace(/"([^"]+)"(\s*):/g, (_match, p1, p2) => {
+          return `<span style="color: #60a5fa">"${p1}"</span>${p2}:`;
+        })
+        // String values
+        .replace(/:\s*"([^"]*)"/g, (_match, p1) => {
+          return `: <span style="color: #4ade80">"${p1}"</span>`;
+        })
+        // Booleans
+        .replace(/:\s*(true|false)/g, (_match, p1) => {
+          return `: <span style="color: #c084fc">${p1}</span>`;
+        })
+        // Null
+        .replace(/:\s*(null)/g, (_match, p1) => {
+          return `: <span style="color: #f87171">${p1}</span>`;
+        })
+    );
   };
 
   // Render loading state
@@ -510,7 +525,6 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                             size="sm"
                             className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                             onClick={() => {
-                              console.log("Row copy button clicked for row:", rowIndex);
                               copyRowValues(rowIndex);
                             }}
                             title={`Copy row ${rowIndex + 1}`}
@@ -534,12 +548,18 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                   ))}
                   {rows.length === 0 && (
                     <tr>
-                      <td colSpan={columns.length + 1} className="text-center py-12">
+                      <td
+                        colSpan={columns.length + 1}
+                        className="text-center py-12"
+                      >
                         <div className="flex flex-col items-center gap-3 text-muted-foreground">
                           <TableIcon className="h-12 w-12 opacity-50" />
                           <div>
                             <p className="font-medium">No results returned</p>
-                            <p className="text-sm">The query executed successfully but returned no rows</p>
+                            <p className="text-sm">
+                              The query executed successfully but returned no
+                              rows
+                            </p>
                           </div>
                         </div>
                       </td>
@@ -554,7 +574,9 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
           <TabsContent value="json" className="flex-1 m-0 overflow-auto">
             <pre className="p-4 text-xs font-mono">
               <code
-                dangerouslySetInnerHTML={{ __html: highlightJSON(resultsAsJSON) }}
+                dangerouslySetInnerHTML={{
+                  __html: highlightJSON(resultsAsJSON),
+                }}
               />
             </pre>
           </TabsContent>

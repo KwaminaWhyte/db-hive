@@ -82,6 +82,7 @@ export function TabProvider({ children, connectionId, currentDatabase }: TabProv
   useEffect(() => {
     if (connectionId && currentDatabase && Object.keys(tabStates).length > 0) {
       const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
+      console.log('[TabContext] Saving to localStorage:', { storageKey, tabIds: Object.keys(tabStates) });
       localStorage.setItem(storageKey, JSON.stringify({
         states: tabStates,
         timestamp: Date.now(),
@@ -111,9 +112,11 @@ export function TabProvider({ children, connectionId, currentDatabase }: TabProv
   }, []);
 
   const removeTabState = useCallback((tabId: string) => {
+    console.log('[TabContext] Removing tab state:', tabId);
     setTabStates((prev) => {
       const newStates = { ...prev };
       delete newStates[tabId];
+      console.log('[TabContext] Updated states after removal:', Object.keys(newStates));
       return newStates;
     });
   }, []);
