@@ -58,7 +58,7 @@ function ConnectedLayout() {
     // Navigate to query route with the table added to tabs
     navigate({
       to: "/query",
-      search: (prev) => {
+      search: (prev: { tabs?: string; active?: number }) => {
         const currentTabIds = prev.tabs
           ? prev.tabs.split(",")
           : [`query-${Date.now()}`];

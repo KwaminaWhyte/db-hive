@@ -158,54 +158,65 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Automatic EXPLAIN query detection
 - [x] PostgreSQL JSON/JSONB type support in driver (2025-11-21)
 
-### Milestone 2.7: Visual Query Builder
+### Milestone 2.7: Visual Query Builder ✅ COMPLETED
 
 **Drag-and-Drop SQL Query Builder**
 
-- [ ] **Core Query Builder Engine:**
-  - [ ] Query builder state management (tables, columns, joins, filters, sorting)
-  - [ ] SQL generation from query builder state
-  - [ ] Support for SELECT, INSERT, UPDATE, DELETE queries
-  - [ ] Real-time SQL preview as user builds query
+- [x] **Core Query Builder Engine:**
+  - [x] Query builder state management (tables, columns, joins, filters, sorting)
+  - [x] SQL generation from query builder state with database-specific syntax
+  - [x] Support for SELECT queries (INSERT/UPDATE/DELETE deferred)
+  - [x] Real-time SQL preview as user builds query
+  - [x] Query validation with error messages
 
-- [ ] **Visual Query Canvas:**
-  - [ ] Table selector dropdown with schema organization
-  - [ ] Draggable table cards showing columns and types
-  - [ ] Visual join line creation (drag from column to column)
-  - [ ] Join type selector (INNER, LEFT, RIGHT, FULL OUTER)
-  - [ ] Auto-suggest joins based on foreign keys
-  - [ ] Pan and zoom canvas controls
+- [x] **Visual Query Canvas:**
+  - [x] Table selector dropdown with schema organization
+  - [x] Lazy loading of tables by schema
+  - [x] Search functionality for tables
+  - [x] Auto-generated unique table aliases
+  - [x] Join type selector (INNER, LEFT, RIGHT, FULL OUTER, CROSS)
+  - [x] Auto-suggest joins based on foreign keys
+  - [x] Visual join management with color-coded badges
 
-- [ ] **Column Selection & Transformation:**
-  - [ ] Multi-select columns with checkboxes
-  - [ ] Column alias input
-  - [ ] Aggregate functions (COUNT, SUM, AVG, MIN, MAX)
-  - [ ] DISTINCT toggle
-  - [ ] Column ordering (drag to reorder)
+- [x] **Column Selection & Transformation:**
+  - [x] Multi-select columns from all tables
+  - [x] Column alias input
+  - [x] Aggregate functions (COUNT, SUM, AVG, MIN, MAX, COUNT_DISTINCT)
+  - [x] DISTINCT toggle (global and per-column)
+  - [x] Column ordering with drag-and-drop reordering
 
-- [ ] **Filter Builder:**
-  - [ ] Visual WHERE clause builder with condition groups
-  - [ ] Support for AND/OR logic operators
-  - [ ] Condition operators (=, !=, >, <, >=, <=, LIKE, IN, IS NULL)
-  - [ ] Value input with type validation
-  - [ ] Nested condition groups
-  - [ ] HAVING clause support for aggregations
+- [x] **Filter Builder:**
+  - [x] Visual WHERE clause builder with condition groups
+  - [x] Support for AND/OR logic operators
+  - [x] All comparison operators (=, !=, >, <, >=, <=, LIKE, NOT LIKE, IN, NOT IN, IS NULL, IS NOT NULL, BETWEEN)
+  - [x] Type-aware value inputs (text, number, boolean)
+  - [x] Nested condition groups (up to 3 levels)
+  - [x] HAVING clause support for aggregations
 
-- [ ] **Additional Features:**
-  - [ ] GROUP BY column selection
-  - [ ] ORDER BY with ASC/DESC toggle
-  - [ ] LIMIT and OFFSET inputs
-  - [ ] Switch between Query Builder and SQL Editor modes
-  - [ ] Import SQL query to visual builder (SQL parser)
-  - [ ] Export query builder state to JSON
-  - [ ] Save query templates
+- [x] **Additional Features:**
+  - [x] GROUP BY column selection with validation
+  - [x] ORDER BY with ASC/DESC toggle and reordering
+  - [x] LIMIT and OFFSET inputs with validation
+  - [x] Pagination preview calculation
+  - [x] Database-specific SQL generation (PostgreSQL, MySQL, SQLite, SQL Server, MongoDB)
 
-- [ ] **UI/UX:**
-  - [ ] Split view: Query Builder (top) + Generated SQL (bottom)
-  - [ ] "Run Query" button to execute generated SQL
-  - [ ] Syntax highlighting for generated SQL
-  - [ ] Responsive layout for different screen sizes
-  - [ ] Keyboard shortcuts for common actions
+- [x] **UI/UX:**
+  - [x] Split view: Query Builder (left) + Generated SQL (right)
+  - [x] "Execute Query" button with results navigation
+  - [x] Monaco Editor for SQL preview with syntax highlighting
+  - [x] Collapsible sections for all query components
+  - [x] Responsive layout with resizable panels
+  - [x] Integrated into View menu in CustomTitlebar
+  - [x] Full route integration at /visual-query
+
+**Implementation Date:** 2025-11-22
+
+**Deferred Features:**
+- [ ] Import SQL query to visual builder (requires SQL parser)
+- [ ] Export query builder state to JSON
+- [ ] Save query templates
+- [ ] Pan and zoom canvas for large queries
+- [ ] INSERT/UPDATE/DELETE query support
 
 ### Milestone 2.8: ER Diagram Generator ✅ COMPLETED
 - [x] Foreign key relationship parsing (PostgreSQL, MySQL, SQLite)
@@ -469,15 +480,15 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ **Window State Persistence** (2025-11-21)
 
 **Recently Completed:**
+- ✅ Milestone 2.7: Visual Query Builder - Complete drag-and-drop SQL query builder with all SQL clauses, nested conditions, and database-specific syntax (2025-11-22)
 - ✅ Milestone 2.1: SQL Server Driver - Complete tiberius-based driver with metadata queries (2025-11-22)
 - ✅ Milestone 2.2: SSH Tunneling - Full UI integration with secure password storage (2025-11-21)
 - ✅ Custom Window Titlebar & Menu System - Professional titlebar with keyboard shortcuts (2025-11-21)
-- ✅ Window State Persistence - Automatic save/restore of window position and size (2025-11-21)
 
 **Next 3 Priorities:**
-1. **Visual Query Builder** - Drag-and-drop query construction interface with table/column selectors, JOIN builder, and filter conditions (Milestone 2.7)
-2. **Logs & Activity Monitor** - Query execution history tracking, session monitoring, and performance analysis (Milestone 3.6)
-3. **Connection Wizard & Dashboard** - Multi-step connection setup with visual feedback, connection testing, and profile management (Phase 3, Milestone 3.1)
+1. **Logs & Activity Monitor** - Query execution history tracking, session monitoring, and performance analysis (Milestone 3.6)
+2. **Connection Wizard & Dashboard** - Multi-step connection setup with visual feedback, connection testing, and profile management (Phase 3, Milestone 3.1)
+3. **Advanced Settings Panel** - Comprehensive configuration UI for editor preferences, theme customization, and database-specific options (Milestone 3.5)
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns

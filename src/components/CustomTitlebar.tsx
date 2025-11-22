@@ -162,6 +162,13 @@ export function CustomTitlebar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={() => navigate({ to: "/query", search: { tabs: "query-0", active: 0 } })}>
+                SQL Editor
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate({ to: "/visual-query" })}>
+                Visual Query Builder
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Theme</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent>
