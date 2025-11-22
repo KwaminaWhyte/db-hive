@@ -146,19 +146,22 @@ function QueryPanelRoute() {
         sql: "",
       });
 
-      // Save to localStorage
+      // Save to localStorage in TabContext format
       if (connectionId && currentDatabase) {
         const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
         localStorage.setItem(
           storageKey,
-          JSON.stringify([
-            {
-              id: newTabId,
-              type: "query",
-              name: "Query",
-              sql: "",
+          JSON.stringify({
+            states: {
+              [newTabId]: {
+                id: newTabId,
+                type: "query",
+                label: "Query",
+                sql: "",
+              },
             },
-          ])
+            timestamp: Date.now(),
+          })
         );
       }
 
@@ -172,22 +175,22 @@ function QueryPanelRoute() {
     // Remove tab state
     removeTabState(tabId);
 
-    // Update localStorage - remove the closed tab
+    // Update localStorage - remove the closed tab (TabContext format)
     if (connectionId && currentDatabase) {
       const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
       const saved = localStorage.getItem(storageKey);
       if (saved) {
         try {
-          const tabs = JSON.parse(saved);
-          // Validate that tabs is actually an array
-          if (Array.isArray(tabs)) {
-            const updatedTabs = tabs.filter((t: any) => t.id !== tabId);
-            localStorage.setItem(storageKey, JSON.stringify(updatedTabs));
-          } else {
-            // Invalid data format - reset to empty array
-            console.warn("Invalid localStorage format, resetting tabs");
-            localStorage.setItem(storageKey, JSON.stringify([]));
-          }
+          const parsed = JSON.parse(saved);
+          const tabStates = parsed.states || {};
+
+          // Remove the closed tab from states
+          delete tabStates[tabId];
+
+          localStorage.setItem(storageKey, JSON.stringify({
+            states: tabStates,
+            timestamp: Date.now(),
+          }));
         } catch (error) {
           console.error("Failed to update localStorage:", error);
         }

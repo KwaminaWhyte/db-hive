@@ -247,13 +247,6 @@ export function TableInspector({
     const totalChanges = editor.getTotalChanges();
     const newRowsCount = editor.newRows.size;
 
-    console.log('[handleCommit] Starting commit with:', {
-      totalChanges,
-      newRowsCount,
-      newRowsKeys: Array.from(editor.newRows.keys()),
-      changesKeys: Array.from(editor.changes.keys()),
-    });
-
     if (totalChanges === 0 && newRowsCount === 0) {
       toast.error('No changes to commit');
       return;
@@ -270,16 +263,13 @@ export function TableInspector({
 
       // Add INSERT statements for new rows
       if (newRowsCount > 0) {
-        console.log('[handleCommit] About to generate INSERT statements for', newRowsCount, 'new rows');
         const insertStatements = editor.generateInsertStatements(schema, tableName, quoteIdentifier);
-        console.log(`[handleCommit] Generated ${insertStatements.length} INSERT statements:`, insertStatements);
         statements.push(...insertStatements);
       }
 
       // Add UPDATE statements for modified cells
       if (totalChanges > 0) {
         const updateStatements = editor.generateUpdateStatements(schema, tableName, quoteIdentifier);
-        console.log(`Generated ${updateStatements.length} UPDATE statements:`, updateStatements);
         statements.push(...updateStatements);
       }
 
@@ -287,8 +277,6 @@ export function TableInspector({
         toast.error('No changes to commit');
         return;
       }
-
-      console.log(`Total statements to execute: ${statements.length}`);
 
       // Wrap in transaction
       if (driverType === 'MySql') {
@@ -304,8 +292,6 @@ export function TableInspector({
         // PostgreSQL and SQL Server
         combinedSQL = `BEGIN;\n${statements.join('\n')}\nCOMMIT;`;
       }
-
-      console.log('Executing SQL transaction:', combinedSQL);
 
       await invoke('execute_query', {
         connectionId,

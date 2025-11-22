@@ -29,60 +29,72 @@ function VisualQueryBuilderPage() {
         return;
       }
 
-      // Store the SQL in a special key for the query page to pick up
+      // Store the SQL in the TabContext format
       const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
-      const currentTabs = localStorage.getItem(storageKey);
+      const currentStorage = localStorage.getItem(storageKey);
 
-      let tabs: any[];
-      if (currentTabs) {
+      let tabStates: Record<string, any> = {};
+      let tabIds: string[] = [];
+
+      if (currentStorage) {
         try {
-          tabs = JSON.parse(currentTabs);
+          const parsed = JSON.parse(currentStorage);
+          // Handle TabContext format: { states: {...}, timestamp: ... }
+          tabStates = parsed.states || {};
+          tabIds = Object.keys(tabStates);
         } catch {
-          tabs = [];
+          tabStates = {};
+          tabIds = [];
         }
-      } else {
-        tabs = [];
       }
 
       // Check if there's already a query tab (reuse the first one)
-      const firstQueryTabIndex = tabs.findIndex((t) => t.type === 'query');
+      const existingQueryTabId = tabIds.find((id) => tabStates[id]?.type === 'query');
 
-      if (firstQueryTabIndex >= 0) {
+      if (existingQueryTabId) {
         // Update the existing query tab with the new SQL
-        tabs[firstQueryTabIndex] = {
-          ...tabs[firstQueryTabIndex],
+        tabStates[existingQueryTabId] = {
+          ...tabStates[existingQueryTabId],
           sql,
-          name: 'Visual Query',
+          label: 'Visual Query',
         };
 
-        localStorage.setItem(storageKey, JSON.stringify(tabs));
+        localStorage.setItem(storageKey, JSON.stringify({
+          states: tabStates,
+          timestamp: Date.now(),
+        }));
 
         // Navigate to the existing tab
+        const activeIndex = tabIds.indexOf(existingQueryTabId);
         navigate({
           to: '/query',
           search: {
-            tabs: tabs.map((t) => t.id).join(','),
-            active: firstQueryTabIndex,
+            tabs: tabIds.join(','),
+            active: activeIndex,
           },
         });
       } else {
         // No query tab exists, create a new one
-        const visualBuilderTab = {
-          id: 'visual-builder',
+        const visualBuilderTabId = 'visual-builder';
+        tabStates[visualBuilderTabId] = {
+          id: visualBuilderTabId,
           type: 'query',
           sql,
-          name: 'Visual Query',
+          label: 'Visual Query',
         };
 
-        tabs.push(visualBuilderTab);
-        localStorage.setItem(storageKey, JSON.stringify(tabs));
+        tabIds.push(visualBuilderTabId);
+        localStorage.setItem(storageKey, JSON.stringify({
+          states: tabStates,
+          timestamp: Date.now(),
+        }));
 
         // Navigate to the new tab
         navigate({
           to: '/query',
           search: {
-            tabs: tabs.map((t) => t.id).join(','),
-            active: tabs.length - 1,
+            tabs: tabIds.join(','),
+            active: tabIds.length - 1,
           },
         });
       }
