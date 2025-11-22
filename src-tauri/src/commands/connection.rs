@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
-use crate::drivers::{mongodb::MongoDbDriver, mysql::MysqlDriver, postgres::PostgresDriver, sqlite::SqliteDriver, ConnectionOptions, DatabaseDriver};
+use crate::drivers::{mongodb::MongoDbDriver, mysql::MysqlDriver, postgres::PostgresDriver, sqlite::SqliteDriver, sqlserver::SqlServerDriver, ConnectionOptions, DatabaseDriver};
 use crate::models::{ConnectionProfile, ConnectionStatus, DbDriver, DbError};
 use crate::state::AppState;
 
@@ -108,9 +108,11 @@ pub async fn test_connection_command(
             driver.test_connection().await?;
             Ok(ConnectionStatus::Connected)
         }
-        DbDriver::SqlServer => Err(DbError::InternalError(
-            "SQL Server driver not yet implemented".to_string(),
-        )),
+        DbDriver::SqlServer => {
+            let driver = SqlServerDriver::connect(opts).await?;
+            driver.test_connection().await?;
+            Ok(ConnectionStatus::Connected)
+        }
     };
 
     // Clean up temporary SSH tunnel if it was created
@@ -515,9 +517,8 @@ pub async fn connect_to_database(
             Arc::new(driver)
         }
         DbDriver::SqlServer => {
-            return Err(DbError::InternalError(
-                "SQL Server driver not yet implemented".to_string(),
-            ))
+            let driver = SqlServerDriver::connect(opts).await?;
+            Arc::new(driver)
         }
     };
 
