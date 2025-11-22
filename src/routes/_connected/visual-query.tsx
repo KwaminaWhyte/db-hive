@@ -9,9 +9,7 @@ import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useConnectionContext } from '@/contexts/ConnectionContext';
 import { QueryBuilder } from '@/components/QueryBuilder';
 import { useCallback } from 'react';
-import { invoke } from '@tauri-apps/api/core';
 import { toast } from 'sonner';
-import type { QueryExecutionResult } from '@/types/database';
 
 export const Route = createFileRoute('/_connected/visual-query')({
   component: VisualQueryBuilderPage,
@@ -26,53 +24,58 @@ function VisualQueryBuilderPage() {
 
   const handleExecute = useCallback(
     async (sql: string) => {
-      if (!connectionId) {
-        toast.error('No active connection');
+      if (!connectionId || !currentDatabase) {
+        toast.error('No active connection or database');
         return;
       }
 
-      try {
-        const startTime = performance.now();
+      // Store the SQL in a special key for the query page to pick up
+      const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
+      const currentTabs = localStorage.getItem(storageKey);
 
-        const result = await invoke<QueryExecutionResult>('execute_query', {
-          connectionId,
-          sql,
-        });
-
-        const executionTime = Math.round(performance.now() - startTime);
-
-        toast.success(`Query executed successfully in ${executionTime}ms`, {
-          description: `${result.rows.length} rows returned`,
-        });
-
-        // Navigate to query tab with results
-        // Store the results in localStorage or state management
-        localStorage.setItem(
-          'last-query-result',
-          JSON.stringify({
-            sql,
-            result,
-            executionTime,
-            timestamp: Date.now(),
-          })
-        );
-
-        // Navigate to query page to show results
-        navigate({
-          to: '/query',
-          search: {
-            tabs: 'query-visual-builder',
-            active: 0,
-          },
-        });
-      } catch (error: any) {
-        console.error('Query execution failed:', error);
-        toast.error('Query execution failed', {
-          description: error.message || 'An unknown error occurred',
-        });
+      let tabs: any[];
+      if (currentTabs) {
+        try {
+          tabs = JSON.parse(currentTabs);
+        } catch {
+          tabs = [];
+        }
+      } else {
+        tabs = [];
       }
+
+      // Add or update the visual builder tab
+      const visualBuilderTabIndex = tabs.findIndex((t) => t.id === 'visual-builder');
+      const visualBuilderTab = {
+        id: 'visual-builder',
+        type: 'query',
+        sql,
+        name: 'Visual Query',
+      };
+
+      if (visualBuilderTabIndex >= 0) {
+        tabs[visualBuilderTabIndex] = visualBuilderTab;
+      } else {
+        tabs.push(visualBuilderTab);
+      }
+
+      localStorage.setItem(storageKey, JSON.stringify(tabs));
+
+      // Navigate to query page
+      navigate({
+        to: '/query',
+        search: {
+          tabs: tabs.map((t) => t.id).join(','),
+          active: tabs.length - 1,
+        },
+      });
+
+      // Show success toast
+      toast.success('Query loaded in SQL Editor', {
+        description: 'Click Execute to run the query',
+      });
     },
-    [connectionId, navigate]
+    [connectionId, currentDatabase, navigate]
   );
 
   if (!connectionId || !connectionProfile) {
