@@ -5,6 +5,10 @@
 //! All state is managed through a thread-safe `Mutex<AppState>` that is shared
 //! across the Tauri application.
 
+mod activity_logger;
+
+pub use activity_logger::ActivityLogger;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
@@ -119,6 +123,9 @@ pub struct AppState {
     /// Metadata cache for each connection
     /// Key: Connection ID (UUID), Value: Metadata cache
     pub metadata_cache: HashMap<String, MetadataCache>,
+
+    /// Activity logger for tracking query execution
+    pub activity_logger: ActivityLogger,
 }
 
 impl Default for AppState {
@@ -131,6 +138,7 @@ impl Default for AppState {
             query_snippets: HashMap::new(),
             ssh_tunnel_manager: SshTunnelManager::new(),
             metadata_cache: HashMap::new(),
+            activity_logger: ActivityLogger::new(7), // 7 days retention
         }
     }
 }
@@ -150,6 +158,7 @@ impl AppState {
             query_snippets: HashMap::new(),
             ssh_tunnel_manager: SshTunnelManager::new(),
             metadata_cache: HashMap::new(),
+            activity_logger: ActivityLogger::new(7), // 7 days retention
         }
     }
 

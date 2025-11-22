@@ -351,6 +351,7 @@ fn flatten_metadata_for_autocomplete(cache: &MetadataCache) -> AutocompleteMetad
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::drivers::DatabaseDriver;
     use std::sync::Arc;
 
     // Mock driver for testing

@@ -1029,6 +1029,7 @@ dependencies = [
  "keyring",
  "mongodb",
  "mysql_async",
+ "regex",
  "rusqlite",
  "russh",
  "russh-keys",

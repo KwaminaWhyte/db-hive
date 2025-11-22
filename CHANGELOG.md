@@ -9,6 +9,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Activity Logging & Monitoring** (2025-11-22):
+  - Complete backend activity logging system with automatic query execution tracking
+  - **Query Log Types**: Full metadata capture (connection, database, SQL, query type, status, duration, row count, errors, tags)
+  - **Activity Logger**: Thread-safe RwLock-based storage with configurable retention period (default 7 days)
+  - **Auto-Detection**: Intelligent SQL query type detection using regex (SELECT, INSERT, UPDATE, DELETE, CREATE, ALTER, DROP, TRANSACTION, OTHER)
+  - **Query Log Table**: TanStack Table with expandable rows, sortable columns, syntax-highlighted SQL preview
+  - **Pagination**: Configurable page sizes (10, 25, 50, 100) with first/previous/next/last navigation
+  - **Comprehensive Filtering**: By connection, database, query type, status, duration range, date range, search text in SQL
+  - **Activity Statistics**: Summary cards with total queries, failed queries, average duration, total rows
+  - **Query Type Breakdown**: Visual bars showing count and percentage per query type (color-coded)
+  - **Status Breakdown**: List view with completion, failure, running, and cancelled counts
+  - **Export Functionality**: Export logs to JSON, CSV, or TXT formats with file system integration
+  - **Auto-Refresh**: Configurable intervals (5s, 10s, 30s) with play/pause controls
+  - **UI Integration**: Split view layout with resizable panels, color-coded badges, added to View menu
+  - **Tauri Commands** (7 new):
+    - `get_query_logs` - Retrieve paginated logs with filtering and sorting
+    - `get_activity_stats` - Calculate activity statistics
+    - `clear_query_logs` - Clear all logs
+    - `clear_old_query_logs` - Clear logs older than retention period
+    - `export_query_logs` - Export logs to file
+    - `update_query_log_tags` - Update log tags
+    - `get_query_logs_count` - Get total log count
+  - Backend implementation in `/src-tauri/src/models/activity.rs` (529 lines)
+  - State management in `/src-tauri/src/state/activity_logger.rs` (428 lines)
+  - Commands in `/src-tauri/src/commands/activity.rs` (398 lines)
+  - Frontend types in `/src/types/activity.ts`
+  - Main component `/src/components/ActivityMonitor.tsx`
+  - 4 sub-components in `/src/components/activityMonitor/`
+
 - **Visual Query Builder** (2025-11-22):
   - Complete drag-and-drop SQL query builder interface at /visual-query route
   - Query builder state management with useReducer pattern (20+ action types)

@@ -7,8 +7,9 @@
 use std::sync::Mutex;
 use std::time::Instant;
 use tauri::State;
+use uuid::Uuid;
 
-use crate::models::DbError;
+use crate::models::{DbError, QueryLog};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 
@@ -107,28 +108,81 @@ pub async fn execute_query(
     sql: String,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<QueryExecutionResult, DbError> {
-    // Get the connection from state
+    // Generate a unique log ID
+    let log_id = Uuid::new_v4().to_string();
+
+    // Get the connection and connection name from state, and start logging
     let connection = {
         let state_guard = state.lock().unwrap();
-        state_guard
+
+        let connection = state_guard
             .get_connection(&connection_id)
             .ok_or_else(|| {
                 DbError::NotFound(format!("Connection with ID {} not found", connection_id))
             })?
-            .clone()
+            .clone();
+
+        // Get connection profile to get the connection name
+        let profile = state_guard
+            .connection_profiles
+            .values()
+            .find(|p| {
+                // Find profile by checking if any active connection uses this profile
+                state_guard.connections.contains_key(&p.id)
+            });
+
+        let connection_name = profile
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| "Unknown Connection".to_string());
+
+        let database = profile
+            .and_then(|p| p.database.clone());
+
+        // Create and log the query start
+        let query_log = QueryLog::new(
+            log_id.clone(),
+            connection_id.clone(),
+            connection_name.clone(),
+            database.clone(),
+            sql.clone(),
+        );
+        state_guard.activity_logger.log_query_start(query_log);
+
+        connection
     };
 
     // Measure execution time
     let start = Instant::now();
 
     // Execute the query
-    let query_result = connection.execute_query(&sql).await?;
+    let query_result = connection.execute_query(&sql).await;
 
     // Calculate execution time in milliseconds
     let execution_time_ms = start.elapsed().as_millis() as u64;
 
+    // Update the log based on result
+    match &query_result {
+        Ok(result) => {
+            let state_guard = state.lock().unwrap();
+            let row_count = result.rows_affected.or(Some(result.rows.len() as u64));
+            state_guard.activity_logger.log_query_complete(
+                &log_id,
+                execution_time_ms,
+                row_count,
+            );
+        }
+        Err(err) => {
+            let state_guard = state.lock().unwrap();
+            state_guard.activity_logger.log_query_error(
+                &log_id,
+                execution_time_ms,
+                err.to_string(),
+            );
+        }
+    }
+
     // Convert QueryResult to QueryExecutionResult
-    let result = QueryExecutionResult::from_query_result(query_result, execution_time_ms);
+    let result = QueryExecutionResult::from_query_result(query_result?, execution_time_ms);
 
     Ok(result)
 }

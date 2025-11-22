@@ -172,6 +172,13 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::update_settings,
             commands::settings::reset_settings,
+            commands::activity::get_query_logs,
+            commands::activity::get_activity_stats,
+            commands::activity::clear_query_logs,
+            commands::activity::clear_old_query_logs,
+            commands::activity::export_query_logs,
+            commands::activity::update_query_log_tags,
+            commands::activity::get_query_logs_count,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
