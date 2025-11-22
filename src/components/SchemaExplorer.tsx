@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Collapsible,
   CollapsibleContent,
@@ -46,6 +47,8 @@ import {
   Download,
   Network,
   MoreVertical,
+  Workflow,
+  Activity,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 import { SqlExportDialog } from "./SqlExportDialog";
@@ -72,6 +75,7 @@ export function SchemaExplorer({
   onExecuteQuery,
   onOpenERDiagram,
 }: SchemaExplorerProps) {
+  const navigate = useNavigate();
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("");
   // Store tables per schema to support lazy loading
@@ -363,6 +367,28 @@ export function SchemaExplorer({
                       View ER Diagram ({selectedSchema})
                     </Button>
                   )}
+
+                  {/* Visual Query Builder */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => navigate({ to: "/visual-query" })}
+                  >
+                    <Workflow className="h-4 w-4 mr-2" />
+                    Visual Query Builder
+                  </Button>
+
+                  {/* Activity Monitor */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => navigate({ to: "/activity" })}
+                  >
+                    <Activity className="h-4 w-4 mr-2" />
+                    Activity Monitor
+                  </Button>
 
                   {/* Export */}
                   <Button

@@ -91,6 +91,7 @@ function VisualQueryBuilderPage() {
   return (
     <div className="h-full">
       <QueryBuilder
+        connectionId={connectionId}
         driver={connectionProfile.driver}
         currentDatabase={currentDatabase}
         onExecute={handleExecute}

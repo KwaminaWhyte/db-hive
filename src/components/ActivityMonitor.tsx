@@ -692,11 +692,11 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
                       <div className="space-y-2">
                         <Label className="text-xs">Connection</Label>
                         <Select
-                          value={filters.connectionId || ''}
+                          value={filters.connectionId || '__all__'}
                           onValueChange={(value) =>
                             setFilters((prev) => ({
                               ...prev,
-                              connectionId: value || undefined,
+                              connectionId: value === '__all__' ? undefined : value,
                             }))
                           }
                         >
@@ -704,7 +704,7 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
                             <SelectValue placeholder="All connections" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">All connections</SelectItem>
+                            <SelectItem value="__all__">All connections</SelectItem>
                             {availableConnections.map((conn) => (
                               <SelectItem key={conn.id} value={conn.id}>
                                 {conn.name}
@@ -718,11 +718,11 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
                       <div className="space-y-2">
                         <Label className="text-xs">Database</Label>
                         <Select
-                          value={filters.database || ''}
+                          value={filters.database || '__all__'}
                           onValueChange={(value) =>
                             setFilters((prev) => ({
                               ...prev,
-                              database: value || undefined,
+                              database: value === '__all__' ? undefined : value,
                             }))
                           }
                           disabled={!filters.connectionId}
@@ -731,7 +731,7 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
                             <SelectValue placeholder="All databases" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="">All databases</SelectItem>
+                            <SelectItem value="__all__">All databases</SelectItem>
                             {availableDatabases.map((db) => (
                               <SelectItem key={db} value={db}>
                                 {db}

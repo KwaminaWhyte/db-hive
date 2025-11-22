@@ -338,6 +338,10 @@ export function useQueryBuilder(driver: DbDriver) {
     dispatch({ type: 'SET_DISTINCT', payload: distinct });
   }, []);
 
+  const setWhere = useCallback((where: ConditionGroup | undefined) => {
+    dispatch({ type: 'SET_WHERE', payload: where });
+  }, []);
+
   const reset = useCallback(() => {
     dispatch({ type: 'RESET' });
   }, []);
@@ -357,6 +361,7 @@ export function useQueryBuilder(driver: DbDriver) {
       updateJoin,
       addWhereCondition,
       removeWhereCondition,
+      setWhere,
       addGroupBy,
       removeGroupBy,
       addHaving,
