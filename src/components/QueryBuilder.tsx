@@ -34,8 +34,18 @@ import {
 } from './ui/resizable';
 import { useQueryBuilder } from '@/hooks/useQueryBuilder';
 import type { DbDriver } from '@/types/database';
+import { TableSelector } from './queryBuilder/TableSelector';
+import { ColumnSelector } from './queryBuilder/ColumnSelector';
+import { JoinBuilder } from './queryBuilder/JoinBuilder';
+import { FilterBuilder } from './queryBuilder/FilterBuilder';
+import { GroupByPanel } from './queryBuilder/GroupByPanel';
+import { OrderByPanel } from './queryBuilder/OrderByPanel';
+import { LimitOffsetControls } from './queryBuilder/LimitOffsetControls';
 
 interface QueryBuilderProps {
+  /** Connection ID for fetching metadata */
+  connectionId: string;
+
   /** Database driver type */
   driver: DbDriver;
 
@@ -63,6 +73,7 @@ interface SectionState {
 }
 
 export const QueryBuilder: FC<QueryBuilderProps> = ({
+  connectionId,
   driver,
   currentDatabase,
   onExecute,
@@ -224,20 +235,6 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
           {/* Query Builder Panel */}
           <ResizablePanel defaultSize={60} minSize={40}>
             <div className="h-full overflow-auto p-6 space-y-4">
-              {/* Empty State */}
-              {state.tables.length === 0 && (
-                <Card className="border-dashed">
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <p className="text-muted-foreground text-center">
-                      Get started by selecting tables to query
-                    </p>
-                    <p className="text-sm text-muted-foreground/70 mt-2">
-                      Use the Table Selection section below
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-
               {/* Table Selection Section */}
               <Collapsible
                 open={sections.tables}
@@ -263,18 +260,14 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <CardContent>
-                      {sectionCounts.tables === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          No tables selected. Add tables to start building your query.
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {/* TableSelector component will be rendered here */}
-                          <p className="text-sm text-muted-foreground">
-                            TableSelector component placeholder
-                          </p>
-                        </div>
-                      )}
+                      <TableSelector
+                        connectionId={connectionId}
+                        currentDatabase={currentDatabase}
+                        driver={driver}
+                        selectedTables={state.tables}
+                        onAddTable={actions.addTable}
+                        onRemoveTable={actions.removeTable}
+                      />
                     </CardContent>
                   </CollapsibleContent>
                 </Card>
@@ -310,12 +303,13 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                           Select tables first to choose columns
                         </p>
                       ) : (
-                        <div className="space-y-2">
-                          {/* ColumnSelector component will be rendered here */}
-                          <p className="text-sm text-muted-foreground">
-                            ColumnSelector component placeholder
-                          </p>
-                        </div>
+                        <ColumnSelector
+                          tables={state.tables}
+                          selectedColumns={state.columns}
+                          onAddColumn={actions.addColumn}
+                          onRemoveColumn={actions.removeColumn}
+                          onUpdateColumn={actions.updateColumn}
+                        />
                       )}
                     </CardContent>
                   </CollapsibleContent>
@@ -348,18 +342,16 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <CardContent>
-                        {sectionCounts.joins === 0 ? (
-                          <p className="text-sm text-muted-foreground text-center py-4">
-                            No joins defined. Add join conditions to relate tables.
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {/* JoinBuilder component will be rendered here */}
-                            <p className="text-sm text-muted-foreground">
-                              JoinBuilder component placeholder
-                            </p>
-                          </div>
-                        )}
+                        <JoinBuilder
+                          connectionId={connectionId}
+                          currentDatabase={currentDatabase}
+                          driver={driver}
+                          tables={state.tables}
+                          joins={state.joins}
+                          onAddJoin={actions.addJoin}
+                          onRemoveJoin={actions.removeJoin}
+                          onUpdateJoin={actions.updateJoin}
+                        />
                       </CardContent>
                     </CollapsibleContent>
                   </Card>
@@ -395,17 +387,14 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                         <p className="text-sm text-muted-foreground text-center py-4">
                           Select tables first to add filters
                         </p>
-                      ) : sectionCounts.filters === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          No filters defined. Add conditions to filter results.
-                        </p>
                       ) : (
-                        <div className="space-y-2">
-                          {/* FilterBuilder component will be rendered here */}
-                          <p className="text-sm text-muted-foreground">
-                            FilterBuilder component placeholder
-                          </p>
-                        </div>
+                        <FilterBuilder
+                          tables={state.tables}
+                          where={state.where}
+                          onAddCondition={actions.addWhereCondition}
+                          onRemoveCondition={actions.removeWhereCondition}
+                          onSetWhere={actions.setWhere}
+                        />
                       )}
                     </CardContent>
                   </CollapsibleContent>
@@ -438,18 +427,16 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                     </CollapsibleTrigger>
                     <CollapsibleContent>
                       <CardContent>
-                        {sectionCounts.groupBy === 0 ? (
-                          <p className="text-sm text-muted-foreground text-center py-4">
-                            Using aggregates requires GROUP BY columns
-                          </p>
-                        ) : (
-                          <div className="space-y-2">
-                            {/* GroupByBuilder component will be rendered here */}
-                            <p className="text-sm text-muted-foreground">
-                              GroupByBuilder component placeholder
-                            </p>
-                          </div>
-                        )}
+                        <GroupByPanel
+                          tables={state.tables}
+                          selectedColumns={state.columns}
+                          groupBy={state.groupBy}
+                          having={state.having}
+                          onAddGroupBy={actions.addGroupBy}
+                          onRemoveGroupBy={actions.removeGroupBy}
+                          onAddHaving={actions.addHaving}
+                          onRemoveHaving={actions.removeHaving}
+                        />
                       </CardContent>
                     </CollapsibleContent>
                   </Card>
@@ -485,17 +472,14 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                         <p className="text-sm text-muted-foreground text-center py-4">
                           Select tables first to add sorting
                         </p>
-                      ) : sectionCounts.orderBy === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          No sorting defined. Add ORDER BY clauses to sort results.
-                        </p>
                       ) : (
-                        <div className="space-y-2">
-                          {/* OrderByBuilder component will be rendered here */}
-                          <p className="text-sm text-muted-foreground">
-                            OrderByBuilder component placeholder
-                          </p>
-                        </div>
+                        <OrderByPanel
+                          tables={state.tables}
+                          orderBy={state.orderBy}
+                          onAdd={actions.addOrderBy}
+                          onRemove={actions.removeOrderBy}
+                          onUpdate={actions.updateOrderBy}
+                        />
                       )}
                     </CardContent>
                   </CollapsibleContent>
@@ -529,18 +513,12 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <CardContent>
-                      {state.tables.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          Select tables first to configure result limits
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {/* LimitOffsetBuilder component will be rendered here */}
-                          <p className="text-sm text-muted-foreground">
-                            LimitOffsetBuilder component placeholder
-                          </p>
-                        </div>
-                      )}
+                      <LimitOffsetControls
+                        limit={state.limit}
+                        offset={state.offset}
+                        onSetLimit={actions.setLimit}
+                        onSetOffset={actions.setOffset}
+                      />
                     </CardContent>
                   </CollapsibleContent>
                 </Card>
