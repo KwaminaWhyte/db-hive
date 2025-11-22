@@ -79,8 +79,12 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [category, setCategory] = useState<CategoryFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedDrivers, setSelectedDrivers] = useState<Set<DbDriver>>(new Set());
-  const [selectedEnvironments, setSelectedEnvironments] = useState<Set<string>>(new Set());
+  const [selectedDrivers, setSelectedDrivers] = useState<Set<DbDriver>>(
+    new Set()
+  );
+  const [selectedEnvironments, setSelectedEnvironments] = useState<Set<string>>(
+    new Set()
+  );
 
   // Load profiles on mount
   useEffect(() => {
@@ -93,10 +97,13 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
     setError(null);
 
     try {
-      const result = await invoke<ConnectionProfile[]>("list_connection_profiles");
+      const result = await invoke<ConnectionProfile[]>(
+        "list_connection_profiles"
+      );
       setProfiles(result);
     } catch (err) {
-      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+      const errorMessage =
+        typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Failed to load profiles: ${errorMessage}`);
     } finally {
       setLoading(false);
@@ -148,11 +155,17 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
         .slice(0, 10);
     } else if (category === "local") {
       filtered = filtered.filter(
-        (p) => p.host === "localhost" || p.host === "127.0.0.1" || p.driver === "Sqlite"
+        (p) =>
+          p.host === "localhost" ||
+          p.host === "127.0.0.1" ||
+          p.driver === "Sqlite"
       );
     } else if (category === "cloud") {
       filtered = filtered.filter(
-        (p) => p.host !== "localhost" && p.host !== "127.0.0.1" && p.driver !== "Sqlite"
+        (p) =>
+          p.host !== "localhost" &&
+          p.host !== "127.0.0.1" &&
+          p.driver !== "Sqlite"
       );
     }
 
@@ -176,7 +189,9 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
 
     // Apply environment filter
     if (selectedEnvironments.size > 0) {
-      filtered = filtered.filter((p) => p.environment && selectedEnvironments.has(p.environment));
+      filtered = filtered.filter(
+        (p) => p.environment && selectedEnvironments.has(p.environment)
+      );
     }
 
     return filtered;
@@ -212,7 +227,10 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
           });
           onConnected?.(connectionId, profile);
         } catch (err) {
-          const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+          const errorMessage =
+            typeof err === "string"
+              ? err
+              : (err as any)?.message || String(err);
           setError(`Failed to connect: ${errorMessage}`);
         } finally {
           setConnectingId(null);
@@ -230,13 +248,19 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
             });
             onConnected?.(connectionId, profile);
           } catch (err) {
-            const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+            const errorMessage =
+              typeof err === "string"
+                ? err
+                : (err as any)?.message || String(err);
             setError(`Failed to connect: ${errorMessage}`);
           } finally {
             setConnectingId(null);
           }
         } else {
-          setPasswordPrompt({ profileId: profile.id, profileName: profile.name });
+          setPasswordPrompt({
+            profileId: profile.id,
+            profileName: profile.name,
+          });
           setPassword("");
         }
       }
@@ -253,7 +277,10 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
           });
           onConnected?.(connectionId, profile);
         } catch (err) {
-          const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+          const errorMessage =
+            typeof err === "string"
+              ? err
+              : (err as any)?.message || String(err);
           setError(`Failed to connect: ${errorMessage}`);
         } finally {
           setConnectingId(null);
@@ -298,7 +325,8 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
       setPasswordPrompt(null);
       setPassword("");
     } catch (err) {
-      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+      const errorMessage =
+        typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Failed to connect: ${errorMessage}`);
     } finally {
       setConnectingId(null);
@@ -318,11 +346,14 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
     setError(null);
 
     try {
-      await invoke("delete_connection_profile", { profileId: deletePrompt.profileId });
+      await invoke("delete_connection_profile", {
+        profileId: deletePrompt.profileId,
+      });
       await loadProfiles();
       setDeletePrompt(null);
     } catch (err) {
-      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+      const errorMessage =
+        typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Failed to delete profile: ${errorMessage}`);
     }
   };
@@ -365,15 +396,21 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
-                  {profile.isFavorite && <Star className="h-4 w-4 text-yellow-500 fill-current" />}
+                  {profile.isFavorite && (
+                    <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                  )}
                   <span className="font-semibold text-base text-foreground truncate">
                     {profile.name}
                   </span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full border ${colorClass} font-medium`}>
+                  <span
+                    className={`text-xs px-2 py-0.5 rounded-full border ${colorClass} font-medium`}
+                  >
                     {driverName}
                   </span>
                   {isConnecting && (
-                    <span className="text-xs text-primary animate-pulse">Connecting...</span>
+                    <span className="text-xs text-primary animate-pulse">
+                      Connecting...
+                    </span>
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground truncate">
@@ -444,7 +481,8 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
   }
 
   const activeFilterCount =
-    (selectedDrivers.size > 0 ? 1 : 0) + (selectedEnvironments.size > 0 ? 1 : 0);
+    (selectedDrivers.size > 0 ? 1 : 0) +
+    (selectedEnvironments.size > 0 ? 1 : 0);
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -453,7 +491,9 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
         <div className="w-full px-8 py-6">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Database Connections</h1>
+              <h1 className="text-3xl font-bold text-foreground">
+                Database Connections
+              </h1>
               <p className="text-muted-foreground mt-1">
                 Manage and connect to your databases
               </p>
@@ -580,7 +620,10 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
           </div>
 
           {/* Category Tabs */}
-          <Tabs value={category} onValueChange={(v) => setCategory(v as CategoryFilter)}>
+          <Tabs
+            value={category}
+            onValueChange={(v) => setCategory(v as CategoryFilter)}
+          >
             <TabsList className="h-10">
               <TabsTrigger value="all" className="text-sm">
                 <Database className="h-4 w-4 mr-2" />
@@ -621,7 +664,10 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
           {filteredProfiles.length === 0 ? (
             <div className="py-16 text-center">
               <div className="inline-flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-primary/30 bg-primary/10 mb-4">
-                <Database className="h-10 w-10 text-primary" strokeWidth={1.5} />
+                <Database
+                  className="h-10 w-10 text-primary"
+                  strokeWidth={1.5}
+                />
               </div>
               <h3 className="text-lg font-semibold text-foreground mb-2">
                 {searchQuery || activeFilterCount > 0 || category !== "all"
@@ -633,12 +679,14 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
                   ? "Try adjusting your search or filters"
                   : "Create your first connection to get started"}
               </p>
-              {!searchQuery && activeFilterCount === 0 && category === "all" && (
-                <Button onClick={onNewConnection}>
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Connection
-                </Button>
-              )}
+              {!searchQuery &&
+                activeFilterCount === 0 &&
+                category === "all" && (
+                  <Button onClick={onNewConnection}>
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Connection
+                  </Button>
+                )}
             </div>
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6">
@@ -663,12 +711,16 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
       </div>
 
       {/* Password Prompt Dialog */}
-      <Dialog open={!!passwordPrompt} onOpenChange={() => setPasswordPrompt(null)}>
+      <Dialog
+        open={!!passwordPrompt}
+        onOpenChange={() => setPasswordPrompt(null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Enter Password</DialogTitle>
             <DialogDescription>
-              Enter the password for <strong>{passwordPrompt?.profileName}</strong>
+              Enter the password for{" "}
+              <strong>{passwordPrompt?.profileName}</strong>
             </DialogDescription>
           </DialogHeader>
 
@@ -703,8 +755,9 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
           <DialogHeader>
             <DialogTitle>Delete Connection</DialogTitle>
             <DialogDescription>
-              Are you sure you want to delete <strong>{deletePrompt?.profileName}</strong>? This
-              action cannot be undone.
+              Are you sure you want to delete{" "}
+              <strong>{deletePrompt?.profileName}</strong>? This action cannot
+              be undone.
             </DialogDescription>
           </DialogHeader>
 

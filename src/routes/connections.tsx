@@ -1,7 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ConnectionDashboard } from "@/components/ConnectionDashboard";
 import { ConnectionForm } from "@/components/ConnectionForm";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
@@ -9,7 +15,9 @@ import { ConnectionProfile } from "@/types/database";
 
 // Define search params validation
 export const Route = createFileRoute("/connections")({
-  validateSearch: (search: Record<string, unknown>): { mode?: "new" | "edit"; profileId?: string } => {
+  validateSearch: (
+    search: Record<string, unknown>
+  ): { mode?: "new" | "edit"; profileId?: string } => {
     return {
       mode: search.mode as "new" | "edit" | undefined,
       profileId: search.profileId as string | undefined,
@@ -22,7 +30,9 @@ function ConnectionsRoute() {
   const navigate = useNavigate({ from: "/connections" });
   const { setConnection } = useConnectionContext();
   const { mode, profileId } = Route.useSearch();
-  const [editProfile, setEditProfile] = useState<ConnectionProfile | undefined>();
+  const [editProfile, setEditProfile] = useState<
+    ConnectionProfile | undefined
+  >();
   const [loading, setLoading] = useState(false);
 
   // Load profile data when in edit mode
@@ -37,7 +47,10 @@ function ConnectionsRoute() {
         .catch((err) => {
           console.error("Failed to load profile:", err);
           // Navigate back to connections if profile not found
-          navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } });
+          navigate({
+            to: "/connections",
+            search: { mode: undefined, profileId: undefined },
+          });
         })
         .finally(() => {
           setLoading(false);
@@ -65,7 +78,10 @@ function ConnectionsRoute() {
           navigate({ to: "/connections", search: { mode: "new" } });
         }}
         onEditConnection={(profile) => {
-          navigate({ to: "/connections", search: { mode: "edit", profileId: profile.id } });
+          navigate({
+            to: "/connections",
+            search: { mode: "edit", profileId: profile.id },
+          });
         }}
       />
 
@@ -74,7 +90,10 @@ function ConnectionsRoute() {
         open={showModal}
         onOpenChange={(open) => {
           if (!open) {
-            navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } });
+            navigate({
+              to: "/connections",
+              search: { mode: undefined, profileId: undefined },
+            });
           }
         }}
       >
@@ -98,7 +117,10 @@ function ConnectionsRoute() {
             <ConnectionForm
               profile={mode === "edit" ? editProfile : undefined}
               onSuccess={() =>
-                navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } })
+                navigate({
+                  to: "/connections",
+                  search: { mode: undefined, profileId: undefined },
+                })
               }
             />
           )}
