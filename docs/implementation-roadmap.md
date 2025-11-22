@@ -347,19 +347,52 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Use card layout with toggles, dropdowns, text inputs ✅
 - [ ] Implement keyboard shortcuts customization modal (TODO: Future enhancement)
 
-### Milestone 3.6: Logs & Activity Monitor
+### Milestone 3.6: Logs & Activity Monitor ✅ COMPLETED
 
-**Session Monitoring Dashboard** (discovered from redesign.md)
+**Session Monitoring Dashboard**
 
-- [ ] Build database session monitor showing:
-  - [ ] Active queries list with real-time updates
-  - [ ] CPU usage chart (line graph)
-  - [ ] Memory usage chart (line graph)
-  - [ ] Query execution logs with filtering
-- [ ] Add process list table with sorting
-- [ ] Implement filters by query type, duration, status
-- [ ] Export logs to file
-- [ ] Technical but clean UI design
+- [x] Build activity logging backend:
+  - [x] QueryLog type with full metadata (connection, database, SQL, type, status, duration, row count, errors)
+  - [x] ActivityLogger with thread-safe RwLock for concurrent access
+  - [x] Automatic query logging on all execute_query calls
+  - [x] Configurable retention period (default 7 days)
+  - [x] SQL query type auto-detection (SELECT, INSERT, UPDATE, etc.)
+- [x] Build query execution logs UI:
+  - [x] QueryLogTable with TanStack Table (expandable rows, sortable columns)
+  - [x] Pagination controls (10, 25, 50, 100 per page)
+  - [x] Query log filtering (connection, database, query type, status, duration, date range, search)
+  - [x] Query log statistics dashboard (total queries, failed count, avg duration, breakdowns)
+- [x] Implement comprehensive filters:
+  - [x] Filter by connection, database, query type, status
+  - [x] Duration range filter (min/max ms)
+  - [x] Date range filter
+  - [x] Search text in SQL queries
+  - [x] Active filter count indicator
+- [x] Export functionality:
+  - [x] Export to JSON format
+  - [x] Export to CSV format
+  - [x] Export to TXT format
+  - [x] Tauri command for file system export
+- [x] Activity statistics:
+  - [x] Total queries, failed queries, average duration, total rows
+  - [x] Breakdown by query type (SELECT, INSERT, UPDATE, etc.)
+  - [x] Breakdown by status (completed, failed, running, cancelled)
+- [x] UI Integration:
+  - [x] Split view layout with resizable panels
+  - [x] Auto-refresh with configurable intervals (5s, 10s, 30s)
+  - [x] Manual refresh button
+  - [x] Clear logs button with confirmation
+  - [x] Color-coded badges for query types and statuses
+  - [x] Added to View menu in CustomTitlebar
+  - [x] Full route integration at /activity
+
+**Implementation Date:** 2025-11-22
+
+**Deferred Features:**
+- [ ] Active queries list with real-time updates (requires database-specific queries)
+- [ ] CPU usage chart (requires system metrics collection)
+- [ ] Memory usage chart (requires system metrics collection)
+- [ ] Process list table (requires database-specific session queries)
 
 ### Milestone 3.7: Plugin Marketplace
 
@@ -480,15 +513,15 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ **Window State Persistence** (2025-11-21)
 
 **Recently Completed:**
+- ✅ Milestone 3.6: Logs & Activity Monitor - Complete activity logging backend with query execution tracking, statistics dashboard, comprehensive filtering, and multi-format export (2025-11-22)
 - ✅ Milestone 2.7: Visual Query Builder - Complete drag-and-drop SQL query builder with all SQL clauses, nested conditions, and database-specific syntax (2025-11-22)
 - ✅ Milestone 2.1: SQL Server Driver - Complete tiberius-based driver with metadata queries (2025-11-22)
 - ✅ Milestone 2.2: SSH Tunneling - Full UI integration with secure password storage (2025-11-21)
-- ✅ Custom Window Titlebar & Menu System - Professional titlebar with keyboard shortcuts (2025-11-21)
 
 **Next 3 Priorities:**
-1. **Logs & Activity Monitor** - Query execution history tracking, session monitoring, and performance analysis (Milestone 3.6)
-2. **Connection Wizard & Dashboard** - Multi-step connection setup with visual feedback, connection testing, and profile management (Phase 3, Milestone 3.1)
-3. **Advanced Settings Panel** - Comprehensive configuration UI for editor preferences, theme customization, and database-specific options (Milestone 3.5)
+1. **Connection Wizard & Dashboard** - Multi-step connection setup with visual feedback, connection testing, and profile management (Phase 3, Milestone 3.1)
+2. **Advanced Settings Panel** - Comprehensive configuration UI for editor preferences, theme customization, and database-specific options (Milestone 3.5)
+3. **Keyboard Shortcuts Cheat Sheet** - Interactive shortcuts guide with search and customization (Milestone 3.8)
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns

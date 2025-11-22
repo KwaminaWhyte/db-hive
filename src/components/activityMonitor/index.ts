@@ -1,0 +1,1 @@
+export { QueryLogTable } from "./QueryLogTable";

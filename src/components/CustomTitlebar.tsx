@@ -168,6 +168,9 @@ export function CustomTitlebar() {
               <DropdownMenuItem onClick={() => navigate({ to: "/visual-query" })}>
                 Visual Query Builder
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate({ to: "/activity" })}>
+                Activity Monitor
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Theme</DropdownMenuSubTrigger>
