@@ -113,6 +113,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 ### Milestone 2.1: Additional Database Drivers ✅ COMPLETED
 - [x] MySQL/MariaDB driver with metadata queries
 - [x] MongoDB driver with CRUD operations & query parser
+- [x] SQL Server driver with tiberius (2025-11-22)
 
 ### Milestone 2.2: SSH Tunneling ✅ COMPLETED (2025-11-21)
 - [x] SSH tunnel manager with password/key auth
@@ -467,15 +468,16 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ **Global Keyboard Shortcuts System** (2025-11-21)
 - ✅ **Window State Persistence** (2025-11-21)
 
-**Recently Completed (2025-11-21):**
-- ✅ Milestone 2.2: SSH Tunneling - Full UI integration with secure password storage
-- ✅ Custom Window Titlebar & Menu System - Professional titlebar with keyboard shortcuts
-- ✅ Window State Persistence - Automatic save/restore of window position and size
+**Recently Completed:**
+- ✅ Milestone 2.1: SQL Server Driver - Complete tiberius-based driver with metadata queries (2025-11-22)
+- ✅ Milestone 2.2: SSH Tunneling - Full UI integration with secure password storage (2025-11-21)
+- ✅ Custom Window Titlebar & Menu System - Professional titlebar with keyboard shortcuts (2025-11-21)
+- ✅ Window State Persistence - Automatic save/restore of window position and size (2025-11-21)
 
 **Next 3 Priorities:**
-1. **Connection Wizard & Dashboard** - Multi-step connection setup with visual feedback, connection testing, and profile management (Phase 3, Milestone 3.1)
-2. **Visual Query Builder** - Drag-and-drop query construction interface with table/column selectors (Milestone 2.8 - now renamed from 2.7)
-3. **SQL Server Driver Integration** - Complete SQL Server driver implementation with metadata queries and Windows authentication support (Milestone 2.1)
+1. **Visual Query Builder** - Drag-and-drop query construction interface with table/column selectors, JOIN builder, and filter conditions (Milestone 2.7)
+2. **Logs & Activity Monitor** - Query execution history tracking, session monitoring, and performance analysis (Milestone 3.6)
+3. **Connection Wizard & Dashboard** - Multi-step connection setup with visual feedback, connection testing, and profile management (Phase 3, Milestone 3.1)
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns

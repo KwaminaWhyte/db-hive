@@ -1,11 +1,19 @@
+//! MySQL Database Driver Implementation
+//!
+//! This module provides a MySQL driver that implements the DatabaseDriver trait
+//! for connecting to and interacting with MySQL databases using the mysql_async crate.
+
 use async_trait::async_trait;
 use mysql_async::prelude::*;
 use mysql_async::{Conn, OptsBuilder, Pool};
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
-use crate::models::{DbError, ColumnInfo, DatabaseInfo, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema};
 use crate::drivers::{ConnectionOptions, DatabaseDriver, QueryResult};
+use crate::models::{
+    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo,
+    TableSchema,
+};
 
 pub struct MysqlDriver {
     pool: Arc<Pool>,
@@ -39,10 +47,7 @@ impl DatabaseDriver for MysqlDriver {
             .db_name(Some(database));
 
         let pool = Pool::new(opts_builder.clone());
-        let conn = pool
-            .get_conn()
-            .await
-            .map_err(Self::map_mysql_error)?;
+        let conn = pool.get_conn().await.map_err(Self::map_mysql_error)?;
 
         Ok(Self {
             pool: Arc::new(pool),
@@ -55,10 +60,7 @@ impl DatabaseDriver for MysqlDriver {
         let mut conn = self.conn.lock().await;
 
         // Execute query
-        let mut result = conn
-            .query_iter(sql)
-            .await
-            .map_err(Self::map_mysql_error)?;
+        let mut result = conn.query_iter(sql).await.map_err(Self::map_mysql_error)?;
 
         // Check if this is a SELECT query (has result set)
         if let Some(columns) = result.columns() {
@@ -126,10 +128,8 @@ impl DatabaseDriver for MysqlDriver {
             self.current_database
         );
 
-        let rows: Vec<(String, String, Option<u64>, Option<String>)> = conn
-            .query(query)
-            .await
-            .map_err(Self::map_mysql_error)?;
+        let rows: Vec<(String, String, Option<u64>, Option<String>)> =
+            conn.query(query).await.map_err(Self::map_mysql_error)?;
 
         Ok(rows
             .into_iter()
@@ -144,9 +144,7 @@ impl DatabaseDriver for MysqlDriver {
 
     async fn test_connection(&self) -> Result<(), DbError> {
         let mut conn = self.conn.lock().await;
-        conn.ping()
-            .await
-            .map_err(Self::map_mysql_error)?;
+        conn.ping().await.map_err(Self::map_mysql_error)?;
         Ok(())
     }
 
@@ -271,11 +269,10 @@ impl DatabaseDriver for MysqlDriver {
             ORDER BY kcu.TABLE_NAME, kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION
         "#;
 
-        let mut conn = self
-            .pool
-            .get_conn()
-            .await
-            .map_err(|e| DbError::ConnectionError(format!("Failed to get connection: {}", e)))?;
+        let mut conn =
+            self.pool.get_conn().await.map_err(|e| {
+                DbError::ConnectionError(format!("Failed to get connection: {}", e))
+            })?;
 
         let rows: Vec<(
             String,
@@ -297,7 +294,18 @@ impl DatabaseDriver for MysqlDriver {
         let mut fk_map: HashMap<String, (ForeignKeyInfo, Vec<String>, Vec<String>)> =
             HashMap::new();
 
-        for (fk_name, table, schema, column, ref_table, ref_schema, ref_column, on_update, on_delete) in rows {
+        for (
+            fk_name,
+            table,
+            schema,
+            column,
+            ref_table,
+            ref_schema,
+            ref_column,
+            on_update,
+            on_delete,
+        ) in rows
+        {
             fk_map
                 .entry(fk_name.clone())
                 .and_modify(|(_, cols, ref_cols)| {
@@ -356,11 +364,9 @@ impl MysqlDriver {
             }
             Value::Int(i) => serde_json::json!(i),
             Value::UInt(u) => serde_json::json!(u),
-            Value::Float(f) => {
-                serde_json::Number::from_f64(f as f64)
-                    .map(serde_json::Value::Number)
-                    .unwrap_or(serde_json::Value::Null)
-            }
+            Value::Float(f) => serde_json::Number::from_f64(f as f64)
+                .map(serde_json::Value::Number)
+                .unwrap_or(serde_json::Value::Null),
             Value::Double(d) => serde_json::Number::from_f64(d)
                 .map(serde_json::Value::Number)
                 .unwrap_or(serde_json::Value::Null),
@@ -376,10 +382,7 @@ impl MysqlDriver {
                 let total_hours = days * 24 + hours as u32;
                 serde_json::Value::String(format!(
                     "{}{:02}:{:02}:{:02}",
-                    sign,
-                    total_hours,
-                    minutes,
-                    seconds
+                    sign, total_hours, minutes, seconds
                 ))
             }
         }
