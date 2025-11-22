@@ -44,31 +44,48 @@ function VisualQueryBuilderPage() {
         tabs = [];
       }
 
-      // Add or update the visual builder tab
-      const visualBuilderTabIndex = tabs.findIndex((t) => t.id === 'visual-builder');
-      const visualBuilderTab = {
-        id: 'visual-builder',
-        type: 'query',
-        sql,
-        name: 'Visual Query',
-      };
+      // Check if there's already a query tab (reuse the first one)
+      const firstQueryTabIndex = tabs.findIndex((t) => t.type === 'query');
 
-      if (visualBuilderTabIndex >= 0) {
-        tabs[visualBuilderTabIndex] = visualBuilderTab;
+      if (firstQueryTabIndex >= 0) {
+        // Update the existing query tab with the new SQL
+        tabs[firstQueryTabIndex] = {
+          ...tabs[firstQueryTabIndex],
+          sql,
+          name: 'Visual Query',
+        };
+
+        localStorage.setItem(storageKey, JSON.stringify(tabs));
+
+        // Navigate to the existing tab
+        navigate({
+          to: '/query',
+          search: {
+            tabs: tabs.map((t) => t.id).join(','),
+            active: firstQueryTabIndex,
+          },
+        });
       } else {
+        // No query tab exists, create a new one
+        const visualBuilderTab = {
+          id: 'visual-builder',
+          type: 'query',
+          sql,
+          name: 'Visual Query',
+        };
+
         tabs.push(visualBuilderTab);
+        localStorage.setItem(storageKey, JSON.stringify(tabs));
+
+        // Navigate to the new tab
+        navigate({
+          to: '/query',
+          search: {
+            tabs: tabs.map((t) => t.id).join(','),
+            active: tabs.length - 1,
+          },
+        });
       }
-
-      localStorage.setItem(storageKey, JSON.stringify(tabs));
-
-      // Navigate to query page
-      navigate({
-        to: '/query',
-        search: {
-          tabs: tabs.map((t) => t.id).join(','),
-          active: tabs.length - 1,
-        },
-      });
 
       // Show success toast
       toast.success('Query loaded in SQL Editor', {
