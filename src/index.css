@@ -211,3 +211,21 @@
 code, pre, .font-mono {
   font-family: "Geist Mono", "Space Mono", ui-monospace, monospace;
 }
+
+/* Tab bar horizontal scrollbar styling */
+.tab-bar-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.tab-bar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tab-bar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.3);
+  border-radius: 4px;
+}
+
+.tab-bar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(100, 116, 139, 0.5);
+}
