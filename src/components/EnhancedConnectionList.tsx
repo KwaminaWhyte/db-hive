@@ -151,8 +151,13 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
       );
     }
 
+    // Apply driver filter
+    if (driverFilter !== "all") {
+      filtered = filtered.filter((p) => p.driver === driverFilter);
+    }
+
     return filtered;
-  }, [profiles, category, searchQuery]);
+  }, [profiles, category, searchQuery, driverFilter]);
 
   // Handle connect button click
   const handleConnectClick = async (profile: ConnectionProfile) => {

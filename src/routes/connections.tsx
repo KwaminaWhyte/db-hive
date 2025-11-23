@@ -16,7 +16,7 @@ import { ConnectionProfile } from "@/types/database";
 // Define search params validation
 export const Route = createFileRoute("/connections")({
   validateSearch: (
-    search: Record<string, unknown>
+    search: Record<string, unknown>,
   ): { mode?: "new" | "edit"; profileId?: string } => {
     return {
       mode: search.mode as "new" | "edit" | undefined,
@@ -63,7 +63,7 @@ function ConnectionsRoute() {
   const showModal = mode === "new" || mode === "edit";
 
   return (
-    <>
+    <div className="w-full h-full">
       {/* Full-page dashboard */}
       <ConnectionDashboard
         onConnected={(connectionId, profile) => {
@@ -97,7 +97,7 @@ function ConnectionsRoute() {
           }
         }}
       >
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="min-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-2xl">
               {mode === "edit" ? "Edit Connection" : "New Connection"}
@@ -126,6 +126,6 @@ function ConnectionsRoute() {
           )}
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 }
