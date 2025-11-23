@@ -264,9 +264,9 @@ function QueryPanelRoute() {
   ]);
 
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden">
+    <div className="flex-1 h-full flex flex-col min-w-0 overflow-hidden">
       {/* Tab Bar */}
-      <div className="border-b border-border bg-background flex-shrink-0">
+      <div className="border-b border-border bg-background flex-shrink-0 overflow-hidden">
         <div className="tab-bar-scroll flex items-center gap-2 px-3 py-1.5 overflow-x-scroll flex-nowrap">
           {tabIds.map((tabId, index) => (
             <div
