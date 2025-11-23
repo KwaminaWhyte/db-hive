@@ -264,16 +264,10 @@ function QueryPanelRoute() {
   ]);
 
   return (
-    <div className="flex-1 h-full flex flex-col">
+    <div className="w-full h-full flex flex-col">
       {/* Tab Bar */}
-      <div className="border-b border-border bg-background">
-        <div
-          className="tab-bar-scroll flex items-center gap-2 px-3 py-1.5 overflow-x-auto flex-nowrap"
-          style={{
-            scrollbarWidth: 'thin',
-            scrollbarColor: 'rgba(100, 116, 139, 0.3) transparent'
-          }}
-        >
+      <div className="border-b border-border bg-background w-full">
+        <div className="tab-bar-scroll flex items-center gap-2 px-3 py-1.5 overflow-x-auto flex-nowrap max-w-full">
           {tabIds.map((tabId, index) => (
             <div
               key={tabId}
