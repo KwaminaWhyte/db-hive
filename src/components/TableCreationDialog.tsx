@@ -166,13 +166,10 @@ export const TableCreationDialog: FC<TableCreationDialogProps> = ({
   const loadPreview = async () => {
     try {
       setLoading(true);
-      console.log("Loading preview with:", { connectionId, tableDefinition });
       const result = await previewCreateTable(connectionId, tableDefinition);
-      console.log("Preview result:", result);
       setPreviewSql(result.sql);
       setStep("preview");
     } catch (error: any) {
-      console.error("Preview error:", error);
       toast.error("Preview Failed", {
         description: error.message || error.toString() || "Failed to generate SQL preview",
       });

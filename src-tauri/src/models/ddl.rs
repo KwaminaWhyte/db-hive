@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 /// Represents common database column types. Each database driver will map these
 /// to their native types (e.g., `Integer` -> `INT` in MySQL, `INTEGER` in SQLite).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum ColumnType {
     // Integer types
     /// Small integer (-32768 to 32767)
