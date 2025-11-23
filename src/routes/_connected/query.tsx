@@ -268,7 +268,7 @@ function QueryPanelRoute() {
       {/* Tab Bar */}
       <div className="border-b border-border bg-background">
         <div
-          className="tab-bar-scroll flex items-center gap-1 px-2 py-1 overflow-x-auto flex-nowrap"
+          className="tab-bar-scroll flex items-center gap-2 px-3 py-1.5 overflow-x-auto flex-nowrap"
           style={{
             scrollbarWidth: 'thin',
             scrollbarColor: 'rgba(100, 116, 139, 0.3) transparent'
@@ -278,8 +278,8 @@ function QueryPanelRoute() {
             <div
               key={tabId}
               className={`
-                group relative flex items-center gap-2 px-3 py-1.5 rounded-t-lg cursor-pointer
-                transition-colors flex-shrink-0
+                group relative flex items-center gap-2 px-4 py-2 rounded-t-lg cursor-pointer
+                transition-colors flex-shrink-0 min-w-fit
                 ${
                   index === activeIndex
                     ? "bg-accent text-foreground border-b-2 border-primary"
