@@ -32,24 +32,41 @@ pub async fn preview_create_table(
     table: TableDefinition,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<DdlResult, DbError> {
+    eprintln!("DEBUG: preview_create_table called with connection_id: {}", connection_id);
+    eprintln!("DEBUG: table name: {}", table.name);
+
     let state_guard = state.lock().unwrap();
 
     // Verify connection exists
+    eprintln!("DEBUG: Checking if connection exists...");
+    eprintln!("DEBUG: Available connections: {:?}", state_guard.connections.keys().collect::<Vec<_>>());
     if !state_guard.connections.contains_key(&connection_id) {
+        eprintln!("ERROR: Connection '{}' not found in connections map", connection_id);
         return Err(DbError::NotFound(format!("Connection '{}' not found", connection_id)));
     }
 
     // Get the connection profile to determine the database driver
+    eprintln!("DEBUG: Checking if profile exists...");
+    eprintln!("DEBUG: Available profiles: {:?}", state_guard.connection_profiles.keys().collect::<Vec<_>>());
     let profile = state_guard
         .connection_profiles
         .get(&connection_id)
-        .ok_or_else(|| DbError::NotFound(format!("Connection profile for '{}' not found", connection_id)))?;
+        .ok_or_else(|| {
+            eprintln!("ERROR: Connection profile for '{}' not found in profiles map", connection_id);
+            DbError::NotFound(format!("Connection profile for '{}' not found", connection_id))
+        })?;
+
+    eprintln!("DEBUG: Found profile with driver: {:?}", profile.driver);
 
     // Get the appropriate DDL generator for this database
     let generator = get_ddl_generator(&profile.driver)?;
+    eprintln!("DEBUG: Got DDL generator");
 
     // Generate SQL
-    generator.generate_create_table(&table)
+    eprintln!("DEBUG: Generating SQL...");
+    let result = generator.generate_create_table(&table)?;
+    eprintln!("DEBUG: Generated SQL successfully: {:?}", result.sql);
+    Ok(result)
 }
 
 /// Create a new table
