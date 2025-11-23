@@ -42,8 +42,7 @@ pub async fn preview_create_table(
     // Get the connection profile to determine the database driver
     let profile = state_guard
         .connection_profiles
-        .values()
-        .find(|p| p.id == connection_id)
+        .get(&connection_id)
         .ok_or_else(|| DbError::NotFound(format!("Connection profile for '{}' not found", connection_id)))?;
 
     // Get the appropriate DDL generator for this database
@@ -125,8 +124,7 @@ pub async fn preview_alter_table(
     // Get the connection profile to determine the database driver
     let profile = state_guard
         .connection_profiles
-        .values()
-        .find(|p| p.id == connection_id)
+        .get(&connection_id)
         .ok_or_else(|| DbError::NotFound(format!("Connection profile for '{}' not found", connection_id)))?;
 
     let generator = get_ddl_generator(&profile.driver)?;
@@ -203,8 +201,7 @@ pub async fn preview_drop_table(
     // Get the connection profile to determine the database driver
     let profile = state_guard
         .connection_profiles
-        .values()
-        .find(|p| p.id == connection_id)
+        .get(&connection_id)
         .ok_or_else(|| DbError::NotFound(format!("Connection profile for '{}' not found", connection_id)))?;
 
     let generator = get_ddl_generator(&profile.driver)?;
