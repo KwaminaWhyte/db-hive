@@ -1,6 +1,7 @@
 // Module declarations
 mod commands;
 mod credentials;
+mod ddl;
 mod drivers;
 mod models;
 mod ssh;
@@ -179,6 +180,12 @@ pub fn run() {
             commands::activity::export_query_logs,
             commands::activity::update_query_log_tags,
             commands::activity::get_query_logs_count,
+            commands::ddl::preview_create_table,
+            commands::ddl::create_table,
+            commands::ddl::preview_alter_table,
+            commands::ddl::alter_table,
+            commands::ddl::preview_drop_table,
+            commands::ddl::drop_table,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

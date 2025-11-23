@@ -285,7 +285,103 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Empty states for filtered results
 - [x] Password prompt dialog for connections without saved passwords
 
-### Milestone 3.3: ERD (Entity Relationship Diagram) Builder
+### Milestone 3.3: Database Schema Management
+
+**DDL Operations - Create/Modify/Delete Database Objects**
+
+**Backend (Rust - Tauri Commands):**
+- [ ] Create table builder command:
+  - [ ] Table name validation
+  - [ ] Column definitions (name, type, nullable, default value)
+  - [ ] Primary key configuration
+  - [ ] Auto-increment/serial column support
+  - [ ] Check constraints
+  - [ ] Unique constraints
+  - [ ] Database-specific type mapping (PostgreSQL, MySQL, SQLite, SQL Server)
+- [ ] Alter table command:
+  - [ ] Add/drop columns
+  - [ ] Rename columns
+  - [ ] Modify column types
+  - [ ] Change column constraints (NOT NULL, DEFAULT)
+  - [ ] Rename table
+- [ ] Drop table command with CASCADE option
+- [ ] Foreign key management commands:
+  - [ ] Add foreign key constraint
+  - [ ] Drop foreign key constraint
+  - [ ] ON DELETE/ON UPDATE actions (CASCADE, SET NULL, RESTRICT)
+- [ ] Index management:
+  - [ ] Create index (single/composite)
+  - [ ] Drop index
+  - [ ] Unique index support
+- [ ] Generate preview SQL for all DDL operations
+- [ ] Transaction support for complex schema changes
+
+**Frontend (React Components):**
+- [ ] TableCreationWizard component:
+  - [ ] Multi-step form (Table Info → Columns → Constraints → Review)
+  - [ ] Column builder with type selector
+  - [ ] Primary key selector (single/composite)
+  - [ ] Foreign key builder with:
+    - [ ] Target table/column selector
+    - [ ] ON DELETE/UPDATE action dropdowns
+    - [ ] Visual relationship preview
+  - [ ] Index builder
+  - [ ] SQL preview panel with syntax highlighting
+  - [ ] Validation with helpful error messages
+- [ ] TableEditor component (for existing tables):
+  - [ ] Visual column editor (add/edit/delete columns)
+  - [ ] Drag-and-drop column reordering (for supported databases)
+  - [ ] Constraint editor
+  - [ ] Index manager
+  - [ ] "Generate SQL" button for manual review
+- [ ] SchemaExplorer context menu additions:
+  - [ ] "Create Table..." menu item
+  - [ ] "Edit Table Structure..." menu item
+  - [ ] "Delete Table..." menu item with confirmation
+  - [ ] "Add Foreign Key..." menu item
+  - [ ] "Manage Indexes..." menu item
+- [ ] ConfirmationDialog for destructive operations:
+  - [ ] Drop table confirmation with cascade warning
+  - [ ] Drop column confirmation with data loss warning
+
+**Database-Specific Implementations:**
+- [ ] PostgreSQL DDL generator with:
+  - [ ] SERIAL/BIGSERIAL types
+  - [ ] Array types support
+  - [ ] JSONB support
+  - [ ] Custom types support
+- [ ] MySQL DDL generator with:
+  - [ ] AUTO_INCREMENT support
+  - [ ] Storage engine selection (InnoDB, MyISAM)
+  - [ ] Character set/collation
+- [ ] SQLite DDL generator with:
+  - [ ] Limitations handling (no ALTER COLUMN, no DROP CONSTRAINT)
+  - [ ] Workaround for table alterations (recreate table)
+  - [ ] AUTOINCREMENT support
+- [ ] SQL Server DDL generator with:
+  - [ ] IDENTITY columns
+  - [ ] Computed columns
+  - [ ] Filegroups support
+
+**Safety & UX:**
+- [ ] Preview SQL before execution
+- [ ] Rollback support for failed operations
+- [ ] Warning dialogs for destructive actions
+- [ ] Data loss warnings when dropping columns
+- [ ] Foreign key dependency checks
+- [ ] Auto-suggest column names from related tables
+- [ ] Type validation based on database capabilities
+
+**Integration:**
+- [ ] Add "Schema" menu to CustomTitlebar with:
+  - [ ] "New Table..."
+  - [ ] "Modify Table..."
+  - [ ] "Manage Indexes..."
+- [ ] Add schema modification shortcuts to keyboard shortcuts modal
+- [ ] Refresh SchemaExplorer after schema changes
+- [ ] Update metadata cache after DDL operations
+
+### Milestone 3.10: ERD (Entity Relationship Diagram) Builder Enhancements
 
 **Visual Schema Designer** (discovered from redesign.md)
 
@@ -511,9 +607,9 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ Milestone 2.7: Visual Query Builder - Complete drag-and-drop SQL query builder with all SQL clauses, nested conditions, and database-specific syntax (2025-11-22)
 
 **Next 3 Priorities:**
-1. **ERD Builder Enhancements** - Interactive ERD canvas with drag-and-drop table editing and layout persistence (Milestone 3.3)
+1. **Database Schema Management** - Create/modify/delete tables, columns, foreign keys, and indexes with visual builders (Milestone 3.3) ⭐ NEXT
 2. **Error & Empty States** - Friendly error pages and empty state illustrations for better UX (Milestone 3.9)
-3. **Plugin System** - Plugin architecture and marketplace for extensibility (Milestone 3.7)
+3. **ERD Builder Enhancements** - Interactive ERD canvas with drag-and-drop table editing and layout persistence (Milestone 3.10)
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns

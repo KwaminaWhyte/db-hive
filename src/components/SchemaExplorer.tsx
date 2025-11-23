@@ -49,10 +49,12 @@ import {
   MoreVertical,
   Workflow,
   Activity,
+  Plus,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 import { SqlExportDialog } from "./SqlExportDialog";
 import { SqlImportDialog } from "./SqlImportDialog";
+import { TableCreationDialog } from "./TableCreationDialog";
 
 interface SchemaExplorerProps {
   connectionId: string;
@@ -92,6 +94,9 @@ export function SchemaExplorer({
   // Import/Export dialog state
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
+  // Table creation dialog state
+  const [showCreateTableDialog, setShowCreateTableDialog] = useState(false);
+  const [createTableSchema, setCreateTableSchema] = useState<string | undefined>(undefined);
 
   // Get the connected database name from the connection profile
   const connectedDatabase = connectionProfile.database || "postgres";
@@ -477,29 +482,50 @@ export function SchemaExplorer({
                           onOpenChange={() => toggleSchemaExpansion(schema.name)}
                         >
                           {/* Schema Header */}
-                          <CollapsibleTrigger asChild>
-                            <button
-                              className="w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left hover:bg-accent/50 group"
-                              draggable={false}
-                            >
-                              {isExpanded ? (
-                                <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              )}
-                              {isExpanded ? (
-                                <FolderOpen className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                              ) : (
-                                <FolderClosed className="h-4 w-4 text-blue-500 flex-shrink-0" />
-                              )}
-                              <span className="flex-1 text-sm font-medium truncate">
-                                {schema.name}
-                              </span>
-                              {isLoadingTables && (
-                                <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
-                              )}
-                            </button>
-                          </CollapsibleTrigger>
+                          <ContextMenu>
+                            <ContextMenuTrigger asChild>
+                              <CollapsibleTrigger asChild>
+                                <button
+                                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left hover:bg-accent/50 group"
+                                  draggable={false}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                  )}
+                                  {isExpanded ? (
+                                    <FolderOpen className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                                  ) : (
+                                    <FolderClosed className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                                  )}
+                                  <span className="flex-1 text-sm font-medium truncate">
+                                    {schema.name}
+                                  </span>
+                                  {isLoadingTables && (
+                                    <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />
+                                  )}
+                                </button>
+                              </CollapsibleTrigger>
+                            </ContextMenuTrigger>
+                            <ContextMenuContent>
+                              <ContextMenuItem
+                                onClick={() => {
+                                  setCreateTableSchema(schema.name);
+                                  setShowCreateTableDialog(true);
+                                }}
+                              >
+                                <Plus className="h-4 w-4 mr-2" />
+                                Create Table
+                              </ContextMenuItem>
+                              <ContextMenuItem
+                                onClick={() => fetchTables(schema.name)}
+                              >
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                Refresh Tables
+                              </ContextMenuItem>
+                            </ContextMenuContent>
+                          </ContextMenu>
 
                           {/* Tables under this schema */}
                           <CollapsibleContent>
@@ -674,6 +700,20 @@ export function SchemaExplorer({
         open={showImportDialog}
         onClose={() => setShowImportDialog(false)}
         connectionId={connectionId}
+      />
+
+      {/* Table Creation Dialog */}
+      <TableCreationDialog
+        open={showCreateTableDialog}
+        onOpenChange={setShowCreateTableDialog}
+        connectionId={connectionId}
+        schema={createTableSchema}
+        onSuccess={() => {
+          // Refresh tables for the schema where the table was created
+          if (createTableSchema) {
+            fetchTables(createTableSchema);
+          }
+        }}
       />
     </div>
   );
