@@ -264,38 +264,26 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 ## 5. Phase 3: Enterprise Features (Ongoing)
 
-### Milestone 3.1: Connection Wizard (Multi-Step Flow)
+### Milestone 3.2: Connection Manager Dashboard ✅ COMPLETED (2025-11-23)
 
-**Enhanced Connection Setup** (discovered from redesign.md)
+**Visual Connection Management**
 
-- [ ] Design multi-step wizard flow:
-  - [ ] Step 1: Select Database Type (PostgreSQL, MySQL, SQLite, SQL Server, MongoDB)
-  - [ ] Step 2: Enter Credentials (host, port, username, password)
-  - [ ] Step 3: Advanced Options (SSL, SSH tunnel, connection timeout)
-  - [ ] Step 4: Test Connection (verify connectivity)
-  - [ ] Step 5: Save Connection (name, color tag, favorite)
-- [ ] Add progress indicator with check marks for completed steps
-- [ ] Implement validation at each step
-- [ ] Add toggleable advanced options panel
-- [ ] Create database type cards with icons
-
-### Milestone 3.2: Connection Manager Dashboard
-
-**Visual Connection Management** (discovered from redesign.md)
-
-- [ ] Build dashboard page for managing all connections:
-  - [ ] Left sidebar with categories (All, Favorites, Recently Used, Local, Cloud)
-  - [ ] Grid/list view toggle
-  - [ ] Connection cards showing:
-    - [ ] Connection name and DB type icon
-    - [ ] Host summary
-    - [ ] Color label/tag
-    - [ ] Status indicator (online/offline)
-  - [ ] Search bar with filters
-  - [ ] Top actions: Create Connection, Import/Export Connections
-- [ ] Three-column responsive card grid
-- [ ] Hover states and animations
-- [ ] Drag-and-drop to organize connections
+- [x] Build dashboard page for managing all connections:
+  - [x] Category tabs (All, Favorites, Recently Used, Local, Cloud)
+  - [x] Grid/list view toggle
+  - [x] Connection cards showing:
+    - [x] Connection name and DB type icon
+    - [x] Host summary with port
+    - [x] Driver type badge with color coding
+    - [x] Favorite star indicator
+  - [x] Search bar with real-time filtering
+  - [x] Top actions: New Connection, Refresh
+- [x] Responsive grid layout (1/2/3 columns based on screen size)
+- [x] Hover states and animations with smooth transitions
+- [x] Double-click to connect functionality
+- [x] Context actions: Edit, Delete, Toggle Favorite
+- [x] Empty states for filtered results
+- [x] Password prompt dialog for connections without saved passwords
 
 ### Milestone 3.3: ERD (Entity Relationship Diagram) Builder
 
@@ -411,18 +399,22 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Add plugin update notifications
 - [ ] Create plugin developer documentation
 
-### Milestone 3.8: Keyboard Shortcuts Cheat Sheet
+### Milestone 3.8: Keyboard Shortcuts Cheat Sheet ✅ COMPLETED (2025-11-23)
 
-**Interactive Shortcuts Guide** (discovered from redesign.md)
+**Interactive Shortcuts Guide**
 
-- [ ] Build keyboard shortcuts modal:
-  - [ ] Grouped by category (Editor, Navigation, Query, Tables)
-  - [ ] Grid layout with card-style sections
-  - [ ] Monospace font for shortcut keys
-  - [ ] Search bar for filtering shortcuts
-  - [ ] Platform-specific shortcuts (Cmd vs Ctrl)
-- [ ] Add "?" hotkey to open shortcuts modal
-- [ ] Make shortcuts customizable (link to Settings)
+- [x] Build keyboard shortcuts modal:
+  - [x] Grouped by category (Editor, Navigation, Welcome Screen)
+  - [x] Card-based layout with organized sections
+  - [x] Monospace font for shortcut keys with platform detection
+  - [x] Search bar for filtering shortcuts with real-time results
+  - [x] Platform-specific shortcuts (Cmd vs Ctrl) auto-detected
+- [x] Add "?" hotkey to open shortcuts modal globally
+- [x] Add menu item in Help menu with keyboard hint
+- [x] Comprehensive shortcut definitions for all implemented shortcuts
+- [x] Empty state for search with no results
+- [x] Platform indicator footer showing current OS
+- [ ] Make shortcuts customizable (TODO: Future enhancement - link to Settings)
 
 ### Milestone 3.9: Error & Empty States
 
@@ -513,15 +505,15 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ **Window State Persistence** (2025-11-21)
 
 **Recently Completed:**
+- ✅ Milestone 3.8: Keyboard Shortcuts Cheat Sheet - Interactive modal with search, platform detection, and Help menu integration (2025-11-23)
+- ✅ Milestone 3.2: Connection Manager Dashboard - Full visual connection management with grid/list views, categories, search, and favorites (2025-11-23)
 - ✅ Milestone 3.6: Logs & Activity Monitor - Complete activity logging backend with query execution tracking, statistics dashboard, comprehensive filtering, and multi-format export (2025-11-22)
 - ✅ Milestone 2.7: Visual Query Builder - Complete drag-and-drop SQL query builder with all SQL clauses, nested conditions, and database-specific syntax (2025-11-22)
-- ✅ Milestone 2.1: SQL Server Driver - Complete tiberius-based driver with metadata queries (2025-11-22)
-- ✅ Milestone 2.2: SSH Tunneling - Full UI integration with secure password storage (2025-11-21)
 
 **Next 3 Priorities:**
-1. **Connection Wizard & Dashboard** - Multi-step connection setup with visual feedback, connection testing, and profile management (Phase 3, Milestone 3.1)
-2. **Advanced Settings Panel** - Comprehensive configuration UI for editor preferences, theme customization, and database-specific options (Milestone 3.5)
-3. **Keyboard Shortcuts Cheat Sheet** - Interactive shortcuts guide with search and customization (Milestone 3.8)
+1. **ERD Builder Enhancements** - Interactive ERD canvas with drag-and-drop table editing and layout persistence (Milestone 3.3)
+2. **Error & Empty States** - Friendly error pages and empty state illustrations for better UX (Milestone 3.9)
+3. **Plugin System** - Plugin architecture and marketplace for extensibility (Milestone 3.7)
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns

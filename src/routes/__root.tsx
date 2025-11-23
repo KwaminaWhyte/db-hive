@@ -7,12 +7,14 @@ import { CustomTitlebar } from "@/components/CustomTitlebar";
 import { Toaster } from "sonner";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { setupWindowStatePersistence } from "@/utils/windowState";
-import { useEffect } from "react";
+import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
+import { useEffect, useState } from "react";
 
 function RootComponent() {
   const { theme } = useTheme();
   const navigate = useNavigate();
   const router = useRouter();
+  const [showShortcutsModal, setShowShortcutsModal] = useState(false);
 
   // Setup window state persistence
   useEffect(() => {
@@ -40,17 +42,30 @@ function RootComponent() {
       },
       description: "Open settings",
     },
+    {
+      key: "?",
+      handler: () => {
+        setShowShortcutsModal(true);
+      },
+      description: "Show keyboard shortcuts",
+    },
   ]);
 
   return (
     <div className="flex flex-col h-screen w-full bg-background">
       {/* Custom Titlebar */}
-      <CustomTitlebar />
+      <CustomTitlebar onShowShortcuts={() => setShowShortcutsModal(true)} />
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
         <Outlet />
       </div>
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        open={showShortcutsModal}
+        onOpenChange={setShowShortcutsModal}
+      />
 
       <Toaster
         richColors
