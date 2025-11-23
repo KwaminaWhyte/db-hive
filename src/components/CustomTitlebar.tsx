@@ -25,7 +25,11 @@ import {
 } from "./ui/dropdown-menu";
 import { useTheme } from "./theme-provider";
 
-export function CustomTitlebar() {
+interface CustomTitlebarProps {
+  onShowShortcuts?: () => void;
+}
+
+export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
   const navigate = useNavigate();
   const router = useRouter();
   const { setTheme } = useTheme();
@@ -228,6 +232,11 @@ export function CustomTitlebar() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
+              <DropdownMenuItem onClick={onShowShortcuts}>
+                Keyboard Shortcuts
+                <span className="ml-auto pl-4 text-xs text-muted-foreground">?</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={() =>
                   window.open("https://github.com/KwaminaWhyte/db-hive/wiki", "_blank")
