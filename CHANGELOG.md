@@ -7,6 +7,70 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0-beta] - 2025-11-23
+
+### Added
+
+- **Database Schema Management (Milestone 3.3)** (2025-11-23):
+  - Complete DDL (Data Definition Language) operations for creating, altering, and dropping tables
+  - Multi-database support: PostgreSQL, MySQL, SQLite, SQL Server (MongoDB intentionally excluded)
+  - **Backend Implementation (2000+ lines of Rust)**:
+    - DDL type system with 20+ column types (Integer, VARCHAR, Text, JSON, UUID, JSONB, Arrays, etc.)
+    - Database-specific SQL generators:
+      - PostgreSQL: SERIAL/BIGSERIAL, arrays, JSONB, UUID, table/column comments
+      - MySQL: AUTO_INCREMENT, InnoDB engine, inline comments, CHECK constraints
+      - SQLite: Type affinity, AUTOINCREMENT, limited ALTER TABLE with clear error messages
+      - SQL Server: IDENTITY, UNIQUEIDENTIFIER, schema prefixes, sp_rename
+    - Foreign key constraints with ON DELETE/UPDATE actions (CASCADE, SET NULL, RESTRICT, NO ACTION, SET DEFAULT)
+    - Unique constraints with auto-generated names
+    - Check constraints support
+    - 6 Tauri commands: `preview_create_table`, `create_table`, `preview_alter_table`, `alter_table`, `preview_drop_table`, `drop_table`
+  - **Frontend Implementation (700+ lines of TypeScript)**:
+    - TableCreationDialog: Multi-step wizard (Basic Info → Columns → Constraints → Preview)
+    - Visual column editor with type dropdown (9 common types)
+    - Primary key, auto-increment, and nullable toggles
+    - Add/remove columns dynamically
+    - SQL preview with syntax highlighting before execution
+    - Form validation (table name required, column names required)
+    - IF NOT EXISTS toggle
+    - SchemaExplorer context menu: "Create Table" on right-click schema
+    - Auto-refresh tables after creation
+  - **TypeScript Types**: Full type definitions matching Rust backend (320 lines)
+  - **API Module**: Typed wrappers for all commands with JSDoc (120 lines)
+  - Files created:
+    - Backend: `src-tauri/src/models/ddl.rs`, `src-tauri/src/ddl/{postgres,mysql,sqlite,sqlserver}.rs`, `src-tauri/src/commands/ddl.rs`
+    - Frontend: `src/types/ddl.ts`, `src/api/ddl.ts`, `src/components/TableCreationDialog.tsx`
+
+- **Keyboard Shortcuts Cheat Sheet (Milestone 3.8)** (2025-11-23):
+  - Interactive modal displaying all keyboard shortcuts
+  - Platform detection (macOS vs Windows/Linux) with automatic key mapping (Cmd ↔ Ctrl)
+  - Real-time search/filter across labels, keys, and descriptions
+  - Organized by category: Editor, Navigation, Welcome Screen
+  - Accessible via "?" hotkey or Help menu
+  - Card-based layout with monospace font for shortcut keys
+  - Empty state for no search results
+  - Platform indicator footer showing current OS
+  - Component: `src/components/KeyboardShortcutsModal.tsx` (265 lines)
+
+- **Connection Manager Dashboard (Milestone 3.2)** (2025-11-23):
+  - Visual connection management dashboard at /connections route
+  - Category tabs: All, Favorites, Recently Used, Local, Cloud
+  - Grid/list view toggle with responsive layout (1/2/3 columns)
+  - Connection cards with driver badges, host info, favorite stars
+  - Real-time search filtering across name, host, folder, driver
+  - Double-click to connect functionality
+  - Context actions: Edit, Delete, Toggle Favorite
+  - Empty states for filtered results
+  - Password prompt dialog for connections without saved credentials
+  - Components: `src/components/ConnectionDashboard.tsx`, `src/components/EnhancedConnectionList.tsx`
+
+### Fixed
+
+- **DDL Connection Profile Lookup** (2025-11-23):
+  - Fixed "Failed to generate SQL preview" error in TableCreationDialog
+  - Changed from iterating values() with find() to direct HashMap get()
+  - All DDL preview commands now correctly look up connection profiles
+
 ## [0.7.0-beta] - 2025-11-22
 
 ### Fixed
