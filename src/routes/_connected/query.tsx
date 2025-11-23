@@ -267,13 +267,13 @@ function QueryPanelRoute() {
     <div className="flex-1 h-full flex flex-col">
       {/* Tab Bar */}
       <div className="border-b border-border bg-background">
-        <div className="flex items-center gap-1 px-2 py-1">
+        <div className="flex items-center gap-1 px-2 py-1 overflow-x-auto scrollbar-thin scrollbar-thumb-muted-foreground/20 scrollbar-track-transparent flex-nowrap">
           {tabIds.map((tabId, index) => (
             <div
               key={tabId}
               className={`
                 group relative flex items-center gap-2 px-3 py-1.5 rounded-t-lg cursor-pointer
-                transition-colors
+                transition-colors flex-shrink-0
                 ${
                   index === activeIndex
                     ? "bg-accent text-foreground border-b-2 border-primary"
@@ -282,7 +282,7 @@ function QueryPanelRoute() {
               `}
               onClick={() => handleSwitchTab(index)}
             >
-              <span className="text-sm font-medium">{getTabLabel(tabId)}</span>
+              <span className="text-sm font-medium whitespace-nowrap">{getTabLabel(tabId)}</span>
               {tabIds.length > 1 && (
                 <button
                   onClick={(e) => {
@@ -303,7 +303,7 @@ function QueryPanelRoute() {
             variant="ghost"
             size="sm"
             onClick={handleAddQueryTab}
-            className="h-7 px-2"
+            className="h-7 px-2 flex-shrink-0"
             title="New query tab"
           >
             <Plus className="h-4 w-4" />
