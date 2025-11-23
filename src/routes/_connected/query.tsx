@@ -264,10 +264,10 @@ function QueryPanelRoute() {
   ]);
 
   return (
-    <div className="h-full flex flex-col w-full">
+    <div className="h-full grid grid-rows-[auto_1fr] min-h-0">
       {/* Tab Bar */}
-      <div className="border-b border-border bg-background flex-shrink-0 w-full min-w-0">
-        <div className="tab-bar-scroll flex items-center gap-2 px-3 py-1.5 overflow-x-auto flex-nowrap min-w-0">
+      <div className="border-b border-border bg-background overflow-hidden">
+        <div className="tab-bar-scroll flex items-center gap-2 px-3 py-1.5 overflow-x-auto flex-nowrap">
           {tabIds.map((tabId, index) => (
             <div
               key={tabId}
@@ -312,7 +312,7 @@ function QueryPanelRoute() {
       </div>
 
       {/* Tab Content - Render ALL tabs but hide inactive ones */}
-      <div className="flex-1 overflow-hidden relative">
+      <div className="overflow-hidden relative min-h-0">
         {tabIds.map((tabId, index) => {
           const tabState = getTabState(tabId);
           if (!tabState) return null;
