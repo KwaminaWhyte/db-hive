@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.1-beta] - 2025-11-24
+
+### Fixed
+
+- **PostgreSQL Row Counts**: Fixed row count display in SchemaExplorer that was showing blank for all tables. Properly handles PostgreSQL's `reltuples` column with correct type handling.
+
+- **Generate SELECT/INSERT Context Menu**: Fixed "Generate SELECT" and "Generate INSERT" context menu items that were not working. Added `handleExecuteQuery` function that properly routes generated SQL to active query tabs with smart tab management (preserves existing SQL, switches tabs when needed).
+
+- **Active Table Highlighting**: Fixed missing visual highlighting for selected tables in SchemaExplorer. Added internal `activeTable` state management with proper onClick handlers for visual feedback.
+
+- **Close All Tabs Feature**: Added new "Close All" option to tab context menus. Includes unsaved work detection and confirmation dialog. Always maintains at least one empty query tab.
+
+### Changed
+
+- Table context menu in SchemaExplorer now includes "Close Tab" option for consistency
+- SQL generation appends to existing content instead of replacing it (preserves user work)
+
 ## [0.8.0-beta] - 2025-11-23
 
 ### Added
