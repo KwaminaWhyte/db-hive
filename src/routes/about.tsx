@@ -21,7 +21,7 @@ import {
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { check } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/api/process";
+import { relaunch } from "@tauri-apps/plugin-process";
 
 export const Route = createFileRoute("/about")({
   component: AboutRoute,
@@ -32,7 +32,7 @@ function AboutRoute() {
   const [previousRoute, setPreviousRoute] = useState<string>("/");
   const [isChecking, setIsChecking] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const version = "0.7.0-beta";
+  const version = "0.8.0-beta";
 
   // Store the previous route before navigating to about
   useEffect(() => {
@@ -80,11 +80,10 @@ function AboutRoute() {
           await update.downloadAndInstall((event) => {
             switch (event.event) {
               case "Started":
-                console.log(`Update download started: ${event.data.contentLength} bytes`);
+                console.log("Update download started");
                 break;
               case "Progress":
-                const percentage = (event.data.chunkLength / event.data.contentLength) * 100;
-                console.log(`Downloaded ${percentage.toFixed(2)}%`);
+                console.log(`Downloading update: ${event.data.chunkLength} bytes`);
                 break;
               case "Finished":
                 console.log("Download finished");
