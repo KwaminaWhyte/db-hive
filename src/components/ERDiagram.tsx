@@ -48,30 +48,38 @@ function TableNode({ data }: { data: TableNodeData }) {
   const hasMoreColumns = columns.length > maxColumns;
 
   return (
-    <Card className={`w-[300px] shadow-xl relative transition-shadow hover:shadow-2xl ${
+    <Card className={`w-[300px] shadow-lg relative transition-all duration-200 hover:shadow-2xl hover:scale-[1.02] ${
       isJunctionTable
-        ? 'border-2 border-blue-300 bg-blue-50/30'
-        : 'border-2 border-amber-200 bg-white'
+        ? 'border-2 border-blue-400 bg-blue-50/50'
+        : 'border-2 border-amber-300 bg-white'
     }`}>
       {/* Connection handles for edges (top-to-bottom flow) */}
       <Handle
         type="target"
         position={Position.Top}
-        className="w-3 h-3 !bg-amber-500 hover:!bg-amber-600 transition-colors"
+        className={`w-4 h-4 !border-2 ${
+          isJunctionTable
+            ? '!bg-blue-500 !border-blue-300'
+            : '!bg-amber-500 !border-amber-300'
+        } hover:scale-125 transition-all`}
         id="top"
       />
       <Handle
         type="source"
         position={Position.Bottom}
-        className="w-3 h-3 !bg-amber-500 hover:!bg-amber-600 transition-colors"
+        className={`w-4 h-4 !border-2 ${
+          isJunctionTable
+            ? '!bg-blue-500 !border-blue-300'
+            : '!bg-amber-500 !border-amber-300'
+        } hover:scale-125 transition-all`}
         id="bottom"
       />
 
       {/* Table header */}
-      <div className={`text-white px-4 py-2.5 font-semibold rounded-t-md ${
+      <div className={`text-white px-4 py-2.5 font-semibold rounded-t-md shadow-sm ${
         isJunctionTable
-          ? 'bg-linear-to-r from-blue-500 to-blue-600'
-          : 'bg-linear-to-r from-amber-500 to-amber-600'
+          ? 'bg-gradient-to-r from-blue-500 to-blue-600'
+          : 'bg-gradient-to-r from-amber-500 to-amber-600'
       }`}>
         <div className="flex items-center justify-between">
           <span className="truncate">{tableName}</span>
@@ -368,11 +376,16 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
         };
       });
 
-      // 5. Transform foreign keys into reactflow edges
+      // 5. Transform foreign keys into reactflow edges with enhanced styling
       const flowEdges: Edge[] = foreignKeys.map((fk, idx) => {
         const label = fk.columns
           .map((col, i) => `${col} → ${fk.referencedColumns[i]}`)
           .join(', ');
+
+        // Check if this is a one-to-many or many-to-many relationship
+        const sourcePK = tableSchemas.find(t => t.table.name === fk.table);
+        const isManyToMany = sourcePK && sourcePK.columns.filter(c => c.isPrimaryKey).length >= 2 &&
+                             fk.columns.length >= 2;
 
         return {
           id: `${fk.name}-${idx}`,
@@ -380,16 +393,39 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
           sourceHandle: 'bottom',
           target: fk.referencedTable,
           targetHandle: 'top',
-          label,
+          label: `${isManyToMany ? 'M:N' : '1:N'} ${label}`,
           type: 'smoothstep',
-          animated: true,
+          animated: false,
           markerEnd: {
             type: MarkerType.ArrowClosed,
-            color: '#f59e0b',
+            color: isManyToMany ? '#3b82f6' : '#f59e0b',
+            width: 20,
+            height: 20,
           },
-          style: { stroke: '#f59e0b', strokeWidth: 2 },
-          labelStyle: { fontSize: 11, fontWeight: 600, fill: '#78350f' },
-          labelBgStyle: { fill: '#fffbeb', fillOpacity: 0.95 },
+          markerStart: {
+            type: MarkerType.Arrow,
+            color: isManyToMany ? '#3b82f6' : '#f59e0b',
+            width: 15,
+            height: 15,
+          },
+          style: {
+            stroke: isManyToMany ? '#3b82f6' : '#f59e0b',
+            strokeWidth: isManyToMany ? 2.5 : 2,
+            strokeDasharray: isManyToMany ? '5,5' : '0',
+          },
+          labelStyle: {
+            fontSize: 11,
+            fontWeight: 600,
+            fill: isManyToMany ? '#1e3a8a' : '#78350f',
+          },
+          labelBgStyle: {
+            fill: isManyToMany ? '#eff6ff' : '#fffbeb',
+            fillOpacity: 0.95,
+            rx: 4,
+            ry: 4,
+          },
+          labelBgPadding: [8, 6] as [number, number],
+          labelBgBorderRadius: 4,
         };
       });
 
