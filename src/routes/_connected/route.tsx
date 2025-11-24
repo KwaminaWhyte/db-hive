@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { SchemaExplorer } from "@/components/SchemaExplorer";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
+import { useTabContext } from "@/contexts/TabContext";
 import { Button } from "@/components/ui/button";
 import { LogOut, Database } from "lucide-react";
 
@@ -33,6 +34,7 @@ function ConnectedLayout() {
     setCurrentDatabase,
     disconnect,
   } = useConnectionContext();
+  const { getTabState, updateTabState, createTabState } = useTabContext();
 
   // Guard: If not connected, redirect to connections page
   if (!connectionId || !connectionProfile) {
@@ -91,6 +93,84 @@ function ConnectedLayout() {
     });
   };
 
+  /**
+   * Handle SQL generation from SchemaExplorer (Generate SELECT/INSERT)
+   * Inserts the SQL into the active query tab or creates a new one
+   */
+  const handleExecuteQuery = (sql: string) => {
+    // Navigate to query route with the SQL inserted into the active tab or a new tab
+    navigate({
+      to: "/query",
+      search: (prev: { tabs?: string; active?: number }) => {
+        const currentTabIds = prev.tabs ? prev.tabs.split(",") : [`query-${Date.now()}`];
+        const activeIndex = prev.active ?? 0;
+        const activeTabId = currentTabIds[activeIndex];
+
+        if (activeTabId) {
+          const activeTab = getTabState(activeTabId);
+
+          if (activeTab?.type === "query") {
+            // Active tab is a query tab - append SQL to it
+            const currentSql = activeTab.sql || "";
+            const newSql = currentSql ? `${currentSql}\n\n${sql}` : sql;
+            updateTabState(activeTabId, { sql: newSql });
+            return {
+              tabs: prev.tabs || currentTabIds.join(","),
+              active: activeIndex,
+            };
+          } else {
+            // Active tab is a table tab - find first query tab or create new one
+            const queryTab = currentTabIds.find((id) => getTabState(id)?.type === "query");
+
+            if (queryTab) {
+              // Found a query tab - update it and switch to it
+              const tabState = getTabState(queryTab);
+              const currentSql = tabState?.sql || "";
+              const newSql = currentSql ? `${currentSql}\n\n${sql}` : sql;
+              updateTabState(queryTab, { sql: newSql });
+
+              // Switch to the query tab
+              const queryTabIndex = currentTabIds.indexOf(queryTab);
+              return {
+                tabs: prev.tabs || currentTabIds.join(","),
+                active: queryTabIndex,
+              };
+            } else {
+              // No query tabs exist - create a new one
+              const newTabId = `query-${Date.now()}`;
+              createTabState({
+                id: newTabId,
+                type: "query",
+                label: "Query",
+                sql,
+              });
+
+              const newTabIds = [...currentTabIds, newTabId];
+              return {
+                tabs: newTabIds.join(","),
+                active: newTabIds.length - 1,
+              };
+            }
+          }
+        }
+
+        // Fallback - create new query tab
+        const newTabId = `query-${Date.now()}`;
+        createTabState({
+          id: newTabId,
+          type: "query",
+          label: "Query",
+          sql,
+        });
+
+        return {
+          tabs: newTabId,
+          active: 0,
+        };
+      },
+    });
+  };
+
   return (
     <div className="flex-1 flex h-full relative">
       {/* Connection Info Bar - Slim bar below titlebar */}
@@ -137,6 +217,7 @@ function ConnectedLayout() {
             onTableSelect={handleTableSelect}
             onDatabaseChange={setCurrentDatabase}
             onOpenERDiagram={handleOpenERDiagram}
+            onExecuteQuery={handleExecuteQuery}
           />
         </div>
 

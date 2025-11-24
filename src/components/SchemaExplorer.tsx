@@ -62,7 +62,6 @@ interface SchemaExplorerProps {
   onDisconnect: () => void;
   onTableSelect: (schema: string, tableName: string) => void;
   onDatabaseChange?: (database: string) => void;
-  selectedTable?: string | null;
   onExecuteQuery?: (sql: string) => void;
   onOpenERDiagram?: (schema: string) => void;
 }
@@ -73,7 +72,6 @@ export function SchemaExplorer({
   onDisconnect,
   onTableSelect,
   onDatabaseChange,
-  selectedTable,
   onExecuteQuery,
   onOpenERDiagram,
 }: SchemaExplorerProps) {
@@ -91,6 +89,8 @@ export function SchemaExplorer({
   const [searchQuery, setSearchQuery] = useState<string>("");
   // Track which schemas are expanded
   const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set(["public"]));
+  // Track the currently active/selected table for highlighting
+  const [activeTable, setActiveTable] = useState<{ schema: string; table: string } | null>(null);
   // Import/Export dialog state
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -541,7 +541,7 @@ export function SchemaExplorer({
                                 </div>
                               ) : schemaTables.length > 0 ? (
                                 schemaTables.map((table) => {
-                                  const isSelected = selectedTable === table.name && selectedSchema === schema.name;
+                                  const isSelected = activeTable?.schema === schema.name && activeTable?.table === table.name;
                                   return (
                                     <ContextMenu key={`${schema.name}.${table.name}`}>
                                       <ContextMenuTrigger asChild>
@@ -551,8 +551,13 @@ export function SchemaExplorer({
                                               ? "bg-accent text-accent-foreground"
                                               : "hover:bg-accent/50"
                                           }`}
+                                          onClick={() => {
+                                            // Set active table for highlighting on single click
+                                            setActiveTable({ schema: schema.name, table: table.name });
+                                          }}
                                           onDoubleClick={() => {
                                             setSelectedSchema(schema.name);
+                                            setActiveTable({ schema: schema.name, table: table.name });
                                             onTableSelect(schema.name, table.name);
                                           }}
                                           draggable
@@ -584,6 +589,7 @@ export function SchemaExplorer({
                                         <ContextMenuItem
                                           onClick={() => {
                                             setSelectedSchema(schema.name);
+                                            setActiveTable({ schema: schema.name, table: table.name });
                                             onTableSelect(schema.name, table.name);
                                           }}
                                         >
