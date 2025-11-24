@@ -552,20 +552,29 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Implementation Date:** 2025-11-24
 
-### Milestone 3.10: About Page
+### Milestone 3.10: About Page ✅ COMPLETED (2025-11-24)
 
-**Application Information** (discovered from redesign.md)
+**Application Information**
 
-- [ ] Create About page showing:
-  - [ ] DB Hive logo (centered)
-  - [ ] Version number
-  - [ ] Contributors & Core Team section
-  - [ ] GitHub link
-  - [ ] Documentation link
-  - [ ] License information (MIT)
-  - [ ] Third-party credits
-- [ ] Centered typography with minimal layout
-- [ ] Add "Check for Updates" button
+- [x] Create About page (`/about` route):
+  - [x] DB-Hive logo matching titlebar branding (centered)
+  - [x] Version number (0.7.0-beta) with badge styling
+  - [x] App tagline: "A Professional Cross-Platform Database Client"
+  - [x] Contributors & Core Team section with "Built with Claude Code" badge
+  - [x] GitHub repository link
+  - [x] Documentation link (GitHub wiki)
+  - [x] Report Issues link (GitHub issues)
+  - [x] License information (MIT) with copyright year
+  - [x] Third-party credits for 10+ major dependencies
+- [x] Professional card-based layout with centered typography
+- [x] "Check for Updates" button with toast notification
+- [x] Integration into Help menu in CustomTitlebar
+- [x] Smart back button with route persistence
+- [x] Dark/light theme support
+- [x] Responsive design
+- [x] External links open in new tabs
+
+**Implementation Date:** 2025-11-24
 
 ### Plugin System
 
@@ -625,16 +634,16 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ **Window State Persistence** (2025-11-21)
 
 **Recently Completed:**
+- ✅ Milestone 3.10: About Page - Professional About page with app information, contributors, third-party credits, and update checker (2025-11-24)
 - ✅ Milestone 3.9: Error & Empty States - Complete redesign of empty states and error displays with 10+ reusable components, smooth animations, and full integration across the application (2025-11-24)
 - ✅ Milestone 3.3: Database Schema Management - Full DDL operations with multi-database support (PostgreSQL, MySQL, SQLite, SQL Server), visual table creation wizard, and SQL preview (2025-11-23)
 - ✅ Milestone 3.8: Keyboard Shortcuts Cheat Sheet - Interactive modal with search, platform detection, and Help menu integration (2025-11-23)
 - ✅ Milestone 3.2: Connection Manager Dashboard - Full visual connection management with grid/list views, categories, search, and favorites (2025-11-23)
-- ✅ Milestone 3.6: Logs & Activity Monitor - Complete activity logging backend with query execution tracking, statistics dashboard, comprehensive filtering, and multi-format export (2025-11-22)
 
 **Next 3 Priorities:**
-1. **ERD Builder Enhancements** - Interactive ERD canvas with drag-and-drop table editing and layout persistence (Milestone 3.10) ⭐ NEXT
-2. **About Page** - Application information page with version, contributors, and update checker (Milestone 3.10)
-3. **Plugin System** - Plugin architecture and marketplace for extensibility (Milestone 3.7)
+1. **ERD Builder Enhancements** - Interactive ERD canvas with drag-and-drop table editing, Add Table button, auto-layout algorithm, and save/load functionality ⭐ NEXT
+2. **Plugin System** - Plugin architecture and marketplace for extensibility (Milestone 3.7)
+3. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections (Phase 3)
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns
