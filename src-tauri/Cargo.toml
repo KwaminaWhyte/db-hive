@@ -1,6 +1,6 @@
 [package]
 name = "db-hive"
-version = "0.7.0"
+version = "0.13.0"
 description = "A Tauri App"
 authors = ["KwaminaWhyte"]
 edition = "2021"
@@ -47,6 +47,7 @@ tiberius = { version = "0.12", features = ["chrono", "native-tls", "sql-browser-
 tokio-util = { version = "0.7", features = ["compat"] }
 regex = "1.11"
 tauri-plugin-process = "2.3.1"
+tauri-plugin-notification = "2.3.3"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-updater = "2.9.0"

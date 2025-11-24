@@ -55,6 +55,18 @@ pub struct GeneralSettings {
 
     /// Enable telemetry and crash reporting
     pub enable_telemetry: bool,
+
+    /// Enable automatic update checking
+    pub auto_check_updates: bool,
+
+    /// Enable automatic update downloading
+    pub auto_download_updates: bool,
+
+    /// Enable automatic update installation
+    pub auto_install_updates: bool,
+
+    /// Update check interval in hours (minimum 1 hour)
+    pub update_check_interval_hours: u32,
 }
 
 impl Default for GeneralSettings {
@@ -65,6 +77,10 @@ impl Default for GeneralSettings {
             startup_behavior: StartupBehavior::ShowConnectionList,
             auto_save_connections: true,
             enable_telemetry: false,
+            auto_check_updates: true,
+            auto_download_updates: false,
+            auto_install_updates: false,
+            update_check_interval_hours: 24,
         }
     }
 }
