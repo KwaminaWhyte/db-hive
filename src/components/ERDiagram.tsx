@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, memo, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Store } from '@tauri-apps/plugin-store';
 import ReactFlow, {
@@ -34,8 +34,9 @@ import { Card } from './ui/card';
 
 /**
  * Custom node component for rendering table information
+ * Memoized to prevent unnecessary re-renders for performance
  */
-function TableNode({ data }: { data: TableNodeData }) {
+const TableNode = memo(({ data }: { data: TableNodeData }) => {
   const { tableName, columns, primaryKeys, foreignKeys } = data;
 
   // Determine if this is a junction table (many-to-many relationship table)
@@ -48,7 +49,7 @@ function TableNode({ data }: { data: TableNodeData }) {
   const hasMoreColumns = columns.length > maxColumns;
 
   return (
-    <Card className={`w-[300px] shadow-lg relative transition-all duration-200 hover:shadow-2xl hover:scale-[1.02] ${
+    <Card className={`w-[300px] shadow-lg relative transition-shadow hover:shadow-2xl ${
       isJunctionTable
         ? 'border-2 border-blue-400 bg-blue-50/50'
         : 'border-2 border-amber-300 bg-white'
@@ -129,7 +130,10 @@ function TableNode({ data }: { data: TableNodeData }) {
       </div>
     </Card>
   );
-}
+});
+
+// Display name for debugging
+TableNode.displayName = 'TableNode';
 
 interface TableNodeData {
   tableName: string;
@@ -228,6 +232,15 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
   useEffect(() => {
     Store.load('erd-layouts.json').then(setStore);
   }, []);
+
+  // Memoize snapGrid array to prevent re-creation on every render
+  const snapGridMemo = useMemo(() => [16, 16] as [number, number], []);
+
+  // Memoize defaultEdgeOptions to prevent re-creation
+  const defaultEdgeOptionsMemo = useMemo(() => ({
+    type: 'smoothstep',
+    animated: false,
+  }), []);
 
   /**
    * Save node positions to persistent storage
@@ -471,6 +484,16 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
   }, [connectionId, schema]);
 
   /**
+   * Memoized minimap node color function
+   */
+  const minimapNodeColor = useCallback((node: Node) => {
+    const data = node.data as TableNodeData;
+    const isJunction = data.tableName.includes('_has_') ||
+                      (data.foreignKeys?.length >= 2 && data.columns?.length <= 5);
+    return isJunction ? '#3b82f6' : '#f59e0b';
+  }, []);
+
+  /**
    * Export diagram as SVG
    */
   const handleExportSVG = useCallback(() => {
@@ -532,11 +555,8 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
         minZoom={0.05}
         maxZoom={1.5}
         snapToGrid={snapToGrid}
-        snapGrid={[16, 16]}
-        defaultEdgeOptions={{
-          type: 'smoothstep',
-          animated: false,
-        }}
+        snapGrid={snapGridMemo}
+        defaultEdgeOptions={defaultEdgeOptionsMemo}
         proOptions={{ hideAttribution: true }}
         nodesDraggable={true}
         nodesConnectable={false}
@@ -556,12 +576,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
           showInteractive={false}
         />
         <MiniMap
-          nodeColor={(node) => {
-            const data = node.data as TableNodeData;
-            const isJunction = data.tableName.includes('_has_') ||
-                              (data.foreignKeys?.length >= 2 && data.columns?.length <= 5);
-            return isJunction ? '#3b82f6' : '#f59e0b';
-          }}
+          nodeColor={minimapNodeColor}
           nodeStrokeWidth={3}
           maskColor="rgba(0, 0, 0, 0.15)"
           style={{
