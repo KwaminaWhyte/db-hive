@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConnectionCard } from "./ConnectionCard";
+import { NoConnectionsEmpty, NoSearchResultsEmpty } from "@/components/empty-states";
 
 interface EnhancedConnectionListProps {
   /** Callback when a profile is selected for editing or null for new connection */
@@ -545,19 +546,19 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
       {/* Connection List/Grid */}
       <div className="flex-1 overflow-y-auto">
         {filteredProfiles.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-primary/30 bg-primary/10 mb-4">
-              <Database className="h-8 w-8 text-primary" strokeWidth={1.5} />
-            </div>
-            <p className="text-foreground text-sm font-medium">
-              {searchQuery || category !== "all" ? "No connections found" : "No connections yet"}
-            </p>
-            <p className="text-muted-foreground text-xs mt-1">
-              {searchQuery || category !== "all"
-                ? "Try adjusting your filters"
-                : "Create your first connection to get started"}
-            </p>
-          </div>
+          searchQuery || category !== "all" ? (
+            <NoSearchResultsEmpty
+              searchQuery={searchQuery}
+              onClearSearch={() => {
+                setSearchQuery("");
+                setCategory("all");
+              }}
+            />
+          ) : (
+            <NoConnectionsEmpty
+              onAddConnection={() => onEdit?.(null)}
+            />
+          )
         ) : viewMode === "grid" ? (
           <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredProfiles.map((profile) => (

@@ -43,6 +43,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConnectionCard } from "./ConnectionCard";
 import { Label } from "./ui/label";
+import { NoConnectionsEmpty, NoSearchResultsEmpty } from "@/components/empty-states";
 
 interface ConnectionDashboardProps {
   /** Callback when successfully connected to a database */
@@ -662,32 +663,21 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
       <div className="flex-1 overflow-y-auto">
         <div className="w-full px-8 py-6">
           {filteredProfiles.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="inline-flex h-20 w-20 items-center justify-center rounded-2xl border-2 border-primary/30 bg-primary/10 mb-4">
-                <Database
-                  className="h-10 w-10 text-primary"
-                  strokeWidth={1.5}
-                />
-              </div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">
-                {searchQuery || activeFilterCount > 0 || category !== "all"
-                  ? "No connections found"
-                  : "No connections yet"}
-              </h3>
-              <p className="text-muted-foreground mb-6">
-                {searchQuery || activeFilterCount > 0 || category !== "all"
-                  ? "Try adjusting your search or filters"
-                  : "Create your first connection to get started"}
-              </p>
-              {!searchQuery &&
-                activeFilterCount === 0 &&
-                category === "all" && (
-                  <Button onClick={onNewConnection}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Connection
-                  </Button>
-                )}
-            </div>
+            searchQuery || activeFilterCount > 0 || category !== "all" ? (
+              <NoSearchResultsEmpty
+                searchQuery={searchQuery}
+                onClearSearch={() => {
+                  setSearchQuery("");
+                  setSelectedDrivers(new Set());
+                  setSelectedEnvironments(new Set());
+                  setCategory("all");
+                }}
+              />
+            ) : (
+              <NoConnectionsEmpty
+                onAddConnection={onNewConnection || (() => {})}
+              />
+            )
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6">
               {filteredProfiles.map((profile) => (

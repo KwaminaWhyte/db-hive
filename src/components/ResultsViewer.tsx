@@ -13,7 +13,6 @@ import { Button } from "./ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import {
   Loader2,
-  AlertCircle,
   CheckCircle2,
   Table as TableIcon,
   FileText,
@@ -26,6 +25,8 @@ import { cn } from "@/lib/utils";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
+import { QueryErrorState } from "./QueryErrorState";
+import { NoResultsEmpty } from "./empty-states";
 
 interface ResultsViewerProps {
   /** Column names */
@@ -340,16 +341,10 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
   if (error) {
     return (
       <Card className="h-full flex flex-col">
-        <CardContent className="flex-1 p-6">
-          <Alert variant="destructive">
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription className="ml-2">
-              <div className="font-semibold mb-1">Query Error</div>
-              <div className="text-sm font-mono whitespace-pre-wrap">
-                {error}
-              </div>
-            </AlertDescription>
-          </Alert>
+        <CardContent className="flex-1 flex items-center justify-center p-6">
+          <QueryErrorState
+            message={error}
+          />
         </CardContent>
       </Card>
     );
@@ -552,16 +547,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                         colSpan={columns.length + 1}
                         className="text-center py-12"
                       >
-                        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                          <TableIcon className="h-12 w-12 opacity-50" />
-                          <div>
-                            <p className="font-medium">No results returned</p>
-                            <p className="text-sm">
-                              The query executed successfully but returned no
-                              rows
-                            </p>
-                          </div>
-                        </div>
+                        <NoResultsEmpty />
                       </td>
                     </tr>
                   )}

@@ -37,6 +37,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "./ui/alert-dialog";
+import { NoHistoryEmpty } from "./empty-states";
 
 interface HistoryPanelProps {
   /** Current connection ID (to filter history) */
@@ -197,12 +198,9 @@ export function HistoryPanel({
             <div className="text-muted-foreground">Loading history...</div>
           </div>
         ) : history.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center px-4">
-            <div className="text-muted-foreground mb-2">No query history</div>
-            <div className="text-sm text-muted-foreground">
-              Execute queries to see them appear here
-            </div>
-          </div>
+          <NoHistoryEmpty
+            onRunQuery={onExecuteQuery ? () => onExecuteQuery("SELECT 1;") : undefined}
+          />
         ) : (
           <ScrollArea className="h-full">
             <div className="space-y-2 p-4">
