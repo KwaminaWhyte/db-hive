@@ -33,6 +33,18 @@ export interface GeneralSettings {
 
   /** Enable telemetry and crash reporting */
   enableTelemetry: boolean;
+
+  /** Enable automatic update checking */
+  autoCheckUpdates: boolean;
+
+  /** Enable automatic update downloading */
+  autoDownloadUpdates: boolean;
+
+  /** Enable automatic update installation */
+  autoInstallUpdates: boolean;
+
+  /** Update check interval in hours (minimum 1 hour) */
+  updateCheckIntervalHours: number;
 }
 
 /**
@@ -146,6 +158,10 @@ export const defaultSettings: AppSettings = {
     startupBehavior: "showConnectionList",
     autoSaveConnections: true,
     enableTelemetry: false,
+    autoCheckUpdates: true,
+    autoDownloadUpdates: false,
+    autoInstallUpdates: false,
+    updateCheckIntervalHours: 24,
   },
   theme: {
     mode: "system",

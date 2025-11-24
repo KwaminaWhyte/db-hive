@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.13.0-beta] - 2025-11-24
+
+### Added
+
+- **Automatic Update System (Milestone 3.12)**: Complete auto-update functionality with system notifications
+  - **Background Update Checking**:
+    - Automatic periodic update checks with configurable interval (1-168 hours, default: 24)
+    - Runs in background without interrupting user workflow
+    - System notification when updates are available
+  - **Auto-Download**:
+    - Optional automatic download of available updates
+    - Progress tracking during download
+    - System notifications for download events
+  - **Auto-Install**:
+    - Optional automatic installation of downloaded updates
+    - 3-second countdown notification before app restart
+    - Seamless update experience with automatic relaunch
+  - **Settings UI**:
+    - Comprehensive settings in General Settings → Automatic Updates
+    - Enable/disable automatic update checking
+    - Configurable check interval input (1-168 hours)
+    - Toggle for auto-download
+    - Toggle for auto-install (nested under auto-download)
+    - Clear descriptions and help text for each option
+  - **Technical Implementation**:
+    - Custom `useAutoUpdater` hook with notification permission handling
+    - Custom `useSettings` hook for loading application settings
+    - Integrated into root component for app-wide availability
+    - Uses `tauri-plugin-notification` v2.3.3 for system notifications
+    - Uses `tauri-plugin-updater` v2.9.0 for update management
+    - Uses `tauri-plugin-process` v2.3.1 for app relaunch
+  - Files added:
+    - `/src/hooks/useAutoUpdater.ts` (177 lines)
+    - `/src/hooks/useSettings.ts` (62 lines)
+  - Files modified:
+    - `/src-tauri/src/models/settings.rs` (added 4 auto-update settings fields)
+    - `/src-tauri/src/lib.rs` (initialized notification plugin)
+    - `/src-tauri/capabilities/default.json` (added notification permissions)
+    - `/src/routes/__root.tsx` (integrated auto-updater)
+    - `/src/components/SettingsPage.tsx` (added settings UI card)
+    - `/src/types/settings.ts` (updated TypeScript types)
+
+### Changed
+
+- **ERD Performance Optimization**:
+  - Applied React Flow best practices for improved rendering performance
+  - Memoized TableNode component with React.memo
+  - Optimized callbacks with useCallback
+  - Optimized objects/arrays with useMemo
+  - Simplified CSS (removed scale animation)
+  - File modified: `/src/components/ERDiagram.tsx`
+
 ## [0.12.0-beta] - 2025-11-24
 
 ### Added

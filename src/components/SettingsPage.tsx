@@ -237,6 +237,82 @@ export function SettingsPage() {
                   </label>
                 </CardContent>
               </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Automatic Updates</CardTitle>
+                  <CardDescription>Configure automatic update checking and installation</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.general.autoCheckUpdates}
+                      onChange={(e) => updateGeneralSettings("autoCheckUpdates", e.target.checked)}
+                      className="size-4"
+                    />
+                    <div>
+                      <div className="text-sm font-medium">Check for updates automatically</div>
+                      <div className="text-muted-foreground text-xs">
+                        Periodically check for new versions and notify you via system notification
+                      </div>
+                    </div>
+                  </label>
+
+                  {settings.general.autoCheckUpdates && (
+                    <>
+                      <div className="pl-6 space-y-4">
+                        <div>
+                          <Label>Check interval (hours)</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max="168"
+                            value={settings.general.updateCheckIntervalHours}
+                            onChange={(e) => updateGeneralSettings("updateCheckIntervalHours", parseInt(e.target.value))}
+                            className="mt-2 max-w-[200px]"
+                          />
+                          <p className="text-muted-foreground text-xs mt-1">
+                            How often to check for updates (1-168 hours)
+                          </p>
+                        </div>
+
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={settings.general.autoDownloadUpdates}
+                            onChange={(e) => updateGeneralSettings("autoDownloadUpdates", e.target.checked)}
+                            className="size-4"
+                          />
+                          <div>
+                            <div className="text-sm font-medium">Download updates automatically</div>
+                            <div className="text-muted-foreground text-xs">
+                              Automatically download updates when available
+                            </div>
+                          </div>
+                        </label>
+
+                        {settings.general.autoDownloadUpdates && (
+                          <label className="flex items-center gap-2 cursor-pointer pl-6">
+                            <input
+                              type="checkbox"
+                              checked={settings.general.autoInstallUpdates}
+                              onChange={(e) => updateGeneralSettings("autoInstallUpdates", e.target.checked)}
+                              className="size-4"
+                            />
+                            <div>
+                              <div className="text-sm font-medium">Install updates automatically</div>
+                              <div className="text-muted-foreground text-xs">
+                                Automatically install downloaded updates and restart (3 second delay)
+                              </div>
+                            </div>
+                          </label>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           )}
 

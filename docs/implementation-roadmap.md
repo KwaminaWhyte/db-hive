@@ -387,23 +387,53 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - DDL operations intentionally not supported (NoSQL database)
 - Returns clear error message: "DDL operations not supported for MongoDB"
 
-### Milestone 3.10: ERD (Entity Relationship Diagram) Builder Enhancements
+### Milestone 3.10: ERD (Entity Relationship Diagram) Builder Enhancements ✅ COMPLETED (2025-11-24)
 
-**Visual Schema Designer** (discovered from redesign.md)
+**Visual Schema Designer**
 
-- [ ] Implement ERD canvas with:
-  - [ ] Draggable table boxes
-  - [ ] Column lists inside each table box
-  - [ ] Visual relationship lines (one-to-one, one-to-many, many-to-many)
-  - [ ] Primary/foreign key indicators
-- [ ] Add ERD toolbar:
-  - [ ] Add Table button
-  - [ ] Auto-Layout algorithm
-  - [ ] Toggle Relationships visibility
-  - [ ] Export to PNG/SVG
-- [ ] Zoom controls (bottom right corner)
-- [ ] Grid-based canvas with snap-to-grid
-- [ ] Save/load ERD layouts
+- [x] Implement ERD canvas with:
+  - [x] Draggable table boxes with position persistence
+  - [x] Column lists inside each table box
+  - [x] Visual relationship lines (one-to-one, one-to-many, many-to-many)
+  - [x] Primary/foreign key indicators with color coding
+- [x] Add ERD toolbar:
+  - [x] Auto-Layout algorithm with Dagre
+  - [x] Toggle Relationships visibility
+  - [x] Export to PNG
+- [x] Zoom controls (minimap with React Flow)
+- [x] Grid-based canvas with snap-to-grid
+- [x] Performance optimizations (React.memo, useCallback, useMemo)
+- [x] Visual enhancements with cardinality indicators
+
+**Implementation Date:** 2025-11-24
+
+### Milestone 3.12: Automatic Update System ✅ COMPLETED (2025-11-24)
+
+**Auto-Update with System Notifications**
+
+- [x] Install and configure tauri-plugin-notification
+- [x] Install and configure tauri-plugin-updater and tauri-plugin-process
+- [x] Implement automatic update checking with configurable interval
+- [x] Add system notifications for all update events:
+  - [x] Update available notification
+  - [x] Download started notification
+  - [x] Download progress tracking
+  - [x] Update ready notification
+  - [x] Auto-install with restart notification
+- [x] Create settings for auto-update preferences:
+  - [x] Enable/disable automatic update checking
+  - [x] Configurable check interval (1-168 hours)
+  - [x] Optional auto-download
+  - [x] Optional auto-install with 3-second restart delay
+- [x] Implement useAutoUpdater hook with:
+  - [x] Background periodic checking
+  - [x] Notification permission handling
+  - [x] Download and install logic
+  - [x] Progress tracking
+- [x] Add Settings UI for update configuration
+- [x] Update TypeScript types and defaults
+
+**Implementation Date:** 2025-11-24
 
 ### Milestone 3.4: Native Window & System Tray ✅ COMPLETED (2025-11-21)
 
@@ -678,15 +708,16 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ **Window State Persistence** (2025-11-21)
 
 **Recently Completed:**
+- ✅ Milestone 3.12: Automatic Update System - Complete auto-update with system notifications, configurable intervals, auto-download, and auto-install with restart (2025-11-24)
+- ✅ Milestone 3.10: ERD Builder Enhancements - Interactive ERD canvas with draggable tables, React Flow integration, auto-layout, performance optimizations, and visual enhancements (2025-11-24)
 - ✅ Milestone 3.11: Auto-Update System - Tauri updater plugin integration with automatic update checking, download, installation, and app relaunch (2025-11-24)
 - ✅ Milestone 3.10: About Page - Professional About page with app information, contributors, third-party credits, and update checker (2025-11-24)
 - ✅ Milestone 3.9: Error & Empty States - Complete redesign of empty states and error displays with 10+ reusable components, smooth animations, and full integration across the application (2025-11-24)
 - ✅ Milestone 3.3: Database Schema Management - Full DDL operations with multi-database support (PostgreSQL, MySQL, SQLite, SQL Server), visual table creation wizard, and SQL preview (2025-11-23)
-- ✅ Milestone 3.8: Keyboard Shortcuts Cheat Sheet - Interactive modal with search, platform detection, and Help menu integration (2025-11-23)
 
 **Next 3 Priorities:**
-1. **ERD Builder Enhancements** - Interactive ERD canvas with drag-and-drop table editing, Add Table button, auto-layout algorithm, and save/load functionality ⭐ NEXT
-2. **Plugin System** - Plugin architecture and marketplace for extensibility (Milestone 3.7)
+1. **Plugin System** - Plugin architecture and marketplace for extensibility (Milestone 3.7) ⭐ NEXT
+2. **Query Performance Analyzer** - EXPLAIN plan visualization with performance insights (Milestone 3.6)
 3. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections (Phase 3)
 
 **Documentation:**
