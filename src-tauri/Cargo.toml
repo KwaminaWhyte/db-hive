@@ -46,3 +46,6 @@ keyring = "3.6"
 tiberius = { version = "0.12", features = ["chrono", "native-tls", "sql-browser-tokio"], default-features = false }
 tokio-util = { version = "0.7", features = ["compat"] }
 regex = "1.11"
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-updater = "2.9.0"
