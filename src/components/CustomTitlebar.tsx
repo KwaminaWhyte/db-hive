@@ -95,6 +95,13 @@ export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
     navigate({ to: "/settings" });
   };
 
+  const handleNavigateToAbout = () => {
+    // Save current route before navigating to about
+    const currentPath = router.state.location.pathname;
+    sessionStorage.setItem("db-hive-previous-route", currentPath);
+    navigate({ to: "/about" });
+  };
+
   return (
     <div className="flex items-center justify-between h-10 bg-background border-b border-border select-none">
       {/* Left: Logo and Menu */}
@@ -252,8 +259,8 @@ export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
                 GitHub Repository
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem disabled>
-                About DB Hive v0.7.0-beta
+              <DropdownMenuItem onClick={handleNavigateToAbout}>
+                About DB-Hive
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0-beta] - 2025-11-24
+
+### Added
+
+- **About Page (Milestone 3.10)**: Professional About page accessible via Help menu
+  - **Core Features**:
+    - Full-page About route (`/about`) with clean, centered layout
+    - Large DB-Hive logo matching the titlebar branding
+    - App version display (0.7.0-beta) with "Check for Updates" button
+    - Back button with smart navigation to previous route
+  - **Content Sections**:
+    - App description and tagline
+    - Key features list with 8+ highlights
+    - Contributors section with "Built with Claude Code" badge
+    - Resource links (GitHub, Documentation, Report Issues)
+    - Third-party credits for 10+ major dependencies
+    - MIT License information with copyright year
+  - **Design**:
+    - Responsive card-based layout
+    - Professional typography and spacing
+    - Dark/light theme support
+    - Smooth scrolling for long content
+    - Consistent with app's overall aesthetic
+  - **Integration**:
+    - Added to Help menu in CustomTitlebar
+    - Smart route persistence (remembers where you came from)
+    - External link handling with proper window.open
+    - Toast notification for update check
+  - Files created:
+    - `/src/routes/about.tsx` (330+ lines)
+  - Files modified:
+    - `/src/components/CustomTitlebar.tsx` (added About navigation handler)
+
 ## [0.9.0-beta] - 2025-11-24
 
 ### Added

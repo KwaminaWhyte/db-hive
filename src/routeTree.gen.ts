@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ConnectionsRouteImport } from './routes/connections'
+import { Route as AboutRouteImport } from './routes/about'
 import { Route as ConnectedRouteRouteImport } from './routes/_connected/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConnectedVisualQueryRouteImport } from './routes/_connected/visual-query'
@@ -28,6 +29,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const ConnectionsRoute = ConnectionsRouteImport.update({
   id: '/connections',
   path: '/connections',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConnectedRouteRoute = ConnectedRouteRouteImport.update({
@@ -75,6 +81,7 @@ const ConnectedTableSchemaTableNameIndexRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
   '/activity': typeof ConnectedActivityRoute
@@ -86,6 +93,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
   '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
   '/activity': typeof ConnectedActivityRoute
@@ -98,6 +106,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_connected': typeof ConnectedRouteRouteWithChildren
+  '/about': typeof AboutRoute
   '/connections': typeof ConnectionsRoute
   '/settings': typeof SettingsRoute
   '/_connected/activity': typeof ConnectedActivityRoute
@@ -111,6 +120,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/about'
     | '/connections'
     | '/settings'
     | '/activity'
@@ -122,6 +132,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/about'
     | '/connections'
     | '/settings'
     | '/activity'
@@ -133,6 +144,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/_connected'
+    | '/about'
     | '/connections'
     | '/settings'
     | '/_connected/activity'
@@ -146,6 +158,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ConnectedRouteRoute: typeof ConnectedRouteRouteWithChildren
+  AboutRoute: typeof AboutRoute
   ConnectionsRoute: typeof ConnectionsRoute
   SettingsRoute: typeof SettingsRoute
 }
@@ -164,6 +177,13 @@ declare module '@tanstack/react-router' {
       path: '/connections'
       fullPath: '/connections'
       preLoaderRoute: typeof ConnectionsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_connected': {
@@ -264,6 +284,7 @@ const ConnectedRouteRouteWithChildren = ConnectedRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ConnectedRouteRoute: ConnectedRouteRouteWithChildren,
+  AboutRoute: AboutRoute,
   ConnectionsRoute: ConnectionsRoute,
   SettingsRoute: SettingsRoute,
 }
