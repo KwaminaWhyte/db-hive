@@ -7,8 +7,24 @@ import { invoke } from "@tauri-apps/api/core";
 import { QueryExecutionResult } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { X, Plus } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 /**
  * Query Panel Route with Multi-Tab Support
@@ -46,6 +62,7 @@ function QueryPanelRoute() {
   const { tabs: tabsParam, active: activeIndex } = Route.useSearch();
   const { connectionId, connectionProfile, currentDatabase } = useConnectionContext();
   const { getTabState, createTabState, removeTabState, getAllTabStates } = useTabContext();
+  const [showCloseAllDialog, setShowCloseAllDialog] = useState(false);
 
   // Parse tab IDs from URL
   const tabIds = tabsParam.split(",").filter(Boolean);
@@ -234,6 +251,65 @@ function QueryPanelRoute() {
     });
   };
 
+  const handleCloseAll = () => {
+    // Check if any query tabs have unsaved work (SQL content)
+    const hasUnsavedWork = tabIds.some((tabId) => {
+      const state = getTabState(tabId);
+      return state?.type === "query" && state?.sql && state.sql.trim().length > 0;
+    });
+
+    if (hasUnsavedWork) {
+      setShowCloseAllDialog(true);
+    } else {
+      confirmCloseAll();
+    }
+  };
+
+  const confirmCloseAll = () => {
+    // Close all tabs and create a new empty query tab
+    const newTabId = `query-${Date.now()}`;
+
+    // Remove all existing tab states
+    tabIds.forEach((tabId) => {
+      removeTabState(tabId);
+    });
+
+    // Create a fresh query tab
+    createTabState({
+      id: newTabId,
+      type: "query",
+      label: "Query",
+      sql: "",
+    });
+
+    // Save to localStorage
+    if (connectionId && currentDatabase) {
+      const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({
+          states: {
+            [newTabId]: {
+              id: newTabId,
+              type: "query",
+              label: "Query",
+              sql: "",
+            },
+          },
+          timestamp: Date.now(),
+        })
+      );
+    }
+
+    // Navigate to the new tab
+    navigate({
+      to: "/query",
+      search: { tabs: newTabId, active: 0 },
+    });
+
+    setShowCloseAllDialog(false);
+  };
+
   const getTabLabel = (tabId: string) => {
     const state = getTabState(tabId);
     return state?.label || tabId;
@@ -269,33 +345,44 @@ function QueryPanelRoute() {
       <div className="border-b border-border bg-background overflow-hidden">
         <div className="tab-bar-scroll flex items-center gap-2 px-3 py-1.5 overflow-x-auto flex-nowrap">
           {tabIds.map((tabId, index) => (
-            <div
-              key={tabId}
-              className={`
-                group relative flex items-center gap-2 px-4 py-2 rounded-t-lg cursor-pointer
-                transition-colors flex-shrink-0 min-w-fit
-                ${
-                  index === activeIndex
-                    ? "bg-accent text-foreground border-b-2 border-primary"
-                    : "hover:bg-accent/50 text-muted-foreground"
-                }
-              `}
-              onClick={() => handleSwitchTab(index)}
-            >
-              <span className="text-sm font-medium whitespace-nowrap">{getTabLabel(tabId)}</span>
-              {tabIds.length > 1 && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCloseTab(index);
-                  }}
-                  className="opacity-0 group-hover:opacity-100 hover:bg-muted rounded p-0.5 transition-opacity"
-                  title="Close tab"
+            <ContextMenu key={tabId}>
+              <ContextMenuTrigger>
+                <div
+                  className={`
+                    group relative flex items-center gap-2 px-4 py-2 rounded-t-lg cursor-pointer
+                    transition-colors flex-shrink-0 min-w-fit
+                    ${
+                      index === activeIndex
+                        ? "bg-accent text-foreground border-b-2 border-primary"
+                        : "hover:bg-accent/50 text-muted-foreground"
+                    }
+                  `}
+                  onClick={() => handleSwitchTab(index)}
                 >
-                  <X className="h-3 w-3" />
-                </button>
-              )}
-            </div>
+                  <span className="text-sm font-medium whitespace-nowrap">{getTabLabel(tabId)}</span>
+                  {tabIds.length > 1 && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCloseTab(index);
+                      }}
+                      className="opacity-0 group-hover:opacity-100 hover:bg-muted rounded p-0.5 transition-opacity"
+                      title="Close tab"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </div>
+              </ContextMenuTrigger>
+              <ContextMenuContent>
+                <ContextMenuItem onClick={() => handleCloseTab(index)}>
+                  Close Tab
+                </ContextMenuItem>
+                <ContextMenuItem onClick={handleCloseAll}>
+                  Close All Tabs
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           ))}
 
           {/* Add Query Tab Button */}
@@ -345,6 +432,25 @@ function QueryPanelRoute() {
           );
         })}
       </div>
+
+      {/* Close All Confirmation Dialog */}
+      <AlertDialog open={showCloseAllDialog} onOpenChange={setShowCloseAllDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close All Tabs?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have unsaved SQL queries. Closing all tabs will discard any unsaved work.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmCloseAll}>
+              Close All
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

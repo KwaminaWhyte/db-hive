@@ -365,11 +365,15 @@ impl DatabaseDriver for PostgresDriver {
             .collect();
 
         // Fetch row counts for tables (not views) using pg_class.reltuples
+        // Note: reltuples is an estimate updated by VACUUM/ANALYZE
         for table in tables.iter_mut() {
             if table.table_type == "TABLE" {
+                // Use the original simpler query - subquery is more reliable than JOIN
                 let count_query = "SELECT reltuples::bigint FROM pg_class WHERE relname = $1 AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)";
 
                 if let Ok(row) = self.client.query_one(count_query, &[&table.name, &schema]).await {
+                    // reltuples is float4 in pg_class, cast to bigint here
+                    // row.get() returns Option<i64> - we clamp negative values to 0
                     table.row_count = row.get::<_, Option<i64>>(0).map(|v| v.max(0) as u64);
                 }
             }
