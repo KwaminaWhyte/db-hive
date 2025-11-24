@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { Store } from '@tauri-apps/plugin-store';
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -16,10 +17,12 @@ import ReactFlow, {
   useEdgesState,
   useNodesState,
   useReactFlow,
+  OnNodesChange,
+  NodeChange,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import dagre from 'dagre';
-import { Download, RefreshCw } from 'lucide-react';
+import { Download, RefreshCw, Grid3x3, LayoutGrid, EyeOff, Eye } from 'lucide-react';
 import {
   ColumnInfo,
   ForeignKeyInfo,
@@ -208,7 +211,102 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [showRelationships, setShowRelationships] = useState(true);
   const { fitView } = useReactFlow();
+  const [store, setStore] = useState<Store | null>(null);
+
+  // Initialize store for persisting layouts
+  useEffect(() => {
+    Store.load('erd-layouts.json').then(setStore);
+  }, []);
+
+  /**
+   * Save node positions to persistent storage
+   */
+  const saveLayout = useCallback(async (nodesToSave: Node[]) => {
+    if (!store) return;
+
+    const layoutKey = `${connectionId}-${schema}`;
+    const positions = nodesToSave.reduce((acc, node) => {
+      acc[node.id] = node.position;
+      return acc;
+    }, {} as Record<string, { x: number; y: number }>);
+
+    try {
+      await store.set(layoutKey, positions);
+      await store.save();
+    } catch (err) {
+      console.error('Failed to save layout:', err);
+    }
+  }, [connectionId, schema, store]);
+
+  /**
+   * Load saved node positions from persistent storage
+   */
+  const loadLayout = useCallback(async (): Promise<Record<string, { x: number; y: number }> | null> => {
+    if (!store) return null;
+
+    const layoutKey = `${connectionId}-${schema}`;
+    try {
+      const positions = await store.get<Record<string, { x: number; y: number }>>(layoutKey);
+      return positions || null;
+    } catch (err) {
+      console.error('Failed to load layout:', err);
+      return null;
+    }
+  }, [connectionId, schema, store]);
+
+  /**
+   * Custom node change handler with snap-to-grid and position persistence
+   */
+  const handleNodesChange: OnNodesChange = useCallback((changes: NodeChange[]) => {
+    let positionChanged = false;
+
+    // Apply snap-to-grid if enabled
+    const processedChanges = changes.map((change) => {
+      if (change.type === 'position' && change.position && snapToGrid) {
+        const gridSize = 16;
+        positionChanged = true;
+        return {
+          ...change,
+          position: {
+            x: Math.round(change.position.x / gridSize) * gridSize,
+            y: Math.round(change.position.y / gridSize) * gridSize,
+          },
+        };
+      }
+      if (change.type === 'position') {
+        positionChanged = true;
+      }
+      return change;
+    });
+
+    onNodesChange(processedChanges);
+
+    // Save layout after position changes (debounced)
+    if (positionChanged) {
+      const timeoutId = setTimeout(() => {
+        setNodes((currentNodes) => {
+          saveLayout(currentNodes);
+          return currentNodes;
+        });
+      }, 500);
+
+      return () => clearTimeout(timeoutId);
+    }
+  }, [onNodesChange, snapToGrid, saveLayout, setNodes]);
+
+  /**
+   * Apply auto-layout using dagre
+   */
+  const handleAutoLayout = useCallback(() => {
+    const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(nodes, edges);
+    setNodes(layoutedNodes);
+    setEdges(layoutedEdges);
+    saveLayout(layoutedNodes);
+    setTimeout(() => fitView({ padding: 0.2, duration: 800 }), 100);
+  }, [nodes, edges, setNodes, setEdges, saveLayout, fitView]);
 
   /**
    * Fetch ER diagram data from backend
@@ -295,14 +393,26 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
         };
       });
 
-      // 6. Apply dagre layout
-      const { nodes: layoutedNodes, edges: layoutedEdges } = getLayoutedElements(
-        flowNodes,
-        flowEdges
-      );
+      // 6. Load saved layout positions or apply dagre layout
+      const savedPositions = await loadLayout();
 
-      setNodes(layoutedNodes);
-      setEdges(layoutedEdges);
+      let finalNodes: Node[];
+      if (savedPositions) {
+        // Apply saved positions
+        finalNodes = flowNodes.map((node) => {
+          const savedPos = savedPositions[node.id];
+          return savedPos
+            ? { ...node, position: savedPos }
+            : node;
+        });
+      } else {
+        // No saved layout, apply dagre auto-layout
+        const { nodes: layoutedNodes } = getLayoutedElements(flowNodes, flowEdges);
+        finalNodes = layoutedNodes;
+      }
+
+      setNodes(finalNodes);
+      setEdges(flowEdges);
 
       // Auto-fit the view after a short delay
       setTimeout(() => {
@@ -316,7 +426,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
     } finally {
       setLoading(false);
     }
-  }, [connectionId, schema, fitView]);
+  }, [connectionId, schema, fitView, loadLayout, setNodes, setEdges]);
 
   // Load data on mount and when connection/schema changes
   useEffect(() => {
@@ -378,16 +488,18 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
     <div className="w-full h-full">
       <ReactFlow
         nodes={nodes}
-        edges={edges}
-        onNodesChange={onNodesChange}
+        edges={showRelationships ? edges : []}
+        onNodesChange={handleNodesChange}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         fitView
         minZoom={0.05}
         maxZoom={1.5}
+        snapToGrid={snapToGrid}
+        snapGrid={[16, 16]}
         defaultEdgeOptions={{
           type: 'smoothstep',
-          animated: false, // Disable animation for better performance with many edges
+          animated: false,
         }}
         proOptions={{ hideAttribution: true }}
         nodesDraggable={true}
@@ -423,26 +535,57 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
           }}
         />
 
-        {/* Control panel */}
-        <Panel position="top-right" className="bg-white/95 backdrop-blur-sm rounded-lg shadow-xl p-2 flex gap-2 border border-gray-200">
-          <Button
-            onClick={fetchERData}
-            variant="outline"
-            size="sm"
-            title="Refresh diagram"
-            className="hover:bg-amber-50"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-          <Button
-            onClick={handleExportSVG}
-            variant="outline"
-            size="sm"
-            title="Export as SVG"
-            className="hover:bg-amber-50"
-          >
-            <Download className="w-4 h-4" />
-          </Button>
+        {/* Enhanced Control Panel */}
+        <Panel position="top-right" className="bg-white/95 backdrop-blur-sm rounded-lg shadow-xl p-2 flex flex-col gap-2 border border-gray-200">
+          <div className="flex gap-2">
+            <Button
+              onClick={handleAutoLayout}
+              variant="outline"
+              size="sm"
+              title="Auto-layout diagram"
+              className="hover:bg-amber-50"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </Button>
+            <Button
+              onClick={() => setShowRelationships(!showRelationships)}
+              variant="outline"
+              size="sm"
+              title={showRelationships ? "Hide relationships" : "Show relationships"}
+              className="hover:bg-amber-50"
+            >
+              {showRelationships ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setSnapToGrid(!snapToGrid)}
+              variant={snapToGrid ? "default" : "outline"}
+              size="sm"
+              title={snapToGrid ? "Disable snap to grid" : "Enable snap to grid"}
+              className={snapToGrid ? "bg-amber-500 hover:bg-amber-600 text-white" : "hover:bg-amber-50"}
+            >
+              <Grid3x3 className="w-4 h-4" />
+            </Button>
+            <Button
+              onClick={fetchERData}
+              variant="outline"
+              size="sm"
+              title="Refresh diagram"
+              className="hover:bg-amber-50"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+            <Button
+              onClick={handleExportSVG}
+              variant="outline"
+              size="sm"
+              title="Export as SVG"
+              className="hover:bg-amber-50"
+            >
+              <Download className="w-4 h-4" />
+            </Button>
+          </div>
         </Panel>
       </ReactFlow>
     </div>
