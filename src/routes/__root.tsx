@@ -8,6 +8,8 @@ import { Toaster } from "sonner";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { setupWindowStatePersistence } from "@/utils/windowState";
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
+import { useSettings } from "@/hooks/useSettings";
+import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { useEffect, useState } from "react";
 
 function RootComponent() {
@@ -15,6 +17,17 @@ function RootComponent() {
   const navigate = useNavigate();
   const router = useRouter();
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+
+  // Load application settings
+  const { settings } = useSettings();
+
+  // Setup automatic update checking with system notifications
+  useAutoUpdater({
+    enabled: settings?.general.autoCheckUpdates ?? true,
+    autoDownload: settings?.general.autoDownloadUpdates ?? false,
+    autoInstall: settings?.general.autoInstallUpdates ?? false,
+    checkIntervalHours: settings?.general.updateCheckIntervalHours ?? 24,
+  });
 
   // Setup window state persistence
   useEffect(() => {
