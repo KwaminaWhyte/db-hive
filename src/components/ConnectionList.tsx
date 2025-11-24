@@ -19,6 +19,7 @@ import {
 import { Pencil, Trash, Server, Plus, RefreshCw, ChevronRight, ChevronDown, FolderOpen, Folder } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoConnectionsEmpty } from "@/components/empty-states";
+import { ConnectionLostError } from "@/components/ConnectionLostError";
 
 interface ConnectionListProps {
   /** Callback when a profile is selected for editing or null for new connection */
@@ -38,6 +39,11 @@ export const ConnectionList: FC<ConnectionListProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<{
+    profileId: string;
+    profileName: string;
+    message: string;
+  } | null>(null);
   const [passwordPrompt, setPasswordPrompt] = useState<{
     profileId: string;
     profileName: string;
@@ -141,7 +147,20 @@ export const ConnectionList: FC<ConnectionListProps> = ({
             typeof err === "string"
               ? err
               : (err as any)?.message || String(err);
-          setError(`Failed to connect: ${errorMessage}`);
+
+          // Check if this is a connection error from Rust DbError
+          const isConnectionError = (err as any)?.kind === "connection" ||
+                                   errorMessage.toLowerCase().includes("connection");
+
+          if (isConnectionError) {
+            setConnectionError({
+              profileId: profile.id,
+              profileName: profile.name,
+              message: errorMessage,
+            });
+          } else {
+            setError(`Failed to connect: ${errorMessage}`);
+          }
         } finally {
           setConnectingId(null);
         }
@@ -163,7 +182,20 @@ export const ConnectionList: FC<ConnectionListProps> = ({
               typeof err === "string"
                 ? err
                 : (err as any)?.message || String(err);
-            setError(`Failed to connect: ${errorMessage}`);
+
+            // Check if this is a connection error from Rust DbError
+            const isConnectionError = (err as any)?.kind === "connection" ||
+                                     errorMessage.toLowerCase().includes("connection");
+
+            if (isConnectionError) {
+              setConnectionError({
+                profileId: profile.id,
+                profileName: profile.name,
+                message: errorMessage,
+              });
+            } else {
+              setError(`Failed to connect: ${errorMessage}`);
+            }
           } finally {
             setConnectingId(null);
           }
@@ -193,7 +225,20 @@ export const ConnectionList: FC<ConnectionListProps> = ({
             typeof err === "string"
               ? err
               : (err as any)?.message || String(err);
-          setError(`Failed to connect: ${errorMessage}`);
+
+          // Check if this is a connection error from Rust DbError
+          const isConnectionError = (err as any)?.kind === "connection" ||
+                                   errorMessage.toLowerCase().includes("connection");
+
+          if (isConnectionError) {
+            setConnectionError({
+              profileId: profile.id,
+              profileName: profile.name,
+              message: errorMessage,
+            });
+          } else {
+            setError(`Failed to connect: ${errorMessage}`);
+          }
         } finally {
           setConnectingId(null);
         }
@@ -214,9 +259,11 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     setConnectingId(passwordPrompt.profileId);
     setError(null);
 
+    // Get profile before try block so it's accessible in catch
+    const profile = profiles.find((p) => p.id === passwordPrompt.profileId);
+
     try {
       // Get SSH password if SSH tunnel is configured with password auth
-      const profile = profiles.find((p) => p.id === passwordPrompt.profileId);
       let sshPassword: string | null = null;
       if (profile?.sshTunnel && profile.sshTunnel.authMethod === "Password") {
         try {
@@ -243,7 +290,20 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     } catch (err) {
       const errorMessage =
         typeof err === "string" ? err : (err as any)?.message || String(err);
-      setError(`Failed to connect: ${errorMessage}`);
+
+      // Check if this is a connection error from Rust DbError
+      const isConnectionError = (err as any)?.kind === "connection" ||
+                               errorMessage.toLowerCase().includes("connection");
+
+      if (isConnectionError && profile) {
+        setConnectionError({
+          profileId: profile.id,
+          profileName: profile.name,
+          message: errorMessage,
+        });
+      } else {
+        setError(`Failed to connect: ${errorMessage}`);
+      }
     } finally {
       setConnectingId(null);
     }
@@ -348,6 +408,25 @@ export const ConnectionList: FC<ConnectionListProps> = ({
       {error && (
         <div className="mx-4 mt-4 rounded-xl bg-red-500/10 border border-red-500/30 p-3 text-sm text-red-900 dark:text-red-200">
           {error}
+        </div>
+      )}
+
+      {connectionError && (
+        <div className="mx-4 mt-4">
+          <ConnectionLostError
+            databaseName={connectionError.profileName}
+            message={connectionError.message}
+            onReconnect={async () => {
+              const profile = profiles.find((p) => p.id === connectionError.profileId);
+              if (profile) {
+                setConnectionError(null);
+                await handleConnectClick(profile);
+              }
+            }}
+            onGoToDashboard={() => {
+              setConnectionError(null);
+            }}
+          />
         </div>
       )}
 
