@@ -12,6 +12,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Button } from './ui/button';
 import { GripHorizontal, GripVertical, Plus, X } from 'lucide-react';
+import { ConnectionLostError } from './ConnectionLostError';
+import { useNavigate } from '@tanstack/react-router';
 
 interface EditorTab {
   id: string;
@@ -65,6 +67,8 @@ export const QueryPanel: FC<QueryPanelProps> = ({
   ]);
   const [activeTabId, setActiveTabId] = useState('tab-1');
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [connectionLost, setConnectionLost] = useState(false);
+  const navigate = useNavigate();
 
   // Query Plan Visualizer state
   const [queryPlan, setQueryPlan] = useState<QueryPlanResult | null>(null);
@@ -211,6 +215,18 @@ export const QueryPanel: FC<QueryPanelProps> = ({
     } catch (err: any) {
       // Handle error - could be a DbError from Tauri
       const errorMessage = err?.message || String(err);
+
+      // Check if this is a connection error
+      const isConnectionError = err?.kind === "connection" ||
+                               errorMessage.toLowerCase().includes("connection lost") ||
+                               errorMessage.toLowerCase().includes("server has gone away") ||
+                               errorMessage.toLowerCase().includes("connection refused") ||
+                               errorMessage.toLowerCase().includes("connection closed");
+
+      if (isConnectionError) {
+        setConnectionLost(true);
+      }
+
       updateTab(activeTabId, {
         error: errorMessage,
         loading: false,
@@ -258,6 +274,26 @@ export const QueryPanel: FC<QueryPanelProps> = ({
   const handleSqlChange = (value: string) => {
     updateTab(activeTabId, { sql: value });
   };
+
+  // If connection is lost, show the ConnectionLostError component
+  if (connectionLost) {
+    return (
+      <div className="h-full flex items-center justify-center p-8">
+        <ConnectionLostError
+          databaseName={connectionProfile?.name}
+          message="The database connection was lost during query execution."
+          onReconnect={() => {
+            setConnectionLost(false);
+            // Clear all tab errors
+            setTabs(tabs.map(tab => ({ ...tab, error: null })));
+          }}
+          onGoToDashboard={() => {
+            navigate({ to: '/connections' });
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <PanelGroup direction="horizontal" className="h-full">
