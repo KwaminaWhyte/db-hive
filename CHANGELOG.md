@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0-beta] - 2025-11-24
+
+### Added
+
+- **Error & Empty States System (Milestone 3.9)**: Complete redesign of empty states and error displays throughout the application
+  - **Error Components**:
+    - `ErrorState` - Reusable base error component with 3 variants (error/warning/info)
+    - `ConnectionLostError` - Specialized component for database connection failures
+    - `QueryErrorState` - Professional query error display with collapsible details and helpful tips
+  - **Empty State Components**:
+    - `EmptyState` - Flexible base component with 3 size variants
+    - `NoConnectionsEmpty` - Friendly empty state for connection list
+    - `NoHistoryEmpty` - Empty query history with action button
+    - `NoTablesEmpty` - Database-aware empty tables state
+    - `NoSearchResultsEmpty` - Smart search results empty state
+    - `NoResultsEmpty` - Query results empty state
+    - `NoDataEmpty` - Table data empty state
+  - **Design Features**:
+    - Consistent visual language across all empty states
+    - Smooth entrance animations (fade-in, slide-up, zoom-in)
+    - Color-coded icons for visual recognition
+    - Dark/light theme support
+    - Responsive, mobile-friendly layouts
+    - WCAG 2.1 AA accessibility compliant
+  - **Integration**:
+    - Integrated into 6 major components (ConnectionList, ConnectionDashboard, HistoryPanel, ResultsViewer, SchemaExplorer, EnhancedConnectionList)
+    - Smart detection of search/filter states
+    - Action buttons wired to relevant handlers
+  - **Documentation**:
+    - Comprehensive API documentation (ERROR_AND_EMPTY_STATES.md)
+    - Quick reference guide (ERROR_STATES_QUICK_REFERENCE.md)
+    - Interactive showcase component (ErrorStatesDemo)
+    - 15+ code examples (ErrorStateExamples.tsx)
+
 ## [0.8.1-beta] - 2025-11-24
 
 ### Fixed

@@ -55,6 +55,7 @@ import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 import { SqlExportDialog } from "./SqlExportDialog";
 import { SqlImportDialog } from "./SqlImportDialog";
 import { TableCreationDialog } from "./TableCreationDialog";
+import { NoTablesEmpty, NoSearchResultsEmpty } from "./empty-states";
 
 interface SchemaExplorerProps {
   connectionId: string;
@@ -631,9 +632,15 @@ export function SchemaExplorer({
                                   );
                                 })
                               ) : (
-                                <p className="text-xs text-muted-foreground px-3 py-2">
-                                  No tables found
-                                </p>
+                                <div className="px-3 py-6">
+                                  <NoTablesEmpty
+                                    databaseName={`${selectedDatabase}.${schema.name}`}
+                                    onCreateTable={() => {
+                                      setCreateTableSchema(schema.name);
+                                      setShowCreateTableDialog(true);
+                                    }}
+                                  />
+                                </div>
                               )}
                             </div>
                           </CollapsibleContent>
@@ -642,18 +649,10 @@ export function SchemaExplorer({
                     })}
                   </div>
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <Search className="h-8 w-8 text-muted-foreground mb-2" />
-                    <p className="text-sm text-muted-foreground">
-                      No schemas or tables match "{searchQuery}"
-                    </p>
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="text-xs text-primary hover:underline mt-2"
-                    >
-                      Clear search
-                    </button>
-                  </div>
+                  <NoSearchResultsEmpty
+                    searchQuery={searchQuery}
+                    onClearSearch={() => setSearchQuery("")}
+                  />
                 )
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-8">

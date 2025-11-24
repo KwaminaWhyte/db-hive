@@ -16,8 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Pencil, Trash, Database, Server, Plus, RefreshCw, ChevronRight, ChevronDown, FolderOpen, Folder } from "lucide-react";
+import { Pencil, Trash, Server, Plus, RefreshCw, ChevronRight, ChevronDown, FolderOpen, Folder } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { NoConnectionsEmpty } from "@/components/empty-states";
 
 interface ConnectionListProps {
   /** Callback when a profile is selected for editing or null for new connection */
@@ -353,15 +354,9 @@ export const ConnectionList: FC<ConnectionListProps> = ({
       {/* Connection List */}
       <div className="flex-1 overflow-y-auto">
         {profiles.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="inline-flex h-16 w-16 items-center justify-center rounded-2xl border-2 border-amber-500/30 bg-amber-500/10 mb-4">
-              <Database className="h-8 w-8 text-amber-600 dark:text-amber-300" strokeWidth={1.5} />
-            </div>
-            <p className="text-foreground text-sm font-medium">No connections yet</p>
-            <p className="text-muted-foreground text-xs mt-1">
-              Create your first connection to get started
-            </p>
-          </div>
+          <NoConnectionsEmpty
+            onAddConnection={() => onEdit?.(null)}
+          />
         ) : (
           <div className="p-4 space-y-2">
             {(() => {
