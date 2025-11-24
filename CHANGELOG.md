@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.0-beta] - 2025-11-24
+
+### Added
+
+- **ERD Builder Enhancements (Milestone 3.10)**: Major improvements to the ER Diagram visualization
+  - **Interactive Features**:
+    - Fully draggable table nodes with position persistence
+    - Positions saved per connection+schema using Tauri Store
+    - Auto-restore saved layouts on diagram load
+    - Snap-to-grid functionality (16px grid, toggleable)
+    - Toggle relationships visibility to reduce clutter
+    - Auto-layout button to reapply dagre algorithm
+  - **Enhanced Toolbar** (2 rows, 5 buttons):
+    - Row 1: Auto-layout, Toggle Relationships
+    - Row 2: Snap to Grid (active state indicator), Refresh, Export SVG
+    - All buttons have descriptive tooltips
+    - Active states for toggle buttons (amber highlight)
+  - **Visual Enhancements**:
+    - Cardinality indicators on all relationships (1:N, M:N)
+    - Distinguished many-to-many relationships:
+      - Blue color scheme (vs amber for 1:N)
+      - Dashed stroke pattern
+      - Bidirectional arrows
+      - Thicker lines (2.5px vs 2px)
+    - Improved table node styling:
+      - Smooth hover animations (scale 1.02x, shadow upgrade)
+      - Larger connection handles (4x4 with borders)
+      - Handle hover effect (scale 1.25x)
+      - Fixed gradient syntax for headers
+      - Shadow enhancements
+    - Better label styling with rounded backgrounds and padding
+  - **Technical Implementation**:
+    - Custom OnNodesChange handler with debounced save (500ms)
+    - Persistent storage key: `${connectionId}-${schema}`
+    - Fallback to dagre auto-layout when no saved positions exist
+    - M:N relationship detection based on compound primary keys
+  - Files modified:
+    - `/src/components/ERDiagram.tsx` (226 lines changed, +175 insertions, -32 deletions)
+
 ## [0.11.0-beta] - 2025-11-24
 
 ### Added
