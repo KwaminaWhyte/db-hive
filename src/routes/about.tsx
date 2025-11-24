@@ -15,9 +15,13 @@ import {
   ExternalLink,
   CheckCircle2,
   Sparkles,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { check } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/api/process";
 
 export const Route = createFileRoute("/about")({
   component: AboutRoute,
@@ -26,6 +30,8 @@ export const Route = createFileRoute("/about")({
 function AboutRoute() {
   const navigate = useNavigate({ from: "/about" });
   const [previousRoute, setPreviousRoute] = useState<string>("/");
+  const [isChecking, setIsChecking] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const version = "0.7.0-beta";
 
   // Store the previous route before navigating to about
@@ -54,10 +60,67 @@ function AboutRoute() {
     }
   };
 
-  const handleCheckForUpdates = () => {
-    toast.success("You're up to date!", {
-      description: `DB-Hive ${version} is the latest version.`,
-    });
+  const handleCheckForUpdates = async () => {
+    if (isChecking || isDownloading) return;
+
+    setIsChecking(true);
+    try {
+      const update = await check();
+
+      if (update?.available) {
+        toast.info(`Update available: ${update.version}`, {
+          description: "Downloading update...",
+          duration: 5000,
+        });
+
+        setIsChecking(false);
+        setIsDownloading(true);
+
+        try {
+          await update.downloadAndInstall((event) => {
+            switch (event.event) {
+              case "Started":
+                console.log(`Update download started: ${event.data.contentLength} bytes`);
+                break;
+              case "Progress":
+                const percentage = (event.data.chunkLength / event.data.contentLength) * 100;
+                console.log(`Downloaded ${percentage.toFixed(2)}%`);
+                break;
+              case "Finished":
+                console.log("Download finished");
+                break;
+            }
+          });
+
+          toast.success("Update installed!", {
+            description: "Restarting application...",
+            duration: 3000,
+          });
+
+          // Relaunch the app after a short delay
+          setTimeout(async () => {
+            await relaunch();
+          }, 2000);
+        } catch (error) {
+          console.error("Failed to download and install update:", error);
+          toast.error("Update failed", {
+            description: error instanceof Error ? error.message : "Failed to install update",
+          });
+          setIsDownloading(false);
+        }
+      } else {
+        toast.success("You're up to date!", {
+          description: `DB-Hive ${version} is the latest version.`,
+        });
+        setIsChecking(false);
+      }
+    } catch (error) {
+      console.error("Failed to check for updates:", error);
+      toast.error("Update check failed", {
+        description: error instanceof Error ? error.message : "Failed to check for updates",
+      });
+      setIsChecking(false);
+    }
   };
 
   const openLink = (url: string) => {
@@ -131,9 +194,24 @@ function AboutRoute() {
                 variant="outline"
                 size="sm"
                 onClick={handleCheckForUpdates}
+                disabled={isChecking || isDownloading}
               >
-                <CheckCircle2 className="size-4 mr-2" />
-                Check for Updates
+                {isChecking ? (
+                  <>
+                    <Loader2 className="size-4 mr-2 animate-spin" />
+                    Checking...
+                  </>
+                ) : isDownloading ? (
+                  <>
+                    <Download className="size-4 mr-2" />
+                    Downloading...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="size-4 mr-2" />
+                    Check for Updates
+                  </>
+                )}
               </Button>
             </div>
           </div>

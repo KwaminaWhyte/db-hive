@@ -576,6 +576,50 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Implementation Date:** 2025-11-24
 
+### Milestone 3.11: Auto-Update System ✅ COMPLETED (2025-11-24)
+
+**Automatic Application Updates**
+
+- [x] Install and configure Tauri updater plugin:
+  - [x] Add `tauri-plugin-updater` (v2.9.0) to Rust dependencies
+  - [x] Add `@tauri-apps/plugin-updater` to frontend dependencies
+  - [x] Initialize updater plugin in `lib.rs`
+- [x] Configure `tauri.conf.json`:
+  - [x] Enable `createUpdaterArtifacts: true` for build process
+  - [x] Set update endpoint to GitHub releases (`latest.json`)
+  - [x] Add public key field for signature verification
+- [x] Implement update check functionality in About page:
+  - [x] Replace placeholder toast with real update checking
+  - [x] Add loading states (checking, downloading)
+  - [x] Visual feedback with spinner and download icon
+  - [x] Toast notifications for all update states
+  - [x] Automatic download and installation
+  - [x] App relaunch after successful update
+- [x] Error handling:
+  - [x] Network error handling
+  - [x] Download failure handling
+  - [x] Installation error handling with user-friendly messages
+- [x] User experience:
+  - [x] Button disabled during operations
+  - [x] Progress indicators
+  - [x] Clear success/error messaging
+  - [x] Non-blocking UI (toast notifications)
+
+**Files Modified:**
+- `src-tauri/src/lib.rs` - Added updater plugin initialization
+- `src-tauri/tauri.conf.json` - Added updater configuration
+- `src/routes/about.tsx` - Implemented update check logic
+- `src-tauri/Cargo.toml` - Added tauri-plugin-updater dependency
+- `package.json` - Added @tauri-apps/plugin-updater dependency
+
+**Notes:**
+- Signing keys need to be generated for production releases: `npm run tauri signer generate`
+- Update artifacts will be created automatically during GitHub release builds
+- Updater checks GitHub releases for `latest.json` manifest
+- Signature verification ready (requires public key configuration)
+
+**Implementation Date:** 2025-11-24
+
 ### Plugin System
 
 - [ ] Design plugin architecture (JS or WASM)
@@ -634,11 +678,11 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ **Window State Persistence** (2025-11-21)
 
 **Recently Completed:**
+- ✅ Milestone 3.11: Auto-Update System - Tauri updater plugin integration with automatic update checking, download, installation, and app relaunch (2025-11-24)
 - ✅ Milestone 3.10: About Page - Professional About page with app information, contributors, third-party credits, and update checker (2025-11-24)
 - ✅ Milestone 3.9: Error & Empty States - Complete redesign of empty states and error displays with 10+ reusable components, smooth animations, and full integration across the application (2025-11-24)
 - ✅ Milestone 3.3: Database Schema Management - Full DDL operations with multi-database support (PostgreSQL, MySQL, SQLite, SQL Server), visual table creation wizard, and SQL preview (2025-11-23)
 - ✅ Milestone 3.8: Keyboard Shortcuts Cheat Sheet - Interactive modal with search, platform detection, and Help menu integration (2025-11-23)
-- ✅ Milestone 3.2: Connection Manager Dashboard - Full visual connection management with grid/list views, categories, search, and favorites (2025-11-23)
 
 **Next 3 Priorities:**
 1. **ERD Builder Enhancements** - Interactive ERD canvas with drag-and-drop table editing, Add Table button, auto-layout algorithm, and save/load functionality ⭐ NEXT

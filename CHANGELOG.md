@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0-beta] - 2025-11-24
+
+### Added
+
+- **Auto-Update System (Milestone 3.11)**: Integrated Tauri updater plugin for automatic application updates
+  - **Core Features**:
+    - Automatic update checking via GitHub releases
+    - One-click update download and installation
+    - Signature verification for secure updates (when keys configured)
+    - Update progress notifications with toast messages
+    - Automatic app relaunch after update installation
+  - **Implementation**:
+    - Installed `tauri-plugin-updater` (v2.9.0) for Rust backend
+    - Installed `@tauri-apps/plugin-updater` for frontend integration
+    - Configured `tauri.conf.json` with updater settings
+    - Updated About page with real update checking functionality
+  - **User Experience**:
+    - "Check for Updates" button in About page
+    - Visual feedback during check (Checking... with spinner)
+    - Download progress indicator (Downloading... with icon)
+    - Toast notifications for all states (checking, available, downloading, installed, errors)
+    - Button disabled during check/download to prevent multiple requests
+  - **Configuration**:
+    - Update endpoint: `https://github.com/KwaminaWhyte/db-hive/releases/latest/download/latest.json`
+    - Supports `createUpdaterArtifacts: true` for GitHub Actions
+    - Public key field ready for signature verification
+  - Files modified:
+    - `/src-tauri/src/lib.rs` (added updater plugin initialization)
+    - `/src-tauri/tauri.conf.json` (added updater configuration)
+    - `/src/routes/about.tsx` (implemented real update check logic with UI states)
+    - `/src-tauri/Cargo.toml` (added tauri-plugin-updater dependency)
+    - `/package.json` (added @tauri-apps/plugin-updater dependency)
+
+### Notes
+
+- Signing keys need to be generated before production releases using `npm run tauri signer generate`
+- Update artifacts will be automatically generated during `npm run tauri build` when a release is created
+- The updater checks for updates from GitHub releases using the latest.json manifest
+
 ## [0.10.0-beta] - 2025-11-24
 
 ### Added
