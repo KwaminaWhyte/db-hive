@@ -514,22 +514,50 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Memory usage chart (requires system metrics collection)
 - [ ] Process list table (requires database-specific session queries)
 
-### Milestone 3.7: Plugin Marketplace
+### Milestone 3.7: Plugin System ✅ COMPLETED (2025-11-28)
 
-**In-App Plugin Discovery** (discovered from redesign.md)
+**Extensible Plugin Architecture with JavaScript Runtime**
 
-- [ ] Design plugin marketplace page:
-  - [ ] Three-column grid of plugin cards
-  - [ ] Each card showing:
-    - [ ] Plugin name and description
-    - [ ] Category (Drivers, Themes, Tools, Export Formats)
-    - [ ] Star rating and downloads count
-    - [ ] Install/Uninstall button
-  - [ ] Search bar with category filters
-  - [ ] Sort options (Popular, Recent, Rating)
-- [ ] Implement plugin installation flow
-- [ ] Add plugin update notifications
-- [ ] Create plugin developer documentation
+- [x] Plugin Runtime with boa_engine (pure Rust JS interpreter):
+  - [x] Sandboxed JavaScript execution environment
+  - [x] IIFE wrapper pattern for export capture
+  - [x] Permission-based API access control
+  - [x] Resource limits and sandbox isolation
+- [x] Plugin Manager:
+  - [x] Install/uninstall plugins from marketplace
+  - [x] Enable/disable installed plugins
+  - [x] Bundled plugin discovery and copying
+  - [x] Plugin configuration storage
+- [x] DBHive JavaScript API:
+  - [x] File read/write (sandboxed to plugin data dir)
+  - [x] Key-value storage API
+  - [x] Clipboard read/write (arboard)
+  - [x] HTTP requests (reqwest blocking)
+  - [x] Notification system
+  - [x] UI component registration (toolbar, context menu)
+- [x] Plugin Marketplace UI:
+  - [x] Category filtering and search
+  - [x] Plugin cards with stats (downloads, rating)
+  - [x] Install/uninstall buttons
+  - [x] Sort options (Popular, Recent, Rating)
+- [x] Installed Plugins UI:
+  - [x] Plugin list with enable/disable toggles
+  - [x] Plugin details view (permissions, stats, keywords)
+  - [x] Settings dialog for plugin configuration
+  - [x] Run button for plugin actions
+  - [x] Uninstall confirmation
+- [x] Plugin Action Handlers:
+  - [x] PluginContext for tracking registered UI components
+  - [x] PluginToolbar for toolbar buttons
+  - [x] usePluginContextMenu hook for context menus
+  - [x] Event listeners for plugin notifications
+- [x] CSV Exporter Plugin (bundled):
+  - [x] Export query results to CSV
+  - [x] Configurable delimiter, headers, quoting
+  - [x] Toolbar button and context menu registration
+- [x] Plugin Development Documentation
+
+**Implementation Date:** 2025-11-28
 
 ### Milestone 3.8: Keyboard Shortcuts Cheat Sheet ✅ COMPLETED (2025-11-23)
 
@@ -650,12 +678,12 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Implementation Date:** 2025-11-24
 
-### Plugin System
+### Plugin System ✅ COMPLETED
 
-- [ ] Design plugin architecture (JS or WASM)
-- [ ] Create plugin API
-- [ ] Build plugin manager UI (see Milestone 3.6)
-- [ ] Develop example plugins
+- [x] Design plugin architecture (JS with boa_engine)
+- [x] Create plugin API (DBHive JS API)
+- [x] Build plugin manager UI (Marketplace + Installed)
+- [x] Develop example plugins (CSV Exporter)
 
 ### Workspace Sync
 
@@ -708,6 +736,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ **Window State Persistence** (2025-11-21)
 
 **Recently Completed:**
+- ✅ Milestone 3.7: Plugin System - Full plugin architecture with boa_engine JS runtime, marketplace UI, plugin settings, action handlers, and CSV Exporter bundled plugin (2025-11-28)
 - ✅ Milestone 3.12: Automatic Update System - Complete auto-update with system notifications, configurable intervals, auto-download, and auto-install with restart (2025-11-24)
 - ✅ Milestone 3.10: ERD Builder Enhancements - Interactive ERD canvas with draggable tables, React Flow integration, auto-layout, performance optimizations, and visual enhancements (2025-11-24)
 - ✅ Milestone 3.11: Auto-Update System - Tauri updater plugin integration with automatic update checking, download, installation, and app relaunch (2025-11-24)
@@ -715,10 +744,17 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ Milestone 3.9: Error & Empty States - Complete redesign of empty states and error displays with 10+ reusable components, smooth animations, and full integration across the application (2025-11-24)
 - ✅ Milestone 3.3: Database Schema Management - Full DDL operations with multi-database support (PostgreSQL, MySQL, SQLite, SQL Server), visual table creation wizard, and SQL preview (2025-11-23)
 
-**Next 3 Priorities:**
-1. **Plugin System** - Plugin architecture and marketplace for extensibility (Milestone 3.7) ⭐ NEXT
-2. **Query Performance Analyzer** - EXPLAIN plan visualization with performance insights (Milestone 3.6)
-3. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections (Phase 3)
+**Next Priorities (Pick from these):**
+1. **AI Assistant** - Natural language to SQL, query explanation, optimization suggestions
+2. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections
+3. **Schema Migration Tools** - Schema diff, migration SQL generation, version control
+4. **Query Templates** - Save/load query templates with parameters
+5. **Data Visualization** - Charts and graphs from query results
+6. **Stored Procedures** - View, edit, and execute stored procedures/functions
+7. **Database Comparison** - Compare schemas between two databases
+8. **Backup Manager** - Schedule and manage database backups
+9. **Performance Dashboard** - Real-time database performance metrics
+10. **Import Wizards** - Import from Excel, CSV with column mapping
 
 **Documentation:**
 - See `CLAUDE.md` for detailed architecture and development patterns
