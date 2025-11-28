@@ -8,6 +8,7 @@ pub mod connection;
 pub mod ddl;
 pub mod export;
 pub mod history;
+pub mod plugins;
 pub mod query;
 pub mod schema;
 pub mod settings;

@@ -4,10 +4,12 @@ mod credentials;
 mod ddl;
 mod drivers;
 mod models;
+mod plugins;
 mod ssh;
 mod state;
 
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
+use plugins::{loader::PluginLoader, PluginManager};
 use state::AppState;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
@@ -94,6 +96,27 @@ pub fn run() {
 
             // Manage the state
             app.manage(Mutex::new(state));
+
+            // Initialize plugin manager
+            let plugin_manager = PluginManager::new(app.handle().clone());
+
+            // Initialize plugins asynchronously
+            let plugin_manager_clone = Arc::new(tokio::sync::Mutex::new(plugin_manager));
+            let manager = plugin_manager_clone.clone();
+            tauri::async_runtime::spawn(async move {
+                let manager = manager.lock().await;
+                if let Err(e) = manager.initialize().await {
+                    eprintln!("Failed to initialize plugin manager: {}", e);
+                }
+            });
+
+            // Manage the plugin manager for commands
+            app.manage(plugin_manager_clone);
+
+            // Initialize plugin loader
+            let plugin_loader = PluginLoader::new(app.handle().clone());
+            let plugin_loader_arc = Arc::new(tokio::sync::Mutex::new(plugin_loader));
+            app.manage(plugin_loader_arc);
 
             // Create system tray menu
             let show_hide_i = MenuItem::with_id(app, "show_hide", "Show/Hide", true, None::<&str>)?;
@@ -189,6 +212,19 @@ pub fn run() {
             commands::ddl::alter_table,
             commands::ddl::preview_drop_table,
             commands::ddl::drop_table,
+            commands::plugins::get_installed_plugins,
+            commands::plugins::get_plugin,
+            commands::plugins::install_plugin,
+            commands::plugins::uninstall_plugin,
+            commands::plugins::enable_plugin,
+            commands::plugins::disable_plugin,
+            commands::plugins::update_plugin_config,
+            commands::plugins::get_marketplace_plugins,
+            commands::plugins::load_plugin,
+            commands::plugins::unload_plugin_runtime,
+            commands::plugins::execute_plugin_function,
+            commands::plugins::get_loaded_plugins,
+            commands::plugins::is_plugin_loaded,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
