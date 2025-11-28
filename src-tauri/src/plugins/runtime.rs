@@ -514,6 +514,72 @@ impl PluginRuntimeSync {
                 js_string!("onMessage"),
                 1,
             )
+            // httpRequest - real implementation using reqwest blocking
+            .function(
+                NativeFunction::from_copy_closure_with_captures(
+                    move |_this, args, has_network_perm, ctx| {
+                        if !has_network_perm {
+                            return Err(JsNativeError::error()
+                                .with_message("Permission denied: NetworkAccess")
+                                .into());
+                        }
+
+                        let url = args
+                            .get_or_undefined(0)
+                            .to_string(ctx)?
+                            .to_std_string_escaped();
+                        let method = args
+                            .get_or_undefined(1)
+                            .to_string(ctx)?
+                            .to_std_string_escaped();
+                        let body = if args.get_or_undefined(2).is_null_or_undefined() {
+                            None
+                        } else {
+                            Some(args.get_or_undefined(2).to_string(ctx)?.to_std_string_escaped())
+                        };
+
+                        // Use blocking reqwest client
+                        let client = reqwest::blocking::Client::new();
+                        let request_builder = match method.to_uppercase().as_str() {
+                            "GET" => client.get(&url),
+                            "POST" => client.post(&url),
+                            "PUT" => client.put(&url),
+                            "DELETE" => client.delete(&url),
+                            "PATCH" => client.patch(&url),
+                            _ => client.get(&url),
+                        };
+
+                        let request_builder = if let Some(body_content) = body {
+                            request_builder
+                                .header("Content-Type", "application/json")
+                                .body(body_content)
+                        } else {
+                            request_builder
+                        };
+
+                        match request_builder.send() {
+                            Ok(response) => {
+                                let status = response.status().as_u16();
+                                let body_text = response.text().unwrap_or_default();
+
+                                let result = serde_json::json!({
+                                    "status": status,
+                                    "headers": {},
+                                    "body": body_text
+                                });
+
+                                Ok(JsValue::String(js_string!(result.to_string())))
+                            }
+                            Err(e) => Err(JsNativeError::error()
+                                .with_message(format!("HTTP request failed: {}", e))
+                                .into()),
+                        }
+                    },
+                    self.permissions.contains("NetworkAccess"),
+                ),
+                js_string!("httpRequest"),
+                3,
+            )
             .build();
 
         self.context

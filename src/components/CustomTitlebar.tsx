@@ -12,6 +12,7 @@ import { useState, useEffect } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Minus, Square, X, ChevronDown } from "lucide-react";
+import { PluginToolbar } from "./PluginToolbar";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -268,6 +269,9 @@ export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
+
+        {/* Plugin Toolbar */}
+        <PluginToolbar />
       </div>
 
       {/* Right: Window Controls */}
