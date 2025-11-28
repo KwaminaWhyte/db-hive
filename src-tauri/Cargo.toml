@@ -1,7 +1,7 @@
 [package]
 name = "db-hive"
 version = "0.13.0"
-description = "A Tauri App"
+description = "A professional database client application"
 authors = ["KwaminaWhyte"]
 edition = "2021"
 
@@ -43,11 +43,19 @@ russh = "0.45"
 russh-keys = "0.45"
 dirs = "5.0"
 keyring = "3.6"
-tiberius = { version = "0.12", features = ["chrono", "native-tls", "sql-browser-tokio"], default-features = false }
+tiberius = { version = "0.12", features = [
+        "chrono",
+        "native-tls",
+        "sql-browser-tokio",
+], default-features = false }
 tokio-util = { version = "0.7", features = ["compat"] }
 regex = "1.11"
 tauri-plugin-process = "2.3.1"
 tauri-plugin-notification = "2.3.3"
+boa_engine = "0.19"
+boa_runtime = "0.19"
+arboard = "3.4"
+reqwest = { version = "0.12", features = ["json"] }
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-updater = "2.9.0"

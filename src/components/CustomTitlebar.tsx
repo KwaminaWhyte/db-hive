@@ -182,6 +182,9 @@ export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
               <DropdownMenuItem onClick={() => navigate({ to: "/activity" })}>
                 Activity Monitor
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate({ to: "/plugins" })}>
+                Plugin Manager
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Theme</DropdownMenuSubTrigger>

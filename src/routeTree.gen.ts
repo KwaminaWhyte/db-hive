@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as PluginsRouteImport } from './routes/plugins'
 import { Route as ConnectionsRouteImport } from './routes/connections'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as ConnectedRouteRouteImport } from './routes/_connected/route'
@@ -24,6 +25,11 @@ import { Route as ConnectedTableSchemaTableNameIndexRouteImport } from './routes
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PluginsRoute = PluginsRouteImport.update({
+  id: '/plugins',
+  path: '/plugins',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ConnectionsRoute = ConnectionsRouteImport.update({
@@ -83,6 +89,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/connections': typeof ConnectionsRoute
+  '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
   '/activity': typeof ConnectedActivityRoute
   '/query': typeof ConnectedQueryRoute
@@ -95,6 +102,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/connections': typeof ConnectionsRoute
+  '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
   '/activity': typeof ConnectedActivityRoute
   '/query': typeof ConnectedQueryRoute
@@ -108,6 +116,7 @@ export interface FileRoutesById {
   '/_connected': typeof ConnectedRouteRouteWithChildren
   '/about': typeof AboutRoute
   '/connections': typeof ConnectionsRoute
+  '/plugins': typeof PluginsRoute
   '/settings': typeof SettingsRoute
   '/_connected/activity': typeof ConnectedActivityRoute
   '/_connected/query': typeof ConnectedQueryRoute
@@ -122,6 +131,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/connections'
+    | '/plugins'
     | '/settings'
     | '/activity'
     | '/query'
@@ -134,6 +144,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/connections'
+    | '/plugins'
     | '/settings'
     | '/activity'
     | '/query'
@@ -146,6 +157,7 @@ export interface FileRouteTypes {
     | '/_connected'
     | '/about'
     | '/connections'
+    | '/plugins'
     | '/settings'
     | '/_connected/activity'
     | '/_connected/query'
@@ -160,6 +172,7 @@ export interface RootRouteChildren {
   ConnectedRouteRoute: typeof ConnectedRouteRouteWithChildren
   AboutRoute: typeof AboutRoute
   ConnectionsRoute: typeof ConnectionsRoute
+  PluginsRoute: typeof PluginsRoute
   SettingsRoute: typeof SettingsRoute
 }
 
@@ -170,6 +183,13 @@ declare module '@tanstack/react-router' {
       path: '/settings'
       fullPath: '/settings'
       preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/plugins': {
+      id: '/plugins'
+      path: '/plugins'
+      fullPath: '/plugins'
+      preLoaderRoute: typeof PluginsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/connections': {
@@ -286,6 +306,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConnectedRouteRoute: ConnectedRouteRouteWithChildren,
   AboutRoute: AboutRoute,
   ConnectionsRoute: ConnectionsRoute,
+  PluginsRoute: PluginsRoute,
   SettingsRoute: SettingsRoute,
 }
 export const routeTree = rootRouteImport

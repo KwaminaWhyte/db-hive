@@ -1,0 +1,62 @@
+{
+  "id": "com.dbhive.csv-exporter",
+  "name": "Advanced CSV Exporter",
+  "version": "1.0.0",
+  "description": "Export query results to CSV with advanced formatting options including custom delimiters, headers, and encoding",
+  "author": {
+    "name": "DB-Hive Team",
+    "email": "plugins@dbhive.com"
+  },
+  "category": "export",
+  "main": "index.js",
+  "pluginType": "javascript",
+  "permissions": [
+    "executeQuery",
+    "writeFiles",
+    "showNotification",
+    "createTab"
+  ],
+  "minVersion": "0.13.0",
+  "icon": "icon.svg",
+  "homepage": "https://github.com/dbhive/csv-exporter",
+  "repository": "https://github.com/dbhive/csv-exporter",
+  "license": "MIT",
+  "keywords": ["csv", "export", "data", "excel"],
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "delimiter": {
+        "type": "string",
+        "enum": [",", ";", "\t", "|"],
+        "default": ",",
+        "title": "Field Delimiter",
+        "description": "Character to separate fields"
+      },
+      "includeHeaders": {
+        "type": "boolean",
+        "default": true,
+        "title": "Include Headers",
+        "description": "Include column names as the first row"
+      },
+      "quoteStrings": {
+        "type": "boolean",
+        "default": true,
+        "title": "Quote Strings",
+        "description": "Wrap string values in quotes"
+      },
+      "encoding": {
+        "type": "string",
+        "enum": ["utf-8", "utf-16", "ascii"],
+        "default": "utf-8",
+        "title": "File Encoding",
+        "description": "Character encoding for the CSV file"
+      },
+      "nullValue": {
+        "type": "string",
+        "default": "",
+        "title": "NULL Representation",
+        "description": "How to represent NULL values in CSV"
+      }
+    }
+  }
+}
