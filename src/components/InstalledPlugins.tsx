@@ -5,13 +5,12 @@ import {
   Trash2,
   Info,
   Package,
-  Calendar,
-  Activity,
   AlertCircle,
   Check,
   X,
   Loader2,
   Play,
+  Save,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Button } from "./ui/button";
@@ -19,13 +18,14 @@ import { Badge } from "./ui/badge";
 import { Switch } from "./ui/switch";
 import { ScrollArea } from "./ui/scroll-area";
 import { Separator } from "./ui/separator";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from "./ui/dialog";
 import {
@@ -72,6 +72,9 @@ export function InstalledPlugins() {
   const [pluginToDelete, setPluginToDelete] = useState<Plugin | null>(null);
   const [togglingPlugins, setTogglingPlugins] = useState<Set<string>>(new Set());
   const [runningPlugins, setRunningPlugins] = useState<Set<string>>(new Set());
+  const [showSettingsDialog, setShowSettingsDialog] = useState(false);
+  const [pluginConfig, setPluginConfig] = useState<Record<string, any>>({});
+  const [savingConfig, setSavingConfig] = useState(false);
 
   useEffect(() => {
     loadInstalledPlugins();
@@ -97,7 +100,7 @@ export function InstalledPlugins() {
     }
   };
 
-  const setupPluginEventListeners = () => {
+  const setupPluginEventListeners = (): (() => void) | undefined => {
     // TODO: Setup event listeners for plugin events
     // This would listen for install/uninstall/enable/disable events
     // and refresh the plugin list accordingly
@@ -186,6 +189,103 @@ export function InstalledPlugins() {
         next.delete(plugin.manifest.id);
         return next;
       });
+    }
+  };
+
+  const handleOpenSettings = (plugin: Plugin) => {
+    // Initialize config with current values or defaults from schema
+    const schema = plugin.manifest.configSchema;
+    const currentConfig = plugin.config || {};
+    const initialConfig: Record<string, any> = {};
+
+    if (schema?.properties) {
+      Object.entries(schema.properties).forEach(([key, prop]: [string, any]) => {
+        initialConfig[key] = currentConfig[key] ?? prop.default ?? "";
+      });
+    }
+
+    setPluginConfig(initialConfig);
+    setShowSettingsDialog(true);
+  };
+
+  const handleSaveSettings = async () => {
+    if (!selectedPlugin) return;
+
+    try {
+      setSavingConfig(true);
+      await updatePluginConfig(selectedPlugin.manifest.id, pluginConfig);
+      toast.success("Settings saved successfully");
+      setShowSettingsDialog(false);
+      await loadInstalledPlugins();
+    } catch (error: any) {
+      console.error("Failed to save settings:", error);
+      toast.error(`Failed to save settings: ${error.message || error}`);
+    } finally {
+      setSavingConfig(false);
+    }
+  };
+
+  const handleConfigChange = (key: string, value: any) => {
+    setPluginConfig((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  };
+
+  const renderConfigField = (key: string, schema: any) => {
+    const value = pluginConfig[key];
+
+    switch (schema.type) {
+      case "boolean":
+        return (
+          <div key={key} className="flex items-center justify-between py-2">
+            <div>
+              <Label htmlFor={key}>{schema.title || key}</Label>
+              {schema.description && (
+                <p className="text-xs text-muted-foreground mt-1">{schema.description}</p>
+              )}
+            </div>
+            <Switch
+              id={key}
+              checked={Boolean(value)}
+              onCheckedChange={(checked) => handleConfigChange(key, checked)}
+            />
+          </div>
+        );
+      case "number":
+        return (
+          <div key={key} className="space-y-2 py-2">
+            <Label htmlFor={key}>{schema.title || key}</Label>
+            {schema.description && (
+              <p className="text-xs text-muted-foreground">{schema.description}</p>
+            )}
+            <Input
+              id={key}
+              type="number"
+              value={value ?? ""}
+              onChange={(e) => handleConfigChange(key, Number(e.target.value))}
+              min={schema.minimum}
+              max={schema.maximum}
+            />
+          </div>
+        );
+      case "string":
+      default:
+        return (
+          <div key={key} className="space-y-2 py-2">
+            <Label htmlFor={key}>{schema.title || key}</Label>
+            {schema.description && (
+              <p className="text-xs text-muted-foreground">{schema.description}</p>
+            )}
+            <Input
+              id={key}
+              type="text"
+              value={value ?? ""}
+              onChange={(e) => handleConfigChange(key, e.target.value)}
+              placeholder={schema.default?.toString() || ""}
+            />
+          </div>
+        );
     }
   };
 
@@ -327,6 +427,16 @@ export function InstalledPlugins() {
                             Run
                           </>
                         )}
+                      </Button>
+                    )}
+                    {selectedPlugin.manifest.configSchema && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleOpenSettings(selectedPlugin)}
+                      >
+                        <Settings className="size-4 mr-2" />
+                        Settings
                       </Button>
                     )}
                     <Button
@@ -504,6 +614,52 @@ export function InstalledPlugins() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Settings Dialog */}
+      <Dialog open={showSettingsDialog} onOpenChange={setShowSettingsDialog}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>
+              <Settings className="size-5 inline mr-2" />
+              {selectedPlugin?.manifest.name} Settings
+            </DialogTitle>
+            <DialogDescription>
+              Configure plugin settings. Changes will take effect after saving.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {selectedPlugin?.manifest.configSchema?.properties ? (
+              <div className="space-y-4">
+                {Object.entries(selectedPlugin.manifest.configSchema.properties).map(
+                  ([key, schema]: [string, any]) => renderConfigField(key, schema)
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                This plugin has no configurable settings.
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowSettingsDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveSettings} disabled={savingConfig}>
+              {savingConfig ? (
+                <>
+                  <Loader2 className="size-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="size-4 mr-2" />
+                  Save Settings
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -14,7 +14,6 @@ import {
   Puzzle,
   Check,
   Loader2,
-  Filter,
   X,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
@@ -24,7 +23,6 @@ import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { ScrollArea } from "./ui/scroll-area";
-import { Separator } from "./ui/separator";
 import { toast } from "sonner";
 import type { MarketplacePlugin, PluginCategory, PluginSortOption, PluginFilters } from "@/types/plugins";
 import { getMarketplacePlugins, installPlugin } from "@/api/plugins";
