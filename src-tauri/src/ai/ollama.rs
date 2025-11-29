@@ -1,14 +1,18 @@
-//! Ollama API Client
+//! Ollama AI Provider
 //!
-//! Provides a client for interacting with the Ollama API for local LLM inference.
+//! Provides integration with Ollama for local LLM inference.
 //! Default endpoint: http://localhost:11434
 
+use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
+use super::provider::{AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage};
+
 /// Ollama API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OllamaConfig {
     /// Base URL for Ollama API (default: http://localhost:11434)
     pub base_url: String,
@@ -28,58 +32,39 @@ impl Default for OllamaConfig {
     }
 }
 
-/// Chat message role
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "lowercase")]
-pub enum ChatRole {
-    System,
-    User,
-    Assistant,
-}
-
-/// A chat message
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ChatMessage {
-    pub role: ChatRole,
-    pub content: String,
-}
-
-impl ChatMessage {
-    pub fn system(content: impl Into<String>) -> Self {
-        Self {
-            role: ChatRole::System,
-            content: content.into(),
-        }
-    }
-
-    pub fn user(content: impl Into<String>) -> Self {
-        Self {
-            role: ChatRole::User,
-            content: content.into(),
-        }
-    }
-
-    pub fn assistant(content: impl Into<String>) -> Self {
-        Self {
-            role: ChatRole::Assistant,
-            content: content.into(),
-        }
-    }
-}
-
 /// Request body for Ollama chat API
 #[derive(Debug, Serialize)]
-struct ChatRequest {
+struct OllamaChatRequest {
     model: String,
-    messages: Vec<ChatMessage>,
+    messages: Vec<OllamaChatMessage>,
     stream: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
-    options: Option<ChatOptions>,
+    options: Option<OllamaChatOptions>,
+}
+
+/// Ollama-specific chat message format
+#[derive(Debug, Serialize)]
+struct OllamaChatMessage {
+    role: String,
+    content: String,
+}
+
+impl From<&ChatMessage> for OllamaChatMessage {
+    fn from(msg: &ChatMessage) -> Self {
+        Self {
+            role: match msg.role {
+                ChatRole::System => "system".to_string(),
+                ChatRole::User => "user".to_string(),
+                ChatRole::Assistant => "assistant".to_string(),
+            },
+            content: msg.content.clone(),
+        }
+    }
 }
 
 /// Model options for chat requests
 #[derive(Debug, Serialize)]
-struct ChatOptions {
+struct OllamaChatOptions {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -88,45 +73,61 @@ struct ChatOptions {
 
 /// Response from Ollama chat API
 #[derive(Debug, Deserialize)]
-pub struct ChatResponse {
-    pub model: String,
-    pub message: ChatMessage,
-    pub done: bool,
+struct OllamaChatResponse {
+    model: String,
+    message: OllamaResponseMessage,
+    #[allow(dead_code)]
+    done: bool,
     #[serde(default)]
-    pub total_duration: u64,
+    prompt_eval_count: u32,
     #[serde(default)]
-    pub eval_count: u32,
+    eval_count: u32,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaResponseMessage {
+    #[allow(dead_code)]
+    role: String,
+    content: String,
 }
 
 /// Model information from Ollama
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct OllamaModel {
-    pub name: String,
-    pub modified_at: String,
-    pub size: u64,
+#[derive(Debug, Deserialize)]
+struct OllamaModelInfo {
+    name: String,
+    modified_at: String,
+    size: u64,
     #[serde(default)]
-    pub digest: String,
+    details: Option<OllamaModelDetails>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaModelDetails {
+    #[serde(default)]
+    parameter_size: Option<String>,
+    #[serde(default)]
+    family: Option<String>,
 }
 
 /// Response from list models API
 #[derive(Debug, Deserialize)]
 struct ListModelsResponse {
-    models: Vec<OllamaModel>,
+    models: Vec<OllamaModelInfo>,
 }
 
 /// Ollama API client
-pub struct OllamaClient {
+pub struct OllamaProvider {
     client: Client,
     config: OllamaConfig,
 }
 
-impl OllamaClient {
-    /// Create a new Ollama client with default configuration
+impl OllamaProvider {
+    /// Create a new Ollama provider with default configuration
     pub fn new() -> Self {
         Self::with_config(OllamaConfig::default())
     }
 
-    /// Create a new Ollama client with custom configuration
+    /// Create a new Ollama provider with custom configuration
     pub fn with_config(config: OllamaConfig) -> Self {
         let client = Client::builder()
             .timeout(Duration::from_secs(config.timeout_secs))
@@ -136,8 +137,36 @@ impl OllamaClient {
         Self { client, config }
     }
 
-    /// Check if Ollama is running and accessible
-    pub async fn is_available(&self) -> bool {
+    /// Get the current configuration
+    pub fn config(&self) -> &OllamaConfig {
+        &self.config
+    }
+
+    /// Format size in human-readable format
+    fn format_size(size: u64) -> String {
+        if size >= 1_000_000_000 {
+            format!("{:.1} GB", size as f64 / 1_000_000_000.0)
+        } else if size >= 1_000_000 {
+            format!("{:.1} MB", size as f64 / 1_000_000.0)
+        } else {
+            format!("{} bytes", size)
+        }
+    }
+}
+
+impl Default for OllamaProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl AiProvider for OllamaProvider {
+    fn provider_type(&self) -> AiProviderType {
+        AiProviderType::Ollama
+    }
+
+    async fn is_available(&self) -> bool {
         let url = format!("{}/api/tags", self.config.base_url);
         match self.client.get(&url).send().await {
             Ok(response) => response.status().is_success(),
@@ -145,8 +174,7 @@ impl OllamaClient {
         }
     }
 
-    /// List available models
-    pub async fn list_models(&self) -> Result<Vec<OllamaModel>, String> {
+    async fn list_models(&self) -> Result<Vec<AiModel>, String> {
         let url = format!("{}/api/tags", self.config.base_url);
 
         let response = self.client
@@ -164,25 +192,46 @@ impl OllamaClient {
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-        Ok(data.models)
+        let models = data.models.into_iter().map(|m| {
+            let description = format!(
+                "{} ({})",
+                m.details.as_ref()
+                    .and_then(|d| d.family.as_ref())
+                    .map(|f| f.as_str())
+                    .unwrap_or("Unknown"),
+                Self::format_size(m.size)
+            );
+
+            AiModel {
+                id: m.name.clone(),
+                name: m.name,
+                provider: AiProviderType::Ollama,
+                description: Some(description),
+                context_window: None,
+            }
+        }).collect();
+
+        Ok(models)
     }
 
-    /// Send a chat message and get a response
-    pub async fn chat(
+    async fn chat(
         &self,
         messages: Vec<ChatMessage>,
         model: Option<&str>,
         temperature: Option<f32>,
-    ) -> Result<ChatResponse, String> {
+        max_tokens: Option<u32>,
+    ) -> Result<ChatCompletion, String> {
         let url = format!("{}/api/chat", self.config.base_url);
 
-        let request = ChatRequest {
+        let ollama_messages: Vec<OllamaChatMessage> = messages.iter().map(|m| m.into()).collect();
+
+        let request = OllamaChatRequest {
             model: model.unwrap_or(&self.config.default_model).to_string(),
-            messages,
+            messages: ollama_messages,
             stream: false,
-            options: Some(ChatOptions {
+            options: Some(OllamaChatOptions {
                 temperature,
-                num_predict: Some(2048),
+                num_predict: max_tokens.map(|t| t as i32),
             }),
         };
 
@@ -198,174 +247,21 @@ impl OllamaClient {
             return Err(format!("Ollama API error: {}", error_text));
         }
 
-        let chat_response: ChatResponse = response
+        let chat_response: OllamaChatResponse = response
             .json()
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-        Ok(chat_response)
-    }
-
-    /// Generate SQL from natural language
-    pub async fn generate_sql(
-        &self,
-        prompt: &str,
-        schema_context: &str,
-        model: Option<&str>,
-    ) -> Result<String, String> {
-        let system_prompt = format!(
-            r#"You are a SQL expert assistant. Generate SQL queries based on natural language requests.
-
-DATABASE SCHEMA:
-{}
-
-RULES:
-1. Generate only valid SQL that matches the schema above
-2. Use proper table and column names exactly as shown in the schema
-3. Include appropriate JOINs when querying related tables
-4. Add LIMIT clauses for SELECT queries unless counting
-5. Use parameterized placeholders ($1, $2) for user-provided values when appropriate
-6. Output ONLY the SQL query, no explanations or markdown
-
-Generate the SQL query for the following request:"#,
-            schema_context
-        );
-
-        let messages = vec![
-            ChatMessage::system(system_prompt),
-            ChatMessage::user(prompt),
-        ];
-
-        let response = self.chat(messages, model, Some(0.1)).await?;
-
-        // Clean up the response - extract SQL from potential markdown
-        let sql = self.extract_sql(&response.message.content);
-        Ok(sql)
-    }
-
-    /// Explain a SQL query in plain English
-    pub async fn explain_query(
-        &self,
-        sql: &str,
-        model: Option<&str>,
-    ) -> Result<String, String> {
-        let system_prompt = r#"You are a SQL expert. Explain SQL queries in clear, simple terms.
-
-Provide:
-1. A brief summary of what the query does
-2. Step-by-step breakdown of each clause
-3. Any potential performance considerations
-4. Suggestions for improvement if applicable
-
-Be concise but thorough."#;
-
-        let messages = vec![
-            ChatMessage::system(system_prompt),
-            ChatMessage::user(format!("Explain this SQL query:\n\n```sql\n{}\n```", sql)),
-        ];
-
-        let response = self.chat(messages, model, Some(0.3)).await?;
-        Ok(response.message.content)
-    }
-
-    /// Suggest optimizations for a SQL query
-    pub async fn optimize_query(
-        &self,
-        sql: &str,
-        schema_context: &str,
-        model: Option<&str>,
-    ) -> Result<String, String> {
-        let system_prompt = format!(
-            r#"You are a SQL performance optimization expert.
-
-DATABASE SCHEMA:
-{}
-
-Analyze the provided SQL query and suggest optimizations. Consider:
-1. Index usage and suggestions
-2. Query structure improvements
-3. JOIN optimization
-4. Subquery vs JOIN alternatives
-5. Potential N+1 query issues
-6. Appropriate use of LIMIT/OFFSET
-
-Provide the optimized query and explain the improvements."#,
-            schema_context
-        );
-
-        let messages = vec![
-            ChatMessage::system(system_prompt),
-            ChatMessage::user(format!("Optimize this SQL query:\n\n```sql\n{}\n```", sql)),
-        ];
-
-        let response = self.chat(messages, model, Some(0.3)).await?;
-        Ok(response.message.content)
-    }
-
-    /// Fix SQL syntax errors
-    pub async fn fix_query(
-        &self,
-        sql: &str,
-        error_message: &str,
-        schema_context: &str,
-        model: Option<&str>,
-    ) -> Result<String, String> {
-        let system_prompt = format!(
-            r#"You are a SQL debugging expert.
-
-DATABASE SCHEMA:
-{}
-
-Fix the SQL query based on the error message. Output ONLY the corrected SQL query, no explanations."#,
-            schema_context
-        );
-
-        let user_prompt = format!(
-            "Fix this SQL query:\n\n```sql\n{}\n```\n\nError: {}",
-            sql, error_message
-        );
-
-        let messages = vec![
-            ChatMessage::system(system_prompt),
-            ChatMessage::user(user_prompt),
-        ];
-
-        let response = self.chat(messages, model, Some(0.1)).await?;
-        let fixed_sql = self.extract_sql(&response.message.content);
-        Ok(fixed_sql)
-    }
-
-    /// Extract SQL from a response that might contain markdown
-    fn extract_sql(&self, content: &str) -> String {
-        // Check for SQL code blocks
-        if let Some(start) = content.find("```sql") {
-            if let Some(end) = content[start + 6..].find("```") {
-                return content[start + 6..start + 6 + end].trim().to_string();
-            }
-        }
-
-        // Check for generic code blocks
-        if let Some(start) = content.find("```") {
-            let after_start = start + 3;
-            // Skip the language identifier if present
-            let content_start = content[after_start..]
-                .find('\n')
-                .map(|i| after_start + i + 1)
-                .unwrap_or(after_start);
-
-            if let Some(end) = content[content_start..].find("```") {
-                return content[content_start..content_start + end].trim().to_string();
-            }
-        }
-
-        // Return as-is if no code blocks found
-        content.trim().to_string()
-    }
-}
-
-impl Default for OllamaClient {
-    fn default() -> Self {
-        Self::new()
+        Ok(ChatCompletion {
+            content: chat_response.message.content,
+            model: chat_response.model,
+            provider: AiProviderType::Ollama,
+            usage: Some(TokenUsage {
+                prompt_tokens: chat_response.prompt_eval_count,
+                completion_tokens: chat_response.eval_count,
+                total_tokens: chat_response.prompt_eval_count + chat_response.eval_count,
+            }),
+        })
     }
 }
 
@@ -374,31 +270,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_extract_sql() {
-        let client = OllamaClient::new();
-
-        // Test with SQL code block
-        let input = "Here's the query:\n```sql\nSELECT * FROM users;\n```";
-        assert_eq!(client.extract_sql(input), "SELECT * FROM users;");
-
-        // Test with generic code block
-        let input = "```\nSELECT * FROM users;\n```";
-        assert_eq!(client.extract_sql(input), "SELECT * FROM users;");
-
-        // Test without code blocks
-        let input = "SELECT * FROM users;";
-        assert_eq!(client.extract_sql(input), "SELECT * FROM users;");
+    fn test_format_size() {
+        assert_eq!(OllamaProvider::format_size(500), "500 bytes");
+        assert_eq!(OllamaProvider::format_size(1_500_000), "1.5 MB");
+        assert_eq!(OllamaProvider::format_size(4_000_000_000), "4.0 GB");
     }
 
     #[test]
-    fn test_chat_message_constructors() {
-        let system = ChatMessage::system("You are helpful");
-        assert_eq!(system.role, ChatRole::System);
-
-        let user = ChatMessage::user("Hello");
-        assert_eq!(user.role, ChatRole::User);
-
-        let assistant = ChatMessage::assistant("Hi there!");
-        assert_eq!(assistant.role, ChatRole::Assistant);
+    fn test_chat_message_conversion() {
+        let msg = ChatMessage::user("Hello");
+        let ollama_msg: OllamaChatMessage = (&msg).into();
+        assert_eq!(ollama_msg.role, "user");
+        assert_eq!(ollama_msg.content, "Hello");
     }
 }

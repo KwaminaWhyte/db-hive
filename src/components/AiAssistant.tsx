@@ -1,21 +1,28 @@
 /**
  * AI Assistant Component
  *
- * Provides AI-powered SQL assistance using local Ollama models
+ * Provides AI-powered SQL assistance using multiple providers:
+ * - Ollama (local LLM)
+ * - OpenAI (GPT-4, GPT-3.5)
+ * - Anthropic (Claude)
+ * - Google (Gemini)
  */
 
 import { useState, useEffect, useCallback } from "react";
 import {
-  checkOllamaStatus,
+  checkProviderStatus,
   listAiModels,
   generateSql,
   explainQuery,
   optimizeQuery,
   fixQuery,
   getAiConfig,
-  setAiConfig,
+  setActiveProvider,
+  setApiKey,
   type AiModel,
-  type OllamaConfig,
+  type AiConfig,
+  type AiProviderType,
+  AI_PROVIDERS,
 } from "../api/ai";
 import {
   Select,
@@ -24,6 +31,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "./ui/select";
+import { Input } from "./ui/input";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 
 interface AiAssistantProps {
   /** Current SQL in the editor */
@@ -44,10 +54,12 @@ export function AiAssistant({
   lastError = "",
   onSqlGenerated,
 }: AiAssistantProps) {
+  const [, setConfig] = useState<AiConfig | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<AiProviderType>("ollama");
   const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
+  const [isConfigured, setIsConfigured] = useState(false);
   const [models, setModels] = useState<AiModel[]>([]);
   const [selectedModel, setSelectedModel] = useState<string>("");
-  const [config, setConfig] = useState<OllamaConfig | null>(null);
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
@@ -56,54 +68,91 @@ export function AiAssistant({
   const [showSettings, setShowSettings] = useState(false);
   const [showContext, setShowContext] = useState(false);
   const [durationMs, setDurationMs] = useState<number | null>(null);
+  const [apiKeyInput, setApiKeyInput] = useState("");
+  const [savingApiKey, setSavingApiKey] = useState(false);
 
-  // Check Ollama status on mount
+  // Load config on mount
+  useEffect(() => {
+    loadConfig();
+  }, []);
+
+  // Check provider status when provider changes
   useEffect(() => {
     checkStatus();
-  }, []);
+  }, [selectedProvider]);
 
-  // Load models when available
+  // Load models when provider is available
   useEffect(() => {
-    if (isAvailable) {
+    if (isAvailable && isConfigured) {
       loadModels();
-      loadConfig();
+    } else {
+      setModels([]);
+      setSelectedModel("");
     }
-  }, [isAvailable]);
-
-  const checkStatus = useCallback(async () => {
-    try {
-      const available = await checkOllamaStatus();
-      setIsAvailable(available);
-      setError(null);
-    } catch (err) {
-      setIsAvailable(false);
-      setError("Failed to check Ollama status");
-    }
-  }, []);
-
-  const loadModels = useCallback(async () => {
-    try {
-      const modelList = await listAiModels();
-      setModels(modelList);
-      if (modelList.length > 0 && !selectedModel) {
-        setSelectedModel(modelList[0].name);
-      }
-    } catch (err) {
-      console.error("Failed to load models:", err);
-    }
-  }, [selectedModel]);
+  }, [isAvailable, isConfigured, selectedProvider]);
 
   const loadConfig = useCallback(async () => {
     try {
       const cfg = await getAiConfig();
       setConfig(cfg);
-      if (cfg.default_model && !selectedModel) {
-        setSelectedModel(cfg.default_model);
-      }
+      setSelectedProvider(cfg.activeProvider);
     } catch (err) {
       console.error("Failed to load config:", err);
     }
-  }, [selectedModel]);
+  }, []);
+
+  const checkStatus = useCallback(async () => {
+    try {
+      const status = await checkProviderStatus(selectedProvider);
+      setIsAvailable(status.available);
+      setIsConfigured(status.configured);
+      setError(null);
+    } catch (err) {
+      setIsAvailable(false);
+      setIsConfigured(false);
+      setError("Failed to check provider status");
+    }
+  }, [selectedProvider]);
+
+  const loadModels = useCallback(async () => {
+    try {
+      const modelList = await listAiModels(selectedProvider);
+      setModels(modelList);
+      if (modelList.length > 0 && !selectedModel) {
+        setSelectedModel(modelList[0].id);
+      }
+    } catch (err) {
+      console.error("Failed to load models:", err);
+      setModels([]);
+    }
+  }, [selectedProvider, selectedModel]);
+
+  const handleProviderChange = async (provider: AiProviderType) => {
+    setSelectedProvider(provider);
+    setSelectedModel("");
+    setApiKeyInput("");
+    try {
+      await setActiveProvider(provider);
+    } catch (err) {
+      console.error("Failed to set provider:", err);
+    }
+  };
+
+  const handleSaveApiKey = async () => {
+    if (!apiKeyInput.trim()) return;
+
+    setSavingApiKey(true);
+    try {
+      await setApiKey(selectedProvider, apiKeyInput);
+      setApiKeyInput("");
+      // Refresh status
+      await checkStatus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingApiKey(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
@@ -117,10 +166,11 @@ export function AiAssistant({
       const response = await generateSql(
         prompt,
         schemaContext,
-        selectedModel || undefined
+        selectedModel || undefined,
+        selectedProvider
       );
       setResult(response.content);
-      setDurationMs(response.duration_ms);
+      setDurationMs(response.durationMs);
       if (onSqlGenerated) {
         onSqlGenerated(response.content);
       }
@@ -144,9 +194,9 @@ export function AiAssistant({
     setResult("");
 
     try {
-      const response = await explainQuery(currentSql, selectedModel || undefined);
+      const response = await explainQuery(currentSql, selectedModel || undefined, selectedProvider);
       setResult(response.content);
-      setDurationMs(response.duration_ms);
+      setDurationMs(response.durationMs);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -170,10 +220,11 @@ export function AiAssistant({
       const response = await optimizeQuery(
         currentSql,
         schemaContext,
-        selectedModel || undefined
+        selectedModel || undefined,
+        selectedProvider
       );
       setResult(response.content);
-      setDurationMs(response.duration_ms);
+      setDurationMs(response.durationMs);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -203,10 +254,11 @@ export function AiAssistant({
         currentSql,
         lastError,
         schemaContext,
-        selectedModel || undefined
+        selectedModel || undefined,
+        selectedProvider
       );
       setResult(response.content);
-      setDurationMs(response.duration_ms);
+      setDurationMs(response.durationMs);
       if (onSqlGenerated) {
         onSqlGenerated(response.content);
       }
@@ -231,21 +283,11 @@ export function AiAssistant({
         result.trim().toUpperCase().startsWith("DELETE") ||
         result.trim().toUpperCase().startsWith("CREATE") ||
         result.trim().toUpperCase().startsWith("ALTER") ||
-        result.trim().toUpperCase().startsWith("DROP")
+        result.trim().toUpperCase().startsWith("DROP") ||
+        result.trim().toUpperCase().startsWith("WITH")
       ) {
         onSqlGenerated(result);
       }
-    }
-  };
-
-  const handleSaveConfig = async () => {
-    if (!config) return;
-
-    try {
-      await setAiConfig({ ...config, default_model: selectedModel });
-      setShowSettings(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -253,6 +295,9 @@ export function AiAssistant({
     if (ms < 1000) return `${ms}ms`;
     return `${(ms / 1000).toFixed(1)}s`;
   };
+
+  const needsApiKey = selectedProvider !== "ollama" && !isConfigured;
+  const providerInfo = AI_PROVIDERS.find(p => p.value === selectedProvider);
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -262,19 +307,25 @@ export function AiAssistant({
           {isAvailable !== null && (
             <span
               className={`w-2 h-2 rounded-full ${
-                isAvailable ? "bg-green-500" : "bg-red-500"
+                isAvailable && isConfigured ? "bg-green-500" : needsApiKey ? "bg-yellow-500" : "bg-red-500"
               }`}
-              title={isAvailable ? "Ollama connected" : "Ollama not available"}
+              title={
+                isAvailable && isConfigured
+                  ? `${providerInfo?.label} connected`
+                  : needsApiKey
+                  ? "API key required"
+                  : `${providerInfo?.label} not available`
+              }
             />
           )}
           <span className="text-sm text-muted-foreground">
-            {isAvailable ? "Connected to Ollama" : "Ollama offline"}
+            {providerInfo?.label || "AI Assistant"}
           </span>
         </div>
         <div className="flex items-center gap-1">
           <button
             onClick={() => setShowSettings(!showSettings)}
-            className="p-1 hover:bg-muted rounded"
+            className={`p-1 hover:bg-muted rounded ${showSettings ? 'bg-muted' : ''}`}
             title="Settings"
           >
             <svg
@@ -338,6 +389,28 @@ export function AiAssistant({
         </div>
       </div>
 
+      {/* Provider Selection */}
+      <div className="px-3 py-2 border-b">
+        <label className="block text-xs font-medium text-muted-foreground mb-1">
+          AI Provider
+        </label>
+        <Select value={selectedProvider} onValueChange={(v) => handleProviderChange(v as AiProviderType)}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select provider" />
+          </SelectTrigger>
+          <SelectContent>
+            {AI_PROVIDERS.map((provider) => (
+              <SelectItem key={provider.value} value={provider.value}>
+                <div className="flex items-center gap-2">
+                  <span>{provider.label}</span>
+                  <span className="text-xs text-muted-foreground">({provider.description})</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Schema Context Panel */}
       {showContext && (
         <div className="p-3 border-b bg-muted/30 max-h-48 overflow-y-auto">
@@ -359,51 +432,71 @@ export function AiAssistant({
       )}
 
       {/* Settings Panel */}
-      {showSettings && config && (
+      {showSettings && (
         <div className="p-3 border-b bg-muted/30">
           <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">
-                Ollama URL
-              </label>
-              <input
-                type="text"
-                value={config.base_url}
-                onChange={(e) =>
-                  setConfig({ ...config, base_url: e.target.value })
-                }
-                className="w-full px-2 py-1 text-sm border rounded bg-background text-foreground"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-muted-foreground mb-1">
-                Timeout (seconds)
-              </label>
-              <input
-                type="number"
-                value={config.timeout_secs}
-                onChange={(e) =>
-                  setConfig({
-                    ...config,
-                    timeout_secs: parseInt(e.target.value) || 120,
-                  })
-                }
-                className="w-full px-2 py-1 text-sm border rounded bg-background text-foreground"
-              />
-            </div>
-            <button
-              onClick={handleSaveConfig}
-              className="w-full px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90"
-            >
-              Save Settings
-            </button>
+            {selectedProvider !== "ollama" && (
+              <div>
+                <label className="block text-xs font-medium text-muted-foreground mb-1">
+                  API Key {isConfigured && <Badge variant="outline" className="ml-1 text-xs">Configured</Badge>}
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    value={apiKeyInput}
+                    onChange={(e) => setApiKeyInput(e.target.value)}
+                    placeholder={isConfigured ? "Enter new key to update" : "Enter API key"}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleSaveApiKey}
+                    disabled={!apiKeyInput.trim() || savingApiKey}
+                  >
+                    {savingApiKey ? "..." : "Save"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {selectedProvider === "openai" && "Get your key at platform.openai.com"}
+                  {selectedProvider === "anthropic" && "Get your key at console.anthropic.com"}
+                  {selectedProvider === "google" && "Get your key at ai.google.dev"}
+                </p>
+              </div>
+            )}
+            {selectedProvider === "ollama" && (
+              <p className="text-xs text-muted-foreground">
+                Ollama runs locally and doesn't require an API key. Make sure Ollama is running on your machine.
+              </p>
+            )}
           </div>
         </div>
       )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
-        {!isAvailable ? (
+        {needsApiKey ? (
+          <div className="text-center py-6">
+            <svg
+              className="w-12 h-12 mx-auto text-yellow-500 mb-3"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"
+              />
+            </svg>
+            <p className="text-sm text-muted-foreground mb-2">
+              API key required for {providerInfo?.label}
+            </p>
+            <p className="text-xs text-muted-foreground mb-4">
+              Click the settings icon above to add your API key
+            </p>
+          </div>
+        ) : !isAvailable && selectedProvider === "ollama" ? (
           <div className="text-center py-6">
             <svg
               className="w-12 h-12 mx-auto text-muted-foreground mb-3"
@@ -446,11 +539,18 @@ export function AiAssistant({
                 </SelectTrigger>
                 <SelectContent>
                   {models
-                    .filter(m => m.name)
-                    .filter((model, idx, arr) => arr.findIndex(m => m.name === model.name) === idx)
+                    .filter(m => m.id)
+                    .filter((model, idx, arr) => arr.findIndex(m => m.id === model.id) === idx)
                     .map((model) => (
-                      <SelectItem key={model.name} value={model.name}>
-                        {model.name} ({model.size})
+                      <SelectItem key={model.id} value={model.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{model.name}</span>
+                          {model.description && (
+                            <span className="text-xs text-muted-foreground">
+                              ({model.description})
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -471,7 +571,7 @@ export function AiAssistant({
               />
               <button
                 onClick={handleGenerate}
-                disabled={loading || !prompt.trim()}
+                disabled={loading || !prompt.trim() || !selectedModel}
                 className="mt-2 w-full px-3 py-1.5 text-sm bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {loading && activeAction === "generate" ? (
@@ -526,7 +626,7 @@ export function AiAssistant({
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={handleExplain}
-                  disabled={loading || !currentSql}
+                  disabled={loading || !currentSql || !selectedModel}
                   className="px-2 py-1.5 text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Explain the current query"
                 >
@@ -534,7 +634,7 @@ export function AiAssistant({
                 </button>
                 <button
                   onClick={handleOptimize}
-                  disabled={loading || !currentSql}
+                  disabled={loading || !currentSql || !selectedModel}
                   className="px-2 py-1.5 text-xs bg-green-500/10 text-green-600 dark:text-green-400 rounded hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Optimize the current query"
                 >
@@ -542,7 +642,7 @@ export function AiAssistant({
                 </button>
                 <button
                   onClick={handleFix}
-                  disabled={loading || !currentSql || !lastError}
+                  disabled={loading || !currentSql || !lastError || !selectedModel}
                   className="px-2 py-1.5 text-xs bg-red-500/10 text-red-600 dark:text-red-400 rounded hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Fix errors in the current query"
                 >
@@ -578,6 +678,7 @@ export function AiAssistant({
                   result.includes("INSERT") ||
                   result.includes("UPDATE") ||
                   result.includes("DELETE") ||
+                  result.includes("WITH") ||
                   result.includes("```sql")) && (
                   <button
                     onClick={handleApplySql}
@@ -593,7 +694,7 @@ export function AiAssistant({
       </div>
 
       {/* Footer with tips */}
-      {isAvailable && (
+      {isAvailable && isConfigured && (
         <div className="p-2 border-t bg-muted/30">
           <p className="text-xs text-muted-foreground text-center">
             Tip: Select tables in schema browser for better context
