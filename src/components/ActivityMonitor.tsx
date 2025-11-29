@@ -732,7 +732,7 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__all__">All databases</SelectItem>
-                            {availableDatabases.map((db) => (
+                            {availableDatabases.filter(Boolean).map((db) => (
                               <SelectItem key={db} value={db}>
                                 {db}
                               </SelectItem>

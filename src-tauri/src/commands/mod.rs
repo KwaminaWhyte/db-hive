@@ -4,6 +4,7 @@
 //! Commands are organized by functionality into separate submodules.
 
 pub mod activity;
+pub mod ai;
 pub mod connection;
 pub mod data_import;
 pub mod ddl;

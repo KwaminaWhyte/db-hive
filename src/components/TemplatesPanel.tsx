@@ -232,9 +232,9 @@ export function TemplatesPanel({ onExecuteQuery }: TemplatesPanelProps) {
             >
               All
             </Badge>
-            {categories.map((cat) => (
+            {categories.filter(Boolean).map((cat, idx) => (
               <Badge
-                key={cat}
+                key={cat || `cat-${idx}`}
                 variant={selectedCategory === cat ? "default" : "outline"}
                 className="cursor-pointer"
                 onClick={() => setSelectedCategory(cat)}

@@ -1,4 +1,5 @@
 // Module declarations
+mod ai;
 mod commands;
 mod credentials;
 mod ddl;
@@ -96,6 +97,9 @@ pub fn run() {
 
             // Manage the state
             app.manage(Mutex::new(state));
+
+            // Initialize AI state
+            app.manage(commands::ai::AiState::default());
 
             // Initialize plugin manager
             let plugin_manager = PluginManager::new(app.handle().clone());
@@ -229,6 +233,15 @@ pub fn run() {
             commands::data_import::import_data_to_table,
             commands::data_import::get_tables_for_import,
             commands::data_import::get_table_columns_for_import,
+            commands::ai::check_ollama_status,
+            commands::ai::get_ai_config,
+            commands::ai::set_ai_config,
+            commands::ai::list_ai_models,
+            commands::ai::ai_generate_sql,
+            commands::ai::ai_explain_query,
+            commands::ai::ai_optimize_query,
+            commands::ai::ai_fix_query,
+            commands::ai::ai_chat,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
