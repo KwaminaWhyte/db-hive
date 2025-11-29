@@ -23,6 +23,7 @@
 ## 1. Architecture Overview
 
 **Tech Stack:**
+
 - Frontend: React 19 + TypeScript + Monaco Editor + TanStack Table + shadcn/ui
 - Backend: Tauri 2.0 + Rust + Tokio
 - Database Drivers: PostgreSQL (tokio-postgres), MySQL (mysql_async), SQLite (rusqlite), MongoDB (mongodb)
@@ -36,6 +37,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 ## 2. Phase 0: Setup & Architecture ✅ COMPLETED
 
 **Week 1-2 Status:**
+
 - [x] Project structure and dependencies configured
 - [x] Tauri 2.0 + React 19 + TypeScript + Tailwind CSS v4
 - [x] shadcn/ui components integrated
@@ -49,6 +51,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 ## 3. Phase 1: MVP Development ✅ COMPLETED (Weeks 3-14)
 
 **Completed Features:**
+
 - ✅ Connection Management (PostgreSQL, MySQL, SQLite, MongoDB)
 - ✅ SQL Editor with Monaco (syntax highlighting, autocomplete)
 - ✅ Query Execution & Results Viewer (Grid/JSON/Raw modes)
@@ -111,11 +114,13 @@ For detailed architecture patterns, see `CLAUDE.md`.
 ## 4. Phase 2: Advanced Features (Weeks 15-28)
 
 ### Milestone 2.1: Additional Database Drivers ✅ COMPLETED
+
 - [x] MySQL/MariaDB driver with metadata queries
 - [x] MongoDB driver with CRUD operations & query parser
 - [x] SQL Server driver with tiberius (2025-11-22)
 
 ### Milestone 2.2: SSH Tunneling ✅ COMPLETED (2025-11-21)
+
 - [x] SSH tunnel manager with password/key auth
 - [x] Tunnel lifecycle management
 - [x] Connection command integration with separate SSH password handling
@@ -127,12 +132,14 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Full integration with ConnectionForm and ConnectionList
 
 ### Milestone 2.3: Advanced SQL Autocomplete ✅ COMPLETED
+
 - [x] Metadata cache with 5-minute expiration
 - [x] Context-aware suggestions (tables, columns, keywords, functions)
 - [x] Monaco Editor provider integration
 - [x] Manual metadata refresh
 
 ### Milestone 2.4: Table Editor ✅ COMPLETED
+
 - [x] Inline editing with cell change tracking
 - [x] Row selection & bulk delete
 - [x] Add/Insert rows with auto-generation detection
@@ -140,12 +147,14 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Commit/rollback UI
 
 ### Milestone 2.5: SQL Import/Export ✅ COMPLETED
+
 - [x] Database dump/restore (PostgreSQL, MySQL, SQLite)
 - [x] Export options (DROP/CREATE/INSERT statements)
 - [x] Import with transaction support & error handling
 - [x] SqlExportDialog & SqlImportDialog components
 
 ### Milestone 2.6: Query Plan Visualizer ✅ COMPLETED (2025-11-21)
+
 - [x] PostgreSQL EXPLAIN (ANALYZE, FORMAT JSON) parser
 - [x] Visual query plan tree with cost highlighting
 - [x] QueryPlanVisualizer component with tree visualization
@@ -212,6 +221,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 **Implementation Date:** 2025-11-22
 
 **Deferred Features:**
+
 - [ ] Import SQL query to visual builder (requires SQL parser)
 - [ ] Export query builder state to JSON
 - [ ] Save query templates
@@ -219,6 +229,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] INSERT/UPDATE/DELETE query support
 
 ### Milestone 2.8: ER Diagram Generator ✅ COMPLETED
+
 - [x] Foreign key relationship parsing (PostgreSQL, MySQL, SQLite)
 - [x] Dagre automatic hierarchical layout with top-to-bottom flow
 - [x] ReactFlow integration with Handle components for proper connections
@@ -290,6 +301,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 **DDL Operations - Create/Modify/Delete Database Objects**
 
 **Backend (Rust - Tauri Commands):**
+
 - [x] DDL Type System (src-tauri/src/models/ddl.rs - 380 lines):
   - [x] ColumnType enum with 20+ database types
   - [x] TableDefinition, ColumnDefinition structures
@@ -334,6 +346,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Transaction support for complex schema changes (TODO: Future enhancement)
 
 **Frontend (React Components):**
+
 - [x] TableCreationDialog component (src/components/TableCreationDialog.tsx - 450 lines):
   - [x] Multi-step wizard (Basic Info → Columns → Constraints → Preview)
   - [x] Column builder with type dropdown (9 common types)
@@ -354,6 +367,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] ConfirmationDialog for destructive operations (TODO: Future enhancement)
 
 **TypeScript Types & API:**
+
 - [x] TypeScript types (src/types/ddl.ts - 320 lines):
   - [x] Matching types for all Rust definitions
   - [x] ColumnTypes helper factory functions
@@ -363,6 +377,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
   - [x] Full JSDoc documentation
 
 **Safety & UX:**
+
 - [x] Preview SQL before execution
 - [x] Error handling with user-friendly messages
 - [ ] Rollback support for failed operations (TODO: Future enhancement)
@@ -370,6 +385,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Foreign key dependency checks (TODO: Future enhancement)
 
 **Integration:**
+
 - [x] Context menu integration in SchemaExplorer
 - [x] Auto-refresh after table creation
 - [ ] Add "Schema" menu to CustomTitlebar (TODO: Future enhancement)
@@ -379,11 +395,13 @@ For detailed architecture patterns, see `CLAUDE.md`.
 **Implementation Date:** 2025-11-23
 
 **Known Issues:**
+
 - Debug logging currently active (will be removed after testing)
 - Foreign key and unique constraint UI planned for future enhancement
 - Advanced ALTER TABLE operations (change type, set NOT NULL) need frontend UI
 
 **MongoDB Note:**
+
 - DDL operations intentionally not supported (NoSQL database)
 - Returns clear error message: "DDL operations not supported for MongoDB"
 
@@ -509,6 +527,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 **Implementation Date:** 2025-11-22
 
 **Deferred Features:**
+
 - [ ] Active queries list with real-time updates (requires database-specific queries)
 - [ ] CPU usage chart (requires system metrics collection)
 - [ ] Memory usage chart (requires system metrics collection)
@@ -664,6 +683,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
   - [x] Non-blocking UI (toast notifications)
 
 **Files Modified:**
+
 - `src-tauri/src/lib.rs` - Added updater plugin initialization
 - `src-tauri/tauri.conf.json` - Added updater configuration
 - `src/routes/about.tsx` - Implemented update check logic
@@ -671,6 +691,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - `package.json` - Added @tauri-apps/plugin-updater dependency
 
 **Notes:**
+
 - Signing keys need to be generated for production releases: `npm run tauri signer generate`
 - Update artifacts will be created automatically during GitHub release builds
 - Updater checks GitHub releases for `latest.json` manifest
@@ -713,8 +734,53 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Query explanation
 - [ ] Optimization suggestions
 
----
+### Milestone 3.13: Additional Database Drivers
 
+**Cloud & Serverless Databases**
+
+- [ ] **Supabase Driver:**
+  - [ ] PostgreSQL-compatible connection via Supabase URL
+  - [ ] Connection pooler support (Transaction/Session modes)
+  - [ ] Supabase-specific connection string parsing
+  - [ ] SSL/TLS configuration for cloud connections
+  - [ ] Reuse existing PostgreSQL driver infrastructure
+
+- [ ] **Neon Driver:**
+  - [ ] PostgreSQL-compatible serverless connection
+  - [ ] Connection string parsing with project/branch support
+  - [ ] Serverless-optimized connection handling
+  - [ ] Cold start handling and connection pooling
+  - [ ] Reuse existing PostgreSQL driver infrastructure
+
+- [ ] **Turso Driver:**
+  - [ ] libSQL/SQLite edge database support
+  - [ ] HTTP API integration for serverless queries
+  - [ ] Embedded replica support
+  - [ ] Authentication token handling
+  - [ ] Custom Turso connection options
+
+- [ ] **Redis Driver:**
+  - [ ] Key-value store operations (GET, SET, DEL, etc.)
+  - [ ] Data structure commands (Lists, Sets, Hashes, Sorted Sets)
+  - [ ] Redis connection string parsing
+  - [ ] Cluster and Sentinel support
+  - [ ] Custom Redis query interface (non-SQL)
+  - [ ] Key browser and data viewer UI
+
+**Frontend Integration:**
+
+- [ ] Connection form updates for each driver type
+- [ ] Driver-specific icons and branding
+- [ ] Connection testing for cloud databases
+- [ ] SSL certificate handling UI
+
+**Notes:**
+
+- Supabase and Neon can leverage existing PostgreSQL driver
+- Turso requires libsql Rust crate integration
+- Redis requires custom UI (non-relational data model)
+
+---
 
 ---
 
@@ -723,6 +789,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 **Current Status:** Phase 2 in progress - Advanced features being implemented
 
 **Completed:**
+
 - ✅ Phase 0: Architecture & Setup
 - ✅ Phase 1: MVP Development (Connection management, SQL editor, schema browser, table editor)
 - ✅ Milestone 2.1-2.5: MySQL/MongoDB drivers, autocomplete, table editing, SQL import/export
@@ -736,6 +803,10 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ **Window State Persistence** (2025-11-21)
 
 **Recently Completed:**
+
+- ✅ Import Wizards - Import from Excel/CSV with column mapping, data type detection, batch import (2025-11-28)
+- ✅ Data Visualization - Interactive charts (bar, line, area, pie, scatter) from query results with recharts (2025-11-28)
+- ✅ Query Templates - Save/load query templates with parameters, validation, and SQL preview (2025-11-28)
 - ✅ Milestone 3.7: Plugin System - Full plugin architecture with boa_engine JS runtime, marketplace UI, plugin settings, action handlers, and CSV Exporter bundled plugin (2025-11-28)
 - ✅ Milestone 3.12: Automatic Update System - Complete auto-update with system notifications, configurable intervals, auto-download, and auto-install with restart (2025-11-24)
 - ✅ Milestone 3.10: ERD Builder Enhancements - Interactive ERD canvas with draggable tables, React Flow integration, auto-layout, performance optimizations, and visual enhancements (2025-11-24)
@@ -745,18 +816,17 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - ✅ Milestone 3.3: Database Schema Management - Full DDL operations with multi-database support (PostgreSQL, MySQL, SQLite, SQL Server), visual table creation wizard, and SQL preview (2025-11-23)
 
 **Next Priorities (Pick from these):**
+
 1. **AI Assistant** - Natural language to SQL, query explanation, optimization suggestions
 2. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections
 3. **Schema Migration Tools** - Schema diff, migration SQL generation, version control
-4. **Query Templates** - Save/load query templates with parameters
-5. **Data Visualization** - Charts and graphs from query results
-6. **Stored Procedures** - View, edit, and execute stored procedures/functions
-7. **Database Comparison** - Compare schemas between two databases
-8. **Backup Manager** - Schedule and manage database backups
-9. **Performance Dashboard** - Real-time database performance metrics
-10. **Import Wizards** - Import from Excel, CSV with column mapping
+4. **Stored Procedures** - View, edit, and execute stored procedures/functions
+5. **Database Comparison** - Compare schemas between two databases
+6. **Backup Manager** - Schedule and manage database backups
+7. **Performance Dashboard** - Real-time database performance metrics
 
 **Documentation:**
+
 - See `CLAUDE.md` for detailed architecture and development patterns
 - See `README.md` for feature list and installation
 - See `docs/USER_GUIDE.md` for complete user documentation

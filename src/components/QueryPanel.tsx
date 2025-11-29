@@ -6,6 +6,7 @@ import { QueryPlanVisualizer, parseExplainJson } from './QueryPlanVisualizer';
 import type { QueryPlanResult } from '@/types/database';
 import { HistoryPanel } from './HistoryPanel';
 import { SnippetSidebar } from './SnippetSidebar';
+import { TemplatesPanel } from './TemplatesPanel';
 import { QueryExecutionResult, ConnectionProfile } from '@/types/database';
 import { createQueryHistory } from '@/types/history';
 import { invoke } from '@tauri-apps/api/core';
@@ -412,13 +413,14 @@ export const QueryPanel: FC<QueryPanelProps> = ({
         </div>
       </PanelResizeHandle>
 
-      {/* Right Sidebar - History and Snippets */}
+      {/* Right Sidebar - History, Snippets, and Templates */}
       <Panel defaultSize={30} minSize={20} maxSize={50}>
         <Tabs defaultValue="history" className="h-full flex flex-col">
           <div className="border-b px-4 shrink-0">
             <TabsList className="h-10">
               <TabsTrigger value="history">History</TabsTrigger>
               <TabsTrigger value="snippets">Snippets</TabsTrigger>
+              <TabsTrigger value="templates">Templates</TabsTrigger>
             </TabsList>
           </div>
 
@@ -433,6 +435,10 @@ export const QueryPanel: FC<QueryPanelProps> = ({
 
           <TabsContent value="snippets" className="flex-1 m-0 overflow-hidden">
             <SnippetSidebar onInsertSnippet={handleInsertSnippet} />
+          </TabsContent>
+
+          <TabsContent value="templates" className="flex-1 m-0 overflow-hidden">
+            <TemplatesPanel onExecuteQuery={handleInsertSnippet} />
           </TabsContent>
         </Tabs>
       </Panel>

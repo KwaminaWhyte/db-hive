@@ -45,6 +45,10 @@ pub enum DbError {
     /// Error occurred during credential storage/retrieval
     #[error("Credential error: {0}")]
     CredentialError(String),
+
+    /// Error occurred during data import
+    #[error("Import error: {0}")]
+    ImportError(String),
 }
 
 impl serde::Serialize for DbError {
@@ -75,6 +79,7 @@ impl serde::Serialize for DbError {
             DbError::NotFound(_) => "not_found",
             DbError::InternalError(_) => "internal",
             DbError::CredentialError(_) => "credential",
+            DbError::ImportError(_) => "import",
         };
 
         state.serialize_field("kind", kind)?;

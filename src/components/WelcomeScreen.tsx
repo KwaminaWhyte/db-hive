@@ -11,6 +11,31 @@ import {
   Plug2,
 } from "lucide-react";
 
+// Database type definition for the grid
+interface DatabaseType {
+  id: string;
+  name: string;
+  icon: string;
+  bgColor: string;
+  available: boolean;
+}
+
+// All supported databases - based on actual implementation status
+const DATABASE_TYPES: DatabaseType[] = [
+  // Available Now (Implemented)
+  { id: "postgres", name: "PostgreSQL", icon: "🐘", bgColor: "bg-[#336791]", available: true },
+  { id: "mysql", name: "MySQL", icon: "🐬", bgColor: "bg-[#00758F]", available: true },
+  { id: "mariadb", name: "MariaDB", icon: "🦭", bgColor: "bg-[#003545]", available: true },
+  { id: "sqlite", name: "SQLite", icon: "📘", bgColor: "bg-[#003B57]", available: true },
+  { id: "mongodb", name: "MongoDB", icon: "🍃", bgColor: "bg-[#13AA52]", available: true },
+  { id: "sqlserver", name: "SQL Server", icon: "🗄️", bgColor: "bg-[#CC2927]", available: true },
+  // Coming Soon (Planned)
+  { id: "supabase", name: "Supabase", icon: "⚡", bgColor: "bg-[#3ECF8E]", available: false },
+  { id: "turso", name: "Turso", icon: "🐂", bgColor: "bg-[#4FF8D2]", available: false },
+  { id: "neon", name: "Neon", icon: "💚", bgColor: "bg-[#00E699]", available: false },
+  { id: "redis", name: "Redis", icon: "🔴", bgColor: "bg-[#DC382D]", available: false },
+];
+
 interface WelcomeScreenProps {
   onNewConnection: () => void;
   onRecentConnections?: () => void;
@@ -293,41 +318,73 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
             </div>
           </div>
 
-          {/* Empty state / dockable hint */}
-          <div className="flex-1 flex items-center justify-center px-4 md:px-6">
-            <div className="w-full max-w-xs space-y-3 text-xs">
-              <div className="flex items-center gap-2">
-                <div className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/10 border border-amber-500/40">
-                  <div className="h-3 w-3 rounded-[0.4rem] bg-amber-600 dark:bg-amber-300/80"></div>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[0.74rem] font-medium uppercase tracking-[0.18em] text-amber-600 dark:text-amber-200/90">
-                    workspace layout
+          {/* Database Types Grid */}
+          <div className="flex-1 flex flex-col px-4 md:px-6 py-4 overflow-y-auto">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/10 border border-amber-500/40">
+                <Database className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" strokeWidth={1.5} />
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[0.74rem] font-medium uppercase tracking-[0.18em] text-amber-600 dark:text-amber-200/90">
+                  supported databases
+                </span>
+                <span className="text-sm text-foreground">Connect to your favorite</span>
+              </div>
+            </div>
+
+            {/* Database Grid */}
+            <div className="grid grid-cols-5 gap-3">
+              {DATABASE_TYPES.map((db) => (
+                <div
+                  key={db.id}
+                  className="flex flex-col items-center gap-1.5 group cursor-default"
+                >
+                  {/* Icon Container */}
+                  <div
+                    className={`relative w-14 h-14 rounded-xl ${db.bgColor} flex items-center justify-center shadow-lg transition-transform group-hover:scale-105 ${
+                      !db.available ? "opacity-60" : ""
+                    }`}
+                  >
+                    <span className="text-2xl">{db.icon}</span>
+                    {/* Subtle glow for available */}
+                    {db.available && (
+                      <div className="absolute inset-0 rounded-xl bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    )}
+                  </div>
+
+                  {/* Name */}
+                  <span className={`text-[0.68rem] text-center leading-tight ${
+                    db.available ? "text-foreground" : "text-muted-foreground"
+                  }`}>
+                    {db.name}
                   </span>
-                  <span className="text-foreground">Dock panels anywhere</span>
+
+                  {/* Status Badge */}
+                  <span
+                    className={`text-[0.6rem] px-1.5 py-0.5 rounded-full font-medium ${
+                      db.available
+                        ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                        : "bg-muted text-muted-foreground border border-border"
+                    }`}
+                  >
+                    {db.available ? "Available Now" : "Coming Soon"}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {/* Legend */}
+            <div className="mt-4 pt-3 border-t border-border">
+              <div className="flex items-center justify-center gap-4 text-[0.68rem] text-muted-foreground">
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                  <span>6 Available</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-muted-foreground/50"></span>
+                  <span>4 Coming Soon</span>
                 </div>
               </div>
-
-              <p className="text-muted-foreground text-[0.8rem] leading-relaxed">
-                DB Hive starts with a clean canvas. Once connected, you can dock
-                the schema browser, query editor, and result grid into a layout
-                that matches how you think.
-              </p>
-
-              <ul className="mt-1 space-y-1 text-[0.78rem] text-muted-foreground leading-relaxed">
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-sm bg-amber-600 dark:bg-amber-300/80"></span>
-                  <span>Drag panels by their header to rearrange.</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-sm bg-amber-600/80 dark:bg-amber-300/60"></span>
-                  <span>Collapse sidebars to focus on schemas or results.</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-sm bg-amber-600/60 dark:bg-amber-300/40"></span>
-                  <span>Save layouts per project for instant recall.</span>
-                </li>
-              </ul>
             </div>
           </div>
 

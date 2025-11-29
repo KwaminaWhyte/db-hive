@@ -41,6 +41,7 @@ import {
   Copy,
   FileCode,
   FileInput,
+  FileSpreadsheet,
   FolderClosed,
   FolderOpen,
   Upload,
@@ -55,6 +56,7 @@ import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 import { SqlExportDialog } from "./SqlExportDialog";
 import { SqlImportDialog } from "./SqlImportDialog";
 import { TableCreationDialog } from "./TableCreationDialog";
+import { DataImportWizard } from "./DataImportWizard";
 import { NoTablesEmpty, NoSearchResultsEmpty } from "./empty-states";
 
 interface SchemaExplorerProps {
@@ -98,6 +100,10 @@ export function SchemaExplorer({
   // Table creation dialog state
   const [showCreateTableDialog, setShowCreateTableDialog] = useState(false);
   const [createTableSchema, setCreateTableSchema] = useState<string | undefined>(undefined);
+  // Data import wizard state
+  const [showDataImportWizard, setShowDataImportWizard] = useState(false);
+  const [importTargetSchema, setImportTargetSchema] = useState<string>("");
+  const [importTargetTable, setImportTargetTable] = useState<string>("");
 
   // Get the connected database name from the connection profile
   const connectedDatabase = connectionProfile.database || "postgres";
@@ -264,9 +270,42 @@ export function SchemaExplorer({
     return `SELECT * FROM "${schemaName}"."${tableName}" LIMIT 100;`;
   };
 
-  // Generate INSERT template for a table
-  const generateInsertTemplate = (schemaName: string, tableName: string) => {
-    return `INSERT INTO "${schemaName}"."${tableName}" (column1, column2, ...) \nVALUES (value1, value2, ...);`;
+  // Generate INSERT template for a table with actual column names
+  const generateInsertTemplate = async (schemaName: string, tableName: string) => {
+    try {
+      // Fetch actual column names from the table
+      const columns = await invoke<{ name: string; data_type: string }[]>(
+        "get_table_columns_for_import",
+        {
+          connectionId,
+          tableName,
+          schema: schemaName,
+        }
+      );
+
+      if (columns.length === 0) {
+        return `INSERT INTO "${schemaName}"."${tableName}" (column1, column2, ...) \nVALUES (value1, value2, ...);`;
+      }
+
+      const columnNames = columns.map((c) => `"${c.name}"`).join(", ");
+      const valuePlaceholders = columns
+        .map((c) => {
+          // Provide type hints as placeholders
+          const type = c.data_type.toLowerCase();
+          if (type.includes("int") || type.includes("serial")) return "0";
+          if (type.includes("bool")) return "false";
+          if (type.includes("float") || type.includes("double") || type.includes("numeric") || type.includes("decimal")) return "0.0";
+          if (type.includes("date") || type.includes("time")) return `'${new Date().toISOString().split("T")[0]}'`;
+          if (type.includes("json")) return "'{}'";
+          return "''";
+        })
+        .join(", ");
+
+      return `INSERT INTO "${schemaName}"."${tableName}" (${columnNames})\nVALUES (${valuePlaceholders});`;
+    } catch (err) {
+      console.error("Failed to fetch columns for INSERT template:", err);
+      return `INSERT INTO "${schemaName}"."${tableName}" (column1, column2, ...) \nVALUES (value1, value2, ...);`;
+    }
   };
 
   // Copy table name to clipboard
@@ -407,7 +446,7 @@ export function SchemaExplorer({
                     Export SQL
                   </Button>
 
-                  {/* Import */}
+                  {/* Import SQL */}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -416,6 +455,21 @@ export function SchemaExplorer({
                   >
                     <Upload className="h-4 w-4 mr-2" />
                     Import SQL
+                  </Button>
+
+                  {/* Import Data (CSV/Excel) */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start"
+                    onClick={() => {
+                      setImportTargetSchema(selectedSchema);
+                      setImportTargetTable("");
+                      setShowDataImportWizard(true);
+                    }}
+                  >
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Import CSV/Excel
                   </Button>
                 </div>
               </PopoverContent>
@@ -520,6 +574,16 @@ export function SchemaExplorer({
                                 Create Table
                               </ContextMenuItem>
                               <ContextMenuItem
+                                onClick={() => {
+                                  setImportTargetSchema(schema.name);
+                                  setImportTargetTable("");
+                                  setShowDataImportWizard(true);
+                                }}
+                              >
+                                <FileSpreadsheet className="h-4 w-4 mr-2" />
+                                Import CSV/Excel
+                              </ContextMenuItem>
+                              <ContextMenuItem
                                 onClick={() => fetchTables(schema.name)}
                               >
                                 <RefreshCw className="h-4 w-4 mr-2" />
@@ -607,8 +671,8 @@ export function SchemaExplorer({
                                           Generate SELECT
                                         </ContextMenuItem>
                                         <ContextMenuItem
-                                          onClick={() => {
-                                            const sql = generateInsertTemplate(schema.name, table.name);
+                                          onClick={async () => {
+                                            const sql = await generateInsertTemplate(schema.name, table.name);
                                             onExecuteQuery?.(sql);
                                           }}
                                         >
@@ -620,6 +684,16 @@ export function SchemaExplorer({
                                         >
                                           <Copy className="h-4 w-4 mr-2" />
                                           Copy Name
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                          onClick={() => {
+                                            setImportTargetSchema(schema.name);
+                                            setImportTargetTable(table.name);
+                                            setShowDataImportWizard(true);
+                                          }}
+                                        >
+                                          <Upload className="h-4 w-4 mr-2" />
+                                          Import Data
                                         </ContextMenuItem>
                                         <ContextMenuItem
                                           onClick={() => fetchTables(schema.name)}
@@ -720,6 +794,26 @@ export function SchemaExplorer({
           }
         }}
       />
+
+      {/* Data Import Wizard */}
+      {showDataImportWizard && (
+        <DataImportWizard
+          connectionId={connectionId}
+          defaultSchema={importTargetSchema}
+          defaultTable={importTargetTable}
+          onClose={() => {
+            setShowDataImportWizard(false);
+            setImportTargetSchema("");
+            setImportTargetTable("");
+          }}
+          onSuccess={() => {
+            // Refresh the table data after successful import
+            if (importTargetSchema) {
+              fetchTables(importTargetSchema);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
