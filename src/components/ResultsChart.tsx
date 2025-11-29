@@ -472,7 +472,7 @@ export function ResultsChart({ columns, rows }: ResultsChartProps) {
               <SelectValue placeholder="Select column" />
             </SelectTrigger>
             <SelectContent>
-              {columns.map((col) => (
+              {columns.filter(Boolean).map((col) => (
                 <SelectItem key={col} value={col}>
                   {col}
                 </SelectItem>
@@ -496,7 +496,7 @@ export function ResultsChart({ columns, rows }: ResultsChartProps) {
               </p>
               <div className="space-y-2 max-h-[200px] overflow-auto">
                 {numericColumns.length > 0 ? (
-                  numericColumns.map((col) => (
+                  numericColumns.filter(Boolean).map((col) => (
                     <div
                       key={col}
                       className="flex items-center gap-2 cursor-pointer"

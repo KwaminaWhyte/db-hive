@@ -448,8 +448,8 @@ export function QueryTemplateDialog({
         )}
         {template?.tags && template.tags.length > 0 && (
           <div className="flex gap-1 mt-2">
-            {template.tags.map((tag) => (
-              <Badge key={tag} variant="secondary" className="text-xs">
+            {template.tags.filter(Boolean).map((tag, idx) => (
+              <Badge key={tag || `tag-${idx}`} variant="secondary" className="text-xs">
                 {tag}
               </Badge>
             ))}

@@ -49,6 +49,10 @@ pub enum DbError {
     /// Error occurred during data import
     #[error("Import error: {0}")]
     ImportError(String),
+
+    /// Error occurred during AI operations
+    #[error("AI error: {0}")]
+    AiError(String),
 }
 
 impl serde::Serialize for DbError {
@@ -80,6 +84,7 @@ impl serde::Serialize for DbError {
             DbError::InternalError(_) => "internal",
             DbError::CredentialError(_) => "credential",
             DbError::ImportError(_) => "import",
+            DbError::AiError(_) => "ai",
         };
 
         state.serialize_field("kind", kind)?;

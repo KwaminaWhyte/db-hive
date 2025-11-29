@@ -7,12 +7,13 @@ import type { QueryPlanResult } from '@/types/database';
 import { HistoryPanel } from './HistoryPanel';
 import { SnippetSidebar } from './SnippetSidebar';
 import { TemplatesPanel } from './TemplatesPanel';
+import { AiAssistant } from './AiAssistant';
 import { QueryExecutionResult, ConnectionProfile } from '@/types/database';
 import { createQueryHistory } from '@/types/history';
 import { invoke } from '@tauri-apps/api/core';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Button } from './ui/button';
-import { GripHorizontal, GripVertical, Plus, X } from 'lucide-react';
+import { GripHorizontal, GripVertical, Plus, X, Sparkles } from 'lucide-react';
 import { ConnectionLostError } from './ConnectionLostError';
 import { useNavigate } from '@tanstack/react-router';
 
@@ -69,6 +70,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
   const [activeTabId, setActiveTabId] = useState('tab-1');
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [connectionLost, setConnectionLost] = useState(false);
+  const [schemaContext, setSchemaContext] = useState('');
   const navigate = useNavigate();
 
   // Query Plan Visualizer state
@@ -85,6 +87,79 @@ export const QueryPanel: FC<QueryPanelProps> = ({
       onQueryLoaded?.();
     }
   }, [pendingQuery]);
+
+  // Load schema context for AI assistant
+  useEffect(() => {
+    const loadSchemaContext = async () => {
+      if (!connectionId) {
+        setSchemaContext('');
+        return;
+      }
+
+      try {
+        // First get schemas
+        const schemas = await invoke<Array<{ name: string }>>('get_schemas', {
+          connectionId,
+          database: currentDatabase || '',
+        });
+
+        let context = `Database: ${currentDatabase || 'unknown'}\n\nTables:\n`;
+        let totalTables = 0;
+
+        // Get tables from each schema (prioritize 'public' for PostgreSQL, skip system schemas)
+        const schemaOrder = schemas
+          .map(s => s.name)
+          .filter(name => !['information_schema', 'pg_catalog', 'mysql', 'performance_schema', 'sys'].includes(name))
+          .sort((a, b) => {
+            if (a === 'public') return -1;
+            if (b === 'public') return 1;
+            return a.localeCompare(b);
+          });
+
+        for (const schemaName of schemaOrder) {
+          try {
+            const tables = await invoke<Array<{ name: string; schema: string; table_type: string }>>('get_tables', {
+              connectionId,
+              schema: schemaName,
+            });
+
+            for (const table of tables) {
+              try {
+                const tableSchema = await invoke<{ columns: Array<{ name: string; dataType: string; nullable: boolean; isPrimaryKey: boolean }> }>('get_table_schema', {
+                  connectionId,
+                  table: table.name,
+                  schema: schemaName,
+                });
+
+                context += `\n${schemaName}.${table.name}:\n`;
+                for (const col of tableSchema.columns) {
+                  context += `  - ${col.name}: ${col.dataType}${col.isPrimaryKey ? ' (PK)' : ''}${col.nullable ? '' : ' NOT NULL'}\n`;
+                }
+                totalTables++;
+              } catch (err) {
+                console.warn(`Failed to get schema for ${schemaName}.${table.name}:`, err);
+              }
+            }
+          } catch (err) {
+            console.warn(`Failed to get tables for schema ${schemaName}:`, err);
+          }
+        }
+
+        if (totalTables === 0) {
+          setSchemaContext(`Database: ${currentDatabase || 'unknown'}\n\nNo tables found.`);
+          return;
+        }
+
+        console.log('Schema context loaded:', context.substring(0, 200) + '...');
+        setSchemaContext(context);
+      } catch (err) {
+        console.error('Failed to load schema context:', err);
+        setSchemaContext('');
+      }
+    };
+
+    loadSchemaContext();
+  }, [connectionId, currentDatabase]);
 
   // Add new tab
   const handleAddTab = () => {
@@ -421,6 +496,10 @@ export const QueryPanel: FC<QueryPanelProps> = ({
               <TabsTrigger value="history">History</TabsTrigger>
               <TabsTrigger value="snippets">Snippets</TabsTrigger>
               <TabsTrigger value="templates">Templates</TabsTrigger>
+              <TabsTrigger value="ai" className="gap-1">
+                <Sparkles className="h-3.5 w-3.5" />
+                AI
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -439,6 +518,15 @@ export const QueryPanel: FC<QueryPanelProps> = ({
 
           <TabsContent value="templates" className="flex-1 m-0 overflow-hidden">
             <TemplatesPanel onExecuteQuery={handleInsertSnippet} />
+          </TabsContent>
+
+          <TabsContent value="ai" className="flex-1 m-0 overflow-hidden">
+            <AiAssistant
+              currentSql={activeTab.sql}
+              schemaContext={schemaContext}
+              lastError={activeTab.error || undefined}
+              onSqlGenerated={(sql) => updateTab(activeTabId, { sql })}
+            />
           </TabsContent>
         </Tabs>
       </Panel>
