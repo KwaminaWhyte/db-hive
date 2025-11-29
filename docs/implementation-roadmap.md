@@ -727,12 +727,50 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Version control integration
 - [ ] Apply migrations UI
 
-### AI Assistant
+### Milestone 3.14: AI Assistant ✅ COMPLETED (2025-11-29)
 
-- [ ] Integrate OpenAI/Claude API
-- [ ] Natural language to SQL
-- [ ] Query explanation
-- [ ] Optimization suggestions
+**Multi-Provider AI-Powered SQL Assistant**
+
+- [x] Provider-agnostic architecture:
+  - [x] AiProvider trait for common interface
+  - [x] Pluggable provider system
+  - [x] Per-provider configuration
+- [x] Ollama Integration (Local LLM):
+  - [x] Local model discovery and selection
+  - [x] No API key required (privacy-first)
+  - [x] Support for llama3.2, codellama, mistral, etc.
+- [x] OpenAI Integration:
+  - [x] GPT-4o, GPT-4, GPT-3.5 Turbo support
+  - [x] Automatic model listing from API
+  - [x] Context window detection
+- [x] Anthropic (Claude) Integration:
+  - [x] Claude Sonnet 4, Claude 3.5 Sonnet, Claude 3 Opus support
+  - [x] System message handling (separate parameter)
+  - [x] 200K context window models
+- [x] Google (Gemini) Integration:
+  - [x] Gemini 2.0 Flash, Gemini 1.5 Pro/Flash support
+  - [x] 1M+ context window models
+  - [x] Automatic model discovery
+- [x] AI Features:
+  - [x] Natural language to SQL generation
+  - [x] Query explanation in plain English
+  - [x] Query optimization suggestions
+  - [x] Error fixing with context
+  - [x] General chat capabilities
+- [x] Frontend UI:
+  - [x] Provider selection dropdown
+  - [x] Model selection per provider
+  - [x] API key management (settings panel)
+  - [x] Status indicators (connected, needs key, offline)
+  - [x] Schema context viewer
+  - [x] Quick action buttons (Explain, Optimize, Fix)
+  - [x] Result display with "Apply to Editor" button
+- [x] Schema Context:
+  - [x] Automatic schema loading on connection
+  - [x] Full table/column context for accurate SQL
+  - [x] System schema filtering (pg_catalog, information_schema, etc.)
+
+**Implementation Date:** 2025-11-29
 
 ### Milestone 3.13: Additional Database Drivers
 
@@ -804,6 +842,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Recently Completed:**
 
+- ✅ Milestone 3.14: AI Assistant - Multi-provider AI with Ollama, OpenAI, Claude, Gemini support; natural language to SQL, query explanation, optimization, error fixing (2025-11-29)
 - ✅ Import Wizards - Import from Excel/CSV with column mapping, data type detection, batch import (2025-11-28)
 - ✅ Data Visualization - Interactive charts (bar, line, area, pie, scatter) from query results with recharts (2025-11-28)
 - ✅ Query Templates - Save/load query templates with parameters, validation, and SQL preview (2025-11-28)
@@ -817,13 +856,14 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Next Priorities (Pick from these):**
 
-1. **AI Assistant** - Natural language to SQL, query explanation, optimization suggestions
+1. **Additional Database Drivers** - Supabase, Neon, Turso, Redis support
 2. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections
 3. **Schema Migration Tools** - Schema diff, migration SQL generation, version control
 4. **Stored Procedures** - View, edit, and execute stored procedures/functions
 5. **Database Comparison** - Compare schemas between two databases
 6. **Backup Manager** - Schedule and manage database backups
 7. **Performance Dashboard** - Real-time database performance metrics
+8. **Query Scheduler** - Schedule and automate recurring queries
 
 **Documentation:**
 
