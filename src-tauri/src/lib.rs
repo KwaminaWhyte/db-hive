@@ -225,6 +225,10 @@ pub fn run() {
             commands::plugins::execute_plugin_function,
             commands::plugins::get_loaded_plugins,
             commands::plugins::is_plugin_loaded,
+            commands::data_import::preview_import_file,
+            commands::data_import::import_data_to_table,
+            commands::data_import::get_tables_for_import,
+            commands::data_import::get_table_columns_for_import,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

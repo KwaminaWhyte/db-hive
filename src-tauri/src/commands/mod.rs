@@ -5,6 +5,7 @@
 
 pub mod activity;
 pub mod connection;
+pub mod data_import;
 pub mod ddl;
 pub mod export;
 pub mod history;

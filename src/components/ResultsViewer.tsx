@@ -20,6 +20,7 @@ import {
   Code,
   FileCode,
   Copy,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { invoke } from "@tauri-apps/api/core";
@@ -27,6 +28,7 @@ import { save } from "@tauri-apps/plugin-dialog";
 import { toast } from "sonner";
 import { QueryErrorState } from "./QueryErrorState";
 import { NoResultsEmpty } from "./empty-states";
+import { ResultsChart } from "./ResultsChart";
 
 interface ResultsViewerProps {
   /** Column names */
@@ -58,7 +60,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
 }) => {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [exporting, setExporting] = useState(false);
-  const [viewMode, setViewMode] = useState<"grid" | "json" | "raw">("grid");
+  const [viewMode, setViewMode] = useState<"grid" | "json" | "raw" | "chart">("grid");
 
   // Copy helper functions
   const copyToClipboard = useCallback(async (text: string, message: string) => {
@@ -444,7 +446,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
         <Tabs
           value={viewMode}
           onValueChange={(value) =>
-            setViewMode(value as "grid" | "json" | "raw")
+            setViewMode(value as "grid" | "json" | "raw" | "chart")
           }
           className="h-full flex flex-col"
         >
@@ -461,6 +463,10 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
               <TabsTrigger value="raw" className="gap-1.5">
                 <FileCode className="h-3.5 w-3.5" />
                 Raw
+              </TabsTrigger>
+              <TabsTrigger value="chart" className="gap-1.5">
+                <BarChart3 className="h-3.5 w-3.5" />
+                Chart
               </TabsTrigger>
             </TabsList>
           </div>
@@ -572,6 +578,11 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
             <pre className="p-4 text-xs font-mono whitespace-pre">
               <code>{resultsAsRaw}</code>
             </pre>
+          </TabsContent>
+
+          {/* Chart View */}
+          <TabsContent value="chart" className="flex-1 m-0 overflow-hidden">
+            <ResultsChart columns={columns} rows={rows} />
           </TabsContent>
         </Tabs>
       </CardContent>

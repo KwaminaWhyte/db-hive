@@ -30,6 +30,7 @@ import {
   RefreshCw,
   Grid3x3,
   List,
+  FolderTree,
   Search,
   Star,
   Clock,
@@ -42,6 +43,7 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConnectionCard } from "./ConnectionCard";
+import { ConnectionTreeView } from "./ConnectionTreeView";
 import { Label } from "./ui/label";
 import { NoConnectionsEmpty, NoSearchResultsEmpty } from "@/components/empty-states";
 import { ConnectionLostError } from "@/components/ConnectionLostError";
@@ -55,7 +57,7 @@ interface ConnectionDashboardProps {
   onEditConnection?: (profile: ConnectionProfile) => void;
 }
 
-type ViewMode = "grid" | "list";
+type ViewMode = "grid" | "list" | "tree";
 type CategoryFilter = "all" | "favorites" | "recent" | "local" | "cloud";
 
 export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
@@ -677,6 +679,15 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
               >
                 <List className="h-4 w-4" />
               </Button>
+              <Button
+                variant={viewMode === "tree" ? "secondary" : "ghost"}
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setViewMode("tree")}
+                title="Tree view (by folder)"
+              >
+                <FolderTree className="h-4 w-4" />
+              </Button>
             </div>
           </div>
 
@@ -770,6 +781,17 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
                   onToggleFavorite={handleToggleFavorite}
                 />
               ))}
+            </div>
+          ) : viewMode === "tree" ? (
+            <div className="max-w-4xl">
+              <ConnectionTreeView
+                profiles={filteredProfiles}
+                connectingId={connectingId}
+                onConnect={handleConnectClick}
+                onEdit={onEditConnection || (() => {})}
+                onDelete={handleDeleteClick}
+                onToggleFavorite={handleToggleFavorite}
+              />
             </div>
           ) : (
             <div className="space-y-3 max-w-5xl">
