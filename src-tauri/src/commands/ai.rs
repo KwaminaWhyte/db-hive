@@ -1,122 +1,222 @@
 //! AI Assistant Commands
 //!
-//! Tauri commands for AI-powered SQL assistance using Ollama.
+//! Tauri commands for AI-powered SQL assistance.
+//! Supports multiple providers: Ollama, OpenAI, Anthropic, Google.
 
-use crate::ai::{ChatMessage, OllamaClient, OllamaConfig};
+use crate::ai::{
+    AiProvider, AiProviderType, AiModel as ProviderAiModel, ChatMessage, ChatCompletion,
+    OllamaProvider, OllamaConfig,
+    OpenAiProvider, OpenAiConfig,
+    AnthropicProvider, AnthropicConfig,
+    GoogleAiProvider, GoogleAiConfig,
+};
 use crate::models::DbError;
 use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 use tauri::State;
 
+/// AI configuration for all providers
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct AiConfig {
+    /// Active provider
+    pub active_provider: AiProviderType,
+    /// Ollama configuration
+    pub ollama: OllamaConfig,
+    /// OpenAI configuration
+    pub openai: OpenAiConfig,
+    /// Anthropic configuration
+    pub anthropic: AnthropicConfig,
+    /// Google AI configuration
+    pub google: GoogleAiConfig,
+}
+
 /// AI Assistant state
 pub struct AiState {
-    pub client: Mutex<Option<OllamaClient>>,
-    pub config: Mutex<OllamaConfig>,
+    pub config: Mutex<AiConfig>,
 }
 
 impl Default for AiState {
     fn default() -> Self {
         Self {
-            client: Mutex::new(None),
-            config: Mutex::new(OllamaConfig::default()),
+            config: Mutex::new(AiConfig::default()),
         }
     }
 }
 
-/// Ollama model information for frontend
+/// AI model information for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AiModel {
+#[serde(rename_all = "camelCase")]
+pub struct AiModelInfo {
+    pub id: String,
     pub name: String,
-    pub size: String,
-    pub modified: String,
+    pub provider: AiProviderType,
+    pub description: Option<String>,
+    pub context_window: Option<u32>,
 }
 
-/// AI chat request
-#[derive(Debug, Deserialize)]
-pub struct AiChatRequest {
-    pub prompt: String,
-    pub model: Option<String>,
-    pub schema_context: Option<String>,
+impl From<ProviderAiModel> for AiModelInfo {
+    fn from(m: ProviderAiModel) -> Self {
+        Self {
+            id: m.id,
+            name: m.name,
+            provider: m.provider,
+            description: m.description,
+            context_window: m.context_window,
+        }
+    }
 }
 
 /// AI chat response
 #[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AiChatResponse {
     pub content: String,
     pub model: String,
+    pub provider: AiProviderType,
     pub duration_ms: u64,
 }
 
-/// Check if Ollama is available
+impl AiChatResponse {
+    fn from_completion(completion: ChatCompletion, duration_ms: u64) -> Self {
+        Self {
+            content: completion.content,
+            model: completion.model,
+            provider: completion.provider,
+            duration_ms,
+        }
+    }
+}
+
+/// Provider status response
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStatus {
+    pub provider: AiProviderType,
+    pub available: bool,
+    pub configured: bool,
+}
+
+/// Get a provider instance based on the config
+fn get_provider(config: &AiConfig, provider_type: Option<AiProviderType>) -> Box<dyn AiProvider> {
+    let provider_type = provider_type.unwrap_or(config.active_provider);
+
+    match provider_type {
+        AiProviderType::Ollama => Box::new(OllamaProvider::with_config(config.ollama.clone())),
+        AiProviderType::OpenAI => Box::new(OpenAiProvider::with_config(config.openai.clone())),
+        AiProviderType::Anthropic => Box::new(AnthropicProvider::with_config(config.anthropic.clone())),
+        AiProviderType::Google => Box::new(GoogleAiProvider::with_config(config.google.clone())),
+    }
+}
+
+/// Check provider availability status
+#[tauri::command]
+pub async fn check_ai_provider_status(
+    state: State<'_, AiState>,
+    provider: Option<AiProviderType>,
+) -> Result<ProviderStatus, DbError> {
+    let config = state.config.lock()
+        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?
+        .clone();
+
+    let provider_type = provider.unwrap_or(config.active_provider);
+    let ai_provider = get_provider(&config, Some(provider_type));
+
+    let available = ai_provider.is_available().await;
+
+    let configured = match provider_type {
+        AiProviderType::Ollama => true, // Ollama doesn't require API key
+        AiProviderType::OpenAI => !config.openai.api_key.is_empty(),
+        AiProviderType::Anthropic => !config.anthropic.api_key.is_empty(),
+        AiProviderType::Google => !config.google.api_key.is_empty(),
+    };
+
+    Ok(ProviderStatus {
+        provider: provider_type,
+        available,
+        configured,
+    })
+}
+
+/// Check if Ollama is available (legacy endpoint for compatibility)
 #[tauri::command]
 pub async fn check_ollama_status(
     state: State<'_, AiState>,
 ) -> Result<bool, DbError> {
-    let client = get_or_create_client(&state)?;
-    Ok(client.is_available().await)
+    let status = check_ai_provider_status(state, Some(AiProviderType::Ollama)).await?;
+    Ok(status.available)
 }
 
-/// Get Ollama configuration
+/// Get AI configuration
 #[tauri::command]
 pub async fn get_ai_config(
     state: State<'_, AiState>,
-) -> Result<OllamaConfig, DbError> {
+) -> Result<AiConfig, DbError> {
     let config = state.config.lock()
         .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?;
     Ok(config.clone())
 }
 
-/// Update Ollama configuration
+/// Update AI configuration
 #[tauri::command]
 pub async fn set_ai_config(
     state: State<'_, AiState>,
-    config: OllamaConfig,
+    config: AiConfig,
 ) -> Result<(), DbError> {
-    // Update config
-    {
-        let mut current_config = state.config.lock()
-            .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?;
-        *current_config = config.clone();
-    }
+    let mut current_config = state.config.lock()
+        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?;
+    *current_config = config;
+    Ok(())
+}
 
-    // Reset client to use new config
-    {
-        let mut client = state.client.lock()
-            .map_err(|e| DbError::AiError(format!("Failed to access client: {}", e)))?;
-        *client = Some(OllamaClient::with_config(config));
+/// Set the active AI provider
+#[tauri::command]
+pub async fn set_active_ai_provider(
+    state: State<'_, AiState>,
+    provider: AiProviderType,
+) -> Result<(), DbError> {
+    let mut config = state.config.lock()
+        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?;
+    config.active_provider = provider;
+    Ok(())
+}
+
+/// Set API key for a provider
+#[tauri::command]
+pub async fn set_ai_api_key(
+    state: State<'_, AiState>,
+    provider: AiProviderType,
+    api_key: String,
+) -> Result<(), DbError> {
+    let mut config = state.config.lock()
+        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?;
+
+    match provider {
+        AiProviderType::Ollama => {} // Ollama doesn't use API keys
+        AiProviderType::OpenAI => config.openai.api_key = api_key,
+        AiProviderType::Anthropic => config.anthropic.api_key = api_key,
+        AiProviderType::Google => config.google.api_key = api_key,
     }
 
     Ok(())
 }
 
-/// List available Ollama models
+/// List available AI models for a provider
 #[tauri::command]
 pub async fn list_ai_models(
     state: State<'_, AiState>,
-) -> Result<Vec<AiModel>, DbError> {
-    let client = get_or_create_client(&state)?;
+    provider: Option<AiProviderType>,
+) -> Result<Vec<AiModelInfo>, DbError> {
+    let config = state.config.lock()
+        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?
+        .clone();
 
-    let models = client.list_models().await
+    let ai_provider = get_provider(&config, provider);
+
+    let models = ai_provider.list_models().await
         .map_err(|e| DbError::AiError(e))?;
 
-    let ai_models: Vec<AiModel> = models.into_iter().map(|m| {
-        // Format size in human-readable format
-        let size = if m.size >= 1_000_000_000 {
-            format!("{:.1} GB", m.size as f64 / 1_000_000_000.0)
-        } else if m.size >= 1_000_000 {
-            format!("{:.1} MB", m.size as f64 / 1_000_000.0)
-        } else {
-            format!("{} bytes", m.size)
-        };
-
-        AiModel {
-            name: m.name,
-            size,
-            modified: m.modified_at,
-        }
-    }).collect();
-
-    Ok(ai_models)
+    Ok(models.into_iter().map(AiModelInfo::from).collect())
 }
 
 /// Generate SQL from natural language
@@ -126,20 +226,23 @@ pub async fn ai_generate_sql(
     prompt: String,
     schema_context: String,
     model: Option<String>,
+    provider: Option<AiProviderType>,
 ) -> Result<AiChatResponse, DbError> {
-    let client = get_or_create_client(&state)?;
+    let config = state.config.lock()
+        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?
+        .clone();
+
+    let ai_provider = get_provider(&config, provider);
 
     let start = std::time::Instant::now();
-    let sql = client.generate_sql(&prompt, &schema_context, model.as_deref()).await
+    let sql = ai_provider.generate_sql(&prompt, &schema_context, model.as_deref()).await
         .map_err(|e| DbError::AiError(e))?;
-
     let duration_ms = start.elapsed().as_millis() as u64;
 
     Ok(AiChatResponse {
         content: sql,
-        model: model.unwrap_or_else(|| {
-            state.config.lock().map(|c| c.default_model.clone()).unwrap_or_default()
-        }),
+        model: model.unwrap_or_else(|| get_default_model(&config, provider)),
+        provider: provider.unwrap_or(config.active_provider),
         duration_ms,
     })
 }
@@ -150,20 +253,23 @@ pub async fn ai_explain_query(
     state: State<'_, AiState>,
     sql: String,
     model: Option<String>,
+    provider: Option<AiProviderType>,
 ) -> Result<AiChatResponse, DbError> {
-    let client = get_or_create_client(&state)?;
+    let config = state.config.lock()
+        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?
+        .clone();
+
+    let ai_provider = get_provider(&config, provider);
 
     let start = std::time::Instant::now();
-    let explanation = client.explain_query(&sql, model.as_deref()).await
+    let explanation = ai_provider.explain_query(&sql, model.as_deref()).await
         .map_err(|e| DbError::AiError(e))?;
-
     let duration_ms = start.elapsed().as_millis() as u64;
 
     Ok(AiChatResponse {
         content: explanation,
-        model: model.unwrap_or_else(|| {
-            state.config.lock().map(|c| c.default_model.clone()).unwrap_or_default()
-        }),
+        model: model.unwrap_or_else(|| get_default_model(&config, provider)),
+        provider: provider.unwrap_or(config.active_provider),
         duration_ms,
     })
 }
@@ -175,20 +281,23 @@ pub async fn ai_optimize_query(
     sql: String,
     schema_context: String,
     model: Option<String>,
+    provider: Option<AiProviderType>,
 ) -> Result<AiChatResponse, DbError> {
-    let client = get_or_create_client(&state)?;
+    let config = state.config.lock()
+        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?
+        .clone();
+
+    let ai_provider = get_provider(&config, provider);
 
     let start = std::time::Instant::now();
-    let optimization = client.optimize_query(&sql, &schema_context, model.as_deref()).await
+    let optimization = ai_provider.optimize_query(&sql, &schema_context, model.as_deref()).await
         .map_err(|e| DbError::AiError(e))?;
-
     let duration_ms = start.elapsed().as_millis() as u64;
 
     Ok(AiChatResponse {
         content: optimization,
-        model: model.unwrap_or_else(|| {
-            state.config.lock().map(|c| c.default_model.clone()).unwrap_or_default()
-        }),
+        model: model.unwrap_or_else(|| get_default_model(&config, provider)),
+        provider: provider.unwrap_or(config.active_provider),
         duration_ms,
     })
 }
@@ -201,20 +310,23 @@ pub async fn ai_fix_query(
     error_message: String,
     schema_context: String,
     model: Option<String>,
+    provider: Option<AiProviderType>,
 ) -> Result<AiChatResponse, DbError> {
-    let client = get_or_create_client(&state)?;
+    let config = state.config.lock()
+        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?
+        .clone();
+
+    let ai_provider = get_provider(&config, provider);
 
     let start = std::time::Instant::now();
-    let fixed = client.fix_query(&sql, &error_message, &schema_context, model.as_deref()).await
+    let fixed = ai_provider.fix_query(&sql, &error_message, &schema_context, model.as_deref()).await
         .map_err(|e| DbError::AiError(e))?;
-
     let duration_ms = start.elapsed().as_millis() as u64;
 
     Ok(AiChatResponse {
         content: fixed,
-        model: model.unwrap_or_else(|| {
-            state.config.lock().map(|c| c.default_model.clone()).unwrap_or_default()
-        }),
+        model: model.unwrap_or_else(|| get_default_model(&config, provider)),
+        provider: provider.unwrap_or(config.active_provider),
         duration_ms,
     })
 }
@@ -225,35 +337,28 @@ pub async fn ai_chat(
     state: State<'_, AiState>,
     messages: Vec<ChatMessage>,
     model: Option<String>,
+    provider: Option<AiProviderType>,
 ) -> Result<AiChatResponse, DbError> {
-    let client = get_or_create_client(&state)?;
+    let config = state.config.lock()
+        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?
+        .clone();
+
+    let ai_provider = get_provider(&config, provider);
 
     let start = std::time::Instant::now();
-    let response = client.chat(messages, model.as_deref(), Some(0.7)).await
+    let completion = ai_provider.chat(messages, model.as_deref(), Some(0.7), None).await
         .map_err(|e| DbError::AiError(e))?;
-
     let duration_ms = start.elapsed().as_millis() as u64;
 
-    Ok(AiChatResponse {
-        content: response.message.content,
-        model: response.model,
-        duration_ms,
-    })
+    Ok(AiChatResponse::from_completion(completion, duration_ms))
 }
 
-/// Helper to get or create the Ollama client
-fn get_or_create_client(state: &State<'_, AiState>) -> Result<OllamaClient, DbError> {
-    let mut client_guard = state.client.lock()
-        .map_err(|e| DbError::AiError(format!("Failed to access client: {}", e)))?;
-
-    if client_guard.is_none() {
-        let config = state.config.lock()
-            .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?;
-        *client_guard = Some(OllamaClient::with_config(config.clone()));
+/// Get the default model for a provider
+fn get_default_model(config: &AiConfig, provider: Option<AiProviderType>) -> String {
+    match provider.unwrap_or(config.active_provider) {
+        AiProviderType::Ollama => config.ollama.default_model.clone(),
+        AiProviderType::OpenAI => config.openai.default_model.clone(),
+        AiProviderType::Anthropic => config.anthropic.default_model.clone(),
+        AiProviderType::Google => config.google.default_model.clone(),
     }
-
-    // Clone the client for use
-    let config = state.config.lock()
-        .map_err(|e| DbError::AiError(format!("Failed to access config: {}", e)))?;
-    Ok(OllamaClient::with_config(config.clone()))
 }
