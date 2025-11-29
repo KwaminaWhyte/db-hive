@@ -720,6 +720,77 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Support JOINs, WHERE, GROUP BY
 - [ ] Add preview mode
 
+### Milestone 3.15: Visual Schema Designer (Database Builder)
+
+**Drag-and-Drop Database Schema Creation**
+
+- [ ] **Canvas & Table Creation:**
+  - [ ] ReactFlow-based canvas (reuse ERD infrastructure)
+  - [ ] Drag-and-drop to create new table nodes
+  - [ ] Table toolbox/palette with "New Table" drag source
+  - [ ] Double-click table to edit properties
+  - [ ] Delete tables with confirmation
+  - [ ] Undo/redo support
+
+- [ ] **Column Designer (in-table editing):**
+  - [ ] Add columns directly in table box
+  - [ ] Column name, type, nullable, default value
+  - [ ] Primary key checkbox with visual indicator
+  - [ ] Auto-increment toggle
+  - [ ] Inline column reordering (drag within table)
+  - [ ] Quick type selector (common types)
+
+- [ ] **Relationship Builder:**
+  - [ ] Draw lines between tables to create foreign keys
+  - [ ] Source column → Target column mapping
+  - [ ] ON DELETE/UPDATE action selector
+  - [ ] Cardinality indicators (1:1, 1:N, M:N)
+  - [ ] Junction table auto-generation for M:N
+  - [ ] Visual relationship editing (click to modify)
+
+- [ ] **Index Designer:**
+  - [ ] Add indexes to tables visually
+  - [ ] Multi-column index support
+  - [ ] Unique index toggle
+  - [ ] Index type selection (B-tree, Hash, etc.)
+  - [ ] Visual index indicator on columns
+
+- [ ] **Constraints:**
+  - [ ] Unique constraints (visual indicator)
+  - [ ] Check constraints with expression editor
+  - [ ] Not null constraints
+  - [ ] Default value expressions
+
+- [ ] **Schema Generation:**
+  - [ ] Real-time DDL preview panel
+  - [ ] Database-specific SQL generation (PostgreSQL, MySQL, SQLite, SQL Server)
+  - [ ] CREATE TABLE ordering based on dependencies
+  - [ ] Foreign key dependency resolution
+  - [ ] "Generate SQL" button to copy/export
+  - [ ] "Execute Schema" to create all tables
+
+- [ ] **Project Management:**
+  - [ ] Save schema designs as projects
+  - [ ] Load/edit existing designs
+  - [ ] Export design to JSON
+  - [ ] Import from existing database (reverse engineer)
+  - [ ] Version history for designs
+
+- [ ] **UX Features:**
+  - [ ] Grid snap for alignment
+  - [ ] Auto-layout algorithm
+  - [ ] Zoom and pan controls
+  - [ ] Minimap for large schemas
+  - [ ] Table grouping/coloring by domain
+  - [ ] Search/filter tables
+  - [ ] Keyboard shortcuts
+
+**Technical Notes:**
+- Reuse ReactFlow from ERD viewer
+- Reuse DDL generation from Milestone 3.3
+- Extend TableDefinition types for visual metadata (position, color)
+- Store designs in Tauri Store or separate files
+
 ### Schema Migration Tools
 
 - [ ] Schema diff algorithm
@@ -856,14 +927,15 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Next Priorities (Pick from these):**
 
-1. **Additional Database Drivers** - Supabase, Neon, Turso, Redis support
-2. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections
+1. **Visual Schema Designer** - Drag-and-drop database builder (tables, relationships, indexes) with DDL generation
+2. **Additional Database Drivers** - Supabase, Neon, Turso, Redis support
 3. **Schema Migration Tools** - Schema diff, migration SQL generation, version control
-4. **Stored Procedures** - View, edit, and execute stored procedures/functions
-5. **Database Comparison** - Compare schemas between two databases
-6. **Backup Manager** - Schedule and manage database backups
-7. **Performance Dashboard** - Real-time database performance metrics
-8. **Query Scheduler** - Schedule and automate recurring queries
+4. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections
+5. **Stored Procedures** - View, edit, and execute stored procedures/functions
+6. **Database Comparison** - Compare schemas between two databases
+7. **Backup Manager** - Schedule and manage database backups
+8. **Performance Dashboard** - Real-time database performance metrics
+9. **Query Scheduler** - Schedule and automate recurring queries
 
 **Documentation:**
 
