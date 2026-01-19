@@ -6,7 +6,7 @@
  * row count, and success/failure status.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { QueryHistory } from "../types/history";
 import { Button } from "./ui/button";
@@ -39,6 +39,29 @@ import {
 } from "./ui/alert-dialog";
 import { NoHistoryEmpty } from "./empty-states";
 
+// Module-level pure functions - no need to recreate on every render
+const formatDate = (isoDate: string): string => {
+  const date = new Date(isoDate);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+
+  return date.toLocaleDateString() + " " + date.toLocaleTimeString();
+};
+
+const formatExecutionTime = (ms?: number): string => {
+  if (!ms) return "N/A";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
+};
+
 interface HistoryPanelProps {
   /** Current connection ID (to filter history) */
   connectionId?: string;
@@ -61,12 +84,7 @@ export function HistoryPanel({
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState(50);
 
-  // Load history on mount and when connectionId, currentDatabase, limit, or refreshTrigger changes
-  useEffect(() => {
-    loadHistory();
-  }, [connectionId, currentDatabase, limit, refreshTrigger]);
-
-  const loadHistory = async () => {
+  const loadHistory = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -88,9 +106,14 @@ export function HistoryPanel({
     } finally {
       setLoading(false);
     }
-  };
+  }, [connectionId, currentDatabase, limit]);
 
-  const handleClearHistory = async () => {
+  // Load history on mount and when connectionId, currentDatabase, limit, or refreshTrigger changes
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory, refreshTrigger]);
+
+  const handleClearHistory = useCallback(async () => {
     try {
       await invoke("clear_history", {
         connectionId: connectionId || null,
@@ -101,29 +124,7 @@ export function HistoryPanel({
         typeof err === "string" ? err : (err as any)?.message || String(err)
       );
     }
-  };
-
-  const formatDate = (isoDate: string) => {
-    const date = new Date(isoDate);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "Just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-
-    return date.toLocaleDateString() + " " + date.toLocaleTimeString();
-  };
-
-  const formatExecutionTime = (ms?: number) => {
-    if (!ms) return "N/A";
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(2)}s`;
-  };
+  }, [connectionId, loadHistory]);
 
   return (
     <div className="flex flex-col h-full">

@@ -8,7 +8,7 @@
  * - Google (Gemini)
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   checkProviderStatus,
   listAiModels,
@@ -24,6 +24,12 @@ import {
   type AiProviderType,
   AI_PROVIDERS,
 } from "../api/ai";
+
+// Module-level pure function
+const formatDuration = (ms: number): string => {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+};
 import {
   Select,
   SelectContent,
@@ -270,7 +276,7 @@ export function AiAssistant({
     }
   };
 
-  const handleApplySql = () => {
+  const handleApplySql = useCallback(() => {
     if (result && onSqlGenerated) {
       // Extract SQL from result if it contains explanation
       const sqlMatch = result.match(/```sql\n([\s\S]*?)\n```/);
@@ -289,12 +295,14 @@ export function AiAssistant({
         onSqlGenerated(result);
       }
     }
-  };
+  }, [result, onSqlGenerated]);
 
-  const formatDuration = (ms: number) => {
-    if (ms < 1000) return `${ms}ms`;
-    return `${(ms / 1000).toFixed(1)}s`;
-  };
+  // Memoized filtered and deduplicated models
+  const uniqueModels = useMemo(() => {
+    return models
+      .filter(m => m.id)
+      .filter((model, idx, arr) => arr.findIndex(m => m.id === model.id) === idx);
+  }, [models]);
 
   const needsApiKey = selectedProvider !== "ollama" && !isConfigured;
   const providerInfo = AI_PROVIDERS.find(p => p.value === selectedProvider);
@@ -538,21 +546,18 @@ export function AiAssistant({
                   <SelectValue placeholder="Select a model" />
                 </SelectTrigger>
                 <SelectContent>
-                  {models
-                    .filter(m => m.id)
-                    .filter((model, idx, arr) => arr.findIndex(m => m.id === model.id) === idx)
-                    .map((model) => (
-                      <SelectItem key={model.id} value={model.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{model.name}</span>
-                          {model.description && (
-                            <span className="text-xs text-muted-foreground">
-                              ({model.description})
-                            </span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
+                  {uniqueModels.map((model) => (
+                    <SelectItem key={model.id} value={model.id}>
+                      <div className="flex items-center gap-2">
+                        <span>{model.name}</span>
+                        {model.description && (
+                          <span className="text-xs text-muted-foreground">
+                            ({model.description})
+                          </span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

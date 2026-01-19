@@ -5,7 +5,7 @@
  * and actions to insert snippets into the editor, edit, or delete them.
  */
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { QuerySnippet } from "../types/history";
 import { Button } from "./ui/button";
@@ -41,7 +41,6 @@ interface SnippetSidebarProps {
 
 export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
   const [snippets, setSnippets] = useState<QuerySnippet[]>([]);
-  const [filteredSnippets, setFilteredSnippets] = useState<QuerySnippet[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -64,15 +63,7 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
   const [formDescription, setFormDescription] = useState("");
   const [formTags, setFormTags] = useState("");
 
-  useEffect(() => {
-    loadSnippets();
-  }, []);
-
-  useEffect(() => {
-    filterSnippets();
-  }, [snippets, searchQuery, selectedTag]);
-
-  const loadSnippets = async () => {
+  const loadSnippets = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
@@ -87,9 +78,14 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedTag]);
 
-  const filterSnippets = () => {
+  useEffect(() => {
+    loadSnippets();
+  }, [loadSnippets]);
+
+  // Memoized filtered snippets - replaces filterSnippets function and useEffect
+  const filteredSnippets = useMemo(() => {
     let filtered = snippets;
 
     // Filter by search query
@@ -108,18 +104,26 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
       filtered = filtered.filter((s) => s.tags?.includes(selectedTag));
     }
 
-    setFilteredSnippets(filtered);
-  };
+    return filtered;
+  }, [snippets, searchQuery, selectedTag]);
 
-  const getAllTags = (): string[] => {
+  // Memoized all tags
+  const allTags = useMemo((): string[] => {
     const tagSet = new Set<string>();
     snippets.forEach((s) => {
       s.tags?.forEach((tag) => tagSet.add(tag));
     });
     return Array.from(tagSet).sort();
-  };
+  }, [snippets]);
 
-  const handleCreateSnippet = async () => {
+  const resetForm = useCallback(() => {
+    setFormName("");
+    setFormQuery("");
+    setFormDescription("");
+    setFormTags("");
+  }, []);
+
+  const handleCreateSnippet = useCallback(async () => {
     try {
       const tags = formTags
         .split(",")
@@ -146,9 +150,9 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
         typeof err === "string" ? err : (err as any)?.message || String(err)
       );
     }
-  };
+  }, [formTags, formName, formQuery, formDescription, resetForm, loadSnippets]);
 
-  const handleEditSnippet = async () => {
+  const handleEditSnippet = useCallback(async () => {
     if (!editingSnippet) return;
 
     try {
@@ -176,9 +180,9 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
         typeof err === "string" ? err : (err as any)?.message || String(err)
       );
     }
-  };
+  }, [editingSnippet, formTags, formName, formQuery, formDescription, resetForm, loadSnippets]);
 
-  const handleDeleteSnippet = async () => {
+  const handleDeleteSnippet = useCallback(async () => {
     if (!deletingSnippet) return;
 
     try {
@@ -194,28 +198,21 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
         typeof err === "string" ? err : (err as any)?.message || String(err)
       );
     }
-  };
+  }, [deletingSnippet, loadSnippets]);
 
-  const openEditDialog = (snippet: QuerySnippet) => {
+  const openEditDialog = useCallback((snippet: QuerySnippet) => {
     setEditingSnippet(snippet);
     setFormName(snippet.name);
     setFormQuery(snippet.query);
     setFormDescription(snippet.description || "");
     setFormTags(snippet.tags?.join(", ") || "");
     setIsEditDialogOpen(true);
-  };
+  }, []);
 
-  const openDeleteDialog = (snippet: QuerySnippet) => {
+  const openDeleteDialog = useCallback((snippet: QuerySnippet) => {
     setDeletingSnippet(snippet);
     setIsDeleteDialogOpen(true);
-  };
-
-  const resetForm = () => {
-    setFormName("");
-    setFormQuery("");
-    setFormDescription("");
-    setFormTags("");
-  };
+  }, []);
 
   return (
     <div className="flex flex-col h-full border-l bg-background">
@@ -307,7 +304,7 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
         />
 
         {/* Tag Filter */}
-        {getAllTags().length > 0 && (
+        {allTags.length > 0 && (
           <div className="flex flex-wrap gap-1">
             <Badge
               variant={selectedTag === null ? "default" : "outline"}
@@ -316,7 +313,7 @@ export function SnippetSidebar({ onInsertSnippet }: SnippetSidebarProps) {
             >
               All
             </Badge>
-            {getAllTags().map((tag) => (
+            {allTags.map((tag) => (
               <Badge
                 key={tag}
                 variant={selectedTag === tag ? "default" : "outline"}

@@ -2,7 +2,7 @@
 
 > A modern, cross-platform database client built with Tauri 2.0 and React 19
 
-![Version](https://img.shields.io/badge/version-0.5.0--beta-blue)
+![Version](https://img.shields.io/badge/version-0.16.0--beta-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Overview

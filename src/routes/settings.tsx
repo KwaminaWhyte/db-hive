@@ -10,7 +10,7 @@ export const Route = createFileRoute("/settings")({
 
 function SettingsRoute() {
   const navigate = useNavigate({ from: "/settings" });
-  const [previousRoute, setPreviousRoute] = useState<string>("/");
+  const [previousRoute, setPreviousRoute] = useState<string | null>(null);
 
   // Store the previous route before navigating to settings
   useEffect(() => {
@@ -23,12 +23,27 @@ function SettingsRoute() {
   }, []);
 
   const handleBack = () => {
-    // Navigate back to the previous route
-    if (previousRoute === "/query") {
-      navigate({ to: "/query" as any });
-    } else if (previousRoute === "/connections" || previousRoute === "/") {
-      navigate({ to: "/" });
+    // If we have a saved previous route, navigate there
+    if (previousRoute) {
+      // Handle routes with dynamic segments or search params
+      if (previousRoute.startsWith("/query")) {
+        navigate({ to: "/query" as any });
+      } else if (previousRoute.startsWith("/er-diagram")) {
+        navigate({ to: previousRoute as any });
+      } else if (previousRoute.startsWith("/activity")) {
+        navigate({ to: "/activity" as any });
+      } else if (previousRoute.startsWith("/visual-query")) {
+        navigate({ to: "/visual-query" as any });
+      } else if (previousRoute.startsWith("/plugins")) {
+        navigate({ to: "/plugins" });
+      } else {
+        navigate({ to: "/" });
+      }
+    } else if (window.history.length > 1) {
+      // Try browser history if no saved route
+      window.history.back();
     } else {
+      // Fallback to home
       navigate({ to: "/" });
     }
   };

@@ -1,4 +1,4 @@
-import { FC, useState, useEffect } from 'react';
+import { FC, useState, useEffect, useCallback } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { SQLEditor } from './SQLEditor';
 import { ResultsViewer } from './ResultsViewer';
@@ -161,8 +161,20 @@ export const QueryPanel: FC<QueryPanelProps> = ({
     loadSchemaContext();
   }, [connectionId, currentDatabase]);
 
-  // Add new tab
-  const handleAddTab = () => {
+  // Update tab state - memoized to prevent unnecessary re-renders
+  const updateTab = useCallback((
+    tabId: string,
+    updates: Partial<Omit<EditorTab, 'id' | 'name'>>
+  ) => {
+    setTabs((prevTabs) =>
+      prevTabs.map((tab) =>
+        tab.id === tabId ? { ...tab, ...updates } : tab
+      )
+    );
+  }, []);
+
+  // Add new tab - memoized
+  const handleAddTab = useCallback(() => {
     tabIdCounter++;
     const newTab: EditorTab = {
       id: `tab-${tabIdCounter}`,
@@ -172,49 +184,42 @@ export const QueryPanel: FC<QueryPanelProps> = ({
       results: null,
       error: null,
     };
-    setTabs([...tabs, newTab]);
+    setTabs((prevTabs) => [...prevTabs, newTab]);
     setActiveTabId(newTab.id);
-  };
+  }, []);
 
-  // Close tab
-  const handleCloseTab = (tabId: string) => {
-    if (tabs.length === 1) {
-      // Don't close the last tab, just reset it
-      setTabs([
-        {
-          id: tabId,
-          name: 'Query 1',
-          sql: '',
-          loading: false,
-          results: null,
-          error: null,
-        },
-      ]);
-      return;
-    }
+  // Close tab - memoized
+  const handleCloseTab = useCallback((tabId: string) => {
+    setTabs((prevTabs) => {
+      if (prevTabs.length === 1) {
+        // Don't close the last tab, just reset it
+        return [
+          {
+            id: tabId,
+            name: 'Query 1',
+            sql: '',
+            loading: false,
+            results: null,
+            error: null,
+          },
+        ];
+      }
 
-    const tabIndex = tabs.findIndex((t) => t.id === tabId);
-    const newTabs = tabs.filter((t) => t.id !== tabId);
-    setTabs(newTabs);
+      const tabIndex = prevTabs.findIndex((t) => t.id === tabId);
+      const newTabs = prevTabs.filter((t) => t.id !== tabId);
 
-    // If closing active tab, switch to adjacent tab
-    if (tabId === activeTabId) {
-      const newActiveIndex = Math.min(tabIndex, newTabs.length - 1);
-      setActiveTabId(newTabs[newActiveIndex].id);
-    }
-  };
+      // If closing active tab, switch to adjacent tab
+      setActiveTabId((currentActiveId) => {
+        if (tabId === currentActiveId) {
+          const newActiveIndex = Math.min(tabIndex, newTabs.length - 1);
+          return newTabs[newActiveIndex].id;
+        }
+        return currentActiveId;
+      });
 
-  // Update tab state
-  const updateTab = (
-    tabId: string,
-    updates: Partial<Omit<EditorTab, 'id' | 'name'>>
-  ) => {
-    setTabs((prevTabs) =>
-      prevTabs.map((tab) =>
-        tab.id === tabId ? { ...tab, ...updates } : tab
-      )
-    );
-  };
+      return newTabs;
+    });
+  }, []);
 
   // Handle query execution
   const handleExecute = async (sqlToExecute: string) => {

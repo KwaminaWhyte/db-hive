@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { toast } from "sonner";
 import type { UiComponent, Notification } from "@/types/plugins";
@@ -170,14 +170,15 @@ export function PluginProvider({ children }: { children: ReactNode }) {
     };
   }, [handleNotification, handleRegisterUi, refreshComponents]);
 
-  const value: PluginContextValue = {
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  const value = useMemo<PluginContextValue>(() => ({
     toolbarButtons,
     contextMenuItems,
     sidebarPanels,
     statusBarItems,
     executeAction,
     refreshComponents,
-  };
+  }), [toolbarButtons, contextMenuItems, sidebarPanels, statusBarItems, executeAction, refreshComponents]);
 
   return <PluginContext.Provider value={value}>{children}</PluginContext.Provider>;
 }

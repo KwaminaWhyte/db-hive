@@ -1,4 +1,4 @@
-import { FC, useState, useEffect } from "react";
+import { FC, useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   ConnectionProfile,
@@ -20,6 +20,29 @@ import { Pencil, Trash, Server, Plus, RefreshCw, ChevronRight, ChevronDown, Fold
 import { Skeleton } from "@/components/ui/skeleton";
 import { NoConnectionsEmpty } from "@/components/empty-states";
 import { ConnectionLostError } from "@/components/ConnectionLostError";
+
+// Module-level constant for driver colors - prevents recreation on each render
+const DRIVER_COLORS: Record<string, string> = {
+  postgresql: "bg-blue-500/20 border-blue-500/40 text-blue-600 dark:text-blue-300",
+  mysql: "bg-orange-500/20 border-orange-500/40 text-orange-600 dark:text-orange-300",
+  mariadb: "bg-orange-500/20 border-orange-500/40 text-orange-600 dark:text-orange-300",
+  sqlite: "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300",
+  mongodb: "bg-emerald-500/20 border-emerald-500/40 text-emerald-600 dark:text-emerald-300",
+  sqlserver: "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300",
+  default: "bg-amber-300/10 border-amber-300/30 text-amber-700 dark:text-amber-200",
+};
+
+// Helper to get badge color for database driver (moved outside component)
+const getDriverColorClass = (driver: DbDriver): string => {
+  const driverName = getDriverDisplayName(driver).toLowerCase();
+  if (driverName.includes("postgresql")) return DRIVER_COLORS.postgresql;
+  if (driverName.includes("mysql")) return DRIVER_COLORS.mysql;
+  if (driverName.includes("mariadb")) return DRIVER_COLORS.mariadb;
+  if (driverName.includes("sqlite")) return DRIVER_COLORS.sqlite;
+  if (driverName.includes("mongodb")) return DRIVER_COLORS.mongodb;
+  if (driverName.includes("sql server")) return DRIVER_COLORS.sqlserver;
+  return DRIVER_COLORS.default;
+};
 
 interface ConnectionListProps {
   /** Callback when a profile is selected for editing or null for new connection */
@@ -79,8 +102,8 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     }
   };
 
-  // Organize profiles by folder
-  const organizeProfilesByFolder = () => {
+  // Memoize organized profiles to prevent recalculation on every render
+  const { folderMap, noFolderProfiles } = useMemo(() => {
     const folderMap = new Map<string, ConnectionProfile[]>();
     const noFolderProfiles: ConnectionProfile[] = [];
 
@@ -96,7 +119,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     });
 
     return { folderMap, noFolderProfiles };
-  };
+  }, [profiles]);
 
   // Toggle folder expansion
   const toggleFolder = (folderName: string) => {
@@ -357,23 +380,6 @@ export const ConnectionList: FC<ConnectionListProps> = ({
     );
   }
 
-  // Helper to get badge color for database driver
-  const getDriverColor = (driver: DbDriver) => {
-    const driverName = getDriverDisplayName(driver).toLowerCase();
-    if (driverName.includes("postgresql")) {
-      return "bg-blue-500/20 border-blue-500/40 text-blue-600 dark:text-blue-300";
-    } else if (driverName.includes("mysql")) {
-      return "bg-orange-500/20 border-orange-500/40 text-orange-600 dark:text-orange-300";
-    } else if (driverName.includes("sqlite")) {
-      return "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300";
-    } else if (driverName.includes("mongodb")) {
-      return "bg-emerald-500/20 border-emerald-500/40 text-emerald-600 dark:text-emerald-300";
-    } else if (driverName.includes("sql server")) {
-      return "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300";
-    }
-    return "bg-amber-300/10 border-amber-300/30 text-amber-700 dark:text-amber-200";
-  };
-
   return (
     <div className="h-full flex flex-col bg-background">
       {/* Header */}
@@ -439,11 +445,9 @@ export const ConnectionList: FC<ConnectionListProps> = ({
         ) : (
           <div className="p-4 space-y-2">
             {(() => {
-              const { folderMap, noFolderProfiles } = organizeProfilesByFolder();
-
               // Render helper for connection profile
               const renderProfile = (profile: ConnectionProfile) => {
-                const colorClass = getDriverColor(profile.driver);
+                const colorClass = getDriverColorClass(profile.driver);
                 const driverName = getDriverDisplayName(profile.driver);
                 const isConnecting = connectingId === profile.id;
 

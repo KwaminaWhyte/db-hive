@@ -1,4 +1,4 @@
-import { FC, useMemo, useState, useCallback } from "react";
+import { FC, useMemo, useState, useCallback, useRef, memo } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -7,6 +7,7 @@ import {
   ColumnDef,
   SortingState,
 } from "@tanstack/react-table";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Alert, AlertDescription } from "./ui/alert";
 import { Button } from "./ui/button";
@@ -50,7 +51,7 @@ interface ResultsViewerProps {
   executionTime?: number;
 }
 
-export const ResultsViewer: FC<ResultsViewerProps> = ({
+const ResultsViewerComponent: FC<ResultsViewerProps> = ({
   columns,
   rows,
   rowsAffected,
@@ -61,6 +62,9 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
   const [sorting, setSorting] = useState<SortingState>([]);
   const [exporting, setExporting] = useState(false);
   const [viewMode, setViewMode] = useState<"grid" | "json" | "raw" | "chart">("grid");
+
+  // Ref for virtual scrolling container
+  const tableContainerRef = useRef<HTMLDivElement>(null);
 
   // Copy helper functions
   const copyToClipboard = useCallback(async (text: string, message: string) => {
@@ -250,6 +254,17 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
     getSortedRowModel: getSortedRowModel(),
   });
 
+  // Get all rows for virtualization
+  const { rows: tableRows } = table.getRowModel();
+
+  // Set up row virtualizer for performance with large datasets
+  const rowVirtualizer = useVirtualizer({
+    count: tableRows.length,
+    getScrollElement: () => tableContainerRef.current,
+    estimateSize: () => 40, // Estimated row height in pixels
+    overscan: 10, // Number of rows to render above/below visible area
+  });
+
   // Convert results to JSON format
   const resultsAsJSON = useMemo(() => {
     if (!columns.length || !rows.length) return "[]";
@@ -287,8 +302,8 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
     return [header, ...dataRows].join("\n");
   }, [columns, rows]);
 
-  // Syntax highlight JSON
-  const highlightJSON = (json: string) => {
+  // Memoized syntax highlighted JSON for better performance
+  const highlightedJSON = useMemo(() => {
     // First escape HTML to prevent XSS
     const escapeHtml = (str: string) => {
       return str
@@ -297,7 +312,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
         .replace(/>/g, "&gt;");
     };
 
-    const escaped = escapeHtml(json);
+    const escaped = escapeHtml(resultsAsJSON);
 
     // Replace with spans for different token types
     return (
@@ -323,7 +338,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
           return `: <span style="color: #f87171">${p1}</span>`;
         })
     );
-  };
+  }, [resultsAsJSON]);
 
   // Render loading state
   if (loading) {
@@ -471,14 +486,17 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
             </TabsList>
           </div>
 
-          {/* Grid View */}
-          <TabsContent value="grid" className="flex-1 m-0 overflow-auto">
-            <div className="relative h-full">
+          {/* Grid View - Virtualized for performance */}
+          <TabsContent value="grid" className="flex-1 m-0 overflow-hidden">
+            <div
+              ref={tableContainerRef}
+              className="relative h-full overflow-auto"
+            >
               <table className="w-full border-collapse text-sm">
                 <thead className="sticky top-0 bg-muted/50 backdrop-blur-sm z-10">
                   {table.getHeaderGroups().map((headerGroup) => (
                     <tr key={headerGroup.id} className="border-b">
-                      <th className="text-left font-semibold px-2 py-3 border-r text-xs text-muted-foreground sticky left-0 bg-muted/50 backdrop-blur-sm">
+                      <th className="text-left font-semibold px-2 py-3 border-r text-xs text-muted-foreground sticky left-0 bg-muted/50 backdrop-blur-sm w-16">
                         #
                       </th>
                       {headerGroup.headers.map((header) => (
@@ -509,45 +527,13 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                     </tr>
                   ))}
                 </thead>
-                <tbody>
-                  {table.getRowModel().rows.map((row, rowIndex) => (
-                    <tr
-                      key={row.id}
-                      className={cn(
-                        "border-b hover:bg-muted/30 transition-colors group",
-                        rowIndex % 2 === 0 ? "bg-background" : "bg-muted/10"
-                      )}
-                    >
-                      <td className="px-2 py-2 border-r text-xs text-muted-foreground sticky left-0 bg-inherit">
-                        <div className="flex items-center gap-1">
-                          <span className="w-8 text-right">{rowIndex + 1}</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => {
-                              copyRowValues(rowIndex);
-                            }}
-                            title={`Copy row ${rowIndex + 1}`}
-                          >
-                            <Copy className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </td>
-                      {row.getVisibleCells().map((cell) => (
-                        <td
-                          key={cell.id}
-                          className="px-4 py-2 border-r last:border-r-0 max-w-md"
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext()
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                  {rows.length === 0 && (
+                <tbody
+                  style={{
+                    height: `${rowVirtualizer.getTotalSize()}px`,
+                    position: 'relative',
+                  }}
+                >
+                  {rows.length === 0 ? (
                     <tr>
                       <td
                         colSpan={columns.length + 1}
@@ -556,6 +542,57 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
                         <NoResultsEmpty />
                       </td>
                     </tr>
+                  ) : (
+                    rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                      const row = tableRows[virtualRow.index];
+                      const rowIndex = virtualRow.index;
+                      return (
+                        <tr
+                          key={row.id}
+                          data-index={virtualRow.index}
+                          ref={(node) => rowVirtualizer.measureElement(node)}
+                          className={cn(
+                            "border-b hover:bg-muted/30 transition-colors group",
+                            rowIndex % 2 === 0 ? "bg-background" : "bg-muted/10"
+                          )}
+                          style={{
+                            position: 'absolute',
+                            top: 0,
+                            left: 0,
+                            width: '100%',
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                        >
+                          <td className="px-2 py-2 border-r text-xs text-muted-foreground sticky left-0 bg-inherit w-16">
+                            <div className="flex items-center gap-1">
+                              <span className="w-8 text-right">{rowIndex + 1}</span>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={() => {
+                                  copyRowValues(rowIndex);
+                                }}
+                                title={`Copy row ${rowIndex + 1}`}
+                              >
+                                <Copy className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </td>
+                          {row.getVisibleCells().map((cell) => (
+                            <td
+                              key={cell.id}
+                              className="px-4 py-2 border-r last:border-r-0 max-w-md"
+                            >
+                              {flexRender(
+                                cell.column.columnDef.cell,
+                                cell.getContext()
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -567,7 +604,7 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
             <pre className="p-4 text-xs font-mono">
               <code
                 dangerouslySetInnerHTML={{
-                  __html: highlightJSON(resultsAsJSON),
+                  __html: highlightedJSON,
                 }}
               />
             </pre>
@@ -589,3 +626,6 @@ export const ResultsViewer: FC<ResultsViewerProps> = ({
     </Card>
   );
 };
+
+// Memoize the component to prevent unnecessary re-renders
+export const ResultsViewer = memo(ResultsViewerComponent);

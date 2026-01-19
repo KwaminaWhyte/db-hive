@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -334,16 +334,28 @@ export function SchemaExplorer({
     });
   }, [schemas, tablesBySchema, searchQuery]);
 
-  // Get filtered tables for a specific schema
-  const getFilteredTablesForSchema = (schemaName: string) => {
-    const schemaTables = tablesBySchema[schemaName] || [];
-    if (!searchQuery.trim()) return schemaTables;
-
+  // Memoize filtered tables per schema to prevent recalculation on every render
+  const filteredTablesBySchema = useMemo(() => {
+    const result: Record<string, TableInfo[]> = {};
     const query = searchQuery.toLowerCase().trim();
-    return schemaTables.filter((table) =>
-      table.name.toLowerCase().includes(query)
-    );
-  };
+
+    for (const schemaName of Object.keys(tablesBySchema)) {
+      const schemaTables = tablesBySchema[schemaName] || [];
+      if (!query) {
+        result[schemaName] = schemaTables;
+      } else {
+        result[schemaName] = schemaTables.filter((table) =>
+          table.name.toLowerCase().includes(query)
+        );
+      }
+    }
+    return result;
+  }, [tablesBySchema, searchQuery]);
+
+  // Get filtered tables for a specific schema (now just a lookup)
+  const getFilteredTablesForSchema = useCallback((schemaName: string) => {
+    return filteredTablesBySchema[schemaName] || [];
+  }, [filteredTablesBySchema]);
 
   return (
     <div className="h-full flex flex-col">

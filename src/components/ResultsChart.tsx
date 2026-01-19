@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, memo } from "react";
 import {
   BarChart,
   Bar,
@@ -63,7 +63,7 @@ const CHART_COLORS = [
   "#6366f1", // indigo
 ];
 
-export function ResultsChart({ columns, rows }: ResultsChartProps) {
+function ResultsChartComponent({ columns, rows }: ResultsChartProps) {
   const [chartType, setChartType] = useState<ChartType>("bar");
   const [xAxisColumn, setXAxisColumn] = useState<string>("");
   const [yAxisColumns, setYAxisColumns] = useState<string[]>([]);
@@ -578,3 +578,6 @@ export function ResultsChart({ columns, rows }: ResultsChartProps) {
     </div>
   );
 }
+
+// Memoize the component to prevent unnecessary re-renders
+export const ResultsChart = memo(ResultsChartComponent);

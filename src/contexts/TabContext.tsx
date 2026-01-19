@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, ReactNode, useCallback, useEffect, useMemo } from "react";
 
 /**
  * Tab State Interface
@@ -126,17 +126,18 @@ export function TabProvider({ children, connectionId, currentDatabase }: TabProv
     setTabStates(states);
   }, []);
 
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  const contextValue = useMemo(() => ({
+    getTabState,
+    updateTabState,
+    createTabState,
+    removeTabState,
+    getAllTabStates,
+    restoreTabStates,
+  }), [getTabState, updateTabState, createTabState, removeTabState, getAllTabStates, restoreTabStates]);
+
   return (
-    <TabContext.Provider
-      value={{
-        getTabState,
-        updateTabState,
-        createTabState,
-        removeTabState,
-        getAllTabStates,
-        restoreTabStates,
-      }}
-    >
+    <TabContext.Provider value={contextValue}>
       {children}
     </TabContext.Provider>
   );

@@ -170,18 +170,24 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
   // Fetch metadata (connections, databases)
   const fetchMetadata = useCallback(async () => {
     try {
-      // Fetch available connections
-      const connections = await invoke<{ id: string; name: string }[]>(
-        'list_connections'
+      // Fetch available connections using correct command name
+      const profiles = await invoke<{ id: string; name: string }[]>(
+        'list_connection_profiles'
       );
-      setAvailableConnections(connections);
+      // Map profiles to connection list format
+      setAvailableConnections(profiles.map(p => ({ id: p.id, name: p.name })));
 
       // Fetch available databases (if a connection is selected)
       if (filters.connectionId) {
-        const databases = await invoke<string[]>('list_databases', {
-          connectionId: filters.connectionId,
-        });
-        setAvailableDatabases(databases);
+        try {
+          const databases = await invoke<string[]>('get_databases', {
+            connectionId: filters.connectionId,
+          });
+          setAvailableDatabases(databases);
+        } catch {
+          // Connection might not be active, ignore database fetch error
+          setAvailableDatabases([]);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch metadata:', error);

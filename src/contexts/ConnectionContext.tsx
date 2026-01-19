@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode } from "react";
+import { createContext, useContext, useState, ReactNode, useCallback, useMemo } from "react";
 import { ConnectionProfile } from "@/types/database";
 
 interface ConnectionContextValue {
@@ -19,30 +19,36 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [connectionProfile, setConnectionProfile] = useState<
     ConnectionProfile | undefined
   >(undefined);
-  const [currentDatabase, setCurrentDatabase] = useState<string>("");
+  const [currentDatabase, setCurrentDatabaseState] = useState<string>("");
 
-  const setConnection = (id: string, profile: ConnectionProfile) => {
+  // Memoize callbacks to prevent unnecessary re-renders
+  const setConnection = useCallback((id: string, profile: ConnectionProfile) => {
     setConnectionId(id);
     setConnectionProfile(profile);
-  };
+  }, []);
 
-  const disconnect = () => {
+  const setCurrentDatabase = useCallback((db: string) => {
+    setCurrentDatabaseState(db);
+  }, []);
+
+  const disconnect = useCallback(() => {
     setConnectionId(null);
     setConnectionProfile(undefined);
-    setCurrentDatabase("");
-  };
+    setCurrentDatabaseState("");
+  }, []);
+
+  // Memoize context value to prevent unnecessary re-renders of consumers
+  const contextValue = useMemo(() => ({
+    connectionId,
+    connectionProfile,
+    currentDatabase,
+    setConnection,
+    setCurrentDatabase,
+    disconnect,
+  }), [connectionId, connectionProfile, currentDatabase, setConnection, setCurrentDatabase, disconnect]);
 
   return (
-    <ConnectionContext.Provider
-      value={{
-        connectionId,
-        connectionProfile,
-        currentDatabase,
-        setConnection,
-        setCurrentDatabase,
-        disconnect,
-      }}
-    >
+    <ConnectionContext.Provider value={contextValue}>
       {children}
     </ConnectionContext.Provider>
   );

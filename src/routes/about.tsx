@@ -29,10 +29,10 @@ export const Route = createFileRoute("/about")({
 
 function AboutRoute() {
   const navigate = useNavigate({ from: "/about" });
-  const [previousRoute, setPreviousRoute] = useState<string>("/");
+  const [previousRoute, setPreviousRoute] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const version = "0.12.0-beta";
+  const version = "0.16.0-beta";
 
   // Store the previous route before navigating to about
   useEffect(() => {
@@ -45,12 +45,29 @@ function AboutRoute() {
   }, []);
 
   const handleBack = () => {
-    // Navigate back to the previous route
-    if (previousRoute === "/query") {
-      navigate({ to: "/query" as any });
-    } else if (previousRoute === "/settings") {
-      navigate({ to: "/settings" });
+    // If we have a saved previous route, navigate there
+    if (previousRoute) {
+      // Handle routes with dynamic segments or search params
+      if (previousRoute.startsWith("/query")) {
+        navigate({ to: "/query" as any });
+      } else if (previousRoute.startsWith("/settings")) {
+        navigate({ to: "/settings" });
+      } else if (previousRoute.startsWith("/er-diagram")) {
+        navigate({ to: previousRoute as any });
+      } else if (previousRoute.startsWith("/activity")) {
+        navigate({ to: "/activity" as any });
+      } else if (previousRoute.startsWith("/visual-query")) {
+        navigate({ to: "/visual-query" as any });
+      } else if (previousRoute.startsWith("/plugins")) {
+        navigate({ to: "/plugins" });
+      } else {
+        navigate({ to: "/" });
+      }
+    } else if (window.history.length > 1) {
+      // Try browser history if no saved route
+      window.history.back();
     } else {
+      // Fallback to home
       navigate({ to: "/" });
     }
   };
