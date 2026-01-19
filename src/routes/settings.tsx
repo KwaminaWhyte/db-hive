@@ -26,8 +26,8 @@ function SettingsRoute() {
     // Navigate back to the previous route
     if (previousRoute === "/query") {
       navigate({ to: "/query" as any });
-    } else if (previousRoute === "/connections") {
-      navigate({ to: "/connections", search: { mode: undefined, profileId: undefined } });
+    } else if (previousRoute === "/connections" || previousRoute === "/") {
+      navigate({ to: "/" });
     } else {
       navigate({ to: "/" });
     }

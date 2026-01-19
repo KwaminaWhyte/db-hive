@@ -55,7 +55,7 @@
     "tailwindcss": "^4.1.17"
   },
   "devDependencies": {
-    "@tanstack/router-devtools": "^1.139.0",
+    "@tanstack/react-router-devtools": "^1.139.0",
     "@tanstack/router-plugin": "^1.139.0",
     "@tauri-apps/cli": "^2",
     "@types/node": "^24.10.1",

@@ -1,5 +1,5 @@
 import { Outlet, createRootRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/router-devtools";
+import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { ConnectionProvider, useConnectionContext } from "@/contexts/ConnectionContext";
 import { TabProvider } from "@/contexts/TabContext";

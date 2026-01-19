@@ -36,21 +36,15 @@ function ConnectedLayout() {
   } = useConnectionContext();
   const { getTabState, updateTabState, createTabState } = useTabContext();
 
-  // Guard: If not connected, redirect to connections page
+  // Guard: If not connected, redirect to home page
   if (!connectionId || !connectionProfile) {
-    navigate({
-      to: "/connections",
-      search: { mode: undefined, profileId: undefined },
-    });
+    navigate({ to: "/" });
     return null;
   }
 
   const handleDisconnect = () => {
     disconnect();
-    navigate({
-      to: "/connections",
-      search: { mode: undefined, profileId: undefined },
-    });
+    navigate({ to: "/" });
   };
 
   const handleTableSelect = (schema: string, tableName: string) => {

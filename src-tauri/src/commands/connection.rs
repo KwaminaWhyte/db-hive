@@ -526,10 +526,29 @@ pub async fn connect_to_database(
     {
         let mut state = state.lock().unwrap();
         state.add_connection(profile_id.clone(), connection);
-        state.connection_passwords.insert(profile_id.clone(), password);
+        state.connection_passwords.insert(profile_id.clone(), password.clone());
 
         // Save password to persistent storage
         state.save_passwords_to_store(&app)?;
+    }
+
+    // Also save password to OS keyring for next time
+    // This ensures password is saved even if the initial save from frontend failed
+    if !password.is_empty() {
+        if let Err(e) = crate::credentials::CredentialManager::save_password(&profile_id, &password) {
+            eprintln!("Warning: Failed to save password to keyring: {}", e);
+            // Don't fail the connection if keyring save fails
+        }
+    }
+
+    // Save SSH password to keyring if provided
+    if let Some(ref ssh_pwd) = ssh_password {
+        if !ssh_pwd.is_empty() {
+            if let Err(e) = crate::credentials::CredentialManager::save_ssh_password(&profile_id, ssh_pwd) {
+                eprintln!("Warning: Failed to save SSH password to keyring: {}", e);
+                // Don't fail the connection if keyring save fails
+            }
+        }
     }
 
     // Record successful connection (update metadata)
