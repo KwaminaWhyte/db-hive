@@ -7,7 +7,6 @@ import {
 } from "../types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -57,15 +56,10 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectingId, setConnectingId] = useState<string | null>(null);
-  const [passwordPrompt, setPasswordPrompt] = useState<{
-    profileId: string;
-    profileName: string;
-  } | null>(null);
   const [deletePrompt, setDeletePrompt] = useState<{
     profileId: string;
     profileName: string;
   } | null>(null);
-  const [password, setPassword] = useState("");
 
   // New state for enhanced features
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -157,141 +151,34 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
 
   // Handle connect button click
   const handleConnectClick = async (profile: ConnectionProfile) => {
-    try {
-      const savedPassword = await invoke<string | null>("get_saved_password", {
-        profileId: profile.id,
-      });
-
-      // Get SSH password if SSH tunnel is configured with password auth
-      let sshPassword: string | null = null;
-      if (profile.sshTunnel && profile.sshTunnel.authMethod === "Password") {
-        try {
-          sshPassword = await invoke<string | null>("get_ssh_password", {
-            profileId: profile.id,
-          });
-        } catch (err) {
-          console.error("Failed to get SSH password:", err);
-        }
-      }
-
-      if (savedPassword) {
-        setConnectingId(profile.id);
-        setError(null);
-
-        try {
-          const connectionId = await invoke<string>("connect_to_database", {
-            profileId: profile.id,
-            password: savedPassword,
-            sshPassword,
-          });
-
-          onConnected?.(connectionId, profile);
-        } catch (err) {
-          const errorMessage =
-            typeof err === "string"
-              ? err
-              : (err as any)?.message || String(err);
-          setError(`Failed to connect: ${errorMessage}`);
-        } finally {
-          setConnectingId(null);
-        }
-      } else {
-        if (profile.driver === "MongoDb" || profile.driver === "Sqlite") {
-          setConnectingId(profile.id);
-          setError(null);
-
-          try {
-            const connectionId = await invoke<string>("connect_to_database", {
-              profileId: profile.id,
-              password: "",
-              sshPassword,
-            });
-
-            onConnected?.(connectionId, profile);
-          } catch (err) {
-            const errorMessage =
-              typeof err === "string"
-                ? err
-                : (err as any)?.message || String(err);
-            setError(`Failed to connect: ${errorMessage}`);
-          } finally {
-            setConnectingId(null);
-          }
-        } else {
-          setPasswordPrompt({
-            profileId: profile.id,
-            profileName: profile.name,
-          });
-          setPassword("");
-        }
-      }
-    } catch (err) {
-      if (profile.driver === "MongoDb" || profile.driver === "Sqlite") {
-        setConnectingId(profile.id);
-        setError(null);
-
-        try {
-          const connectionId = await invoke<string>("connect_to_database", {
-            profileId: profile.id,
-            password: "",
-            sshPassword: null,
-          });
-
-          onConnected?.(connectionId, profile);
-        } catch (err) {
-          const errorMessage =
-            typeof err === "string"
-              ? err
-              : (err as any)?.message || String(err);
-          setError(`Failed to connect: ${errorMessage}`);
-        } finally {
-          setConnectingId(null);
-        }
-      } else {
-        setPasswordPrompt({
-          profileId: profile.id,
-          profileName: profile.name,
-        });
-        setPassword("");
-      }
-    }
-  };
-
-  // Handle connect with password
-  const handleConnect = async () => {
-    if (!passwordPrompt || !password) return;
-
-    setConnectingId(passwordPrompt.profileId);
+    setConnectingId(profile.id);
     setError(null);
 
     try {
-      const profile = profiles.find((p) => p.id === passwordPrompt.profileId);
+      let savedPassword: string | null = null;
+      try {
+        savedPassword = await invoke<string | null>("get_saved_password", { profileId: profile.id });
+      } catch (err) {
+        console.error("Failed to retrieve saved password:", err);
+      }
+
       let sshPassword: string | null = null;
-      if (profile?.sshTunnel && profile.sshTunnel.authMethod === "Password") {
+      if (profile.sshTunnel && profile.sshTunnel.authMethod === "Password") {
         try {
-          sshPassword = await invoke<string | null>("get_ssh_password", {
-            profileId: passwordPrompt.profileId,
-          });
+          sshPassword = await invoke<string | null>("get_ssh_password", { profileId: profile.id });
         } catch (err) {
           console.error("Failed to get SSH password:", err);
         }
       }
 
       const connectionId = await invoke<string>("connect_to_database", {
-        profileId: passwordPrompt.profileId,
-        password,
+        profileId: profile.id,
+        password: savedPassword || "",
         sshPassword,
       });
-
-      if (profile) {
-        onConnected?.(connectionId, profile);
-      }
-
-      setPasswordPrompt(null);
-      setPassword("");
+      onConnected?.(connectionId, profile);
     } catch (err) {
-      const errorMessage =
-        typeof err === "string" ? err : (err as any)?.message || String(err);
+      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Failed to connect: ${errorMessage}`);
     } finally {
       setConnectingId(null);
@@ -579,41 +466,6 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
           </div>
         )}
       </div>
-
-      {/* Password Prompt Dialog */}
-      <Dialog open={!!passwordPrompt} onOpenChange={() => setPasswordPrompt(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Enter Password</DialogTitle>
-            <DialogDescription>
-              Enter the password for <strong>{passwordPrompt?.profileName}</strong>
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleConnect()}
-                autoFocus
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPasswordPrompt(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleConnect} disabled={!password}>
-              Connect
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deletePrompt} onOpenChange={() => setDeletePrompt(null)}>

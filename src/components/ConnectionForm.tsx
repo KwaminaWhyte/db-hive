@@ -15,7 +15,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -49,7 +48,6 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
 
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [enableKeychain, setEnableKeychain] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<string | null>(null);
@@ -71,7 +69,6 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   });
   const [sshPassword, setSshPassword] = useState("");
   const [showSshPassword, setShowSshPassword] = useState(false);
-  const [enableSshKeychain, setEnableSshKeychain] = useState(true);
 
   // Update form when profile changes
   useEffect(() => {
@@ -272,14 +269,18 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
 
       if (status === "Connected") {
         setTestStatus("Connection successful!");
-        if (testProfile.id && enableKeychain) {
+        if (testProfile.id && password) {
           try {
             await invoke("save_password", { profileId: testProfile.id, password });
-            if (sshMode === "ssh" && sshConfig.authMethod === "Password" && sshPassword && enableSshKeychain) {
-              await invoke("save_ssh_password", { profileId: testProfile.id, sshPassword });
-            }
           } catch (err) {
             console.error("Failed to save password:", err);
+          }
+        }
+        if (testProfile.id && sshMode === "ssh" && sshConfig.authMethod === "Password" && sshPassword) {
+          try {
+            await invoke("save_ssh_password", { profileId: testProfile.id, sshPassword });
+          } catch (err) {
+            console.error("Failed to save SSH password:", err);
           }
         }
       } else {
@@ -318,14 +319,18 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         profileId = await invoke<string>("create_connection_profile", { profile: saveProfile });
       }
 
-      if (password && enableKeychain) {
+      if (password) {
         try {
           await invoke("save_password", { profileId, password });
-          if (sshMode === "ssh" && sshConfig.authMethod === "Password" && sshPassword && enableSshKeychain) {
-            await invoke("save_ssh_password", { profileId, sshPassword });
-          }
         } catch (err) {
-          console.error("Failed to save password:", err);
+          console.error("Failed to save password to keyring:", err);
+        }
+      }
+      if (sshMode === "ssh" && sshConfig.authMethod === "Password" && sshPassword) {
+        try {
+          await invoke("save_ssh_password", { profileId, sshPassword });
+        } catch (err) {
+          console.error("Failed to save SSH password:", err);
         }
       }
 
@@ -519,14 +524,9 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
                 </Button>
               </div>
               <div className="flex items-center gap-2 mt-1.5">
-                <Checkbox
-                  id="enable-keychain"
-                  checked={enableKeychain}
-                  onCheckedChange={(checked) => setEnableKeychain(checked === true)}
-                />
-                <label htmlFor="enable-keychain" className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1">
+                <label className="text-xs text-muted-foreground flex items-center gap-1">
                   <Key className="h-3 w-3" />
-                  Enable keychain
+                  Saved to keychain
                 </label>
               </div>
             </div>
@@ -689,14 +689,9 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
                       </Button>
                     </div>
                     <div className="flex items-center gap-2 mt-1.5">
-                      <Checkbox
-                        id="enable-ssh-keychain"
-                        checked={enableSshKeychain}
-                        onCheckedChange={(checked) => setEnableSshKeychain(checked === true)}
-                      />
-                      <label htmlFor="enable-ssh-keychain" className="text-xs text-muted-foreground cursor-pointer flex items-center gap-1">
+                      <label className="text-xs text-muted-foreground flex items-center gap-1">
                         <Key className="h-3 w-3" />
-                        Enable keychain
+                        Saved to keychain
                       </label>
                     </div>
                     <p className="text-xs text-muted-foreground">

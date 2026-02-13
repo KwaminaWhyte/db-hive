@@ -44,7 +44,6 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { ConnectionCard } from "./ConnectionCard";
 import { ConnectionTreeView } from "./ConnectionTreeView";
-import { Label } from "./ui/label";
 import { NoConnectionsEmpty, NoSearchResultsEmpty } from "@/components/empty-states";
 import { ConnectionLostError } from "@/components/ConnectionLostError";
 
@@ -74,15 +73,10 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
     profileName: string;
     message: string;
   } | null>(null);
-  const [passwordPrompt, setPasswordPrompt] = useState<{
-    profileId: string;
-    profileName: string;
-  } | null>(null);
   const [deletePrompt, setDeletePrompt] = useState<{
     profileId: string;
     profileName: string;
   } | null>(null);
-  const [password, setPassword] = useState("");
 
   // Dashboard state
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
@@ -208,181 +202,40 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
 
   // Handle connect
   const handleConnectClick = async (profile: ConnectionProfile) => {
+    setConnectingId(profile.id);
+    setError(null);
+
     try {
-      const savedPassword = await invoke<string | null>("get_saved_password", {
-        profileId: profile.id,
-      });
+      let savedPassword: string | null = null;
+      try {
+        savedPassword = await invoke<string | null>("get_saved_password", { profileId: profile.id });
+      } catch (err) {
+        console.error("Failed to retrieve saved password:", err);
+      }
 
       let sshPassword: string | null = null;
       if (profile.sshTunnel && profile.sshTunnel.authMethod === "Password") {
         try {
-          sshPassword = await invoke<string | null>("get_ssh_password", {
-            profileId: profile.id,
-          });
-        } catch (err) {
-          console.error("Failed to get SSH password:", err);
-        }
-      }
-
-      if (savedPassword) {
-        setConnectingId(profile.id);
-        setError(null);
-
-        try {
-          const connectionId = await invoke<string>("connect_to_database", {
-            profileId: profile.id,
-            password: savedPassword,
-            sshPassword,
-          });
-          onConnected?.(connectionId, profile);
-        } catch (err) {
-          const errorMessage =
-            typeof err === "string"
-              ? err
-              : (err as any)?.message || String(err);
-
-          // Check if this is a connection error from Rust DbError
-          const isConnectionError = (err as any)?.kind === "connection" ||
-                                   errorMessage.toLowerCase().includes("connection");
-
-          if (isConnectionError) {
-            setConnectionError({
-              profileId: profile.id,
-              profileName: profile.name,
-              message: errorMessage,
-            });
-          } else {
-            setError(`Failed to connect: ${errorMessage}`);
-          }
-        } finally {
-          setConnectingId(null);
-        }
-      } else {
-        if (profile.driver === "MongoDb" || profile.driver === "Sqlite") {
-          setConnectingId(profile.id);
-          setError(null);
-
-          try {
-            const connectionId = await invoke<string>("connect_to_database", {
-              profileId: profile.id,
-              password: "",
-              sshPassword,
-            });
-            onConnected?.(connectionId, profile);
-          } catch (err) {
-            const errorMessage =
-              typeof err === "string"
-                ? err
-                : (err as any)?.message || String(err);
-
-            // Check if this is a connection error from Rust DbError
-            const isConnectionError = (err as any)?.kind === "connection" ||
-                                     errorMessage.toLowerCase().includes("connection");
-
-            if (isConnectionError) {
-              setConnectionError({
-                profileId: profile.id,
-                profileName: profile.name,
-                message: errorMessage,
-              });
-            } else {
-              setError(`Failed to connect: ${errorMessage}`);
-            }
-          } finally {
-            setConnectingId(null);
-          }
-        } else {
-          setPasswordPrompt({
-            profileId: profile.id,
-            profileName: profile.name,
-          });
-          setPassword("");
-        }
-      }
-    } catch (err) {
-      if (profile.driver === "MongoDb" || profile.driver === "Sqlite") {
-        setConnectingId(profile.id);
-        setError(null);
-
-        try {
-          const connectionId = await invoke<string>("connect_to_database", {
-            profileId: profile.id,
-            password: "",
-            sshPassword: null,
-          });
-          onConnected?.(connectionId, profile);
-        } catch (err) {
-          const errorMessage =
-            typeof err === "string"
-              ? err
-              : (err as any)?.message || String(err);
-
-          // Check if this is a connection error from Rust DbError
-          const isConnectionError = (err as any)?.kind === "connection" ||
-                                   errorMessage.toLowerCase().includes("connection");
-
-          if (isConnectionError) {
-            setConnectionError({
-              profileId: profile.id,
-              profileName: profile.name,
-              message: errorMessage,
-            });
-          } else {
-            setError(`Failed to connect: ${errorMessage}`);
-          }
-        } finally {
-          setConnectingId(null);
-        }
-      } else {
-        setPasswordPrompt({ profileId: profile.id, profileName: profile.name });
-        setPassword("");
-      }
-    }
-  };
-
-  // Handle connect with password
-  const handleConnect = async () => {
-    if (!passwordPrompt || !password) return;
-
-    setConnectingId(passwordPrompt.profileId);
-    setError(null);
-
-    // Get profile before try block so it's accessible in catch
-    const profile = profiles.find((p) => p.id === passwordPrompt.profileId);
-
-    try {
-      let sshPassword: string | null = null;
-      if (profile?.sshTunnel && profile.sshTunnel.authMethod === "Password") {
-        try {
-          sshPassword = await invoke<string | null>("get_ssh_password", {
-            profileId: passwordPrompt.profileId,
-          });
+          sshPassword = await invoke<string | null>("get_ssh_password", { profileId: profile.id });
         } catch (err) {
           console.error("Failed to get SSH password:", err);
         }
       }
 
       const connectionId = await invoke<string>("connect_to_database", {
-        profileId: passwordPrompt.profileId,
-        password,
+        profileId: profile.id,
+        password: savedPassword || "",
         sshPassword,
       });
-
-      if (profile) {
-        onConnected?.(connectionId, profile);
-      }
-
-      setPasswordPrompt(null);
-      setPassword("");
+      onConnected?.(connectionId, profile);
     } catch (err) {
-      const errorMessage =
-        typeof err === "string" ? err : (err as any)?.message || String(err);
+      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
 
       // Check if this is a connection error from Rust DbError
       const isConnectionError = (err as any)?.kind === "connection" ||
                                errorMessage.toLowerCase().includes("connection");
 
-      if (isConnectionError && profile) {
+      if (isConnectionError) {
         setConnectionError({
           profileId: profile.id,
           profileName: profile.name,
@@ -800,45 +653,6 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
           )}
         </div>
       </div>
-
-      {/* Password Prompt Dialog */}
-      <Dialog
-        open={!!passwordPrompt}
-        onOpenChange={() => setPasswordPrompt(null)}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Enter Password</DialogTitle>
-            <DialogDescription>
-              Enter the password for{" "}
-              <strong>{passwordPrompt?.profileName}</strong>
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleConnect()}
-                autoFocus
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPasswordPrompt(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleConnect} disabled={!password}>
-              Connect
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deletePrompt} onOpenChange={() => setDeletePrompt(null)}>

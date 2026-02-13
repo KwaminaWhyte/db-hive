@@ -124,15 +124,10 @@ function HomeRoute() {
   } | null>(null);
 
   // Dialogs
-  const [passwordPrompt, setPasswordPrompt] = useState<{
-    profileId: string;
-    profileName: string;
-  } | null>(null);
   const [deletePrompt, setDeletePrompt] = useState<{
     profileId: string;
     profileName: string;
   } | null>(null);
-  const [password, setPassword] = useState("");
 
   // Connection string for new connection view
   const [connectionString, setConnectionString] = useState("");
@@ -216,11 +211,21 @@ function HomeRoute() {
 
   // Handle connect click
   const handleConnectClick = async (profile: ConnectionProfile) => {
-    try {
-      const savedPassword = await invoke<string | null>("get_saved_password", {
-        profileId: profile.id,
-      });
+    setConnectingId(profile.id);
+    setError(null);
 
+    try {
+      // Retrieve saved password (keyring or in-memory fallback)
+      let savedPassword: string | null = null;
+      try {
+        savedPassword = await invoke<string | null>("get_saved_password", {
+          profileId: profile.id,
+        });
+      } catch (err) {
+        console.error("Failed to retrieve saved password:", err);
+      }
+
+      // Retrieve SSH password if needed
       let sshPassword: string | null = null;
       if (profile.sshTunnel && profile.sshTunnel.authMethod === "Password") {
         try {
@@ -232,97 +237,15 @@ function HomeRoute() {
         }
       }
 
-      if (savedPassword) {
-        setConnectingId(profile.id);
-        setError(null);
-        try {
-          const connectionId = await invoke<string>("connect_to_database", {
-            profileId: profile.id,
-            password: savedPassword,
-            sshPassword,
-          });
-          handleConnected(connectionId, profile);
-        } catch (err) {
-          handleConnectionError(err, profile);
-        } finally {
-          setConnectingId(null);
-        }
-      } else if (profile.driver === "MongoDb" || profile.driver === "Sqlite") {
-        setConnectingId(profile.id);
-        setError(null);
-        try {
-          const connectionId = await invoke<string>("connect_to_database", {
-            profileId: profile.id,
-            password: "",
-            sshPassword,
-          });
-          handleConnected(connectionId, profile);
-        } catch (err) {
-          handleConnectionError(err, profile);
-        } finally {
-          setConnectingId(null);
-        }
-      } else {
-        setPasswordPrompt({ profileId: profile.id, profileName: profile.name });
-        setPassword("");
-      }
-    } catch (err) {
-      if (profile.driver === "MongoDb" || profile.driver === "Sqlite") {
-        setConnectingId(profile.id);
-        try {
-          const connectionId = await invoke<string>("connect_to_database", {
-            profileId: profile.id,
-            password: "",
-            sshPassword: null,
-          });
-          handleConnected(connectionId, profile);
-        } catch (connErr) {
-          handleConnectionError(connErr, profile);
-        } finally {
-          setConnectingId(null);
-        }
-      } else {
-        setPasswordPrompt({ profileId: profile.id, profileName: profile.name });
-        setPassword("");
-      }
-    }
-  };
-
-  // Handle connect with password
-  const handleConnect = async () => {
-    if (!passwordPrompt || !password) return;
-    setConnectingId(passwordPrompt.profileId);
-    setError(null);
-    const profile = profiles.find((p) => p.id === passwordPrompt.profileId);
-
-    try {
-      let sshPassword: string | null = null;
-      if (profile?.sshTunnel && profile.sshTunnel.authMethod === "Password") {
-        try {
-          sshPassword = await invoke<string | null>("get_ssh_password", {
-            profileId: passwordPrompt.profileId,
-          });
-        } catch (err) {
-          console.error("Failed to get SSH password:", err);
-        }
-      }
-
+      // Connect using saved password or empty string
       const connectionId = await invoke<string>("connect_to_database", {
-        profileId: passwordPrompt.profileId,
-        password,
+        profileId: profile.id,
+        password: savedPassword || "",
         sshPassword,
       });
-
-      if (profile) handleConnected(connectionId, profile);
-      setPasswordPrompt(null);
-      setPassword("");
+      handleConnected(connectionId, profile);
     } catch (err) {
-      if (profile) {
-        handleConnectionError(err, profile);
-      } else {
-        const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
-        setError(`Failed to connect: ${errorMessage}`);
-      }
+      handleConnectionError(err, profile);
     } finally {
       setConnectingId(null);
     }
@@ -703,36 +626,6 @@ function HomeRoute() {
           </div>
         </footer>
       </div>
-
-      {/* Password Prompt Dialog */}
-      <Dialog open={!!passwordPrompt} onOpenChange={(open) => !open && setPasswordPrompt(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Connect to {passwordPrompt?.profileName}</DialogTitle>
-            <DialogDescription>Enter the password to connect to this database.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 py-4">
-            <Label htmlFor="connect-password">Password</Label>
-            <Input
-              type="password"
-              id="connect-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleConnect()}
-              placeholder="Enter password"
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPasswordPrompt(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleConnect} disabled={!password || connectingId !== null}>
-              {connectingId ? "Connecting..." : "Connect"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={!!deletePrompt} onOpenChange={(open) => !open && setDeletePrompt(null)}>
