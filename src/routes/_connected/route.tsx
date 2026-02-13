@@ -1,9 +1,10 @@
+import { useState, useEffect, useCallback } from "react";
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
 import { SchemaExplorer } from "@/components/SchemaExplorer";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { useTabContext } from "@/contexts/TabContext";
 import { Button } from "@/components/ui/button";
-import { LogOut, Database } from "lucide-react";
+import { LogOut, Database, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 /**
  * Connected Layout Route
@@ -35,6 +36,23 @@ function ConnectedLayout() {
     disconnect,
   } = useConnectionContext();
   const { getTabState, updateTabState, createTabState } = useTabContext();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => !prev);
+  }, []);
+
+  // Keyboard shortcut: Cmd+B / Ctrl+B to toggle sidebar
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "b") {
+        e.preventDefault();
+        toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [toggleSidebar]);
 
   // Guard: If not connected, redirect to home page
   if (!connectionId || !connectionProfile) {
@@ -203,16 +221,39 @@ function ConnectedLayout() {
       {/* Main Content Area (with top padding for titlebar + connection bar) */}
       <div className="flex-1 flex pt-8">
         {/* Left Sidebar - Schema Explorer */}
-        <div className="w-80 border-r overflow-y-auto">
-          <SchemaExplorer
-            connectionId={connectionId}
-            connectionProfile={connectionProfile}
-            onDisconnect={handleDisconnect}
-            onTableSelect={handleTableSelect}
-            onDatabaseChange={setCurrentDatabase}
-            onOpenERDiagram={handleOpenERDiagram}
-            onExecuteQuery={handleExecuteQuery}
-          />
+        <div
+          className={`border-r overflow-hidden transition-[width] duration-200 ease-in-out ${
+            sidebarCollapsed ? "w-0 border-r-0" : "w-80"
+          }`}
+        >
+          <div className="w-80 h-full overflow-y-auto">
+            <SchemaExplorer
+              connectionId={connectionId}
+              connectionProfile={connectionProfile}
+              onDisconnect={handleDisconnect}
+              onTableSelect={handleTableSelect}
+              onDatabaseChange={setCurrentDatabase}
+              onOpenERDiagram={handleOpenERDiagram}
+              onExecuteQuery={handleExecuteQuery}
+            />
+          </div>
+        </div>
+
+        {/* Sidebar Toggle Button */}
+        <div className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSidebar}
+            className="absolute top-2 -left-3 z-10 h-6 w-6 rounded-sm border border-border bg-background hover:bg-accent"
+            title={sidebarCollapsed ? "Show sidebar (Cmd+B)" : "Hide sidebar (Cmd+B)"}
+          >
+            {sidebarCollapsed ? (
+              <PanelLeftOpen className="h-3.5 w-3.5" />
+            ) : (
+              <PanelLeftClose className="h-3.5 w-3.5" />
+            )}
+          </Button>
         </div>
 
         {/* Main Content - Child Routes */}

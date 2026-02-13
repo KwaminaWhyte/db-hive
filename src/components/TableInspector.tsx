@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -37,6 +37,7 @@ import {
   Save,
   Trash2,
   Plus,
+  XCircle,
 } from "lucide-react";
 import { TableSchema, QueryExecutionResult } from "@/types";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -45,6 +46,79 @@ import { EditableCell } from "./EditableCell";
 import { TransactionPreview } from "./TransactionPreview";
 import { useTableEditor } from "@/hooks/useTableEditor";
 import { toast } from "sonner";
+
+/** Returns a small styled badge indicating the column's data type */
+function getColumnTypeIcon(dataType: string): React.ReactNode {
+  const type = dataType.toLowerCase();
+  if (
+    type.includes("int") ||
+    type.includes("serial") ||
+    type.includes("numeric") ||
+    type.includes("decimal") ||
+    type.includes("float") ||
+    type.includes("double") ||
+    type.includes("real") ||
+    type.includes("money")
+  ) {
+    return (
+      <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 px-1 rounded leading-none">
+        #
+      </span>
+    );
+  }
+  if (type.includes("bool")) {
+    return (
+      <span className="text-[10px] font-bold text-purple-500 bg-purple-500/10 px-1 rounded leading-none">
+        B
+      </span>
+    );
+  }
+  if (type.includes("json")) {
+    return (
+      <span className="text-[10px] font-bold text-orange-500 bg-orange-500/10 px-1 rounded leading-none">
+        {"{}"}
+      </span>
+    );
+  }
+  if (
+    type.includes("date") ||
+    type.includes("time") ||
+    type.includes("timestamp")
+  ) {
+    return (
+      <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-1 rounded leading-none">
+        D
+      </span>
+    );
+  }
+  if (type.includes("uuid")) {
+    return (
+      <span className="text-[10px] font-bold text-pink-500 bg-pink-500/10 px-1 rounded leading-none">
+        U
+      </span>
+    );
+  }
+  if (type.includes("bytea") || type.includes("blob") || type.includes("binary")) {
+    return (
+      <span className="text-[10px] font-bold text-yellow-600 bg-yellow-500/10 px-1 rounded leading-none">
+        0x
+      </span>
+    );
+  }
+  if (type.includes("array") || type.includes("[]")) {
+    return (
+      <span className="text-[10px] font-bold text-cyan-500 bg-cyan-500/10 px-1 rounded leading-none">
+        []
+      </span>
+    );
+  }
+  // Default: text/varchar/char type
+  return (
+    <span className="text-[10px] font-bold text-muted-foreground bg-muted px-1 rounded leading-none">
+      T
+    </span>
+  );
+}
 
 interface TableInspectorProps {
   connectionId: string;
@@ -372,6 +446,73 @@ export function TableInspector({
     }
   };
 
+  // Clear selection when page changes
+  useEffect(() => {
+    editor.clearSelection();
+  }, [currentPage]);
+
+  // Clear selection when data refreshes
+  useEffect(() => {
+    editor.clearSelection();
+  }, [sampleData]);
+
+  // Clear selection when edit mode is toggled off
+  useEffect(() => {
+    if (!editMode) {
+      editor.clearSelection();
+    }
+  }, [editMode]);
+
+  // Compute header checkbox state (for indeterminate support)
+  const totalSelectableRows = (sampleData?.rows.length || 0) + editor.newRows.size;
+  const allRowsSelected = totalSelectableRows > 0 && editor.selectedRows.size === totalSelectableRows;
+  const someRowsSelected = editor.selectedRows.size > 0 && !allRowsSelected;
+  const headerCheckboxState: boolean | "indeterminate" = allRowsSelected
+    ? true
+    : someRowsSelected
+      ? "indeterminate"
+      : false;
+
+  // Copy selected rows as JSON to clipboard
+  const copySelectedRowsAsJson = useCallback(async () => {
+    if (!sampleData || editor.selectedRows.size === 0) return;
+
+    const selectedData: Record<string, any>[] = [];
+
+    editor.selectedRows.forEach((rowIndex) => {
+      if (rowIndex < 0) {
+        // New row
+        const newRow = editor.newRows.get(rowIndex);
+        if (newRow) {
+          const obj: Record<string, any> = {};
+          newRow.values.forEach((value, key) => {
+            obj[key] = value;
+          });
+          selectedData.push(obj);
+        }
+      } else {
+        // Existing row
+        const row = sampleData.rows[rowIndex];
+        if (row) {
+          const obj: Record<string, any> = {};
+          sampleData.columns.forEach((col, i) => {
+            obj[col] = row[i];
+          });
+          selectedData.push(obj);
+        }
+      }
+    });
+
+    const json = JSON.stringify(selectedData, null, 2);
+    await copyToClipboard(json, `${selectedData.length} row${selectedData.length === 1 ? '' : 's'} copied as JSON`);
+  }, [sampleData, editor.selectedRows, editor.newRows, copyToClipboard]);
+
+  // Bulk delete selected rows by queuing them through the editor's deleteRow pattern
+  const handleBulkDeleteFromBar = useCallback(() => {
+    if (editor.selectedRows.size === 0) return;
+    setShowDeleteConfirm(true);
+  }, [editor.selectedRows.size]);
+
   // Toggle edit mode
   const handleToggleEditMode = () => {
     if (editMode && editor.getTotalChanges() > 0) {
@@ -390,7 +531,7 @@ export function TableInspector({
     return (
       <div className="h-full flex flex-col">
         {/* Header Skeleton */}
-        <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center justify-between px-3 py-2 border-b">
           <div className="flex items-center gap-2">
             <Skeleton className="h-6 w-6 rounded" />
             <Skeleton className="h-6 w-48" />
@@ -420,8 +561,8 @@ export function TableInspector({
   if (error && !tableSchema) {
     return (
       <div className="h-full flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="font-semibold">Error</h3>
+        <div className="flex items-center justify-between px-3 py-2 border-b">
+          <h3 className="text-sm font-semibold">Error</h3>
           <Button variant="ghost" size="sm" onClick={onClose}>
             <X className="h-4 w-4" />
           </Button>
@@ -444,11 +585,11 @@ export function TableInspector({
   return (
     <div className="h-full flex flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between px-3 py-2 border-b">
         <div className="flex items-center gap-2">
-          <Table2 className="h-5 w-5" />
+          <Table2 className="h-4 w-4" />
           <div>
-            <h3 className="font-semibold">{tableName}</h3>
+            <h3 className="text-sm font-semibold">{tableName}</h3>
             <p className="text-xs text-muted-foreground">
               {schema}.{tableName}
             </p>
@@ -571,7 +712,7 @@ export function TableInspector({
                             <TableRow>
                               <TableHead className="w-12 text-center">
                                 <Checkbox
-                                  checked={editor.selectedRows.size > 0 && editor.selectedRows.size === sampleData.rows.length + editor.newRows.size}
+                                  checked={headerCheckboxState}
                                   onCheckedChange={(checked) => {
                                     if (checked) {
                                       editor.selectAll();
@@ -587,11 +728,10 @@ export function TableInspector({
                                 return (
                                   <TableHead key={columnInfo.name} className="whitespace-nowrap group">
                                     <div className="flex items-center justify-between gap-2">
-                                      <div className="flex flex-col gap-0.5">
-                                        <span className="font-medium text-foreground">{columnInfo.name}</span>
-                                        <span className="text-[10px] font-normal text-muted-foreground">
-                                          {columnInfo.dataType.toUpperCase()}
-                                        </span>
+                                      <div className="flex items-center gap-1.5">
+                                        {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-amber-500 shrink-0" />}
+                                        <span className="shrink-0">{getColumnTypeIcon(columnInfo.dataType)}</span>
+                                        <span className="font-medium text-foreground truncate">{columnInfo.name}</span>
                                       </div>
                                       <Button
                                         variant="ghost"
@@ -683,15 +823,13 @@ export function TableInspector({
                                   className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
                                   title="Double-click to view row details"
                                 >
-                                  {editMode && (
-                                    <TableCell className="w-12 text-center">
-                                      <Checkbox
-                                        checked={isSelected}
-                                        onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
-                                        aria-label={`Select row ${absoluteRowNumber}`}
-                                      />
-                                    </TableCell>
-                                  )}
+                                  <TableCell className="w-12 text-center">
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
+                                      aria-label={`Select row ${absoluteRowNumber}`}
+                                    />
+                                  </TableCell>
                                   <TableCell
                                     className="w-12 text-center text-xs text-muted-foreground font-mono"
                                     onDoubleClick={!editMode ? () => {
@@ -775,7 +913,7 @@ export function TableInspector({
                         <TableRow>
                           <TableHead className="w-12 text-center">
                             <Checkbox
-                              checked={editor.selectedRows.size > 0 && editor.selectedRows.size === sampleData.rows.length + editor.newRows.size}
+                              checked={headerCheckboxState}
                               onCheckedChange={(checked) => {
                                 if (checked) {
                                   editor.selectAll();
@@ -791,11 +929,10 @@ export function TableInspector({
                             return (
                               <TableHead key={columnInfo.name} className="whitespace-nowrap group">
                                 <div className="flex items-center justify-between gap-2">
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="font-medium text-foreground">{columnInfo.name}</span>
-                                    <span className="text-[10px] font-normal text-muted-foreground">
-                                      {columnInfo.dataType.toUpperCase()}
-                                    </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-amber-500 shrink-0" />}
+                                    <span className="shrink-0">{getColumnTypeIcon(columnInfo.dataType)}</span>
+                                    <span className="font-medium text-foreground truncate">{columnInfo.name}</span>
                                   </div>
                                   <Button
                                     variant="ghost"
@@ -1042,16 +1179,28 @@ export function TableInspector({
                             <Table>
                               <TableHeader className="sticky top-0 bg-background border-b z-10">
                                 <TableRow>
+                                  <TableHead className="w-12 text-center">
+                                    <Checkbox
+                                      checked={headerCheckboxState}
+                                      onCheckedChange={(checked) => {
+                                        if (checked) {
+                                          editor.selectAll();
+                                        } else {
+                                          editor.clearSelection();
+                                        }
+                                      }}
+                                      aria-label="Select all rows"
+                                    />
+                                  </TableHead>
                                   <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
                                   {(tableSchema?.columns || []).map((columnInfo) => {
                                     return (
                                       <TableHead key={columnInfo.name} className="whitespace-nowrap group">
                                         <div className="flex items-center justify-between gap-2">
-                                          <div className="flex flex-col gap-0.5">
-                                            <span className="font-medium text-foreground">{columnInfo.name}</span>
-                                            <span className="text-[10px] font-normal text-muted-foreground">
-                                              {columnInfo.dataType.toUpperCase()}
-                                            </span>
+                                          <div className="flex items-center gap-1.5">
+                                            {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-amber-500 shrink-0" />}
+                                            <span className="shrink-0">{getColumnTypeIcon(columnInfo.dataType)}</span>
+                                            <span className="font-medium text-foreground truncate">{columnInfo.name}</span>
                                           </div>
                                           <Button
                                             variant="ghost"
@@ -1074,12 +1223,20 @@ export function TableInspector({
                               <TableBody>
                                 {sampleData.rows.map((row, rowIndex) => {
                                   const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
+                                  const isSelected = editor.selectedRows.has(rowIndex);
                                   return (
                                     <TableRow
                                       key={rowIndex}
-                                      className="hover:bg-muted/50 group"
+                                      className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
                                       title="Double-click to view row details"
                                     >
+                                      <TableCell className="w-12 text-center">
+                                        <Checkbox
+                                          checked={isSelected}
+                                          onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
+                                          aria-label={`Select row ${absoluteRowNumber}`}
+                                        />
+                                      </TableCell>
                                       <TableCell
                                         className="w-12 text-center text-xs text-muted-foreground font-mono"
                                         onDoubleClick={() => {
@@ -1171,31 +1328,28 @@ export function TableInspector({
                         <Table>
                           <TableHeader className="sticky top-0 bg-background border-b z-10">
                             <TableRow>
-                              {editMode && (
-                                <TableHead className="w-12 text-center">
-                                  <Checkbox
-                                    checked={editor.selectedRows.size === sampleData.rows.length && sampleData.rows.length > 0}
-                                    onCheckedChange={(checked) => {
-                                      if (checked) {
-                                        editor.selectAll();
-                                      } else {
-                                        editor.clearSelection();
-                                      }
-                                    }}
-                                    aria-label="Select all rows"
-                                  />
-                                </TableHead>
-                              )}
+                              <TableHead className="w-12 text-center">
+                                <Checkbox
+                                  checked={headerCheckboxState}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      editor.selectAll();
+                                    } else {
+                                      editor.clearSelection();
+                                    }
+                                  }}
+                                  aria-label="Select all rows"
+                                />
+                              </TableHead>
                               <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
                               {(tableSchema?.columns || []).map((columnInfo) => {
                                 return (
                                   <TableHead key={columnInfo.name} className="whitespace-nowrap group">
                                     <div className="flex items-center justify-between gap-2">
-                                      <div className="flex flex-col gap-0.5">
-                                        <span className="font-medium text-foreground">{columnInfo.name}</span>
-                                        <span className="text-[10px] font-normal text-muted-foreground">
-                                          {columnInfo.dataType.toUpperCase()}
-                                        </span>
+                                      <div className="flex items-center gap-1.5">
+                                        {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-amber-500 shrink-0" />}
+                                        <span className="shrink-0">{getColumnTypeIcon(columnInfo.dataType)}</span>
+                                        <span className="font-medium text-foreground truncate">{columnInfo.name}</span>
                                       </div>
                                       <Button
                                         variant="ghost"
@@ -1287,15 +1441,13 @@ export function TableInspector({
                                   className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
                                   title="Double-click to view row details"
                                 >
-                                  {editMode && (
-                                    <TableCell className="w-12 text-center">
-                                      <Checkbox
-                                        checked={isSelected}
-                                        onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
-                                        aria-label={`Select row ${absoluteRowNumber}`}
-                                      />
-                                    </TableCell>
-                                  )}
+                                  <TableCell className="w-12 text-center">
+                                    <Checkbox
+                                      checked={isSelected}
+                                      onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
+                                      aria-label={`Select row ${absoluteRowNumber}`}
+                                    />
+                                  </TableCell>
                                   <TableCell
                                     className="w-12 text-center text-xs text-muted-foreground font-mono"
                                     onDoubleClick={!editMode ? () => {
@@ -1411,44 +1563,102 @@ export function TableInspector({
                   )
                 )}
 
+              {/* Floating Bulk Action Bar */}
+              {editor.selectedRows.size > 0 && (
+                <div className="relative shrink-0">
+                  <div className="flex items-center justify-center px-4 py-2">
+                    <div className="flex items-center gap-3 px-4 py-2 bg-background border border-border rounded-lg shadow-lg">
+                      <span className="text-sm font-medium text-foreground">
+                        {editor.selectedRows.size} {editor.selectedRows.size === 1 ? 'row' : 'rows'} selected
+                      </span>
+                      <div className="h-4 w-px bg-border" />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={copySelectedRowsAsJson}
+                      >
+                        <Copy className="h-3 w-3 mr-1" />
+                        Copy JSON
+                      </Button>
+                      {editMode && (
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={handleBulkDeleteFromBar}
+                          disabled={isDeleting}
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Delete
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => editor.clearSelection()}
+                      >
+                        <XCircle className="h-3 w-3 mr-1" />
+                        Deselect All
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Pagination Controls */}
-              <div className="flex items-center justify-between px-4 py-3 border-t bg-background shrink-0">
-                <div className="text-sm text-muted-foreground">
+              <div className="flex items-center justify-between px-4 py-2 border-t bg-background shrink-0">
+                <div className="text-xs text-muted-foreground">
                   {totalRows !== null ? (
-                    <>
-                      Showing {((currentPage - 1) * pageSize) + 1} to {Math.min(currentPage * pageSize, totalRows)} of {totalRows.toLocaleString()} rows
-                    </>
+                    <>{totalRows.toLocaleString()} rows</>
                   ) : (
-                    <>Showing {sampleData.rows.length} rows</>
+                    <>{sampleData.rows.length} rows</>
                   )}
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {totalPages !== null && (
-                    <span className="text-sm text-muted-foreground">
-                      Page {currentPage} of {totalPages}
-                    </span>
-                  )}
-                  <div className="flex gap-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handlePreviousPage}
-                      disabled={currentPage === 1 || loadingSampleData}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      Previous
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleNextPage}
-                      disabled={totalPages === null || currentPage >= totalPages || loadingSampleData}
-                    >
-                      Next
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handlePreviousPage}
+                    disabled={currentPage === 1 || loadingSampleData}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center gap-1 text-xs">
+                    <input
+                      type="number"
+                      value={currentPage}
+                      onChange={(e) => {
+                        const page = parseInt(e.target.value);
+                        if (!isNaN(page) && page >= 1) {
+                          if (totalPages && page <= totalPages) {
+                            setCurrentPage(page);
+                          } else if (!totalPages) {
+                            setCurrentPage(page);
+                          }
+                        }
+                      }}
+                      className="w-12 h-7 text-center bg-muted border border-border rounded text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-1 focus:ring-ring"
+                      min={1}
+                      max={totalPages || undefined}
+                    />
+                    <span className="text-muted-foreground">of {totalPages ?? "?"}</span>
                   </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handleNextPage}
+                    disabled={totalPages === null || currentPage >= totalPages || loadingSampleData}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground border-l border-border pl-2 ml-1">
+                    {pageSize} / page
+                  </span>
                 </div>
               </div>
             </>

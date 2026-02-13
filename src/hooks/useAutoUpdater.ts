@@ -1,5 +1,5 @@
-import { useEffect, useRef, useCallback } from 'react';
-import { check } from '@tauri-apps/plugin-updater';
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { check, Update } from '@tauri-apps/plugin-updater';
 import { relaunch } from '@tauri-apps/plugin-process';
 import { isPermissionGranted, requestPermission, sendNotification } from '@tauri-apps/plugin-notification';
 
@@ -10,14 +10,16 @@ interface UseAutoUpdaterOptions {
   checkIntervalHours: number;
 }
 
+export type UpdateStatus =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'available'; version: string; body?: string }
+  | { state: 'downloading'; progress: number; total: number }
+  | { state: 'ready'; version: string }
+  | { state: 'error'; message: string };
+
 /**
- * Custom hook for automatic update checking with system notifications
- *
- * Features:
- * - Automatic periodic update checking
- * - System notifications for update events
- * - Optional auto-download and auto-install
- * - Configurable check interval
+ * Custom hook for automatic update checking with in-app UI state + system notifications
  */
 export function useAutoUpdater(options: UseAutoUpdaterOptions) {
   const {
@@ -29,24 +31,19 @@ export function useAutoUpdater(options: UseAutoUpdaterOptions) {
 
   const intervalRef = useRef<number | null>(null);
   const isCheckingRef = useRef(false);
+  const updateRef = useRef<Update | null>(null);
+  const [status, setStatus] = useState<UpdateStatus>({ state: 'idle' });
+  const [dismissed, setDismissed] = useState(false);
 
-  /**
-   * Request notification permission if not already granted
-   */
   const ensureNotificationPermission = useCallback(async () => {
     let permissionGranted = await isPermissionGranted();
-
     if (!permissionGranted) {
       const permission = await requestPermission();
       permissionGranted = permission === 'granted';
     }
-
     return permissionGranted;
   }, []);
 
-  /**
-   * Send a system notification
-   */
   const notify = useCallback(async (title: string, body: string) => {
     const hasPermission = await ensureNotificationPermission();
     if (hasPermission) {
@@ -55,110 +52,112 @@ export function useAutoUpdater(options: UseAutoUpdaterOptions) {
   }, [ensureNotificationPermission]);
 
   /**
+   * Download and install the pending update
+   */
+  const downloadAndInstall = useCallback(async () => {
+    const update = updateRef.current;
+    if (!update) return;
+
+    setStatus({ state: 'downloading', progress: 0, total: 0 });
+
+    try {
+      let totalBytes = 0;
+      let downloadedBytes = 0;
+
+      await update.downloadAndInstall((event) => {
+        switch (event.event) {
+          case 'Started':
+            totalBytes = event.data.contentLength ?? 0;
+            setStatus({ state: 'downloading', progress: 0, total: totalBytes });
+            break;
+          case 'Progress':
+            downloadedBytes += event.data.chunkLength;
+            setStatus({ state: 'downloading', progress: downloadedBytes, total: totalBytes });
+            break;
+          case 'Finished':
+            break;
+        }
+      });
+
+      setStatus({ state: 'ready', version: update.version });
+
+      await notify('Update Ready', 'DB-Hive has been updated. Restart to apply changes.');
+
+      if (autoInstall) {
+        setTimeout(async () => {
+          await relaunch();
+        }, 3000);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to download update';
+      setStatus({ state: 'error', message });
+      await notify('Update Failed', message);
+    }
+  }, [autoInstall, notify]);
+
+  /**
    * Check for updates
    */
   const checkForUpdates = useCallback(async () => {
-    // Prevent multiple simultaneous checks
-    if (isCheckingRef.current) {
-      console.log('[AutoUpdater] Update check already in progress, skipping');
-      return;
-    }
+    if (isCheckingRef.current) return;
 
     isCheckingRef.current = true;
-    console.log('[AutoUpdater] Checking for updates...');
+    setStatus({ state: 'checking' });
+    setDismissed(false);
 
     try {
       const update = await check();
 
       if (update?.available) {
-        console.log(`[AutoUpdater] Update available: ${update.version}`);
+        updateRef.current = update;
+        setStatus({ state: 'available', version: update.version, body: update.body ?? undefined });
 
-        // Notify user about available update
         await notify(
           'Update Available',
-          `DB-Hive ${update.version} is available. ${autoDownload ? 'Downloading...' : 'Click to update.'}`
+          `DB-Hive ${update.version} is available. ${autoDownload ? 'Downloading...' : 'Open app to update.'}`
         );
 
         if (autoDownload) {
-          console.log('[AutoUpdater] Auto-download enabled, downloading update...');
-
-          try {
-            await update.downloadAndInstall((event) => {
-              switch (event.event) {
-                case 'Started':
-                  console.log('[AutoUpdater] Download started');
-                  break;
-                case 'Progress':
-                  console.log(`[AutoUpdater] Downloaded ${event.data.chunkLength} bytes`);
-                  break;
-                case 'Finished':
-                  console.log('[AutoUpdater] Download finished');
-                  break;
-              }
-            });
-
-            console.log('[AutoUpdater] Update downloaded and installed successfully');
-
-            if (autoInstall) {
-              // Notify about automatic restart
-              await notify(
-                'Update Installed',
-                'DB-Hive has been updated. Restarting in 3 seconds...'
-              );
-
-              console.log('[AutoUpdater] Auto-install enabled, restarting app in 3 seconds...');
-              setTimeout(async () => {
-                await relaunch();
-              }, 3000);
-            } else {
-              // Notify that restart is needed
-              await notify(
-                'Update Ready',
-                'DB-Hive has been updated. Please restart the application to apply changes.'
-              );
-            }
-          } catch (error) {
-            console.error('[AutoUpdater] Failed to download/install update:', error);
-            await notify(
-              'Update Failed',
-              error instanceof Error ? error.message : 'Failed to install update'
-            );
-          }
+          await downloadAndInstall();
         }
       } else {
-        console.log('[AutoUpdater] No updates available');
+        setStatus({ state: 'idle' });
       }
     } catch (error) {
       console.error('[AutoUpdater] Update check failed:', error);
-      // Don't notify about check failures in background
+      setStatus({ state: 'idle' });
     } finally {
       isCheckingRef.current = false;
     }
-  }, [autoDownload, autoInstall, notify]);
+  }, [autoDownload, downloadAndInstall, notify]);
 
   /**
-   * Start automatic update checking
+   * Restart the app (for "ready" state)
    */
+  const restartApp = useCallback(async () => {
+    await relaunch();
+  }, []);
+
+  /**
+   * Dismiss the update banner
+   */
+  const dismiss = useCallback(() => {
+    setDismissed(true);
+  }, []);
+
   useEffect(() => {
     if (!enabled) {
-      console.log('[AutoUpdater] Automatic updates disabled');
-
-      // Clear existing interval if any
       if (intervalRef.current !== null) {
         window.clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-
       return;
     }
-
-    console.log(`[AutoUpdater] Enabled with ${checkIntervalHours}h interval`);
 
     // Check immediately on mount
     checkForUpdates();
 
-    // Set up periodic checking
-    const intervalMs = checkIntervalHours * 60 * 60 * 1000; // Convert hours to ms
+    const intervalMs = checkIntervalHours * 60 * 60 * 1000;
     intervalRef.current = window.setInterval(() => {
       checkForUpdates();
     }, intervalMs);
@@ -172,6 +171,11 @@ export function useAutoUpdater(options: UseAutoUpdaterOptions) {
   }, [enabled, checkIntervalHours, checkForUpdates]);
 
   return {
+    status,
+    dismissed,
     checkForUpdates,
+    downloadAndInstall,
+    restartApp,
+    dismiss,
   };
 }

@@ -2,7 +2,7 @@
  * DB Hive Design System
  * Modern, minimalistic database client UI
  * Primary: Honey Gold (#FFB400)
- * Typography: Inter, SF Pro
+ * Typography: DM Sans, JetBrains Mono
  * Radius: 8-12px (0.5rem - 0.75rem)
  */
 
@@ -220,13 +220,13 @@
 }
 
 * {
-  font-family: "Geist", -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
   font-optical-sizing: auto;
   font-style: normal;
 }
 
 code, pre, .font-mono {
-  font-family: "Geist Mono", "Space Mono", ui-monospace, monospace;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
 }
 
 /* Tab bar horizontal scrollbar styling */
@@ -268,4 +268,81 @@ code, pre, .font-mono {
 
 .dark .tab-bar-scroll::-webkit-scrollbar-thumb:hover {
   background: rgba(156, 163, 175, 0.7);
+}
+
+/* ── HiveLogo Animations ── */
+
+@keyframes hive-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes hive-glow-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+@keyframes hive-hex-spin-cw {
+  from { transform: rotate(6deg); }
+  to { transform: rotate(366deg); }
+}
+
+@keyframes hive-hex-spin-ccw {
+  from { transform: rotate(-6deg); }
+  to { transform: rotate(-366deg); }
+}
+
+@keyframes hive-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes hive-cluster-drift {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.7; }
+  50% { transform: translate(3px, -4px) scale(1.08); opacity: 1; }
+}
+
+@keyframes hive-cluster-drift-alt {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+  50% { transform: translate(-2px, 3px) scale(1.05); opacity: 0.9; }
+}
+
+@keyframes hive-entrance {
+  0% { opacity: 0; transform: scale(0.85) translateY(12px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.hive-logo-animate {
+  animation: hive-entrance 0.6s ease-out both, hive-float 5s ease-in-out 0.6s infinite;
+}
+
+.hive-glow-animate {
+  animation: hive-glow-pulse 3s ease-in-out infinite;
+}
+
+.hive-hex-cw {
+  animation: hive-hex-spin-cw 30s linear infinite;
+}
+
+.hive-hex-ccw {
+  animation: hive-hex-spin-ccw 30s linear infinite;
+}
+
+.hive-shimmer {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(251, 191, 36, 0.2) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: hive-shimmer 4s ease-in-out infinite;
+}
+
+.hive-cluster-1 {
+  animation: hive-cluster-drift 4s ease-in-out infinite;
+}
+
+.hive-cluster-2 {
+  animation: hive-cluster-drift-alt 5s ease-in-out infinite;
 }

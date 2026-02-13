@@ -11,7 +11,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Minus, Square, X, ChevronDown } from "lucide-react";
+import { Minus, Square, X, ChevronDown, Search } from "lucide-react";
 import { PluginToolbar } from "./PluginToolbar";
 import { Button } from "./ui/button";
 import {
@@ -28,11 +28,12 @@ import { useTheme } from "./theme-provider";
 
 interface CustomTitlebarProps {
   onShowShortcuts?: () => void;
+  onOpenCommandPalette?: () => void;
 }
 
 const isMacOS = navigator.userAgent.includes("Mac");
 
-export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
+export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: CustomTitlebarProps) {
   const navigate = useNavigate();
   const router = useRouter();
   const { setTheme } = useTheme();
@@ -153,9 +154,6 @@ export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
               <DropdownMenuItem onClick={() => navigate({ to: "/" })}>
                 New Connection
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate({ to: "/" })}>
-                Recent Connections
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleClose}>
                 Exit
@@ -222,13 +220,6 @@ export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
               <DropdownMenuItem onClick={handleNavigateToSettings}>
                 Settings
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleMinimize}>
-                Minimize
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleMaximize}>
-                {isMaximized ? "Restore" : "Maximize"}
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -276,6 +267,20 @@ export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
         <div onMouseDown={(e) => e.stopPropagation()}>
           <PluginToolbar />
         </div>
+      </div>
+
+      {/* Center: Command Palette Trigger */}
+      <div className="flex-1 flex justify-center" onMouseDown={(e) => e.stopPropagation()}>
+        <button
+          onClick={onOpenCommandPalette}
+          className="flex items-center gap-2 px-3 h-7 rounded-md border border-border bg-muted/50 text-xs text-muted-foreground hover:bg-accent transition-colors min-w-[200px]"
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span>Search or run commands...</span>
+          <kbd className="ml-auto text-[10px] bg-background px-1 rounded border border-border">
+            {isMacOS ? "\u2318" : "Ctrl+"}K
+          </kbd>
+        </button>
       </div>
 
       {/* Right: Window Controls (hidden on macOS where native traffic lights are used) */}

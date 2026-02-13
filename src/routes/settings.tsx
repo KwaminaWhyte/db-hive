@@ -23,27 +23,11 @@ function SettingsRoute() {
   }, []);
 
   const handleBack = () => {
-    // If we have a saved previous route, navigate there
     if (previousRoute) {
-      // Handle routes with dynamic segments or search params
-      if (previousRoute.startsWith("/query")) {
-        navigate({ to: "/query" as any });
-      } else if (previousRoute.startsWith("/er-diagram")) {
-        navigate({ to: previousRoute as any });
-      } else if (previousRoute.startsWith("/activity")) {
-        navigate({ to: "/activity" as any });
-      } else if (previousRoute.startsWith("/visual-query")) {
-        navigate({ to: "/visual-query" as any });
-      } else if (previousRoute.startsWith("/plugins")) {
-        navigate({ to: "/plugins" });
-      } else {
-        navigate({ to: "/" });
-      }
+      navigate({ to: previousRoute as any });
     } else if (window.history.length > 1) {
-      // Try browser history if no saved route
       window.history.back();
     } else {
-      // Fallback to home
       navigate({ to: "/" });
     }
   };

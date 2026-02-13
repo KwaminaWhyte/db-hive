@@ -11,6 +11,7 @@ Complete guide to using DB-Hive database client.
 - [Working with Results](#working-with-results)
 - [Query History and Snippets](#query-history-and-snippets)
 - [Tips and Tricks](#tips-and-tricks)
+- [Automatic Updates](#automatic-updates)
 - [Keyboard Shortcuts](#keyboard-shortcuts)
 
 ## Getting Started
@@ -469,6 +470,33 @@ WHERE last_login < '2023-01-01';
 -- Step 4: Verify
 SELECT status, COUNT(*) FROM users GROUP BY status;
 ```
+
+## Automatic Updates
+
+DB-Hive checks for updates automatically and notifies you when a new version is available.
+
+### In-App Update Banner
+
+When an update is detected, a floating banner appears at the bottom center of the app:
+
+1. **Update Available** - Shows the new version number. Click **Download** to start, or **Later** to dismiss.
+2. **Downloading** - A progress bar shows download progress with byte counters.
+3. **Ready to Install** - Click **Restart** to apply the update and relaunch the app.
+
+The banner can be dismissed with the X button. It will reappear on the next update check cycle.
+
+### Update Settings
+
+Configure update behavior in **Settings > General > Automatic Updates**:
+
+- **Auto-check for updates** - Enable/disable periodic update checks (default: on)
+- **Check interval** - How often to check, in hours (default: 24)
+- **Auto-download** - Automatically download updates when available
+- **Auto-install** - Automatically install and restart after downloading
+
+### Manual Update Check
+
+Go to **Help > About** and click **Check for Updates** to check immediately.
 
 ## Troubleshooting
 

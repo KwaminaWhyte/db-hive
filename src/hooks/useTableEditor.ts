@@ -155,13 +155,19 @@ export function useTableEditor({ columns, rows }: UseTableEditorOptions) {
   }, []);
 
   /**
-   * Select all rows
+   * Select all rows (including new rows with negative indices)
    */
   const selectAll = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      selectedRows: new Set(rows.map((_, idx) => idx)),
-    }));
+    setState((prev) => {
+      const allIndices = rows.map((_, idx) => idx);
+      prev.newRows.forEach((_, tempId) => {
+        allIndices.push(tempId);
+      });
+      return {
+        ...prev,
+        selectedRows: new Set(allIndices),
+      };
+    });
   }, [rows]);
 
   /**

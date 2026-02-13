@@ -10,6 +10,8 @@ import { setupWindowStatePersistence } from "@/utils/windowState";
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
 import { useSettings } from "@/hooks/useSettings";
 import { useAutoUpdater } from "@/hooks/useAutoUpdater";
+import { UpdateBanner } from "@/components/UpdateBanner";
+import { CommandPalette } from "@/components/CommandPalette";
 import { useEffect, useState } from "react";
 
 function RootComponent() {
@@ -17,12 +19,31 @@ function RootComponent() {
   const navigate = useNavigate();
   const router = useRouter();
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
+
+  const isMacOS = navigator.userAgent.includes("Mac");
+
+  // Global Cmd+K / Ctrl+K shortcut to toggle the command palette
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isModK =
+        e.key.toLowerCase() === "k" && (isMacOS ? e.metaKey : e.ctrlKey);
+      if (isModK) {
+        e.preventDefault();
+        e.stopPropagation();
+        setShowCommandPalette((prev) => !prev);
+      }
+    };
+    // Use capture phase to intercept before route-level handlers
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [isMacOS]);
 
   // Load application settings
   const { settings } = useSettings();
 
-  // Setup automatic update checking with system notifications
-  useAutoUpdater({
+  // Setup automatic update checking with in-app banner + system notifications
+  const updater = useAutoUpdater({
     enabled: settings?.general.autoCheckUpdates ?? true,
     autoDownload: settings?.general.autoDownloadUpdates ?? false,
     autoInstall: settings?.general.autoInstallUpdates ?? false,
@@ -67,7 +88,10 @@ function RootComponent() {
   return (
     <div className="flex flex-col h-screen w-full bg-background">
       {/* Custom Titlebar */}
-      <CustomTitlebar onShowShortcuts={() => setShowShortcutsModal(true)} />
+      <CustomTitlebar
+        onShowShortcuts={() => setShowShortcutsModal(true)}
+        onOpenCommandPalette={() => setShowCommandPalette(true)}
+      />
 
       {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
@@ -78,6 +102,26 @@ function RootComponent() {
       <KeyboardShortcutsModal
         open={showShortcutsModal}
         onOpenChange={setShowShortcutsModal}
+      />
+
+      {/* Command Palette */}
+      <CommandPalette
+        open={showCommandPalette}
+        onOpenChange={setShowCommandPalette}
+        onShowShortcuts={() => {
+          setShowCommandPalette(false);
+          setShowShortcutsModal(true);
+        }}
+      />
+
+      {/* In-app Update Banner */}
+      <UpdateBanner
+        status={updater.status}
+        dismissed={updater.dismissed}
+        onDownload={updater.downloadAndInstall}
+        onRestart={updater.restartApp}
+        onDismiss={updater.dismiss}
+        onRetry={updater.checkForUpdates}
       />
 
       <Toaster

@@ -32,7 +32,7 @@ function AboutRoute() {
   const [previousRoute, setPreviousRoute] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const version = "0.16.0-beta";
+  const version = "0.17.1-beta";
 
   // Store the previous route before navigating to about
   useEffect(() => {

@@ -44,20 +44,22 @@ interface WelcomeScreenProps {
 }
 
 export const HiveLogo: FC<{ className?: string }> = ({ className = "" }) => (
-  <div className={`relative ${className}`}>
+  <div className={`relative hive-logo-animate ${className}`}>
     {/* Geometric honey DB Hive logo */}
     <div className="relative h-24 w-24 sm:h-28 sm:w-28 md:h-32 md:w-32 rounded-2xl border border-amber-300/40 bg-gradient-to-br from-amber-300/40 via-amber-400/25 to-amber-500/30 shadow-[0_0_0_1px_rgba(15,23,42,0.8),0_18px_45px_rgba(0,0,0,0.85)] overflow-hidden">
       {/* Inner hex / DB symbol */}
       <div className="absolute inset-[18%] rounded-[1.15rem] bg-slate-950/90 dark:bg-slate-950/90 border border-amber-200/30 shadow-[0_0_0_1px_rgba(15,23,42,0.9),0_0_40px_rgba(251,191,36,0.45)] flex items-center justify-center">
-        {/* Layered hex stack */}
+        {/* Layered hex stack — slow opposing rotations */}
         <div className="relative h-full w-full flex items-center justify-center">
-          <div className="absolute h-[78%] w-[78%] border border-amber-300/40 rounded-[1rem] rotate-6"></div>
-          <div className="absolute h-[78%] w-[78%] border border-amber-200/50 rounded-[1rem] -rotate-6"></div>
-          <div className="relative h-[64%] w-[64%] rounded-[0.85rem] bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 shadow-[0_12px_30px_rgba(251,191,36,0.65)] flex flex-col justify-center items-center gap-0.5">
+          <div className="absolute h-[78%] w-[78%] border border-amber-300/40 rounded-[1rem] hive-hex-cw"></div>
+          <div className="absolute h-[78%] w-[78%] border border-amber-200/50 rounded-[1rem] hive-hex-ccw"></div>
+          <div className="relative h-[64%] w-[64%] rounded-[0.85rem] bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 shadow-[0_12px_30px_rgba(251,191,36,0.65)] flex flex-col justify-center items-center gap-0.5 overflow-hidden">
             {/* DB stripes hinting a hive */}
             <div className="w-[72%] h-[0.2rem] rounded-full bg-slate-950/85"></div>
             <div className="w-[64%] h-[0.2rem] rounded-full bg-slate-950/85"></div>
             <div className="w-[56%] h-[0.2rem] rounded-full bg-slate-950/85"></div>
+            {/* Shimmer sweep */}
+            <div className="absolute inset-0 hive-shimmer pointer-events-none"></div>
           </div>
         </div>
 
@@ -66,16 +68,16 @@ export const HiveLogo: FC<{ className?: string }> = ({ className = "" }) => (
         <div className="absolute -right-3 top-1/2 -translate-y-1/2 h-10 w-6 rounded-full border border-amber-200/35 transform translate-x-[0.15rem] translate-y-[-0.25rem] rotate-[18deg]"></div>
       </div>
 
-      {/* Glow ring */}
-      <div className="pointer-events-none absolute -inset-6 rounded-[1.75rem] bg-[radial-gradient(circle_at_30%_0%,rgba(255,255,255,0.3),transparent_55%),radial-gradient(circle_at_80%_120%,rgba(251,191,36,0.55),transparent_60%)] opacity-80 mix-blend-screen"></div>
+      {/* Glow ring — pulsing */}
+      <div className="pointer-events-none absolute -inset-6 rounded-[1.75rem] bg-[radial-gradient(circle_at_30%_0%,rgba(255,255,255,0.3),transparent_55%),radial-gradient(circle_at_80%_120%,rgba(251,191,36,0.55),transparent_60%)] mix-blend-screen hive-glow-animate"></div>
     </div>
 
-    {/* Mini hex clusters */}
-    <div className="pointer-events-none absolute -right-6 -top-2 opacity-80">
+    {/* Mini hex clusters — drifting */}
+    <div className="pointer-events-none absolute -right-6 -top-2 hive-cluster-1">
       <div className="h-4 w-4 rounded-md border border-amber-200/60 bg-amber-300/25"></div>
       <div className="h-3 w-3 rounded-md border border-amber-200/50 bg-amber-300/15 translate-x-3 -translate-y-1"></div>
     </div>
-    <div className="pointer-events-none absolute -left-4 -bottom-3 opacity-70">
+    <div className="pointer-events-none absolute -left-4 -bottom-3 hive-cluster-2">
       <div className="h-3 w-3 rounded-md border border-amber-200/40 bg-amber-300/15"></div>
       <div className="h-2.5 w-2.5 rounded-md border border-amber-200/30 bg-amber-300/10 translate-x-2 -translate-y-1"></div>
     </div>

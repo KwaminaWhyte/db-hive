@@ -120,16 +120,18 @@ impl DatabaseDriver for MysqlDriver {
     async fn get_tables(&self, _schema: &str) -> Result<Vec<TableInfo>, DbError> {
         let mut conn = self.conn.lock().await;
 
-        let query = format!(
-            "SELECT TABLE_NAME, TABLE_TYPE, TABLE_ROWS, TABLE_COMMENT
-             FROM information_schema.TABLES
-             WHERE TABLE_SCHEMA = '{}'
-             ORDER BY TABLE_NAME",
-            self.current_database
-        );
+        // Use parameterized query to prevent SQL injection
+        let query = r#"
+            SELECT TABLE_NAME, TABLE_TYPE, TABLE_ROWS, TABLE_COMMENT
+            FROM information_schema.TABLES
+            WHERE TABLE_SCHEMA = ?
+            ORDER BY TABLE_NAME
+        "#;
 
-        let rows: Vec<(String, String, Option<u64>, Option<String>)> =
-            conn.query(query).await.map_err(Self::map_mysql_error)?;
+        let rows: Vec<(String, String, Option<u64>, Option<String>)> = conn
+            .exec(query, (&self.current_database,))
+            .await
+            .map_err(Self::map_mysql_error)?;
 
         Ok(rows
             .into_iter()
@@ -155,23 +157,22 @@ impl DatabaseDriver for MysqlDriver {
     ) -> Result<TableSchema, DbError> {
         let mut conn = self.conn.lock().await;
 
-        // Get column information
-        let column_query = format!(
-            "SELECT
+        // Get column information using parameterized query
+        let column_query = r#"
+            SELECT
                 COLUMN_NAME,
                 COLUMN_TYPE,
                 IS_NULLABLE,
                 COLUMN_DEFAULT,
                 COLUMN_KEY,
                 EXTRA
-             FROM information_schema.COLUMNS
-             WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}'
-             ORDER BY ORDINAL_POSITION",
-            self.current_database, table_name
-        );
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+            ORDER BY ORDINAL_POSITION
+        "#;
 
         let column_rows: Vec<(String, String, String, Option<String>, String, String)> = conn
-            .query(column_query)
+            .exec(column_query, (&self.current_database, table_name))
             .await
             .map_err(Self::map_mysql_error)?;
 
@@ -193,20 +194,19 @@ impl DatabaseDriver for MysqlDriver {
             )
             .collect();
 
-        // Get index information
-        let index_query = format!(
-            "SELECT
+        // Get index information using parameterized query
+        let index_query = r#"
+            SELECT
                 INDEX_NAME,
                 NON_UNIQUE,
                 COLUMN_NAME
-             FROM information_schema.STATISTICS
-             WHERE TABLE_SCHEMA = '{}' AND TABLE_NAME = '{}'
-             ORDER BY INDEX_NAME, SEQ_IN_INDEX",
-            self.current_database, table_name
-        );
+            FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+            ORDER BY INDEX_NAME, SEQ_IN_INDEX
+        "#;
 
         let index_rows: Vec<(String, i64, String)> = conn
-            .query(index_query)
+            .exec(index_query, (&self.current_database, table_name))
             .await
             .map_err(Self::map_mysql_error)?;
 

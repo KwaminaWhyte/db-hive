@@ -343,13 +343,13 @@ function QueryPanelRoute() {
     <div className="h-full grid grid-rows-[auto_1fr] min-h-0">
       {/* Tab Bar */}
       <div className="border-b border-border bg-background overflow-hidden">
-        <div className="tab-bar-scroll flex items-center gap-2 px-3 py-1.5 overflow-x-auto flex-nowrap">
+        <div className="tab-bar-scroll flex items-center gap-1 px-2 py-1 overflow-x-auto flex-nowrap">
           {tabIds.map((tabId, index) => (
             <ContextMenu key={tabId}>
               <ContextMenuTrigger>
                 <div
                   className={`
-                    group relative flex items-center gap-2 px-4 py-2 rounded-t-lg cursor-pointer
+                    group relative flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg cursor-pointer
                     transition-colors flex-shrink-0 min-w-fit
                     ${
                       index === activeIndex

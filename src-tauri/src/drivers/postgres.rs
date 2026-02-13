@@ -11,6 +11,12 @@ use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
 
+/// Quote a PostgreSQL identifier to prevent SQL injection.
+/// Doubles any embedded double-quotes, then wraps in double-quotes.
+fn quote_ident(ident: &str) -> String {
+    format!("\"{}\"", ident.replace('"', "\"\""))
+}
+
 /// PostgreSQL database driver
 ///
 /// Manages connections to PostgreSQL databases and provides query execution
@@ -328,27 +334,52 @@ impl DatabaseDriver for PostgresDriver {
     }
 
     async fn get_tables(&self, schema: &str) -> Result<Vec<TableInfo>, DbError> {
+        // Single query that fetches tables, views, and materialized views along with
+        // row count estimates. Uses GREATEST(n_live_tup, reltuples, 0) to pick the
+        // best available estimate:
+        //   - pg_stat_user_tables.n_live_tup: updated by INSERT/UPDATE/DELETE operations
+        //   - pg_class.reltuples: updated by VACUUM/ANALYZE (can be -1 if never analyzed)
+        // Views and materialized views get NULL row counts.
         let query = r#"
             SELECT
-                schemaname as schema,
-                tablename as name,
-                'TABLE' as table_type
-            FROM pg_tables
-            WHERE schemaname = $1
+                t.schemaname AS schema,
+                t.tablename AS name,
+                'TABLE' AS table_type,
+                GREATEST(
+                    COALESCE(s.n_live_tup, 0),
+                    COALESCE(c.reltuples::bigint, 0),
+                    0
+                ) AS row_count
+            FROM pg_tables t
+            LEFT JOIN pg_stat_user_tables s
+                ON s.schemaname = t.schemaname AND s.relname = t.tablename
+            LEFT JOIN pg_class c
+                ON c.relname = t.tablename
+                AND c.relnamespace = (
+                    SELECT oid FROM pg_namespace WHERE nspname = t.schemaname
+                )
+            WHERE t.schemaname = $1
+
             UNION ALL
+
             SELECT
-                schemaname as schema,
-                viewname as name,
-                'VIEW' as table_type
+                schemaname AS schema,
+                viewname AS name,
+                'VIEW' AS table_type,
+                NULL::bigint AS row_count
             FROM pg_views
             WHERE schemaname = $1
+
             UNION ALL
+
             SELECT
-                schemaname as schema,
-                matviewname as name,
-                'MATERIALIZED VIEW' as table_type
+                schemaname AS schema,
+                matviewname AS name,
+                'MATERIALIZED VIEW' AS table_type,
+                NULL::bigint AS row_count
             FROM pg_matviews
             WHERE schemaname = $1
+
             ORDER BY name
         "#;
 
@@ -364,27 +395,39 @@ impl DatabaseDriver for PostgresDriver {
                 let table_schema: String = row.get(0);
                 let name: String = row.get(1);
                 let table_type: String = row.get(2);
+                let row_count: Option<i64> = row.get(3);
 
                 TableInfo {
                     name,
                     schema: table_schema,
-                    row_count: None,
+                    row_count: row_count.map(|v| v.max(0) as u64),
                     table_type,
                 }
             })
             .collect();
 
-        // Fetch row counts for tables (not views) using pg_class.reltuples
-        // Note: reltuples is an estimate updated by VACUUM/ANALYZE
-        for table in tables.iter_mut() {
-            if table.table_type == "TABLE" {
-                // Use the original simpler query - subquery is more reliable than JOIN
-                let count_query = "SELECT reltuples::bigint FROM pg_class WHERE relname = $1 AND relnamespace = (SELECT oid FROM pg_namespace WHERE nspname = $2)";
+        // For tables where the estimate is still 0, run an actual COUNT(*).
+        // This handles newly created tables that haven't been analyzed yet and
+        // have no DML statistics. We only do this for tables (not views) and
+        // collect the names first to avoid holding references across await.
+        let zero_count_tables: Vec<String> = tables
+            .iter()
+            .filter(|t| t.table_type == "TABLE" && t.row_count == Some(0))
+            .map(|t| t.name.clone())
+            .collect();
 
-                if let Ok(row) = self.client.query_one(count_query, &[&table.name, &schema]).await {
-                    // reltuples is float4 in pg_class, cast to bigint here
-                    // row.get() returns Option<i64> - we clamp negative values to 0
-                    table.row_count = row.get::<_, Option<i64>>(0).map(|v| v.max(0) as u64);
+        for table_name in &zero_count_tables {
+            // Use quoted identifier to handle special characters in table names
+            let count_sql = format!(
+                "SELECT COUNT(*) FROM {}.{}",
+                quote_ident(schema),
+                quote_ident(table_name)
+            );
+
+            if let Ok(row) = self.client.query_one(&count_sql, &[]).await {
+                let actual_count: i64 = row.get(0);
+                if let Some(table) = tables.iter_mut().find(|t| &t.name == table_name) {
+                    table.row_count = Some(actual_count as u64);
                 }
             }
         }

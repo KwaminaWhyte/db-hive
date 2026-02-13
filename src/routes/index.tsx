@@ -135,12 +135,12 @@ function HomeRoute() {
   // Keyboard shortcuts
   useRouteShortcuts([
     {
-      key: "\u2318+K",
+      key: "\u2318+N",
       handler: () => setViewState({ view: "new-connection" }),
       description: "New connection",
     },
     {
-      key: "Ctrl+K",
+      key: "Ctrl+N",
       handler: () => setViewState({ view: "new-connection" }),
       description: "New connection",
     },
@@ -610,7 +610,7 @@ function HomeRoute() {
         {/* Footer */}
         <footer className="border-t border-border px-6 py-3">
           <div className="flex items-center justify-center text-xs text-muted-foreground">
-            <span>Version 0.16.0-beta</span>
+            <span>Version 0.17.1-beta</span>
           </div>
           <div className="flex items-center justify-center gap-3 mt-1 text-xs text-muted-foreground">
             <a
