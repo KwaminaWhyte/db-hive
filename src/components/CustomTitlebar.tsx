@@ -30,6 +30,8 @@ interface CustomTitlebarProps {
   onShowShortcuts?: () => void;
 }
 
+const isMacOS = navigator.userAgent.includes("Mac");
+
 export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
   const navigate = useNavigate();
   const router = useRouter();
@@ -105,11 +107,12 @@ export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
 
   return (
     <div
+      data-tauri-drag-region
       className="flex items-center justify-between h-10 bg-background border-b border-border select-none"
       onMouseDown={handleDragStart}
     >
-      {/* Left: Logo and Menu */}
-      <div className="flex items-center gap-2 px-3">
+      {/* Left: Logo and Menu — extra left padding on macOS for native traffic lights */}
+      <div className={`flex items-center gap-2 px-3 ${isMacOS ? "pl-[78px]" : ""}`}>
         {/* App Logo - Small version */}
         <div
           className="relative h-6 w-6 rounded border border-amber-300/40 bg-gradient-to-br from-amber-300/40 via-amber-400/25 to-amber-500/30"
@@ -275,30 +278,32 @@ export function CustomTitlebar({ onShowShortcuts }: CustomTitlebarProps) {
         </div>
       </div>
 
-      {/* Right: Window Controls */}
-      <div className="flex items-center" onMouseDown={(e) => e.stopPropagation()}>
-        <button
-          onClick={handleMinimize}
-          className="h-10 px-4 hover:bg-accent transition-colors"
-          title="Minimize"
-        >
-          <Minus className="h-4 w-4" />
-        </button>
-        <button
-          onClick={handleMaximize}
-          className="h-10 px-4 hover:bg-accent transition-colors"
-          title={isMaximized ? "Restore" : "Maximize"}
-        >
-          <Square className="h-3.5 w-3.5" />
-        </button>
-        <button
-          onClick={handleClose}
-          className="h-10 px-4 hover:bg-destructive hover:text-destructive-foreground transition-colors"
-          title="Close"
-        >
-          <X className="h-4 w-4" />
-        </button>
-      </div>
+      {/* Right: Window Controls (hidden on macOS where native traffic lights are used) */}
+      {!isMacOS && (
+        <div className="flex items-center" onMouseDown={(e) => e.stopPropagation()}>
+          <button
+            onClick={handleMinimize}
+            className="h-10 px-4 hover:bg-accent transition-colors"
+            title="Minimize"
+          >
+            <Minus className="h-4 w-4" />
+          </button>
+          <button
+            onClick={handleMaximize}
+            className="h-10 px-4 hover:bg-accent transition-colors"
+            title={isMaximized ? "Restore" : "Maximize"}
+          >
+            <Square className="h-3.5 w-3.5" />
+          </button>
+          <button
+            onClick={handleClose}
+            className="h-10 px-4 hover:bg-destructive hover:text-destructive-foreground transition-colors"
+            title="Close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 }

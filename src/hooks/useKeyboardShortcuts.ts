@@ -79,6 +79,16 @@ export function matchesShortcut(
 export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[]) {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input/textarea
+      const target = event.target as HTMLElement;
+      if (
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.isContentEditable
+      ) {
+        return;
+      }
+
       for (const shortcut of shortcuts) {
         const parsed = parseShortcut(shortcut.key);
         if (matchesShortcut(event, parsed)) {

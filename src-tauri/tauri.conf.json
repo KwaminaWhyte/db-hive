@@ -22,7 +22,9 @@
         "maximizable": true,
         "minimizable": true,
         "closable": true,
-        "decorations": false,
+        "decorations": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "transparent": false,
         "skipTaskbar": false,
         "alwaysOnTop": false

@@ -12,7 +12,7 @@ mod state;
 use std::sync::{Arc, Mutex};
 use plugins::{loader::PluginLoader, PluginManager};
 use state::AppState;
-use tauri::menu::{Menu, MenuItem};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
 
@@ -43,6 +43,46 @@ fn greet(name: &str) -> String {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .menu(|handle| {
+            // macOS requires a native Edit menu for keyboard events to be properly
+            // routed to WebView text fields. Without it, key events fall through to
+            // the native layer, causing NSBeep and preventing text input.
+            #[cfg(target_os = "macos")]
+            {
+                let edit_menu = Submenu::with_items(
+                    handle,
+                    "Edit",
+                    true,
+                    &[
+                        &PredefinedMenuItem::undo(handle, None)?,
+                        &PredefinedMenuItem::redo(handle, None)?,
+                        &PredefinedMenuItem::separator(handle)?,
+                        &PredefinedMenuItem::cut(handle, None)?,
+                        &PredefinedMenuItem::copy(handle, None)?,
+                        &PredefinedMenuItem::paste(handle, None)?,
+                        &PredefinedMenuItem::select_all(handle, None)?,
+                    ],
+                )?;
+
+                let window_menu = Submenu::with_items(
+                    handle,
+                    "Window",
+                    true,
+                    &[
+                        &PredefinedMenuItem::minimize(handle, None)?,
+                        &PredefinedMenuItem::maximize(handle, None)?,
+                        &PredefinedMenuItem::close_window(handle, None)?,
+                    ],
+                )?;
+
+                Menu::with_items(handle, &[&edit_menu, &window_menu])
+            }
+
+            #[cfg(not(target_os = "macos"))]
+            {
+                Menu::new(handle)
+            }
+        })
         .setup(|app| {
             // Initialize application state
             let mut state = AppState::default();
@@ -153,6 +193,16 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // On non-macOS platforms, remove decorations so the custom titlebar
+            // is the only window chrome. On macOS, titleBarStyle:"Overlay" in
+            // tauri.conf.json handles this while keeping native keyboard routing.
+            #[cfg(not(target_os = "macos"))]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.set_decorations(false);
+                }
+            }
 
             Ok(())
         })

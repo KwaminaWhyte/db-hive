@@ -61,3 +61,4 @@ calamine = "0.26"
 
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-updater = "2.9.0"
+

@@ -1,44 +1,102 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { ConnectionList } from "@/components/ConnectionList";
+import { useState, useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { ConnectionForm } from "@/components/ConnectionForm";
 import { HiveLogo } from "@/components/WelcomeScreen";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
-import { ConnectionProfile } from "@/types/database";
-import { Button } from "@/components/ui/button";
 import {
-  Database,
-  Command,
-  Terminal,
-  LayoutPanelLeft,
-  Plug2,
-  Github,
+  ConnectionProfile,
+  DbDriver,
+  getDriverDisplayName,
+} from "@/types/database";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Skeleton } from "@/components/ui/skeleton";
+import { ConnectionLostError } from "@/components/ConnectionLostError";
+import {
   ArrowLeft,
+  Plus,
+  Search,
+  MoreVertical,
+  Pencil,
+  Copy,
+  Files,
+  Trash2,
+  ChevronDown,
+  RefreshCw,
 } from "lucide-react";
 
-// Database type definition for the grid
-interface DatabaseType {
+// Database type for the selection grid
+interface DatabaseTypeOption {
   id: string;
+  driver: DbDriver | null;
   name: string;
-  icon: string;
-  bgColor: string;
+  color: string;
+  abbr: string;
   available: boolean;
 }
 
-// All supported databases - based on actual implementation status
-const DATABASE_TYPES: DatabaseType[] = [
-  { id: "postgres", name: "PostgreSQL", icon: "\ud83d\udc18", bgColor: "bg-[#336791]", available: true },
-  { id: "mysql", name: "MySQL", icon: "\ud83d\udc2c", bgColor: "bg-[#00758F]", available: true },
-  { id: "mariadb", name: "MariaDB", icon: "\ud83e\uddad", bgColor: "bg-[#003545]", available: true },
-  { id: "sqlite", name: "SQLite", icon: "\ud83d\udcd8", bgColor: "bg-[#003B57]", available: true },
-  { id: "mongodb", name: "MongoDB", icon: "\ud83c\udf43", bgColor: "bg-[#13AA52]", available: true },
-  { id: "sqlserver", name: "SQL Server", icon: "\ud83d\uddc4\ufe0f", bgColor: "bg-[#CC2927]", available: true },
-  { id: "supabase", name: "Supabase", icon: "\u26a1", bgColor: "bg-[#3ECF8E]", available: false },
-  { id: "turso", name: "Turso", icon: "\ud83d\udc02", bgColor: "bg-[#4FF8D2]", available: false },
-  { id: "neon", name: "Neon", icon: "\ud83d\udc9a", bgColor: "bg-[#00E699]", available: false },
-  { id: "redis", name: "Redis", icon: "\ud83d\udd34", bgColor: "bg-[#DC382D]", available: false },
+const DATABASE_TYPE_OPTIONS: DatabaseTypeOption[] = [
+  { id: "postgres", driver: "Postgres", name: "PostgreSQL", color: "#336791", abbr: "PG", available: true },
+  { id: "mysql", driver: "MySql", name: "MySQL", color: "#F29111", abbr: "My", available: true },
+  { id: "mariadb", driver: "MySql", name: "MariaDB", color: "#003545", abbr: "Ma", available: true },
+  { id: "sqlserver", driver: "SqlServer", name: "SQL Server", color: "#CC2927", abbr: "SS", available: true },
+  { id: "mongodb", driver: "MongoDb", name: "MongoDB", color: "#13AA52", abbr: "Mo", available: true },
+  { id: "sqlite", driver: "Sqlite", name: "SQLite", color: "#003B57", abbr: "SL", available: true },
+  { id: "redis", driver: null, name: "Redis", color: "#DC382D", abbr: "Re", available: false },
+  { id: "supabase", driver: null, name: "Supabase", color: "#3ECF8E", abbr: "Sb", available: false },
+  { id: "neon", driver: null, name: "Neon", color: "#00E699", abbr: "Ne", available: false },
+  { id: "turso", driver: null, name: "LibSQL / Turso", color: "#4FF8D2", abbr: "Tu", available: false },
 ];
+
+// Driver icon config for connection list
+const DRIVER_ICON_CONFIG: Record<string, { color: string; abbr: string }> = {
+  Postgres: { color: "#336791", abbr: "PG" },
+  MySql: { color: "#F29111", abbr: "My" },
+  Sqlite: { color: "#003B57", abbr: "SL" },
+  MongoDb: { color: "#13AA52", abbr: "Mo" },
+  SqlServer: { color: "#CC2927", abbr: "SS" },
+};
+
+// Small colored icon for database type
+function DatabaseIcon({ driver, size = 36 }: { driver: string; size?: number }) {
+  const config = DRIVER_ICON_CONFIG[driver] || { color: "#666", abbr: "DB" };
+  return (
+    <div
+      className="rounded-lg flex items-center justify-center text-white font-bold shrink-0"
+      style={{
+        backgroundColor: config.color,
+        width: size,
+        height: size,
+        fontSize: size * 0.35,
+      }}
+    >
+      {config.abbr}
+    </div>
+  );
+}
+
+type ViewState =
+  | { view: "home" }
+  | { view: "new-connection" }
+  | { view: "connection-form"; driver: DbDriver; editProfile?: ConnectionProfile };
 
 export const Route = createFileRoute("/")({
   component: HomeRoute,
@@ -47,232 +105,654 @@ export const Route = createFileRoute("/")({
 function HomeRoute() {
   const navigate = useNavigate();
   const { setConnection } = useConnectionContext();
-  const [showForm, setShowForm] = useState(false);
-  const [editProfile, setEditProfile] = useState<ConnectionProfile | undefined>();
-  const [refreshKey, setRefreshKey] = useState(0);
 
-  // Wire up keyboard shortcuts for home page
+  // View state
+  const [viewState, setViewState] = useState<ViewState>({ view: "home" });
+
+  // Profiles state
+  const [profiles, setProfiles] = useState<ConnectionProfile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Connection state
+  const [connectingId, setConnectingId] = useState<string | null>(null);
+  const [connectionError, setConnectionError] = useState<{
+    profileId: string;
+    profileName: string;
+    message: string;
+  } | null>(null);
+
+  // Dialogs
+  const [passwordPrompt, setPasswordPrompt] = useState<{
+    profileId: string;
+    profileName: string;
+  } | null>(null);
+  const [deletePrompt, setDeletePrompt] = useState<{
+    profileId: string;
+    profileName: string;
+  } | null>(null);
+  const [password, setPassword] = useState("");
+
+  // Connection string for new connection view
+  const [connectionString, setConnectionString] = useState("");
+
+  // Keyboard shortcuts
   useRouteShortcuts([
     {
       key: "\u2318+K",
-      handler: () => {
-        setEditProfile(undefined);
-        setShowForm(true);
-      },
+      handler: () => setViewState({ view: "new-connection" }),
       description: "New connection",
     },
     {
       key: "Ctrl+K",
-      handler: () => {
-        setEditProfile(undefined);
-        setShowForm(true);
-      },
+      handler: () => setViewState({ view: "new-connection" }),
       description: "New connection",
     },
     {
       key: "Escape",
       handler: () => {
-        if (showForm) {
-          setShowForm(false);
-          setEditProfile(undefined);
+        if (viewState.view !== "home") {
+          setViewState({ view: "home" });
         }
       },
-      description: "Cancel",
+      description: "Back",
     },
   ]);
 
-  const handleEdit = (profile: ConnectionProfile | null) => {
-    if (profile) {
-      setEditProfile(profile);
-    } else {
-      setEditProfile(undefined);
+  // Load profiles
+  useEffect(() => {
+    loadProfiles();
+  }, []);
+
+  const loadProfiles = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await invoke<ConnectionProfile[]>("list_connection_profiles");
+      setProfiles(result);
+    } catch (err) {
+      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+      setError(`Failed to load profiles: ${errorMessage}`);
+    } finally {
+      setLoading(false);
     }
-    setShowForm(true);
   };
 
+  // Filter profiles by search
+  const filteredProfiles = profiles.filter((p) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      p.name.toLowerCase().includes(query) ||
+      getDriverDisplayName(p.driver).toLowerCase().includes(query) ||
+      p.host.toLowerCase().includes(query) ||
+      (p.folder && p.folder.toLowerCase().includes(query))
+    );
+  });
+
+  // Handle connected
   const handleConnected = (connectionId: string, profile: ConnectionProfile) => {
     setConnection(connectionId, profile);
     const defaultTabId = `query-${Date.now()}`;
     navigate({ to: "/query", search: { tabs: defaultTabId, active: 0 } });
   };
 
-  const handleFormSuccess = () => {
-    setShowForm(false);
-    setEditProfile(undefined);
-    setRefreshKey((k) => k + 1);
+  // Handle connection error
+  const handleConnectionError = (err: unknown, profile: ConnectionProfile) => {
+    const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+    const isConnectionError =
+      (err as any)?.kind === "connection" || errorMessage.toLowerCase().includes("connection");
+    if (isConnectionError) {
+      setConnectionError({
+        profileId: profile.id,
+        profileName: profile.name,
+        message: errorMessage,
+      });
+    } else {
+      setError(`Failed to connect: ${errorMessage}`);
+    }
   };
 
+  // Handle connect click
+  const handleConnectClick = async (profile: ConnectionProfile) => {
+    try {
+      const savedPassword = await invoke<string | null>("get_saved_password", {
+        profileId: profile.id,
+      });
+
+      let sshPassword: string | null = null;
+      if (profile.sshTunnel && profile.sshTunnel.authMethod === "Password") {
+        try {
+          sshPassword = await invoke<string | null>("get_ssh_password", {
+            profileId: profile.id,
+          });
+        } catch (err) {
+          console.error("Failed to get SSH password:", err);
+        }
+      }
+
+      if (savedPassword) {
+        setConnectingId(profile.id);
+        setError(null);
+        try {
+          const connectionId = await invoke<string>("connect_to_database", {
+            profileId: profile.id,
+            password: savedPassword,
+            sshPassword,
+          });
+          handleConnected(connectionId, profile);
+        } catch (err) {
+          handleConnectionError(err, profile);
+        } finally {
+          setConnectingId(null);
+        }
+      } else if (profile.driver === "MongoDb" || profile.driver === "Sqlite") {
+        setConnectingId(profile.id);
+        setError(null);
+        try {
+          const connectionId = await invoke<string>("connect_to_database", {
+            profileId: profile.id,
+            password: "",
+            sshPassword,
+          });
+          handleConnected(connectionId, profile);
+        } catch (err) {
+          handleConnectionError(err, profile);
+        } finally {
+          setConnectingId(null);
+        }
+      } else {
+        setPasswordPrompt({ profileId: profile.id, profileName: profile.name });
+        setPassword("");
+      }
+    } catch (err) {
+      if (profile.driver === "MongoDb" || profile.driver === "Sqlite") {
+        setConnectingId(profile.id);
+        try {
+          const connectionId = await invoke<string>("connect_to_database", {
+            profileId: profile.id,
+            password: "",
+            sshPassword: null,
+          });
+          handleConnected(connectionId, profile);
+        } catch (connErr) {
+          handleConnectionError(connErr, profile);
+        } finally {
+          setConnectingId(null);
+        }
+      } else {
+        setPasswordPrompt({ profileId: profile.id, profileName: profile.name });
+        setPassword("");
+      }
+    }
+  };
+
+  // Handle connect with password
+  const handleConnect = async () => {
+    if (!passwordPrompt || !password) return;
+    setConnectingId(passwordPrompt.profileId);
+    setError(null);
+    const profile = profiles.find((p) => p.id === passwordPrompt.profileId);
+
+    try {
+      let sshPassword: string | null = null;
+      if (profile?.sshTunnel && profile.sshTunnel.authMethod === "Password") {
+        try {
+          sshPassword = await invoke<string | null>("get_ssh_password", {
+            profileId: passwordPrompt.profileId,
+          });
+        } catch (err) {
+          console.error("Failed to get SSH password:", err);
+        }
+      }
+
+      const connectionId = await invoke<string>("connect_to_database", {
+        profileId: passwordPrompt.profileId,
+        password,
+        sshPassword,
+      });
+
+      if (profile) handleConnected(connectionId, profile);
+      setPasswordPrompt(null);
+      setPassword("");
+    } catch (err) {
+      if (profile) {
+        handleConnectionError(err, profile);
+      } else {
+        const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+        setError(`Failed to connect: ${errorMessage}`);
+      }
+    } finally {
+      setConnectingId(null);
+    }
+  };
+
+  // Handle delete
+  const handleDeleteConfirm = async () => {
+    if (!deletePrompt) return;
+    try {
+      await invoke("delete_connection_profile", { profileId: deletePrompt.profileId });
+      await loadProfiles();
+      setDeletePrompt(null);
+    } catch (err) {
+      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+      setError(`Failed to delete: ${errorMessage}`);
+    }
+  };
+
+  // Handle duplicate
+  const handleDuplicate = async (profile: ConnectionProfile) => {
+    try {
+      const duplicated: ConnectionProfile = {
+        ...profile,
+        id: "",
+        name: `${profile.name} (copy)`,
+        createdAt: Math.floor(Date.now() / 1000),
+        updatedAt: Math.floor(Date.now() / 1000),
+      };
+      await invoke<string>("create_connection_profile", { profile: duplicated });
+      await loadProfiles();
+    } catch (err) {
+      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+      setError(`Failed to duplicate: ${errorMessage}`);
+    }
+  };
+
+  // Handle copy details
+  const handleCopyDetails = (profile: ConnectionProfile) => {
+    const details = `${getDriverDisplayName(profile.driver)} - ${profile.host}:${profile.port}${profile.database ? `/${profile.database}` : ""}`;
+    navigator.clipboard.writeText(details);
+  };
+
+  // Form success
+  const handleFormSuccess = () => {
+    setViewState({ view: "home" });
+    loadProfiles();
+  };
+
+  // Detect driver from connection string
+  const detectDriverFromConnectionString = (connStr: string): DbDriver | null => {
+    const s = connStr.toLowerCase().trim();
+    if (s.startsWith("postgres://") || s.startsWith("postgresql://")) return "Postgres";
+    if (s.startsWith("mysql://") || s.startsWith("mariadb://")) return "MySql";
+    if (s.startsWith("mongodb://") || s.startsWith("mongodb+srv://")) return "MongoDb";
+    if (s.startsWith("sqlite://") || s.startsWith("file:") || s.endsWith(".db") || s.endsWith(".sqlite")) return "Sqlite";
+    if (s.startsWith("mssql://") || s.startsWith("sqlserver://")) return "SqlServer";
+    return null;
+  };
+
+  // ── New Connection View ──
+  if (viewState.view === "new-connection") {
+    return (
+      <div className="flex-1 flex flex-col h-full bg-background">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
+          <button
+            onClick={() => setViewState({ view: "home" })}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </button>
+          <span className="font-semibold">New Connection</span>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-[680px] mx-auto py-10 px-6">
+            {/* Connection String */}
+            <div className="space-y-2">
+              <Label className="text-sm font-medium">Connection String</Label>
+              <Input
+                value={connectionString}
+                onChange={(e) => {
+                  setConnectionString(e.target.value);
+                  const detected = detectDriverFromConnectionString(e.target.value);
+                  if (detected) {
+                    setViewState({ view: "connection-form", driver: detected });
+                  }
+                }}
+                placeholder="protocol://user:password@host:port/database"
+                className="h-11"
+              />
+              <p className="text-xs text-muted-foreground">
+                Paste your connection string to auto-detect database type
+              </p>
+            </div>
+
+            {/* Divider */}
+            <div className="flex items-center gap-4 my-10">
+              <div className="flex-1 border-t border-border" />
+              <span className="text-sm text-muted-foreground whitespace-nowrap">or select database</span>
+              <div className="flex-1 border-t border-border" />
+            </div>
+
+            {/* Database Grid */}
+            <div className="grid grid-cols-2 gap-3">
+              {DATABASE_TYPE_OPTIONS.map((db) => (
+                <button
+                  key={db.id}
+                  disabled={!db.available}
+                  onClick={() => {
+                    if (db.driver) {
+                      setViewState({ view: "connection-form", driver: db.driver });
+                    }
+                  }}
+                  className={`flex items-center gap-3.5 px-4 py-4 rounded-xl border transition-all text-left ${
+                    db.available
+                      ? "border-border hover:border-foreground/20 hover:bg-accent/50 cursor-pointer"
+                      : "border-border/50 opacity-40 cursor-not-allowed"
+                  }`}
+                >
+                  <div
+                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0"
+                    style={{ backgroundColor: db.color }}
+                  >
+                    {db.abbr}
+                  </div>
+                  <span className="text-sm font-medium">{db.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Connection Form View ──
+  if (viewState.view === "connection-form") {
+    return (
+      <div className="flex-1 flex flex-col h-full bg-background">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-6 py-4 border-b border-border">
+          <button
+            onClick={() =>
+              viewState.editProfile
+                ? setViewState({ view: "home" })
+                : setViewState({ view: "new-connection" })
+            }
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </button>
+          <DatabaseIcon driver={viewState.driver} size={24} />
+          <span className="font-semibold">
+            {viewState.editProfile
+              ? viewState.editProfile.name
+              : getDriverDisplayName(viewState.driver)}
+          </span>
+        </div>
+
+        {/* Form */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-[680px] mx-auto py-8 px-6">
+            <ConnectionForm
+              driver={viewState.driver}
+              profile={viewState.editProfile}
+              onSuccess={handleFormSuccess}
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Home View ──
   return (
     <div className="flex-1 flex h-full relative">
-      {/* Left Sidebar: Connections List */}
-      <aside className="w-72 border-r border-border bg-card/50 flex flex-col">
-        <ConnectionList
-          key={refreshKey}
-          onEdit={handleEdit}
-          onProfilesChange={() => setRefreshKey((k) => k + 1)}
-          onConnected={handleConnected}
-        />
-      </aside>
+      {/* Left Panel: Branding */}
+      <div className="w-1/2 bg-muted/30 flex flex-col items-center justify-center border-r border-border">
+        <HiveLogo />
+        <div className="mt-8 text-center">
+          <div className="flex items-center justify-center gap-2">
+            <span className="text-3xl font-semibold tracking-tight">DB</span>
+            <span className="bg-foreground text-background px-2 py-0.5 rounded-md text-lg font-bold">
+              Hive
+            </span>
+          </div>
+          <p className="text-muted-foreground mt-3 text-base">
+            The Modern Database Desktop App
+          </p>
+        </div>
+      </div>
 
-      {/* Right Panel: Branding or Form */}
-      <main className="flex-1 flex flex-col bg-background overflow-hidden">
-        {showForm ? (
-          /* Connection Form */
-          <div className="flex-1 flex flex-col overflow-y-auto">
-            <div className="p-6 border-b border-border flex items-center gap-4">
+      {/* Right Panel: Connections */}
+      <div className="w-1/2 flex flex-col bg-background">
+        {/* Header */}
+        <div className="px-6 pt-6 pb-4 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-2xl font-semibold tracking-tight">Saved Connections</h2>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-1.5 h-9">
+                    Manage
+                    <ChevronDown className="h-3.5 w-3.5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={loadProfiles}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Refresh
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => {
-                  setShowForm(false);
-                  setEditProfile(undefined);
-                }}
-                className="h-8 w-8"
+                size="sm"
+                onClick={() => setViewState({ view: "new-connection" })}
+                className="gap-1.5 h-9"
               >
-                <ArrowLeft className="h-4 w-4" />
+                New
+                <Plus className="h-3.5 w-3.5" />
               </Button>
-              <div>
-                <h1 className="text-xl font-semibold">
-                  {editProfile ? "Edit Connection" : "New Connection"}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  {editProfile
-                    ? `Update: ${editProfile.name}`
-                    : "Create a new database connection"}
-                </p>
-              </div>
-            </div>
-            <div className="flex-1 p-6 max-w-2xl">
-              <ConnectionForm
-                profile={editProfile}
-                onSuccess={handleFormSuccess}
-              />
             </div>
           </div>
-        ) : (
-          /* Branding Panel */
-          <div className="flex-1 flex flex-col overflow-y-auto">
-            {/* Hero Section */}
-            <div className="flex-1 flex flex-col items-center justify-center py-10 px-6">
-              <HiveLogo />
 
-              <div className="mt-6 text-center space-y-2 max-w-md">
-                <div className="flex items-center justify-center gap-2">
-                  <span className="uppercase tracking-[0.16em] text-[0.72rem] text-amber-600 dark:text-amber-300/80">
-                    DB HIVE
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/5 px-2 py-0.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(16,185,129,0.3)]"></span>
-                    <span className="text-[0.7rem] font-medium text-emerald-600 dark:text-emerald-300/90">
-                      open source
-                    </span>
-                  </span>
-                </div>
-                <h1 className="text-2xl md:text-3xl tracking-tight font-semibold text-foreground">
-                  A focused workspace for your data.
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Inspect, query, and shape your databases with a developer-first client that stays out of your way.
-                </p>
-              </div>
-            </div>
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search by tag..."
+              className="pl-10 h-10"
+            />
+          </div>
+        </div>
 
-            {/* Keyboard Shortcuts */}
-            <div className="px-6 py-4 border-t border-border">
-              <div className="flex items-center gap-2 mb-3">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg bg-amber-500/10 border border-amber-500/40">
-                  <Command className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" strokeWidth={1.5} />
-                </span>
-                <span className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                  keyboard flow
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2.5 text-xs">
-                {[
-                  { icon: Plug2, label: "New connection", keys: ["\u2318", "K"] },
-                  { icon: Terminal, label: "Run query", keys: ["\u21e7", "\u23ce"] },
-                  { icon: Database, label: "Switch table", keys: ["\u2325", "\u21e5"] },
-                  { icon: LayoutPanelLeft, label: "Toggle sidebar", keys: ["\u2318", "B"] },
-                ].map((shortcut, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between rounded-lg border border-border bg-card px-2.5 py-2"
-                  >
-                    <div className="flex items-center gap-1.5">
-                      <shortcut.icon className="h-3.5 w-3.5 text-foreground" strokeWidth={1.5} />
-                      <span className="text-foreground">{shortcut.label}</span>
-                    </div>
-                    <div className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary px-1.5 py-0.5 text-[0.64rem] text-secondary-foreground">
-                      {shortcut.keys.map((key, j) => (
-                        <span key={j}>{key}</span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Supported Databases */}
-            <div className="px-6 py-4 border-t border-border">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-amber-500/10 border border-amber-500/40">
-                  <Database className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" strokeWidth={1.5} />
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-[0.74rem] font-medium uppercase tracking-[0.18em] text-amber-600 dark:text-amber-200/90">
-                    supported databases
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-5 gap-3">
-                {DATABASE_TYPES.map((db) => (
-                  <div key={db.id} className="flex flex-col items-center gap-1.5 group cursor-default">
-                    <div
-                      className={`relative w-12 h-12 rounded-xl ${db.bgColor} flex items-center justify-center shadow-lg transition-transform group-hover:scale-105 ${
-                        !db.available ? "opacity-60" : ""
-                      }`}
-                    >
-                      <span className="text-xl">{db.icon}</span>
-                      {db.available && (
-                        <div className="absolute inset-0 rounded-xl bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      )}
-                    </div>
-                    <span className={`text-[0.68rem] text-center leading-tight ${
-                      db.available ? "text-foreground" : "text-muted-foreground"
-                    }`}>
-                      {db.name}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Footer */}
-            <footer className="border-t border-border bg-card/50 px-6 py-2.5">
-              <div className="flex items-center justify-between text-[0.7rem] text-muted-foreground">
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center gap-1.5">
-                    <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]"></span>
-                    <span>DB Hive</span>
-                  </span>
-                  <span className="text-muted-foreground/70">v0.4.0-beta</span>
-                </div>
-                <a
-                  href="https://github.com/KwaminaWhyte/db-hive"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 hover:text-amber-600 dark:hover:text-amber-200 transition-colors"
-                >
-                  <Github className="h-3.5 w-3.5" strokeWidth={1.5} />
-                  <span>GitHub</span>
-                </a>
-              </div>
-            </footer>
+        {/* Errors */}
+        {error && (
+          <div className="mx-6 mb-3 rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+            {error}
           </div>
         )}
-      </main>
+
+        {connectionError && (
+          <div className="mx-6 mb-3">
+            <ConnectionLostError
+              databaseName={connectionError.profileName}
+              message={connectionError.message}
+              onReconnect={async () => {
+                const profile = profiles.find((p) => p.id === connectionError.profileId);
+                if (profile) {
+                  setConnectionError(null);
+                  await handleConnectClick(profile);
+                }
+              }}
+              onGoToDashboard={() => setConnectionError(null)}
+            />
+          </div>
+        )}
+
+        {/* Connection List */}
+        <div className="flex-1 overflow-y-auto px-6">
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16 rounded-xl" />
+              ))}
+            </div>
+          ) : filteredProfiles.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <p className="text-muted-foreground text-sm">
+                {profiles.length === 0
+                  ? "No connections yet. Click 'New +' to get started."
+                  : "No connections match your search."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-0.5">
+              {filteredProfiles.map((profile) => {
+                const isConnecting = connectingId === profile.id;
+                return (
+                  <div
+                    key={profile.id}
+                    className="group flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-accent/50 transition-colors cursor-pointer"
+                    onDoubleClick={() => handleConnectClick(profile)}
+                    title="Double-click to connect"
+                  >
+                    <DatabaseIcon driver={profile.driver} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-sm truncate">
+                          {profile.name}
+                        </span>
+                        {isConnecting && (
+                          <span className="text-xs text-primary animate-pulse">
+                            Connecting...
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground">
+                        {getDriverDisplayName(profile.driver).toLowerCase()} &bull; {profile.host}
+                      </span>
+                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem
+                          onClick={() =>
+                            setViewState({
+                              view: "connection-form",
+                              driver: profile.driver,
+                              editProfile: profile,
+                            })
+                          }
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleCopyDetails(profile)}>
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy Details
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDuplicate(profile)}>
+                          <Files className="h-4 w-4 mr-2" />
+                          Duplicate
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onClick={() =>
+                            setDeletePrompt({
+                              profileId: profile.id,
+                              profileName: profile.name,
+                            })
+                          }
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <footer className="border-t border-border px-6 py-3">
+          <div className="flex items-center justify-center text-xs text-muted-foreground">
+            <span>Version 0.16.0-beta</span>
+          </div>
+          <div className="flex items-center justify-center gap-3 mt-1 text-xs text-muted-foreground">
+            <a
+              href="https://github.com/KwaminaWhyte/db-hive"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-foreground transition-colors"
+            >
+              GitHub
+            </a>
+            <span>&bull;</span>
+            <span>DB-Hive.app</span>
+          </div>
+        </footer>
+      </div>
+
+      {/* Password Prompt Dialog */}
+      <Dialog open={!!passwordPrompt} onOpenChange={(open) => !open && setPasswordPrompt(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Connect to {passwordPrompt?.profileName}</DialogTitle>
+            <DialogDescription>Enter the password to connect to this database.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-4">
+            <Label htmlFor="connect-password">Password</Label>
+            <Input
+              type="password"
+              id="connect-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleConnect()}
+              placeholder="Enter password"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPasswordPrompt(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleConnect} disabled={!password || connectingId !== null}>
+              {connectingId ? "Connecting..." : "Connect"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!deletePrompt} onOpenChange={(open) => !open && setDeletePrompt(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Connection</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete &ldquo;{deletePrompt?.profileName}&rdquo;? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeletePrompt(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleDeleteConfirm}>
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
