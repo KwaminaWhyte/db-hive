@@ -252,6 +252,14 @@ export function SchemaExplorer({
           : "";
 
         setSelectedSchema(newSelectedSchema);
+
+        // Load tables for initially expanded schemas (e.g., "public")
+        const newExpanded = new Set(["public"]);
+        newExpanded.forEach((schemaName) => {
+          if (schemasData.find((s) => s.name === schemaName)) {
+            fetchTables(schemaName);
+          }
+        });
       } catch (err) {
         const errorMessage =
           typeof err === "string" ? err : (err as any)?.message || String(err);
