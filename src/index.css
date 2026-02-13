@@ -199,23 +199,20 @@
   }
   body {
     @apply bg-background text-foreground;
-  }
-
-  /* Prevent text selection on interactive elements */
-  button,
-  [role="button"],
-  [role="tab"],
-  [role="menuitem"],
-  [role="option"],
-  [role="checkbox"],
-  [role="radio"],
-  [role="switch"],
-  .cursor-pointer,
-  label,
-  nav,
-  summary {
     user-select: none;
     -webkit-user-select: none;
+  }
+
+  /* Allow text selection in inputs, textareas, code editors, and pre blocks */
+  input,
+  textarea,
+  [contenteditable="true"],
+  pre,
+  code,
+  .monaco-editor,
+  .select-text {
+    user-select: text;
+    -webkit-user-select: text;
   }
 }
 

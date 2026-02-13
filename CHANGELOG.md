@@ -7,54 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.18.0-beta] - 2026-02-13
+
 ### Added
 
-- **In-App Update Banner**: New floating notification banner that appears when updates are available, replacing the system-notification-only approach with a visible in-app experience
-  - **"Update Available"** state: Shows new version number with Download button and Later dismissal
-  - **"Downloading"** state: Animated progress bar with byte counters (e.g., "12.3 MB / 45.6 MB (27%)")
-  - **"Ready to Install"** state: Restart button to apply the update immediately
-  - **"Error"** state: Error details with Retry button
-  - Slides up from bottom center with frosted glass backdrop blur
-  - Dismissable with X button; reappears on next update check if dismissed
-  - Works alongside existing system notifications for background awareness
-  - Files created: `src/components/UpdateBanner.tsx`
-  - Files modified: `src/hooks/useAutoUpdater.ts` (refactored to expose `status`, `dismissed`, `downloadAndInstall()`, `restartApp()`, `dismiss()`), `src/routes/__root.tsx` (wired UpdateBanner into root layout)
-
-- **HiveLogo Animations**: Ambient CSS animations on the welcome page logo for a polished, living feel
-  - **Entrance**: Scale-up + fade-in on page load (0.6s)
-  - **Float**: Gentle vertical bobbing (5s loop)
-  - **Hex rotation**: Two decorative hex borders slowly counter-rotate (30s loop)
-  - **Glow pulse**: Glow ring fades in and out (3s loop)
-  - **Shimmer**: Light sweep across the gold center diamond (4s loop)
-  - **Cluster drift**: Mini hex clusters drift lazily (4-5s loops)
-  - All animations are intentionally slow and subtle to avoid distraction
-  - Files modified: `src/components/WelcomeScreen.tsx` (HiveLogo component), `src/index.css` (7 new @keyframes + utility classes)
-
 - **Command Palette**: VS Code / Raycast-style command palette accessible via `Cmd+K` / `Ctrl+K` or clicking the search trigger in the toolbar. Includes grouped commands for Navigation, Theme, Window controls, and Actions with fuzzy search, keyboard navigation (arrow keys, Enter, Escape), and keyboard shortcut hints.
-  - File created: `src/components/CommandPalette.tsx`
-  - Files modified: `src/routes/__root.tsx`, `src/components/CustomTitlebar.tsx`
 
-- **Column Type Badges in Table Inspector**: Table column headers now display inline type badges -- `#` for numbers, `T` for text, `B` for booleans, `{}` for JSON, `D` for dates, `U` for UUID, `0x` for binary, `[]` for arrays -- with color-coded backgrounds for quick visual identification.
+- **Bulk Row Selection & Actions**: Select multiple rows with checkboxes (including select-all with indeterminate state). Floating action bar shows when rows are selected with Copy JSON, Delete, and Deselect All actions.
 
-- **Compact Pagination Controls**: Replaced bulky Previous/Next buttons with a compact pagination bar featuring an editable page input field, chevron-style prev/next buttons, total page count, and per-page size indicator.
+- **Collapsible Sidebar**: Toggle sidebar visibility with `Cmd+B` / `Ctrl+B` or the toggle button in the connection info bar. Smooth width transition animation.
+
+- **Right-Click Context Menu on Table Cells**: Copy Cell, Copy Row as JSON, Edit Cell, Set to NULL, Delete Row — all accessible via right-click on any data cell.
+
+- **Column Type Badges**: Table column headers display inline type badges (`#` for numbers, `T` for text, `B` for booleans, `{}` for JSON, `D` for dates, `U` for UUID, `0x` for binary, `[]` for arrays) with color-coded backgrounds.
+
+- **Pending Changes Panel (Beekeeper Studio-inspired)**: Redesigned transaction preview with Visual/SQL tabs. Visual tab shows breadcrumb paths (e.g., `public.users > id = 5 > name`) with red/green diff lines for old/new values. Footer has "Clear All" and "Commit All (N)" buttons.
+
+- **In-App Update Banner**: Floating notification banner for updates with download progress, restart button, and dismissal support.
+
+- **HiveLogo Animations**: Ambient CSS animations on the welcome page logo (float, hex rotation, glow pulse, shimmer, cluster drift).
 
 ### Fixed
 
-- **Version Display**: Updated hardcoded version strings from `0.16.0-beta` to `0.17.1-beta` in the home page footer and About page to match the actual app version in `tauri.conf.json`
+- **PostgreSQL Row Counts Showing 0**: Replaced unreliable `pg_class.reltuples` with combined `pg_stat_user_tables` + `pg_class` query using `GREATEST(COALESCE(...))` plus `COUNT(*)` fallback. Replaced N+1 query pattern with single JOIN.
 
-- **PostgreSQL Row Counts Showing 0**: Fixed sidebar showing "0 rows" for most tables by replacing the unreliable `pg_class.reltuples` (returns -1 for unanalyzed tables) with a combined query using `GREATEST(COALESCE(pg_stat_user_tables.n_live_tup, 0), COALESCE(pg_class.reltuples::bigint, 0), 0)` plus a `COUNT(*)` fallback for newly created tables. Also replaced the N+1 query pattern with a single efficient JOIN query.
+- **MySQL SQL Injection Vulnerability**: Converted string-interpolated queries to parameterized queries using `conn.exec()` with `?` placeholders.
 
-- **MySQL SQL Injection Vulnerability**: Converted MySQL driver's `get_tables` and `get_table_schema` methods from string-interpolated queries to parameterized queries using `conn.exec()` with `?` placeholders.
+- **Settings Back Button Navigation**: Fixed back button navigating to welcome page instead of previous page. Uses `sessionStorage` to track the actual previous route.
 
-- **Settings Back Button Navigation**: Fixed the back button in Settings and other toolbar pages navigating to the welcome page instead of the previous page. Now uses `sessionStorage` to track and return to the actual previous route.
+- **Sidebar Row Count Text Cutoff**: Row counts ("5 rows") no longer clipped in the sidebar table list.
+
+- **Context Menu Edit Cell**: Fixed right-click "Edit Cell" immediately reverting by preventing blur during input mount.
+
+- **Primary Keys Read-Only**: Primary key columns are no longer editable via double-click or context menu, preventing accidental key modifications.
+
+- **Browser Text Selection Disabled**: Disabled default text selection across the entire app (inputs, textareas, code editors, and `pre` blocks remain selectable).
 
 ### Changed
 
-- **Sidebar Refresh/Disconnect Layout**: Moved the refresh button from the sidebar bottom panel to an icon-only button next to the search field. Removed the disconnect button from the sidebar (accessible from the top connection info bar instead).
+- **Removed Edit Mode Toggle**: Cells are now always editable on double-click — no explicit edit mode toggle button needed. Insert row button is always visible.
 
-- **Window Menu Simplified**: Removed Minimize and Maximize items from the Window dropdown menu. Removed "Recent Connections" from the File menu.
+- **Unified Footer Bar**: Data/Columns/Indexes tabs and pagination controls now share a single footer bar instead of separate areas.
 
-- **Improved Table Column Headers**: Changed from a two-line stacked layout (name + data type) to a single-line inline layout with key icon, type badge, and column name.
+- **Sidebar Toggle in Connection Bar**: Moved sidebar toggle from a floating button to the connection info bar for better discoverability.
+
+- **Sidebar Refresh/Disconnect Layout**: Moved refresh button to icon-only next to search field. Removed disconnect from sidebar (accessible from connection info bar).
+
+- **Window Menu Simplified**: Removed Minimize/Maximize from Window dropdown. Removed "Recent Connections" from File menu.
+
+- **Table Display Improvements**: Single-line column headers with key icon + type badge + name. Visible vertical grid lines between columns. Compact pagination with editable page input.
+
+- **Code Deduplication**: Collapsed 4 duplicate table rendering sections into shared helper functions, reducing TableInspector from ~1800 to ~1100 lines.
 
 ## [0.17.1-beta] - 2026-02-13
 

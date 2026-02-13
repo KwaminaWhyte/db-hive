@@ -4,6 +4,11 @@ import { SchemaExplorer } from "@/components/SchemaExplorer";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { useTabContext } from "@/contexts/TabContext";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 import { LogOut, Database, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 /**
@@ -188,8 +193,27 @@ function ConnectedLayout() {
       {/* Connection Info Bar - Slim bar below titlebar */}
       <div className="fixed top-10 left-0 right-0 h-8 border-b border-border bg-accent/30 z-40">
         <div className="flex items-center justify-between h-full px-4">
-          {/* Left: Connection Info */}
+          {/* Left: Sidebar Toggle + Connection Info */}
           <div className="flex items-center gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={toggleSidebar}
+                  className="h-6 w-6 rounded-sm"
+                >
+                  {sidebarCollapsed ? (
+                    <PanelLeftOpen className="size-3.5" />
+                  ) : (
+                    <PanelLeftClose className="size-3.5" />
+                  )}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                {sidebarCollapsed ? "Show sidebar" : "Hide sidebar"} (Cmd+B)
+              </TooltipContent>
+            </Tooltip>
             <Database className="size-3.5 text-muted-foreground" />
             <span className="text-xs font-medium">
               {connectionProfile.name}
@@ -237,23 +261,6 @@ function ConnectedLayout() {
               onExecuteQuery={handleExecuteQuery}
             />
           </div>
-        </div>
-
-        {/* Sidebar Toggle Button */}
-        <div className="relative">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={toggleSidebar}
-            className="absolute top-2 -left-3 z-10 h-6 w-6 rounded-sm border border-border bg-background hover:bg-accent"
-            title={sidebarCollapsed ? "Show sidebar (Cmd+B)" : "Hide sidebar (Cmd+B)"}
-          >
-            {sidebarCollapsed ? (
-              <PanelLeftOpen className="h-3.5 w-3.5" />
-            ) : (
-              <PanelLeftClose className="h-3.5 w-3.5" />
-            )}
-          </Button>
         </div>
 
         {/* Main Content - Child Routes */}

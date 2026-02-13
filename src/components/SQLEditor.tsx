@@ -121,7 +121,7 @@ export const SQLEditor: FC<SQLEditorProps> = ({
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader className="pb-3 border-b">
+      <CardHeader className="!px-3 !pt-2 !pb-2 !gap-0 border-b">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button

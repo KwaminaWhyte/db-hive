@@ -25,6 +25,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
   Table2,
   Key,
   Database,
@@ -33,11 +40,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
-  Edit3,
   Save,
   Trash2,
   Plus,
   XCircle,
+  ClipboardCopy,
+  Pencil,
+  Ban,
 } from "lucide-react";
 import { TableSchema, QueryExecutionResult } from "@/types";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -148,7 +157,6 @@ export function TableInspector({
   const [totalRows, setTotalRows] = useState<number | null>(null);
   const [selectedRow, setSelectedRow] = useState<any[] | null>(null);
   const [showRowViewer, setShowRowViewer] = useState(false);
-  const [editMode, setEditMode] = useState(false);
   const [showTransactionPreview, setShowTransactionPreview] = useState(false);
   const [isCommitting, setIsCommitting] = useState(false);
   const [commitError, setCommitError] = useState<string | null>(null);
@@ -196,6 +204,24 @@ export function TableInspector({
     });
     const text = columnValues.join('\n');
     await copyToClipboard(text, `Column "${columnName}" copied`);
+  }, [sampleData, copyToClipboard]);
+
+  // Copy a single cell value to clipboard
+  const copyCellValue = useCallback(async (value: any) => {
+    const text = value === null || value === undefined ? 'NULL' :
+                 typeof value === 'object' ? JSON.stringify(value) : String(value);
+    await copyToClipboard(text, "Cell value copied");
+  }, [copyToClipboard]);
+
+  // Copy a row as JSON to clipboard
+  const copyRowAsJson = useCallback(async (row: any[]) => {
+    if (!sampleData) return;
+    const obj: Record<string, any> = {};
+    sampleData.columns.forEach((col, i) => {
+      obj[col] = row[i];
+    });
+    const json = JSON.stringify(obj, null, 2);
+    await copyToClipboard(json, "Row copied as JSON");
   }, [sampleData, copyToClipboard]);
 
   useEffect(() => {
@@ -456,13 +482,6 @@ export function TableInspector({
     editor.clearSelection();
   }, [sampleData]);
 
-  // Clear selection when edit mode is toggled off
-  useEffect(() => {
-    if (!editMode) {
-      editor.clearSelection();
-    }
-  }, [editMode]);
-
   // Compute header checkbox state (for indeterminate support)
   const totalSelectableRows = (sampleData?.rows.length || 0) + editor.newRows.size;
   const allRowsSelected = totalSelectableRows > 0 && editor.selectedRows.size === totalSelectableRows;
@@ -513,19 +532,293 @@ export function TableInspector({
     setShowDeleteConfirm(true);
   }, [editor.selectedRows.size]);
 
-  // Toggle edit mode
-  const handleToggleEditMode = () => {
-    if (editMode && editor.getTotalChanges() > 0) {
-      // Warn user they have unsaved changes
-      toast.warning('You have unsaved changes. Please commit or discard them first.');
-      setShowTransactionPreview(true);
-      return;
-    }
-    setEditMode(!editMode);
-    if (!editMode) {
-      toast.info('Edit mode enabled - double-click cells to edit');
-    }
-  };
+  // ---------- Shared rendering helpers ----------
+
+  /** Render the table header row (checkbox + # + column headers) */
+  const renderTableHeader = () => (
+    <TableHeader className="sticky top-0 bg-background border-b z-10">
+      <TableRow>
+        <TableHead className="w-12 text-center">
+          <Checkbox
+            checked={headerCheckboxState}
+            onCheckedChange={(checked) => {
+              if (checked) {
+                editor.selectAll();
+              } else {
+                editor.clearSelection();
+              }
+            }}
+            aria-label="Select all rows"
+          />
+        </TableHead>
+        <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
+        {(tableSchema?.columns || []).map((columnInfo) => (
+          <TableHead key={columnInfo.name} className="whitespace-nowrap group">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-amber-500 shrink-0" />}
+                <span className="shrink-0">{getColumnTypeIcon(columnInfo.dataType)}</span>
+                <span className="font-medium text-foreground truncate">{columnInfo.name}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  copyColumnValues(columnInfo.name);
+                }}
+                title={`Copy column "${columnInfo.name}"`}
+              >
+                <Copy className="h-3 w-3" />
+              </Button>
+            </div>
+          </TableHead>
+        ))}
+      </TableRow>
+    </TableHeader>
+  );
+
+  /** Render new rows (inserted but not yet committed) */
+  const renderNewRows = () => (
+    <>
+      {Array.from(editor.newRows.values()).map((newRow) => {
+        const newRowIndex = newRow.tempId; // negative number
+        const isSelected = editor.selectedRows.has(newRowIndex);
+        return (
+          <TableRow
+            key={`new-${newRowIndex}`}
+            className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''} bg-green-500/10 border-l-2 border-l-green-500`}
+            title="New row (not yet committed)"
+          >
+            <TableCell className="w-12 text-center">
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={() => editor.toggleRowSelection(newRowIndex)}
+                aria-label={`Select new row`}
+              />
+            </TableCell>
+            <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
+              <div className="flex items-center justify-center gap-1">
+                <Plus className="h-3 w-3 text-green-600" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 opacity-100 hover:bg-destructive/20"
+                  onClick={() => {
+                    editor.removeNewRow(newRowIndex);
+                    toast.info('New row removed');
+                  }}
+                  title="Remove new row"
+                >
+                  <X className="h-3 w-3 text-destructive" />
+                </Button>
+              </div>
+            </TableCell>
+            {(tableSchema?.columns || []).map((columnInfo, cellIndex) => {
+              const isEditing = editor.editingCell?.rowIndex === newRowIndex &&
+                               editor.editingCell?.columnIndex === cellIndex;
+              const cellValue = newRow.values.get(columnInfo.name);
+
+              return (
+                <TableCell key={cellIndex} className="p-0">
+                  <EditableCell
+                    value={cellValue}
+                    rowIndex={newRowIndex}
+                    columnName={columnInfo.name}
+                    columnIndex={cellIndex}
+                    isEditing={isEditing}
+                    isModified={false}
+                    dataType={columnInfo.dataType}
+                    nullable={columnInfo.nullable}
+                    onStartEdit={editor.startEdit}
+                    onChange={editor.applyChange}
+                    onCancelEdit={editor.cancelEdit}
+                  />
+                </TableCell>
+              );
+            })}
+          </TableRow>
+        );
+      })}
+    </>
+  );
+
+  /** Render existing data rows with EditableCell and context menu */
+  const renderExistingRows = () => (
+    <>
+      {sampleData?.rows.map((row, rowIndex) => {
+        const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
+        const isSelected = editor.selectedRows.has(rowIndex);
+        return (
+          <TableRow
+            key={rowIndex}
+            className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
+            title="Double-click cells to edit"
+          >
+            <TableCell className="w-12 text-center">
+              <Checkbox
+                checked={isSelected}
+                onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
+                aria-label={`Select row ${absoluteRowNumber}`}
+              />
+            </TableCell>
+            <TableCell
+              className="w-12 text-center text-xs text-muted-foreground font-mono"
+              onDoubleClick={() => {
+                setSelectedRow(row);
+                setShowRowViewer(true);
+              }}
+            >
+              <div className="flex items-center justify-center gap-1">
+                <span>{absoluteRowNumber}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={() => copyRowValues(row)}
+                  title="Copy row"
+                >
+                  <Copy className="h-3 w-3" />
+                </Button>
+              </div>
+            </TableCell>
+            {row.map((cell, cellIndex) => {
+              const columnName = sampleData!.columns[cellIndex];
+              const columnInfo = tableSchema?.columns.find(c => c.name === columnName);
+
+              if (!columnInfo) return null;
+
+              const isEditing = editor.editingCell?.rowIndex === rowIndex &&
+                               editor.editingCell?.columnIndex === cellIndex;
+              const isModified = editor.isCellModified(rowIndex, columnName);
+
+              return (
+                <ContextMenu key={cellIndex}>
+                  <ContextMenuTrigger asChild>
+                    <TableCell className="p-0">
+                      <EditableCell
+                        value={cell}
+                        rowIndex={rowIndex}
+                        columnName={columnName}
+                        columnIndex={cellIndex}
+                        isEditing={isEditing}
+                        isModified={isModified}
+                        dataType={columnInfo.dataType}
+                        nullable={columnInfo.nullable}
+                        isPrimaryKey={columnInfo.isPrimaryKey}
+                        onStartEdit={editor.startEdit}
+                        onChange={editor.applyChange}
+                        onCancelEdit={editor.cancelEdit}
+                      />
+                    </TableCell>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuItem onClick={() => copyCellValue(cell)}>
+                      <ClipboardCopy className="h-4 w-4 mr-2" />
+                      Copy Cell
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={() => copyRowAsJson(row)}>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy Row as JSON
+                    </ContextMenuItem>
+                    {!columnInfo.isPrimaryKey && (
+                      <ContextMenuItem onClick={() => editor.startEdit(rowIndex, cellIndex)}>
+                        <Pencil className="h-4 w-4 mr-2" />
+                        Edit Cell
+                      </ContextMenuItem>
+                    )}
+                    {!columnInfo.isPrimaryKey && columnInfo.nullable && (
+                      <ContextMenuItem onClick={() => {
+                        editor.applyChange({
+                          rowIndex,
+                          columnName,
+                          columnIndex: cellIndex,
+                          oldValue: cell,
+                          newValue: null,
+                        });
+                      }}>
+                        <Ban className="h-4 w-4 mr-2" />
+                        Set to NULL
+                      </ContextMenuItem>
+                    )}
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      className="text-destructive focus:text-destructive"
+                      onClick={() => {
+                        editor.toggleRowSelection(rowIndex);
+                        setShowDeleteConfirm(true);
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Row
+                    </ContextMenuItem>
+                  </ContextMenuContent>
+                </ContextMenu>
+              );
+            })}
+          </TableRow>
+        );
+      })}
+    </>
+  );
+
+  /** Render the full data table (header + new rows + existing rows) */
+  const renderDataTable = () => (
+    <div className="h-full overflow-auto">
+      <div className="min-w-max h-full select-none">
+        <Table className="[&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border">
+          {renderTableHeader()}
+          <TableBody>
+            {renderNewRows()}
+            {renderExistingRows()}
+          </TableBody>
+        </Table>
+        {sampleData && sampleData.rows.length === 0 && editor.newRows.size === 0 && (
+          <div className="flex items-center justify-center py-12">
+            <div className="text-center space-y-2">
+              <Database className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
+              <p className="text-muted-foreground">No data found in this table</p>
+              <p className="text-sm text-muted-foreground">This collection/table is empty</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  /** Render the TransactionPreview panel */
+  const renderTransactionPreview = () => (
+    <TransactionPreview
+      statements={(() => {
+        const statements: string[] = [];
+        // Add INSERT statements for new rows
+        if (editor.newRows.size > 0) {
+          statements.push(...editor.generateInsertStatements(schema, tableName, quoteIdentifier));
+        }
+        // Add UPDATE statements for modified cells
+        if (editor.getTotalChanges() > 0) {
+          statements.push(...editor.generateUpdateStatements(schema, tableName, quoteIdentifier));
+        }
+        return statements;
+      })()}
+      isExecuting={isCommitting}
+      onCommit={handleCommit}
+      onDiscard={handleDiscard}
+      onClose={() => setShowTransactionPreview(false)}
+      error={commitError}
+      totalChanges={editor.getTotalChanges() + editor.newRows.size}
+      modifiedRows={editor.changes.size + editor.newRows.size}
+      {...{
+        changes: editor.changes,
+        newRows: editor.newRows,
+        columns: tableSchema?.columns || [],
+        rows: sampleData?.rows || [],
+        tableName,
+        schemaName: schema,
+      } as any}
+    />
+  );
 
   if (loading) {
     return (
@@ -539,20 +832,20 @@ export function TableInspector({
           <Skeleton className="h-8 w-8 rounded" />
         </div>
 
-        {/* Tabs Skeleton */}
-        <div className="border-b px-4">
-          <div className="flex gap-4 h-10">
-            <Skeleton className="h-full w-20" />
-            <Skeleton className="h-full w-24" />
-            <Skeleton className="h-full w-20" />
-          </div>
-        </div>
-
         {/* Content Skeleton */}
         <div className="flex-1 p-4 space-y-3">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Skeleton key={i} className="h-12 w-full" />
           ))}
+        </div>
+
+        {/* Tabs Skeleton at bottom */}
+        <div className="border-t px-4">
+          <div className="flex gap-4 h-10">
+            <Skeleton className="h-full w-20" />
+            <Skeleton className="h-full w-24" />
+            <Skeleton className="h-full w-20" />
+          </div>
         </div>
       </div>
     );
@@ -611,7 +904,7 @@ export function TableInspector({
               </Button>
             </>
           )}
-          {editMode && editor.selectedRows.size > 0 && (
+          {editor.selectedRows.size > 0 && (
             <>
               <Badge variant="secondary" className="mr-2">
                 {editor.selectedRows.size} {editor.selectedRows.size === 1 ? 'row' : 'rows'} selected
@@ -627,28 +920,17 @@ export function TableInspector({
               </Button>
             </>
           )}
-          {editMode && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                editor.addRow();
-                toast.success('New row added');
-              }}
-              title="Add a new row"
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              Add Row
-            </Button>
-          )}
           <Button
-            variant={editMode ? "default" : "outline"}
+            variant="outline"
             size="sm"
-            onClick={handleToggleEditMode}
-            title={editMode ? "Exit edit mode" : "Enter edit mode"}
+            onClick={() => {
+              editor.addRow();
+              toast.success('New row added');
+            }}
+            title="Add a new row"
           >
-            <Edit3 className="h-4 w-4 mr-1" />
-            {editMode ? 'Editing' : 'Edit'}
+            <Plus className="h-4 w-4 mr-1" />
+            Add Row
           </Button>
           <Button variant="ghost" size="sm" onClick={handleRefresh}>
             <RefreshCw className="h-4 w-4" />
@@ -666,20 +948,8 @@ export function TableInspector({
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs - TabsList moved to bottom */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-        <div className="border-b px-4 shrink-0">
-          <TabsList>
-            <TabsTrigger value="data">Data</TabsTrigger>
-            <TabsTrigger value="columns">
-              Columns ({tableSchema.columns.length})
-            </TabsTrigger>
-            <TabsTrigger value="indexes">
-              Indexes ({tableSchema.indexes.length})
-            </TabsTrigger>
-          </TabsList>
-        </div>
-
         {/* Data Tab */}
         <TabsContent value="data" className="flex-1 m-0 flex flex-col overflow-hidden">
           {loadingSampleData ? (
@@ -705,193 +975,7 @@ export function TableInspector({
                     {showRowViewer && selectedRow ? (
                       <PanelGroup direction="horizontal" className="h-full">
                         <Panel defaultSize={65} minSize={40}>
-                          <div className="h-full overflow-auto">
-                            <div className="min-w-max h-full">
-                              <Table>
-                          <TableHeader className="sticky top-0 bg-background border-b z-10">
-                            <TableRow>
-                              <TableHead className="w-12 text-center">
-                                <Checkbox
-                                  checked={headerCheckboxState}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      editor.selectAll();
-                                    } else {
-                                      editor.clearSelection();
-                                    }
-                                  }}
-                                  aria-label="Select all rows"
-                                />
-                              </TableHead>
-                              <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
-                              {(tableSchema?.columns || []).map((columnInfo) => {
-                                return (
-                                  <TableHead key={columnInfo.name} className="whitespace-nowrap group">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="flex items-center gap-1.5">
-                                        {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-amber-500 shrink-0" />}
-                                        <span className="shrink-0">{getColumnTypeIcon(columnInfo.dataType)}</span>
-                                        <span className="font-medium text-foreground truncate">{columnInfo.name}</span>
-                                      </div>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          copyColumnValues(columnInfo.name);
-                                        }}
-                                        title={`Copy column "${columnInfo.name}"`}
-                                      >
-                                        <Copy className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  </TableHead>
-                                );
-                              })}
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {/* Render new rows first */}
-                            {Array.from(editor.newRows.values()).map((newRow) => {
-                              const newRowIndex = newRow.tempId; // negative number
-                              const isSelected = editor.selectedRows.has(newRowIndex);
-                              return (
-                                <TableRow
-                                  key={`new-${newRowIndex}`}
-                                  className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''} bg-green-500/10 border-l-2 border-l-green-500`}
-                                  title="New row (not yet committed)"
-                                >
-                                  <TableCell className="w-12 text-center">
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={() => editor.toggleRowSelection(newRowIndex)}
-                                      aria-label={`Select new row`}
-                                    />
-                                  </TableCell>
-                                  <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <Plus className="h-3 w-3 text-green-600" />
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-5 w-5 p-0 opacity-100 hover:bg-destructive/20"
-                                        onClick={() => {
-                                          editor.removeNewRow(newRowIndex);
-                                          toast.info('New row removed');
-                                        }}
-                                        title="Remove new row"
-                                      >
-                                        <X className="h-3 w-3 text-destructive" />
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                  {(tableSchema?.columns || []).map((columnInfo, cellIndex) => {
-                                    const isEditing = editor.editingCell?.rowIndex === newRowIndex &&
-                                                     editor.editingCell?.columnIndex === cellIndex;
-                                    const cellValue = newRow.values.get(columnInfo.name);
-
-                                    return (
-                                      <TableCell key={cellIndex} className="p-0">
-                                        <EditableCell
-                                          value={cellValue}
-                                          rowIndex={newRowIndex}
-                                          columnName={columnInfo.name}
-                                          columnIndex={cellIndex}
-                                          isEditing={isEditing}
-                                          isModified={false}
-                                          dataType={columnInfo.dataType}
-                                          nullable={columnInfo.nullable}
-                                          onStartEdit={editor.startEdit}
-                                          onChange={editor.applyChange}
-                                          onCancelEdit={editor.cancelEdit}
-                                        />
-                                      </TableCell>
-                                    );
-                                  })}
-                                </TableRow>
-                              );
-                            })}
-
-                            {/* Render existing rows */}
-                            {sampleData.rows.map((row, rowIndex) => {
-                              const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
-                              const isSelected = editor.selectedRows.has(rowIndex);
-                              return (
-                                <TableRow
-                                  key={rowIndex}
-                                  className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
-                                  title="Double-click to view row details"
-                                >
-                                  <TableCell className="w-12 text-center">
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
-                                      aria-label={`Select row ${absoluteRowNumber}`}
-                                    />
-                                  </TableCell>
-                                  <TableCell
-                                    className="w-12 text-center text-xs text-muted-foreground font-mono"
-                                    onDoubleClick={!editMode ? () => {
-                                      setSelectedRow(row);
-                                      setShowRowViewer(true);
-                                    } : undefined}
-                                  >
-                                    <div className="flex items-center justify-center gap-1">
-                                      <span>{absoluteRowNumber}</span>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={() => copyRowValues(row)}
-                                        title="Copy row"
-                                      >
-                                        <Copy className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                  {row.map((cell, cellIndex) => (
-                                    <TableCell
-                                      key={cellIndex}
-                                      className="whitespace-nowrap font-mono text-sm cursor-text select-text hover:bg-accent/50"
-                                      onDoubleClick={() => {
-                                        setSelectedRow(row);
-                                        setShowRowViewer(true);
-                                      }}
-                                      title="Double-click for JSON viewer"
-                                    >
-                                      {cell === null || cell === undefined ? (
-                                        <span className="italic text-muted-foreground opacity-50">
-                                          NULL
-                                        </span>
-                                      ) : typeof cell === "object" ? (
-                                        <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
-                                          {JSON.stringify(cell)}
-                                        </code>
-                                      ) : typeof cell === "boolean" ? (
-                                        <span className={cell ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
-                                          {String(cell)}
-                                        </span>
-                                      ) : typeof cell === "number" ? (
-                                        <span className="text-blue-600 dark:text-blue-400">
-                                          {cell.toLocaleString()}
-                                        </span>
-                                      ) : cell === "" ? (
-                                        <span className="italic text-muted-foreground opacity-50">
-                                          (empty)
-                                        </span>
-                                      ) : (
-                                        <span className="text-foreground">{String(cell)}</span>
-                                      )}
-                                    </TableCell>
-                                  ))}
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
+                          {renderDataTable()}
                         </Panel>
                         <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
                         <Panel defaultSize={35} minSize={25} maxSize={60}>
@@ -906,662 +990,38 @@ export function TableInspector({
                         </Panel>
                       </PanelGroup>
                     ) : (
-                <div className="flex-1 overflow-auto">
-                <div className="min-w-max h-full">
-                  <Table>
-                      <TableHeader className="sticky top-0 bg-background border-b z-10">
-                        <TableRow>
-                          <TableHead className="w-12 text-center">
-                            <Checkbox
-                              checked={headerCheckboxState}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  editor.selectAll();
-                                } else {
-                                  editor.clearSelection();
-                                }
-                              }}
-                              aria-label="Select all rows"
-                            />
-                          </TableHead>
-                          <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
-                          {(tableSchema?.columns || []).map((columnInfo) => {
-                            return (
-                              <TableHead key={columnInfo.name} className="whitespace-nowrap group">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-1.5">
-                                    {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-amber-500 shrink-0" />}
-                                    <span className="shrink-0">{getColumnTypeIcon(columnInfo.dataType)}</span>
-                                    <span className="font-medium text-foreground truncate">{columnInfo.name}</span>
-                                  </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      copyColumnValues(columnInfo.name);
-                                    }}
-                                    title={`Copy column "${columnInfo.name}"`}
-                                  >
-                                    <Copy className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </TableHead>
-                            );
-                          })}
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {/* Render new rows first */}
-                        {Array.from(editor.newRows.values()).map((newRow) => {
-                          const newRowIndex = newRow.tempId; // negative number
-                          const isSelected = editor.selectedRows.has(newRowIndex);
-                          return (
-                            <TableRow
-                              key={`new-${newRowIndex}`}
-                              className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''} bg-green-500/10 border-l-2 border-l-green-500`}
-                              title="New row (not yet committed)"
-                            >
-                              <TableCell className="w-12 text-center">
-                                <Checkbox
-                                  checked={isSelected}
-                                  onCheckedChange={() => editor.toggleRowSelection(newRowIndex)}
-                                  aria-label={`Select new row`}
-                                />
-                              </TableCell>
-                              <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
-                                <div className="flex items-center justify-center gap-1">
-                                  <Plus className="h-3 w-3 text-green-600" />
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-5 w-5 p-0 opacity-100 hover:bg-destructive/20"
-                                    onClick={() => {
-                                      editor.removeNewRow(newRowIndex);
-                                      toast.info('New row removed');
-                                    }}
-                                    title="Remove new row"
-                                  >
-                                    <X className="h-3 w-3 text-destructive" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                              {(tableSchema?.columns || []).map((columnInfo, cellIndex) => {
-                                const isEditing = editor.editingCell?.rowIndex === newRowIndex &&
-                                                 editor.editingCell?.columnIndex === cellIndex;
-                                const cellValue = newRow.values.get(columnInfo.name);
-
-                                return (
-                                  <TableCell key={cellIndex} className="p-0">
-                                    <EditableCell
-                                      value={cellValue}
-                                      rowIndex={newRowIndex}
-                                      columnName={columnInfo.name}
-                                      columnIndex={cellIndex}
-                                      isEditing={isEditing}
-                                      isModified={false}
-                                      dataType={columnInfo.dataType}
-                                      nullable={columnInfo.nullable}
-                                      onStartEdit={editor.startEdit}
-                                      onChange={editor.applyChange}
-                                      onCancelEdit={editor.cancelEdit}
-                                    />
-                                  </TableCell>
-                                );
-                              })}
-                            </TableRow>
-                          );
-                        })}
-
-                        {/* Render existing rows */}
-                        {sampleData.rows.map((row, rowIndex) => {
-                          const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
-                          const isSelected = editor.selectedRows.has(rowIndex);
-                          return (
-                            <TableRow
-                              key={rowIndex}
-                              className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
-                              title="Double-click to view row details"
-                            >
-                              <TableCell className="w-12 text-center">
-                                <Checkbox
-                                  checked={isSelected}
-                                  onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
-                                  aria-label={`Select row ${absoluteRowNumber}`}
-                                />
-                              </TableCell>
-                              <TableCell
-                                className="w-12 text-center text-xs text-muted-foreground font-mono"
-                                onDoubleClick={!editMode ? () => {
-                                  setSelectedRow(row);
-                                  setShowRowViewer(true);
-                                } : undefined}
-                              >
-                                <div className="flex items-center justify-center gap-1">
-                                  <span>{absoluteRowNumber}</span>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                    onClick={() => copyRowValues(row)}
-                                    title="Copy row"
-                                  >
-                                    <Copy className="h-3 w-3" />
-                                  </Button>
-                                </div>
-                              </TableCell>
-                              {row.map((cell, cellIndex) => {
-                                const columnName = sampleData.columns[cellIndex];
-                                const columnInfo = tableSchema?.columns.find(c => c.name === columnName);
-
-                                if (!columnInfo) return null;
-
-                                // In edit mode, use EditableCell component
-                                if (editMode) {
-                                  const isEditing = editor.editingCell?.rowIndex === rowIndex &&
-                                                   editor.editingCell?.columnIndex === cellIndex;
-                                  const isModified = editor.isCellModified(rowIndex, columnName);
-
-                                  return (
-                                    <TableCell key={cellIndex} className="p-0">
-                                      <EditableCell
-                                        value={cell}
-                                        rowIndex={rowIndex}
-                                        columnName={columnName}
-                                        columnIndex={cellIndex}
-                                        isEditing={isEditing}
-                                        isModified={isModified}
-                                        dataType={columnInfo.dataType}
-                                        nullable={columnInfo.nullable}
-                                        onStartEdit={editor.startEdit}
-                                        onChange={editor.applyChange}
-                                        onCancelEdit={editor.cancelEdit}
-                                      />
-                                    </TableCell>
-                                  );
-                                }
-
-                                // Read-only mode (original rendering)
-                                const cellString = cell === null || cell === undefined ? 'NULL' :
-                                                  typeof cell === "object" ? JSON.stringify(cell) :
-                                                  String(cell);
-                                const isTruncated = cellString.length > 100;
-                                const displayValue = isTruncated ? cellString.substring(0, 100) + '...' : cellString;
-
-                                return (
-                                  <TableCell
-                                    key={cellIndex}
-                                    className="whitespace-nowrap font-mono text-sm cursor-text select-text hover:bg-accent/50 max-w-md"
-                                    onDoubleClick={() => {
-                                      setSelectedRow(row);
-                                      setShowRowViewer(true);
-                                    }}
-                                    title={isTruncated ? `${cellString}\n\nDouble-click for JSON viewer` : "Double-click for JSON viewer"}
-                                  >
-                                    <div className="truncate">
-                                      {cell === null || cell === undefined ? (
-                                        <span className="italic text-muted-foreground opacity-50">
-                                          NULL
-                                        </span>
-                                      ) : typeof cell === "object" ? (
-                                        <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
-                                          {displayValue}
-                                        </code>
-                                      ) : typeof cell === "boolean" ? (
-                                        <span className={cell ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
-                                          {String(cell)}
-                                        </span>
-                                      ) : typeof cell === "number" ? (
-                                        <span className="text-blue-600 dark:text-blue-400">
-                                          {cell.toLocaleString()}
-                                        </span>
-                                      ) : cell === "" ? (
-                                        <span className="italic text-muted-foreground opacity-50">
-                                          (empty)
-                                        </span>
-                                      ) : (
-                                        <span className="text-foreground">{displayValue}</span>
-                                      )}
-                                    </div>
-                                  </TableCell>
-                                );
-                              })}
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                    {sampleData.rows.length === 0 && (
-                      <div className="flex items-center justify-center py-12">
-                        <div className="text-center space-y-2">
-                          <Database className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
-                          <p className="text-muted-foreground">No data found in this table</p>
-                          <p className="text-sm text-muted-foreground">This collection/table is empty</p>
-                        </div>
-                      </div>
+                      renderDataTable()
                     )}
-                  </div>
-                </div>
-              )}
+                  </Panel>
+                  <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
+                  <Panel defaultSize={30} minSize={20} maxSize={50}>
+                    {renderTransactionPreview()}
+                  </Panel>
+                </PanelGroup>
+              ) : (
+                showRowViewer && selectedRow ? (
+                  <PanelGroup direction="horizontal" className="flex-1">
+                    <Panel defaultSize={65} minSize={40}>
+                      {renderDataTable()}
                     </Panel>
                     <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
-                    <Panel defaultSize={30} minSize={20} maxSize={50}>
-                      <TransactionPreview
-                        statements={(() => {
-                          const statements: string[] = [];
-                          // Add INSERT statements for new rows
-                          if (editor.newRows.size > 0) {
-                            statements.push(...editor.generateInsertStatements(schema, tableName, quoteIdentifier));
-                          }
-                          // Add UPDATE statements for modified cells
-                          if (editor.getTotalChanges() > 0) {
-                            statements.push(...editor.generateUpdateStatements(schema, tableName, quoteIdentifier));
-                          }
-                          return statements;
-                        })()}
-                        isExecuting={isCommitting}
-                        onCommit={handleCommit}
-                        onDiscard={handleDiscard}
-                        onClose={() => setShowTransactionPreview(false)}
-                        error={commitError}
-                        totalChanges={editor.getTotalChanges() + editor.newRows.size}
-                        modifiedRows={editor.changes.size + editor.newRows.size}
+                    <Panel defaultSize={35} minSize={25} maxSize={60}>
+                      <RowJsonViewer
+                        columns={sampleData.columns}
+                        row={selectedRow}
+                        onClose={() => {
+                          setShowRowViewer(false);
+                          setSelectedRow(null);
+                        }}
                       />
                     </Panel>
                   </PanelGroup>
                 ) : (
-                  showRowViewer && selectedRow ? (
-                    <PanelGroup direction="horizontal" className="flex-1">
-                      <Panel defaultSize={65} minSize={40}>
-                        <div className="h-full overflow-auto">
-                          <div className="min-w-max h-full">
-                            <Table>
-                              <TableHeader className="sticky top-0 bg-background border-b z-10">
-                                <TableRow>
-                                  <TableHead className="w-12 text-center">
-                                    <Checkbox
-                                      checked={headerCheckboxState}
-                                      onCheckedChange={(checked) => {
-                                        if (checked) {
-                                          editor.selectAll();
-                                        } else {
-                                          editor.clearSelection();
-                                        }
-                                      }}
-                                      aria-label="Select all rows"
-                                    />
-                                  </TableHead>
-                                  <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
-                                  {(tableSchema?.columns || []).map((columnInfo) => {
-                                    return (
-                                      <TableHead key={columnInfo.name} className="whitespace-nowrap group">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <div className="flex items-center gap-1.5">
-                                            {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-amber-500 shrink-0" />}
-                                            <span className="shrink-0">{getColumnTypeIcon(columnInfo.dataType)}</span>
-                                            <span className="font-medium text-foreground truncate">{columnInfo.name}</span>
-                                          </div>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={(e) => {
-                                              e.stopPropagation();
-                                              copyColumnValues(columnInfo.name);
-                                            }}
-                                            title={`Copy column "${columnInfo.name}"`}
-                                          >
-                                            <Copy className="h-3 w-3" />
-                                          </Button>
-                                        </div>
-                                      </TableHead>
-                                    );
-                                  })}
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {sampleData.rows.map((row, rowIndex) => {
-                                  const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
-                                  const isSelected = editor.selectedRows.has(rowIndex);
-                                  return (
-                                    <TableRow
-                                      key={rowIndex}
-                                      className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
-                                      title="Double-click to view row details"
-                                    >
-                                      <TableCell className="w-12 text-center">
-                                        <Checkbox
-                                          checked={isSelected}
-                                          onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
-                                          aria-label={`Select row ${absoluteRowNumber}`}
-                                        />
-                                      </TableCell>
-                                      <TableCell
-                                        className="w-12 text-center text-xs text-muted-foreground font-mono"
-                                        onDoubleClick={() => {
-                                          setSelectedRow(row);
-                                          setShowRowViewer(true);
-                                        }}
-                                      >
-                                        <div className="flex items-center justify-center gap-1">
-                                          <span>{absoluteRowNumber}</span>
-                                          <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                            onClick={() => copyRowValues(row)}
-                                            title="Copy row"
-                                          >
-                                            <Copy className="h-3 w-3" />
-                                          </Button>
-                                        </div>
-                                      </TableCell>
-                                      {row.map((cell, cellIndex) => {
-                                        const cellString = cell === null || cell === undefined ? 'NULL' :
-                                                          typeof cell === "object" ? JSON.stringify(cell) :
-                                                          String(cell);
-                                        const isTruncated = cellString.length > 100;
-                                        const displayValue = isTruncated ? cellString.substring(0, 100) + '...' : cellString;
-
-                                        return (
-                                          <TableCell
-                                            key={cellIndex}
-                                            className="whitespace-nowrap font-mono text-sm cursor-text select-text hover:bg-accent/50 max-w-md"
-                                            onDoubleClick={() => {
-                                              setSelectedRow(row);
-                                              setShowRowViewer(true);
-                                            }}
-                                            title={isTruncated ? `${cellString}\n\nDouble-click for JSON viewer` : "Double-click for JSON viewer"}
-                                          >
-                                            <div className="truncate">
-                                              {cell === null || cell === undefined ? (
-                                                <span className="italic text-muted-foreground opacity-50">
-                                                  NULL
-                                                </span>
-                                              ) : typeof cell === "object" ? (
-                                                <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
-                                                  {displayValue}
-                                                </code>
-                                              ) : typeof cell === "boolean" ? (
-                                                <span className={cell ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
-                                                  {String(cell)}
-                                                </span>
-                                              ) : typeof cell === "number" ? (
-                                                <span className="text-blue-600 dark:text-blue-400">
-                                                  {cell.toLocaleString()}
-                                                </span>
-                                              ) : cell === "" ? (
-                                                <span className="italic text-muted-foreground opacity-50">
-                                                  (empty)
-                                                </span>
-                                              ) : (
-                                                <span className="text-foreground">{displayValue}</span>
-                                              )}
-                                            </div>
-                                          </TableCell>
-                                        );
-                                      })}
-                                    </TableRow>
-                                  );
-                                })}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        </div>
-                      </Panel>
-                      <PanelResizeHandle className="w-1 bg-border hover:bg-primary/50 transition-colors" />
-                      <Panel defaultSize={35} minSize={25} maxSize={60}>
-                        <RowJsonViewer
-                          columns={sampleData.columns}
-                          row={selectedRow}
-                          onClose={() => {
-                            setShowRowViewer(false);
-                            setSelectedRow(null);
-                          }}
-                        />
-                      </Panel>
-                    </PanelGroup>
-                  ) : (
-                    <div className="flex-1 overflow-auto">
-                      <div className="min-w-max h-full">
-                        <Table>
-                          <TableHeader className="sticky top-0 bg-background border-b z-10">
-                            <TableRow>
-                              <TableHead className="w-12 text-center">
-                                <Checkbox
-                                  checked={headerCheckboxState}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      editor.selectAll();
-                                    } else {
-                                      editor.clearSelection();
-                                    }
-                                  }}
-                                  aria-label="Select all rows"
-                                />
-                              </TableHead>
-                              <TableHead className="w-12 text-center font-normal text-xs text-muted-foreground">#</TableHead>
-                              {(tableSchema?.columns || []).map((columnInfo) => {
-                                return (
-                                  <TableHead key={columnInfo.name} className="whitespace-nowrap group">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="flex items-center gap-1.5">
-                                        {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-amber-500 shrink-0" />}
-                                        <span className="shrink-0">{getColumnTypeIcon(columnInfo.dataType)}</span>
-                                        <span className="font-medium text-foreground truncate">{columnInfo.name}</span>
-                                      </div>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          copyColumnValues(columnInfo.name);
-                                        }}
-                                        title={`Copy column "${columnInfo.name}"`}
-                                      >
-                                        <Copy className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  </TableHead>
-                                );
-                              })}
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {/* Render new rows first */}
-                            {Array.from(editor.newRows.values()).map((newRow) => {
-                              const newRowIndex = newRow.tempId; // negative number
-                              const isSelected = editor.selectedRows.has(newRowIndex);
-                              return (
-                                <TableRow
-                                  key={`new-${newRowIndex}`}
-                                  className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''} bg-green-500/10 border-l-2 border-l-green-500`}
-                                  title="New row (not yet committed)"
-                                >
-                                  <TableCell className="w-12 text-center">
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={() => editor.toggleRowSelection(newRowIndex)}
-                                      aria-label={`Select new row`}
-                                    />
-                                  </TableCell>
-                                  <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
-                                    <div className="flex items-center justify-center gap-1">
-                                      <Plus className="h-3 w-3 text-green-600" />
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-5 w-5 p-0 opacity-100 hover:bg-destructive/20"
-                                        onClick={() => {
-                                          editor.removeNewRow(newRowIndex);
-                                          toast.info('New row removed');
-                                        }}
-                                        title="Remove new row"
-                                      >
-                                        <X className="h-3 w-3 text-destructive" />
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                  {(tableSchema?.columns || []).map((columnInfo, cellIndex) => {
-                                    const isEditing = editor.editingCell?.rowIndex === newRowIndex &&
-                                                     editor.editingCell?.columnIndex === cellIndex;
-                                    const cellValue = newRow.values.get(columnInfo.name);
-
-                                    return (
-                                      <TableCell key={cellIndex} className="p-0">
-                                        <EditableCell
-                                          value={cellValue}
-                                          rowIndex={newRowIndex}
-                                          columnName={columnInfo.name}
-                                          columnIndex={cellIndex}
-                                          isEditing={isEditing}
-                                          isModified={false}
-                                          dataType={columnInfo.dataType}
-                                          nullable={columnInfo.nullable}
-                                          onStartEdit={editor.startEdit}
-                                          onChange={editor.applyChange}
-                                          onCancelEdit={editor.cancelEdit}
-                                        />
-                                      </TableCell>
-                                    );
-                                  })}
-                                </TableRow>
-                              );
-                            })}
-
-                            {/* Render existing rows */}
-                            {sampleData.rows.map((row, rowIndex) => {
-                              const absoluteRowNumber = ((currentPage - 1) * pageSize) + rowIndex + 1;
-                              const isSelected = editor.selectedRows.has(rowIndex);
-                              return (
-                                <TableRow
-                                  key={rowIndex}
-                                  className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''}`}
-                                  title="Double-click to view row details"
-                                >
-                                  <TableCell className="w-12 text-center">
-                                    <Checkbox
-                                      checked={isSelected}
-                                      onCheckedChange={() => editor.toggleRowSelection(rowIndex)}
-                                      aria-label={`Select row ${absoluteRowNumber}`}
-                                    />
-                                  </TableCell>
-                                  <TableCell
-                                    className="w-12 text-center text-xs text-muted-foreground font-mono"
-                                    onDoubleClick={!editMode ? () => {
-                                      setSelectedRow(row);
-                                      setShowRowViewer(true);
-                                    } : undefined}
-                                  >
-                                    <div className="flex items-center justify-center gap-1">
-                                      <span>{absoluteRowNumber}</span>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        onClick={() => copyRowValues(row)}
-                                        title="Copy row"
-                                      >
-                                        <Copy className="h-3 w-3" />
-                                      </Button>
-                                    </div>
-                                  </TableCell>
-                                  {row.map((cell, cellIndex) => {
-                                    const columnName = sampleData.columns[cellIndex];
-                                    const columnInfo = tableSchema?.columns.find(c => c.name === columnName);
-
-                                    if (!columnInfo) return null;
-
-                                    // In edit mode, use EditableCell component
-                                    if (editMode) {
-                                      const isEditing = editor.editingCell?.rowIndex === rowIndex &&
-                                                       editor.editingCell?.columnIndex === cellIndex;
-                                      const isModified = editor.isCellModified(rowIndex, columnName);
-
-                                      return (
-                                        <TableCell key={cellIndex} className="p-0">
-                                          <EditableCell
-                                            value={cell}
-                                            rowIndex={rowIndex}
-                                            columnName={columnName}
-                                            columnIndex={cellIndex}
-                                            isEditing={isEditing}
-                                            isModified={isModified}
-                                            dataType={columnInfo.dataType}
-                                            nullable={columnInfo.nullable}
-                                            onStartEdit={editor.startEdit}
-                                            onChange={editor.applyChange}
-                                            onCancelEdit={editor.cancelEdit}
-                                          />
-                                        </TableCell>
-                                      );
-                                    }
-
-                                    // Read-only mode (original rendering)
-                                    const cellString = cell === null || cell === undefined ? 'NULL' :
-                                                      typeof cell === "object" ? JSON.stringify(cell) :
-                                                      String(cell);
-                                    const isTruncated = cellString.length > 100;
-                                    const displayValue = isTruncated ? cellString.substring(0, 100) + '...' : cellString;
-
-                                    return (
-                                      <TableCell
-                                        key={cellIndex}
-                                        className="whitespace-nowrap font-mono text-sm cursor-text select-text hover:bg-accent/50 max-w-md"
-                                        onDoubleClick={() => {
-                                          setSelectedRow(row);
-                                          setShowRowViewer(true);
-                                        }}
-                                        title={isTruncated ? `${cellString}\n\nDouble-click for JSON viewer` : "Double-click for JSON viewer"}
-                                      >
-                                        <div className="truncate">
-                                          {cell === null || cell === undefined ? (
-                                            <span className="italic text-muted-foreground opacity-50">
-                                              NULL
-                                            </span>
-                                          ) : typeof cell === "object" ? (
-                                            <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
-                                              {displayValue}
-                                            </code>
-                                          ) : typeof cell === "boolean" ? (
-                                            <span className={cell ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
-                                              {String(cell)}
-                                            </span>
-                                          ) : typeof cell === "number" ? (
-                                            <span className="text-blue-600 dark:text-blue-400">
-                                              {cell.toLocaleString()}
-                                            </span>
-                                          ) : cell === "" ? (
-                                            <span className="italic text-muted-foreground opacity-50">
-                                              (empty)
-                                            </span>
-                                          ) : (
-                                            <span className="text-foreground">{displayValue}</span>
-                                          )}
-                                        </div>
-                                      </TableCell>
-                                    );
-                                  })}
-                                </TableRow>
-                              );
-                            })}
-                          </TableBody>
-                        </Table>
-                        {sampleData.rows.length === 0 && (
-                          <div className="flex items-center justify-center py-12">
-                            <div className="text-center space-y-2">
-                              <Database className="h-12 w-12 mx-auto text-muted-foreground opacity-50" />
-                              <p className="text-muted-foreground">No data found in this table</p>
-                              <p className="text-sm text-muted-foreground">This collection/table is empty</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )
-                )}
+                  <div className="flex-1 overflow-hidden">
+                    {renderDataTable()}
+                  </div>
+                )
+              )}
 
               {/* Floating Bulk Action Bar */}
               {editor.selectedRows.size > 0 && (
@@ -1581,18 +1041,16 @@ export function TableInspector({
                         <Copy className="h-3 w-3 mr-1" />
                         Copy JSON
                       </Button>
-                      {editMode && (
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={handleBulkDeleteFromBar}
-                          disabled={isDeleting}
-                        >
-                          <Trash2 className="h-3 w-3 mr-1" />
-                          Delete
-                        </Button>
-                      )}
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={handleBulkDeleteFromBar}
+                        disabled={isDeleting}
+                      >
+                        <Trash2 className="h-3 w-3 mr-1" />
+                        Delete
+                      </Button>
                       <Button
                         variant="ghost"
                         size="sm"
@@ -1607,60 +1065,7 @@ export function TableInspector({
                 </div>
               )}
 
-              {/* Pagination Controls */}
-              <div className="flex items-center justify-between px-4 py-2 border-t bg-background shrink-0">
-                <div className="text-xs text-muted-foreground">
-                  {totalRows !== null ? (
-                    <>{totalRows.toLocaleString()} rows</>
-                  ) : (
-                    <>{sampleData.rows.length} rows</>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={handlePreviousPage}
-                    disabled={currentPage === 1 || loadingSampleData}
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </Button>
-                  <div className="flex items-center gap-1 text-xs">
-                    <input
-                      type="number"
-                      value={currentPage}
-                      onChange={(e) => {
-                        const page = parseInt(e.target.value);
-                        if (!isNaN(page) && page >= 1) {
-                          if (totalPages && page <= totalPages) {
-                            setCurrentPage(page);
-                          } else if (!totalPages) {
-                            setCurrentPage(page);
-                          }
-                        }
-                      }}
-                      className="w-12 h-7 text-center bg-muted border border-border rounded text-xs [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-1 focus:ring-ring"
-                      min={1}
-                      max={totalPages || undefined}
-                    />
-                    <span className="text-muted-foreground">of {totalPages ?? "?"}</span>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    onClick={handleNextPage}
-                    disabled={totalPages === null || currentPage >= totalPages || loadingSampleData}
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                  <span className="text-xs text-muted-foreground border-l border-border pl-2 ml-1">
-                    {pageSize} / page
-                  </span>
-                </div>
-              </div>
+              {/* Pagination Controls - shares footer with TabsList */}
             </>
           ) : (
             <div className="flex items-center justify-center flex-1">
@@ -1679,7 +1084,7 @@ export function TableInspector({
         <TabsContent value="columns" className="flex-1 m-0 overflow-hidden">
           <ScrollArea className="h-full w-full">
             <div className="min-w-max">
-              <Table>
+              <Table className="[&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border">
                 <TableHeader className="sticky top-0 bg-background z-10">
                   <TableRow>
                     <TableHead className="whitespace-nowrap">Column</TableHead>
@@ -1731,7 +1136,7 @@ export function TableInspector({
           <ScrollArea className="h-full w-full">
             {tableSchema.indexes.length > 0 ? (
               <div className="min-w-max">
-                <Table>
+                <Table className="[&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border">
                   <TableHeader className="sticky top-0 bg-background z-10">
                     <TableRow>
                       <TableHead className="whitespace-nowrap">Index Name</TableHead>
@@ -1769,6 +1174,70 @@ export function TableInspector({
             )}
           </ScrollArea>
         </TabsContent>
+
+        {/* Footer: Tabs + Pagination in one bar */}
+        <div className="flex items-center justify-between px-4 py-1.5 border-t bg-background shrink-0">
+          <TabsList>
+            <TabsTrigger value="data">Data</TabsTrigger>
+            <TabsTrigger value="columns">
+              Columns ({tableSchema.columns.length})
+            </TabsTrigger>
+            <TabsTrigger value="indexes">
+              Indexes ({tableSchema.indexes.length})
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Pagination (only visible on Data tab) */}
+          {activeTab === "data" && sampleData && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {totalRows !== null ? `${totalRows.toLocaleString()} rows` : `${sampleData.rows.length} rows`}
+              </span>
+              <span className="text-muted-foreground">|</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={handlePreviousPage}
+                disabled={currentPage === 1 || loadingSampleData}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <div className="flex items-center gap-1 text-xs">
+                <input
+                  type="number"
+                  value={currentPage}
+                  onChange={(e) => {
+                    const page = parseInt(e.target.value);
+                    if (!isNaN(page) && page >= 1) {
+                      if (totalPages && page <= totalPages) {
+                        setCurrentPage(page);
+                      } else if (!totalPages) {
+                        setCurrentPage(page);
+                      }
+                    }
+                  }}
+                  className="w-12 h-7 text-center bg-muted border border-border rounded text-xs select-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-1 focus:ring-ring"
+                  min={1}
+                  max={totalPages || undefined}
+                />
+                <span className="text-muted-foreground">of {totalPages ?? "?"}</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={handleNextPage}
+                disabled={totalPages === null || currentPage >= totalPages || loadingSampleData}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+              <span className="text-xs text-muted-foreground border-l border-border pl-2 ml-1">
+                {pageSize} / page
+              </span>
+            </div>
+          )}
+        </div>
       </Tabs>
 
       {/* Bulk Delete Confirmation Dialog */}

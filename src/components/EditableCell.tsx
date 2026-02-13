@@ -35,6 +35,9 @@ interface EditableCellProps {
   /** Whether column accepts NULL */
   nullable: boolean;
 
+  /** Whether this column is a primary key (non-editable) */
+  isPrimaryKey?: boolean;
+
   /** Callback when cell edit starts */
   onStartEdit: (rowIndex: number, columnIndex: number) => void;
 
@@ -57,6 +60,7 @@ export const EditableCell: FC<EditableCellProps> = ({
   isModified,
   dataType,
   nullable,
+  isPrimaryKey,
   onStartEdit,
   onChange,
   onCancelEdit,
@@ -64,19 +68,26 @@ export const EditableCell: FC<EditableCellProps> = ({
 }) => {
   const [editValue, setEditValue] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const justMountedRef = useRef(false);
 
   // Initialize edit value when entering edit mode
   useEffect(() => {
     if (isEditing) {
+      justMountedRef.current = true;
       const initialValue = value === null || value === undefined ? '' : String(value);
       setEditValue(initialValue);
       // Focus input after a brief delay to ensure it's rendered
-      setTimeout(() => inputRef.current?.focus(), 10);
+      setTimeout(() => {
+        inputRef.current?.focus();
+        justMountedRef.current = false;
+      }, 50);
     }
   }, [isEditing, value]);
 
   const handleDoubleClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent event from bubbling to parent elements
+    e.stopPropagation();
+    // Primary keys are not editable
+    if (isPrimaryKey) return;
     if (!isEditing) {
       onStartEdit(rowIndex, columnIndex);
     }
@@ -91,6 +102,9 @@ export const EditableCell: FC<EditableCellProps> = ({
   };
 
   const handleBlur = () => {
+    // Skip blur if the edit just started (e.g., from context menu "Edit Cell")
+    // to prevent the input from immediately committing before the user can type
+    if (justMountedRef.current) return;
     if (isEditing) {
       handleCommit();
     }
@@ -171,7 +185,7 @@ export const EditableCell: FC<EditableCellProps> = ({
       )}
       onClick={onClick}
       onDoubleClick={handleDoubleClick}
-      title={isTruncated ? `${cellString}\n\nDouble-click to edit • Click to copy` : "Double-click to edit • Click to copy"}
+      title={isPrimaryKey ? (isTruncated ? cellString : "Primary key (read-only)") : (isTruncated ? `${cellString}\n\nDouble-click to edit • Click to copy` : "Double-click to edit • Click to copy")}
     >
       {value === null || value === undefined ? (
         <span className="italic text-muted-foreground opacity-50">

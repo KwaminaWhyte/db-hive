@@ -1,9 +1,8 @@
 import { FC, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Button } from './ui/button';
 import { ScrollArea } from './ui/scroll-area';
-import { Badge } from './ui/badge';
-import { FileCode, X, AlertCircle, FileEdit, Database } from 'lucide-react';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
+import { X, AlertCircle, Eye, Code } from 'lucide-react';
 import { Alert, AlertDescription } from './ui/alert';
 
 interface TransactionPreviewProps {
@@ -30,6 +29,31 @@ interface TransactionPreviewProps {
 
   /** Number of modified rows */
   modifiedRows?: number;
+
+  /** Map of rowIndex -> { changes: Map<columnName, { oldValue, newValue }> } */
+  changes?: Map<number, { changes: Map<string, { oldValue: any; newValue: any }> }>;
+
+  /** Map of tempId -> { tempId: number, values: Map<string, any> } */
+  newRows?: Map<number, { tempId: number; values: Map<string, any> }>;
+
+  /** Column schema information */
+  columns?: Array<{
+    name: string;
+    dataType: string;
+    isPrimaryKey: boolean;
+    nullable: boolean;
+    defaultValue: string | null;
+    isAutoIncrement: boolean;
+  }>;
+
+  /** Current page data rows */
+  rows?: any[][];
+
+  /** Table name */
+  tableName?: string;
+
+  /** Schema name */
+  schemaName?: string;
 }
 
 /**
@@ -145,6 +169,24 @@ function highlightSQL(sql: string): React.ReactNode {
   return result;
 }
 
+/** Format a cell value for display */
+function formatValue(value: any): string {
+  if (value === null || value === undefined) return 'NULL';
+  if (typeof value === 'string') return `'${value}'`;
+  return String(value);
+}
+
+interface VisualChange {
+  type: 'update' | 'insert' | 'delete';
+  breadcrumb: string;
+  details: Array<{
+    column?: string;
+    oldValue?: string;
+    newValue?: string;
+    summary?: string;
+  }>;
+}
+
 export const TransactionPreview: FC<TransactionPreviewProps> = ({
   statements,
   isExecuting,
@@ -153,34 +195,98 @@ export const TransactionPreview: FC<TransactionPreviewProps> = ({
   onClose,
   error,
   totalChanges = 0,
-  modifiedRows = 0,
+  changes,
+  newRows,
+  columns,
+  rows,
+  tableName,
+  schemaName,
 }) => {
   const totalStatements = statements.length;
 
-  // Calculate statistics
-  const stats = useMemo(() => {
-    let updates = 0;
-    let inserts = 0;
-    let deletes = 0;
+  // Determine whether we have rich change data for the visual tab
+  const hasVisualData = !!(changes || newRows);
 
+  // Find the primary key column index for row identification
+  const pkColumnIndex = useMemo(() => {
+    if (!columns) return -1;
+    return columns.findIndex((col) => col.isPrimaryKey);
+  }, [columns]);
+
+  // Build a human-readable row identifier
+  const getRowLabel = (rowIndex: number): string => {
+    if (rows && pkColumnIndex >= 0 && rows[rowIndex]) {
+      const pkCol = columns![pkColumnIndex];
+      const pkValue = rows[rowIndex][pkColumnIndex];
+      return `${pkCol.name} = ${formatValue(pkValue)}`;
+    }
+    return `row ${rowIndex + 1}`;
+  };
+
+  const qualifiedTable = useMemo(() => {
+    if (schemaName && tableName) return `${schemaName}.${tableName}`;
+    if (tableName) return tableName;
+    return 'table';
+  }, [schemaName, tableName]);
+
+  // Compute visual diff entries from the changes and newRows maps
+  const visualChanges = useMemo<VisualChange[]>(() => {
+    const entries: VisualChange[] = [];
+
+    // Process UPDATE changes
+    if (changes) {
+      Array.from(changes.entries()).forEach(([rowIndex, rowChange]) => {
+        Array.from(rowChange.changes.entries()).forEach(([columnName, { oldValue, newValue }]) => {
+          entries.push({
+            type: 'update',
+            breadcrumb: `${qualifiedTable} > ${getRowLabel(rowIndex)} > ${columnName}`,
+            details: [
+              { oldValue: formatValue(oldValue) },
+              { newValue: formatValue(newValue) },
+            ],
+          });
+        });
+      });
+    }
+
+    // Process INSERT new rows
+    if (newRows) {
+      Array.from(newRows.entries()).forEach(([, newRow]) => {
+        const valueParts: string[] = [];
+        newRow.values.forEach((value, colName) => {
+          valueParts.push(`${colName}: ${formatValue(value)}`);
+        });
+
+        entries.push({
+          type: 'insert',
+          breadcrumb: `${qualifiedTable} > new row`,
+          details: [
+            { summary: valueParts.length > 0 ? valueParts.join(', ') : '(empty row)' },
+          ],
+        });
+      });
+    }
+
+    // Detect DELETE statements from SQL (no rich data available for deletes)
     statements.forEach((stmt) => {
       const upperStmt = stmt.trim().toUpperCase();
-      if (upperStmt.startsWith('UPDATE')) updates++;
-      else if (upperStmt.startsWith('INSERT')) inserts++;
-      else if (upperStmt.startsWith('DELETE')) deletes++;
+      if (upperStmt.startsWith('DELETE')) {
+        entries.push({
+          type: 'delete',
+          breadcrumb: `${qualifiedTable} > row`,
+          details: [{ summary: stmt.trim() }],
+        });
+      }
     });
 
-    return { updates, inserts, deletes };
-  }, [statements]);
+    return entries;
+  }, [changes, newRows, statements, qualifiedTable, rows, pkColumnIndex, columns]);
 
   return (
     <div className="h-full flex flex-col border-l bg-background">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b bg-muted/30">
-        <div className="flex items-center gap-2">
-          <FileCode className="h-4 w-4 text-muted-foreground" />
-          <span className="text-sm font-semibold">Transaction Preview</span>
-        </div>
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+        <span className="text-sm font-semibold">Pending Changes</span>
         <Button
           variant="ghost"
           size="sm"
@@ -190,37 +296,6 @@ export const TransactionPreview: FC<TransactionPreviewProps> = ({
           <X className="h-4 w-4" />
         </Button>
       </div>
-
-      {/* Statistics Bar */}
-      {totalStatements > 0 && (
-        <div className="p-3 border-b bg-muted/20">
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1.5">
-              <Database className="h-3.5 w-3.5 text-blue-500" />
-              <span className="text-xs font-medium">{modifiedRows} {modifiedRows === 1 ? 'Row' : 'Rows'}</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <FileEdit className="h-3.5 w-3.5 text-amber-500" />
-              <span className="text-xs font-medium">{totalChanges} {totalChanges === 1 ? 'Cell' : 'Cells'}</span>
-            </div>
-            {stats.updates > 0 && (
-              <Badge variant="outline" className="text-xs">
-                {stats.updates} UPDATE{stats.updates > 1 ? 'S' : ''}
-              </Badge>
-            )}
-            {stats.inserts > 0 && (
-              <Badge variant="outline" className="text-xs bg-green-500/10 text-green-600 border-green-600/30">
-                {stats.inserts} INSERT{stats.inserts > 1 ? 'S' : ''}
-              </Badge>
-            )}
-            {stats.deletes > 0 && (
-              <Badge variant="outline" className="text-xs bg-red-500/10 text-red-600 border-red-600/30">
-                {stats.deletes} DELETE{stats.deletes > 1 ? 'S' : ''}
-              </Badge>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Error Display */}
       {error && (
@@ -232,82 +307,163 @@ export const TransactionPreview: FC<TransactionPreviewProps> = ({
         </div>
       )}
 
-      {/* SQL Statements */}
-      <ScrollArea className="flex-1 p-4">
-        <div className="space-y-3">
-          {statements.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <p className="text-sm">No changes to commit</p>
-              <p className="text-xs mt-1">Edit cells to see SQL statements here</p>
-            </div>
-          ) : (
-            statements.map((stmt, idx) => {
-              // Determine statement type for badge color
-              const upperStmt = stmt.trim().toUpperCase();
-              const stmtType = upperStmt.startsWith('UPDATE')
-                ? 'UPDATE'
-                : upperStmt.startsWith('INSERT')
-                ? 'INSERT'
-                : upperStmt.startsWith('DELETE')
-                ? 'DELETE'
-                : 'SQL';
-
-              const badgeColor =
-                stmtType === 'UPDATE'
-                  ? 'bg-blue-500/10 text-blue-600 border-blue-600/30'
-                  : stmtType === 'INSERT'
-                  ? 'bg-green-500/10 text-green-600 border-green-600/30'
-                  : 'bg-red-500/10 text-red-600 border-red-600/30';
-
-              return (
-                <Card key={idx} className="bg-muted/30">
-                  <CardHeader className="p-3 pb-2">
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-xs font-medium text-muted-foreground">
-                        Statement {idx + 1}
-                      </CardTitle>
-                      <Badge variant="outline" className={`text-xs ${badgeColor}`}>
-                        {stmtType}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-3 pt-0">
-                    <pre className="text-xs font-mono bg-background p-3 rounded border overflow-x-auto">
-                      <code className="language-sql" style={{ color: '#D4D4D4' }}>
-                        {highlightSQL(stmt)}
-                      </code>
-                    </pre>
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
+      {/* Tabs: Visual / SQL */}
+      {totalStatements === 0 ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center py-8 text-muted-foreground">
+            <p className="text-sm">No changes to commit</p>
+            <p className="text-xs mt-1">Edit cells to see changes here</p>
+          </div>
         </div>
-      </ScrollArea>
+      ) : (
+        <Tabs defaultValue={hasVisualData ? 'visual' : 'sql'} className="flex-1 flex flex-col min-h-0">
+          <div className="px-3 pt-2 border-b">
+            <TabsList className="h-8">
+              <TabsTrigger value="visual" className="text-xs gap-1.5 px-3">
+                <Eye className="h-3.5 w-3.5" />
+                Visual
+              </TabsTrigger>
+              <TabsTrigger value="sql" className="text-xs gap-1.5 px-3">
+                <Code className="h-3.5 w-3.5" />
+                SQL
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-      {/* Action Buttons */}
-      <div className="p-3 border-t bg-muted/30 space-y-2">
-        <div className="flex gap-2">
+          {/* Visual Tab */}
+          <TabsContent value="visual" className="flex-1 min-h-0">
+            <ScrollArea className="h-full">
+              <div className="p-3 space-y-3">
+                {hasVisualData && visualChanges.length > 0 ? (
+                  visualChanges.map((change, idx) => (
+                    <div key={idx} className="space-y-1">
+                      {/* Breadcrumb */}
+                      <div className="text-xs text-muted-foreground font-mono px-1">
+                        {change.breadcrumb.split(' > ').map((segment, segIdx, arr) => (
+                          <span key={segIdx}>
+                            <span className={segIdx === arr.length - 1 ? 'text-foreground font-medium' : ''}>
+                              {segment}
+                            </span>
+                            {segIdx < arr.length - 1 && (
+                              <span className="mx-1 text-muted-foreground/60">&rsaquo;</span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Diff lines */}
+                      <div className="rounded-md overflow-hidden border border-border/50">
+                        {change.type === 'update' && change.details.map((detail, dIdx) => (
+                          <div key={dIdx}>
+                            {detail.oldValue !== undefined && (
+                              <div className="bg-red-500/10 text-red-600 dark:text-red-400 border-l-2 border-red-500 px-3 py-1.5 font-mono text-xs">
+                                <span className="select-none mr-2">-</span>
+                                {detail.oldValue}
+                              </div>
+                            )}
+                            {detail.newValue !== undefined && (
+                              <div className="bg-green-500/10 text-green-600 dark:text-green-400 border-l-2 border-green-500 px-3 py-1.5 font-mono text-xs">
+                                <span className="select-none mr-2">+</span>
+                                {detail.newValue}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+
+                        {change.type === 'insert' && change.details.map((detail, dIdx) => (
+                          <div key={dIdx} className="bg-green-500/10 text-green-600 dark:text-green-400 border-l-2 border-green-500 px-3 py-1.5 font-mono text-xs">
+                            <span className="select-none mr-2">+</span>
+                            INSERT {detail.summary}
+                          </div>
+                        ))}
+
+                        {change.type === 'delete' && change.details.map((_detail, dIdx) => (
+                          <div key={dIdx} className="bg-red-500/10 text-red-600 dark:text-red-400 border-l-2 border-red-500 px-3 py-1.5 font-mono text-xs">
+                            <span className="select-none mr-2">-</span>
+                            DELETE row
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  /* Fallback: no rich data, show SQL statement summaries */
+                  statements.map((stmt, idx) => {
+                    const upperStmt = stmt.trim().toUpperCase();
+                    const isInsert = upperStmt.startsWith('INSERT');
+                    const isDelete = upperStmt.startsWith('DELETE');
+
+                    return (
+                      <div key={idx} className="space-y-1">
+                        <div className="text-xs text-muted-foreground font-mono px-1">
+                          {qualifiedTable} <span className="mx-1 text-muted-foreground/60">&rsaquo;</span>
+                          <span className="text-foreground font-medium">statement {idx + 1}</span>
+                        </div>
+                        <div className="rounded-md overflow-hidden border border-border/50">
+                          <div
+                            className={`px-3 py-1.5 font-mono text-xs border-l-2 ${
+                              isDelete
+                                ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500'
+                                : isInsert
+                                ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500'
+                            }`}
+                          >
+                            <span className="select-none mr-2">{isDelete ? '-' : isInsert ? '+' : '~'}</span>
+                            {stmt.trim().substring(0, 120)}{stmt.trim().length > 120 ? '...' : ''}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {/* SQL Tab */}
+          <TabsContent value="sql" className="flex-1 min-h-0">
+            <ScrollArea className="h-full">
+              <div className="p-3 space-y-2">
+                {statements.map((stmt, idx) => (
+                  <pre
+                    key={idx}
+                    className="text-xs font-mono bg-muted/50 p-3 rounded-md border overflow-x-auto"
+                  >
+                    <code style={{ color: '#D4D4D4' }}>
+                      {highlightSQL(stmt)}
+                    </code>
+                  </pre>
+                ))}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
+      )}
+
+      {/* Footer */}
+      {totalStatements > 0 && (
+        <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/30">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onDiscard}
+            disabled={isExecuting}
+            className="text-muted-foreground hover:text-destructive text-xs"
+          >
+            Clear All
+          </Button>
           <Button
             variant="default"
             size="sm"
             onClick={onCommit}
-            disabled={totalStatements === 0 || isExecuting}
-            className="flex-1"
+            disabled={isExecuting}
+            className="text-xs"
           >
-            {isExecuting ? 'Committing...' : `Commit ${totalStatements} ${totalStatements === 1 ? 'Change' : 'Changes'}`}
+            {isExecuting ? 'Committing...' : `Commit All (${totalChanges || totalStatements})`}
           </Button>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onDiscard}
-          disabled={totalStatements === 0 || isExecuting}
-          className="w-full"
-        >
-          Discard All Changes
-        </Button>
-      </div>
+      )}
     </div>
   );
 };
