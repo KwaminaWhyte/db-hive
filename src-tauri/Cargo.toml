@@ -1,6 +1,6 @@
 [package]
 name = "db-hive"
-version = "0.17.0"
+version = "0.17.1"
 description = "A professional database client application"
 authors = ["KwaminaWhyte"]
 edition = "2021"

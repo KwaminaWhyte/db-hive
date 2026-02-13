@@ -30,11 +30,17 @@ impl PostgresDriver {
         ];
 
         if let Some(password) = &opts.password {
-            parts.push(format!("password={}", password));
+            if !password.is_empty() {
+                // Quote password to handle special characters and spaces
+                let escaped = password.replace('\\', "\\\\").replace('\'', "\\'");
+                parts.push(format!("password='{}'", escaped));
+            }
         }
 
         if let Some(database) = &opts.database {
-            parts.push(format!("dbname={}", database));
+            if !database.is_empty() {
+                parts.push(format!("dbname={}", database));
+            }
         }
 
         if let Some(timeout) = opts.timeout {
@@ -288,14 +294,17 @@ impl DatabaseDriver for PostgresDriver {
     }
 
     async fn get_schemas(&self, database: &str) -> Result<Vec<SchemaInfo>, DbError> {
-        // Note: information_schema.schemata only shows schemas from the connected database,
-        // so filtering by catalog_name is unnecessary and can cause mismatches.
+        // Use pg_catalog.pg_namespace instead of information_schema.schemata
+        // because pg_namespace shows ALL schemas regardless of user privileges,
+        // matching behavior of pgAdmin, DBeaver, and other database tools.
+
         let query = r#"
             SELECT
-                schema_name as name
-            FROM information_schema.schemata
-            WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
-            ORDER BY schema_name
+                nspname as name
+            FROM pg_catalog.pg_namespace
+            WHERE nspname NOT LIKE 'pg_%'
+              AND nspname != 'information_schema'
+            ORDER BY nspname
         "#;
 
         let rows = self
@@ -613,9 +622,28 @@ mod tests {
         assert!(conn_str.contains("host=localhost"));
         assert!(conn_str.contains("port=5432"));
         assert!(conn_str.contains("user=postgres"));
-        assert!(conn_str.contains("password=secret"));
+        assert!(conn_str.contains("password='secret'"));
         assert!(conn_str.contains("dbname=testdb"));
         assert!(conn_str.contains("connect_timeout=30"));
+    }
+
+    #[test]
+    fn test_connection_string_empty_password_excluded() {
+        let opts = ConnectionOptions {
+            host: "localhost".to_string(),
+            port: 5432,
+            username: "postgres".to_string(),
+            password: Some("".to_string()),
+            database: Some("testdb".to_string()),
+            timeout: None,
+        };
+
+        let conn_str = PostgresDriver::build_connection_string(&opts);
+
+        // Empty password must NOT appear in connection string to avoid
+        // corrupting subsequent parameters in libpq key-value format
+        assert!(!conn_str.contains("password="));
+        assert!(conn_str.contains("dbname=testdb"));
     }
 
     #[test]

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.1-beta] - 2026-02-13
+
+### Fixed
+
+- **PostgreSQL Connection String Parsing**: Fixed critical bug where an unquoted empty `password=` in the libpq connection string caused the `dbname` parameter to be consumed as the password value. This meant the database name was silently ignored and PostgreSQL connected to the user's default database instead of the specified one. Empty passwords are now omitted, and non-empty passwords are properly single-quoted with escaping.
+
+- **PostgreSQL Schemas Not Showing**: Switched schema listing from `information_schema.schemata` (which only shows schemas the user has privileges on) to `pg_catalog.pg_namespace` (which shows all schemas), matching the behavior of pgAdmin, DBeaver, and other database tools.
+
+- **Database Switching with SSH Tunnels**: Fixed `switch_database` connecting directly to the remote host instead of routing through the active SSH tunnel, which caused silent connection failures when switching databases over SSH.
+
 ## [0.17.0-beta] - 2026-02-13
 
 ### Fixed

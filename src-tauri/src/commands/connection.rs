@@ -489,12 +489,23 @@ pub async fn connect_to_database(
     };
 
     // Build connection options from profile
+    // For PostgreSQL, default to "postgres" database if none specified
+    let database = if matches!(profile.driver, DbDriver::Postgres) {
+        match &profile.database {
+            None => Some("postgres".to_string()),
+            Some(d) if d.is_empty() => Some("postgres".to_string()),
+            other => other.clone(),
+        }
+    } else {
+        profile.database.clone()
+    };
+
     let opts = ConnectionOptions {
         host: actual_host,
         port: actual_port,
         username: profile.username.clone(),
         password: Some(password.clone()),
-        database: profile.database.clone(),
+        database,
         timeout: Some(30),
     };
 
@@ -666,10 +677,27 @@ pub async fn switch_database(
         (profile, password)
     };
 
+    // Determine actual host/port: use SSH tunnel if one is active
+    let (actual_host, actual_port) = if profile.ssh_tunnel.is_some() {
+        let tunnel_manager = {
+            let state_guard = state.lock().unwrap();
+            state_guard.ssh_tunnel_manager.clone()
+        };
+
+        if let Some(local_port) = tunnel_manager.get_local_port(&connection_id).await {
+            ("127.0.0.1".to_string(), local_port)
+        } else {
+            // SSH tunnel was configured but no active tunnel found — use direct connection
+            (profile.host.clone(), profile.port)
+        }
+    } else {
+        (profile.host.clone(), profile.port)
+    };
+
     // Build connection options with the new database
     let opts = ConnectionOptions {
-        host: profile.host.clone(),
-        port: profile.port,
+        host: actual_host,
+        port: actual_port,
         username: profile.username.clone(),
         password: Some(password.clone()),
         database: Some(new_database.clone()),
