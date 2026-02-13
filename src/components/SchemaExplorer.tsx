@@ -168,6 +168,13 @@ export function SchemaExplorer({
       } else if (schemasData.length > 0) {
         setSelectedSchema(schemasData[0].name);
       }
+
+      // Load tables for initially expanded schemas (e.g., "public")
+      expandedSchemas.forEach((schemaName) => {
+        if (schemasData.find((s) => s.name === schemaName)) {
+          fetchTables(schemaName);
+        }
+      });
     } catch (err) {
       const errorMessage =
         typeof err === "string" ? err : (err as any)?.message || String(err);

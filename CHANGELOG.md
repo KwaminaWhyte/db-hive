@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0-beta] - 2026-02-13
+
+### Fixed
+
+- **macOS Keyboard Input**: Fixed critical bug where typing in input fields produced beep sounds and no text appeared on macOS. Root cause was WRY 0.53.5's `WryWebViewParent` NSView silently dropping regular keystrokes when `decorations: false` was set. Switched to `titleBarStyle: "Overlay"` with `hiddenTitle: true` to keep native window chrome for proper keyboard routing while preserving custom titlebar.
+
+- **PostgreSQL Tables Not Loading**: Fixed schema explorer not loading tables for the initially expanded "public" schema on connect. The `expandedSchemas` state initialized with "public" expanded, but `fetchTables` was only triggered by user click — not on mount. Tables now auto-load for initially expanded schemas after schemas are fetched.
+
+- **Password Prompt Modal Removed**: Eliminated the unnecessary password prompt modal that appeared when connecting to saved profiles. Passwords are now always saved to the OS keychain when provided during connection creation/editing, and automatically retrieved on connect. Removed the modal from all connection views (ConnectionList, EnhancedConnectionList, ConnectionDashboard, index page).
+
+### Changed
+
+- **macOS Window Configuration**: Window now uses `decorations: true` with `titleBarStyle: "Overlay"` instead of `decorations: false`. Custom titlebar adds 78px left padding on macOS for native traffic lights. Windows-style window controls hidden on macOS.
+- **Connection Form**: Removed "Enable Keychain" checkbox — passwords are always saved securely when provided. Shows static "Saved to keychain" label instead.
+- Removed `objc2` macOS-specific dependencies that were used for the previous keyboard workaround.
+
 ## [0.13.0-beta] - 2025-11-24
 
 ### Added
