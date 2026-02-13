@@ -288,18 +288,19 @@ impl DatabaseDriver for PostgresDriver {
     }
 
     async fn get_schemas(&self, database: &str) -> Result<Vec<SchemaInfo>, DbError> {
+        // Note: information_schema.schemata only shows schemas from the connected database,
+        // so filtering by catalog_name is unnecessary and can cause mismatches.
         let query = r#"
             SELECT
                 schema_name as name
             FROM information_schema.schemata
-            WHERE catalog_name = $1
-                AND schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
+            WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
             ORDER BY schema_name
         "#;
 
         let rows = self
             .client
-            .query(query, &[&database])
+            .query(query, &[])
             .await
             .map_err(|e| DbError::QueryError(format!("Failed to fetch schemas: {}", e)))?;
 
