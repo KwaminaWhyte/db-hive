@@ -519,3 +519,14 @@ export interface SqlImportOptions {
   /** Use a transaction (rollback all changes on error) */
   useTransaction: boolean;
 }
+
+export interface SqlImportResult {
+  executed: number;
+  errorsCount: number;
+  skipped: number;
+  firstError: string | null;
+  /** True if the import was stopped early by the user */
+  cancelled: boolean;
+  /** Absolute path to the error log file, or null if there were no errors */
+  logFile: string | null;
+}

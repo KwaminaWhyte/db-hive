@@ -81,24 +81,35 @@ export function SchemaExplorer({
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("");
   // Store tables per schema to support lazy loading
-  const [tablesBySchema, setTablesBySchema] = useState<Record<string, TableInfo[]>>({});
+  const [tablesBySchema, setTablesBySchema] = useState<
+    Record<string, TableInfo[]>
+  >({});
   const [databases, setDatabases] = useState<string[]>([]);
   const [selectedDatabase, setSelectedDatabase] = useState<string>("");
   const [loadingSchemas, setLoadingSchemas] = useState(true);
-  const [loadingTablesForSchema, setLoadingTablesForSchema] = useState<Record<string, boolean>>({});
+  const [loadingTablesForSchema, setLoadingTablesForSchema] = useState<
+    Record<string, boolean>
+  >({});
   const [loadingDatabases, setLoadingDatabases] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>("");
   // Track which schemas are expanded
-  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(new Set(["public"]));
+  const [expandedSchemas, setExpandedSchemas] = useState<Set<string>>(
+    new Set(["public"]),
+  );
   // Track the currently active/selected table for highlighting
-  const [activeTable, setActiveTable] = useState<{ schema: string; table: string } | null>(null);
+  const [activeTable, setActiveTable] = useState<{
+    schema: string;
+    table: string;
+  } | null>(null);
   // Import/Export dialog state
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   // Table creation dialog state
   const [showCreateTableDialog, setShowCreateTableDialog] = useState(false);
-  const [createTableSchema, setCreateTableSchema] = useState<string | undefined>(undefined);
+  const [createTableSchema, setCreateTableSchema] = useState<
+    string | undefined
+  >(undefined);
   // Data import wizard state
   const [showDataImportWizard, setShowDataImportWizard] = useState(false);
   const [importTargetSchema, setImportTargetSchema] = useState<string>("");
@@ -236,8 +247,8 @@ export function SchemaExplorer({
         const newSelectedSchema = publicSchema
           ? "public"
           : schemasData.length > 0
-          ? schemasData[0].name
-          : "";
+            ? schemasData[0].name
+            : "";
 
         setSelectedSchema(newSelectedSchema);
 
@@ -274,7 +285,10 @@ export function SchemaExplorer({
   };
 
   // Generate INSERT template for a table with actual column names
-  const generateInsertTemplate = async (schemaName: string, tableName: string) => {
+  const generateInsertTemplate = async (
+    schemaName: string,
+    tableName: string,
+  ) => {
     try {
       // Fetch actual column names from the table
       const columns = await invoke<{ name: string; data_type: string }[]>(
@@ -283,7 +297,7 @@ export function SchemaExplorer({
           connectionId,
           tableName,
           schema: schemaName,
-        }
+        },
       );
 
       if (columns.length === 0) {
@@ -297,8 +311,15 @@ export function SchemaExplorer({
           const type = c.data_type.toLowerCase();
           if (type.includes("int") || type.includes("serial")) return "0";
           if (type.includes("bool")) return "false";
-          if (type.includes("float") || type.includes("double") || type.includes("numeric") || type.includes("decimal")) return "0.0";
-          if (type.includes("date") || type.includes("time")) return `'${new Date().toISOString().split("T")[0]}'`;
+          if (
+            type.includes("float") ||
+            type.includes("double") ||
+            type.includes("numeric") ||
+            type.includes("decimal")
+          )
+            return "0.0";
+          if (type.includes("date") || type.includes("time"))
+            return `'${new Date().toISOString().split("T")[0]}'`;
           if (type.includes("json")) return "'{}'";
           return "''";
         })
@@ -332,7 +353,7 @@ export function SchemaExplorer({
       // Include schema if any of its tables match
       const schemaTables = tablesBySchema[schema.name] || [];
       return schemaTables.some((table) =>
-        table.name.toLowerCase().includes(query)
+        table.name.toLowerCase().includes(query),
       );
     });
   }, [schemas, tablesBySchema, searchQuery]);
@@ -348,7 +369,7 @@ export function SchemaExplorer({
         result[schemaName] = schemaTables;
       } else {
         result[schemaName] = schemaTables.filter((table) =>
-          table.name.toLowerCase().includes(query)
+          table.name.toLowerCase().includes(query),
         );
       }
     }
@@ -356,9 +377,12 @@ export function SchemaExplorer({
   }, [tablesBySchema, searchQuery]);
 
   // Get filtered tables for a specific schema (now just a lookup)
-  const getFilteredTablesForSchema = useCallback((schemaName: string) => {
-    return filteredTablesBySchema[schemaName] || [];
-  }, [filteredTablesBySchema]);
+  const getFilteredTablesForSchema = useCallback(
+    (schemaName: string) => {
+      return filteredTablesBySchema[schemaName] || [];
+    },
+    [filteredTablesBySchema],
+  );
 
   return (
     <div className="h-full flex flex-col">
@@ -424,7 +448,7 @@ export function SchemaExplorer({
                       onClick={() => onOpenERDiagram(selectedSchema)}
                     >
                       <Network className="h-4 w-4 mr-2" />
-                      View ER Diagram ({selectedSchema})
+                      View ER Diagram
                     </Button>
                   )}
 
@@ -531,10 +555,15 @@ export function SchemaExplorer({
                   fetchTables(schemaName);
                 });
               }}
-              disabled={loadingSchemas || Object.values(loadingTablesForSchema).some(Boolean)}
+              disabled={
+                loadingSchemas ||
+                Object.values(loadingTablesForSchema).some(Boolean)
+              }
               title="Refresh schemas & tables"
             >
-              <RefreshCw className={`h-4 w-4 ${(loadingSchemas || Object.values(loadingTablesForSchema).some(Boolean)) ? 'animate-spin' : ''}`} />
+              <RefreshCw
+                className={`h-4 w-4 ${loadingSchemas || Object.values(loadingTablesForSchema).some(Boolean) ? "animate-spin" : ""}`}
+              />
             </Button>
           </div>
         </div>
@@ -559,14 +588,19 @@ export function SchemaExplorer({
                   <div className="space-y-1">
                     {filteredSchemas.map((schema) => {
                       const isExpanded = expandedSchemas.has(schema.name);
-                      const schemaTables = getFilteredTablesForSchema(schema.name);
-                      const isLoadingTables = loadingTablesForSchema[schema.name];
+                      const schemaTables = getFilteredTablesForSchema(
+                        schema.name,
+                      );
+                      const isLoadingTables =
+                        loadingTablesForSchema[schema.name];
 
                       return (
                         <Collapsible
                           key={schema.name}
                           open={isExpanded}
-                          onOpenChange={() => toggleSchemaExpansion(schema.name)}
+                          onOpenChange={() =>
+                            toggleSchemaExpansion(schema.name)
+                          }
                         >
                           {/* Schema Header */}
                           <ContextMenu>
@@ -630,7 +664,10 @@ export function SchemaExplorer({
                               {isLoadingTables ? (
                                 <div className="space-y-1">
                                   {[1, 2, 3].map((i) => (
-                                    <div key={i} className="flex items-center gap-2 px-3 py-2">
+                                    <div
+                                      key={i}
+                                      className="flex items-center gap-2 px-3 py-2"
+                                    >
                                       <Skeleton className="h-4 w-4 rounded" />
                                       <Skeleton className="h-4 flex-1" />
                                     </div>
@@ -638,9 +675,13 @@ export function SchemaExplorer({
                                 </div>
                               ) : schemaTables.length > 0 ? (
                                 schemaTables.map((table) => {
-                                  const isSelected = activeTable?.schema === schema.name && activeTable?.table === table.name;
+                                  const isSelected =
+                                    activeTable?.schema === schema.name &&
+                                    activeTable?.table === table.name;
                                   return (
-                                    <ContextMenu key={`${schema.name}.${table.name}`}>
+                                    <ContextMenu
+                                      key={`${schema.name}.${table.name}`}
+                                    >
                                       <ContextMenuTrigger asChild>
                                         <button
                                           className={`w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left group ${
@@ -650,17 +691,30 @@ export function SchemaExplorer({
                                           }`}
                                           onClick={() => {
                                             // Set active table for highlighting on single click
-                                            setActiveTable({ schema: schema.name, table: table.name });
+                                            setActiveTable({
+                                              schema: schema.name,
+                                              table: table.name,
+                                            });
                                           }}
                                           onDoubleClick={() => {
                                             setSelectedSchema(schema.name);
-                                            setActiveTable({ schema: schema.name, table: table.name });
-                                            onTableSelect(schema.name, table.name);
+                                            setActiveTable({
+                                              schema: schema.name,
+                                              table: table.name,
+                                            });
+                                            onTableSelect(
+                                              schema.name,
+                                              table.name,
+                                            );
                                           }}
                                           draggable
                                           onDragStart={(e) => {
-                                            e.dataTransfer.setData("text/plain", `"${schema.name}"."${table.name}"`);
-                                            e.dataTransfer.effectAllowed = "copy";
+                                            e.dataTransfer.setData(
+                                              "text/plain",
+                                              `"${schema.name}"."${table.name}"`,
+                                            );
+                                            e.dataTransfer.effectAllowed =
+                                              "copy";
                                           }}
                                         >
                                           {getTableIcon(table.tableType)}
@@ -670,7 +724,8 @@ export function SchemaExplorer({
                                           {table.rowCount !== null &&
                                             table.rowCount !== undefined && (
                                               <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground">
-                                                {table.rowCount.toLocaleString()} rows
+                                                {table.rowCount.toLocaleString()}{" "}
+                                                rows
                                               </span>
                                             )}
                                           <ChevronRight
@@ -686,8 +741,14 @@ export function SchemaExplorer({
                                         <ContextMenuItem
                                           onClick={() => {
                                             setSelectedSchema(schema.name);
-                                            setActiveTable({ schema: schema.name, table: table.name });
-                                            onTableSelect(schema.name, table.name);
+                                            setActiveTable({
+                                              schema: schema.name,
+                                              table: table.name,
+                                            });
+                                            onTableSelect(
+                                              schema.name,
+                                              table.name,
+                                            );
                                           }}
                                         >
                                           <Eye className="h-4 w-4 mr-2" />
@@ -695,7 +756,10 @@ export function SchemaExplorer({
                                         </ContextMenuItem>
                                         <ContextMenuItem
                                           onClick={() => {
-                                            const sql = generateSelectQuery(schema.name, table.name);
+                                            const sql = generateSelectQuery(
+                                              schema.name,
+                                              table.name,
+                                            );
                                             onExecuteQuery?.(sql);
                                           }}
                                         >
@@ -704,7 +768,11 @@ export function SchemaExplorer({
                                         </ContextMenuItem>
                                         <ContextMenuItem
                                           onClick={async () => {
-                                            const sql = await generateInsertTemplate(schema.name, table.name);
+                                            const sql =
+                                              await generateInsertTemplate(
+                                                schema.name,
+                                                table.name,
+                                              );
                                             onExecuteQuery?.(sql);
                                           }}
                                         >
@@ -712,7 +780,9 @@ export function SchemaExplorer({
                                           Generate INSERT
                                         </ContextMenuItem>
                                         <ContextMenuItem
-                                          onClick={() => copyTableName(table.name)}
+                                          onClick={() =>
+                                            copyTableName(table.name)
+                                          }
                                         >
                                           <Copy className="h-4 w-4 mr-2" />
                                           Copy Name
@@ -728,7 +798,9 @@ export function SchemaExplorer({
                                           Import Data
                                         </ContextMenuItem>
                                         <ContextMenuItem
-                                          onClick={() => fetchTables(schema.name)}
+                                          onClick={() =>
+                                            fetchTables(schema.name)
+                                          }
                                         >
                                           <RefreshCw className="h-4 w-4 mr-2" />
                                           Refresh

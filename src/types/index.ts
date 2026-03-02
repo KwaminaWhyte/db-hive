@@ -19,6 +19,7 @@ export type {
   TableSchema,
   SqlExportOptions,
   SqlImportOptions,
+  SqlImportResult,
 } from './database';
 
 export { getDefaultPort, getDriverDisplayName } from './database';

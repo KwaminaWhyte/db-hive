@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.0-beta] - 2026-03-02
+
+### Added
+
+- **SQL Import: Cancellable Operation**: Import can now be stopped mid-way via a **Stop** button in the dialog. Clicking Stop signals the Rust backend (via a shared `Arc<AtomicBool>`) to halt after the current statement. The result shows how many statements were imported before stopping.
+
+- **SQL Import: Error Log File**: All skipped/failed statements are now written to a `.log` file next to the source SQL file (e.g. `dump_import_errors.log`). An **Open error log** button appears in the result when errors occurred, opening the file in the system default text editor.
+
+### Fixed
+
+- **SQL Import: Modal Dismissal During Import**: Clicking outside the dialog or pressing Escape no longer closes it while an import is in progress. The dialog is locked until the operation finishes or the user clicks Stop, preventing accidental cancellation of long-running imports.
+
+- **SQL Import: "Could not open log file"**: Added `opener:allow-open-path` and `opener:allow-reveal-item-in-dir` to Tauri capabilities. The `opener:default` permission alone did not grant path-opening access.
+
+## [0.18.1-beta] - 2026-03-02
+
+### Fixed
+
+- **SQL Import: Broken Pipe on Large INSERT Batches**: Proactively split INSERT statements exceeding 8 MB into 50-row batches before sending to the server. MariaDB 10.x ignores `SET SESSION max_allowed_packet`, causing the server to drop the connection ("Broken pipe / os error 32") when receiving oversized packets from large `mysqldump` files. Client-side splitting now prevents the connection from ever dying.
+
+- **SQL Import: `[object Object]` Error Display**: Tauri command errors arrive in JavaScript as plain `{ kind, message }` objects, not `Error` instances. `String(err)` on a plain object produced `"[object Object]"` in the import dialog. Fixed error extraction to read `.message` from the Tauri error shape, so the actual error text is shown.
+
+- **SQL Import: Connection Closed After First Statement**: `mysql_async` requires `result.drop_result().await` after every `query_iter()` call to return the connection to a clean protocol state. Without it, the connection's state machine was left mid-stream, making all subsequent queries fail with "Connection to the server is closed". Added `drop_result()` to both the SELECT and DML branches of `execute_query`.
+
+- **SQL Import: `REPLACE IGNORE INTO` Syntax Error**: MySQL 8.0.x client dumping from a MariaDB server generates the invalid hybrid `REPLACE IGNORE INTO`, accepted by neither MySQL nor MariaDB. Added `normalize_dump_stmt()` to rewrite this to `INSERT IGNORE INTO`, which preserves the duplicate-skip semantics.
+
+- **MySQL `max_allowed_packet` for Large Dumps**: Set the `mysql_async` client-side limit to 1 GB in `OptsBuilder` (was 16 MB default). This matches the `--max_allowed_packet=1G` flag used when producing `mysqldump` backups, preventing "packet too large" errors on large multi-row INSERT batches.
+
+- **SQL Import Default Options**: Changed import dialog defaults to `continueOnError: true` / `useTransaction: false` — matching `mysqldump --force` behaviour so large dumps complete even if individual statements fail.
+
 ## [0.18.0-beta] - 2026-02-13
 
 ### Added

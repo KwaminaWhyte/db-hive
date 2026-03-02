@@ -14,7 +14,8 @@ use serde_json::Value;
 use std::fs::File;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use tauri::State;
 
 /// Options for SQL export
@@ -53,6 +54,20 @@ pub struct SqlImportOptions {
     pub continue_on_error: bool,
     /// Use transaction (rollback all on error)
     pub use_transaction: bool,
+}
+
+/// Result returned by import_from_sql
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SqlImportResult {
+    pub executed: usize,
+    pub errors_count: usize,
+    pub skipped: usize,
+    pub first_error: Option<String>,
+    /// True if the import was stopped early by the user
+    pub cancelled: bool,
+    /// Absolute path to the error log file, or None if there were no errors
+    pub log_file: Option<String>,
 }
 
 /// Export query results to CSV format
@@ -546,51 +561,25 @@ fn sql_value_to_string(value: &Value) -> String {
 ///   });
 /// }
 /// ```
+/// Signal an in-progress import to stop after the current statement.
+#[tauri::command]
+pub async fn cancel_import(cancel_flag: State<'_, Arc<AtomicBool>>) -> Result<(), DbError> {
+    cancel_flag.store(true, Ordering::Relaxed);
+    Ok(())
+}
+
 #[tauri::command]
 pub async fn import_from_sql(
     connection_id: String,
     file_path: String,
     options: SqlImportOptions,
     state: State<'_, Mutex<AppState>>,
-) -> Result<String, DbError> {
-    // Read SQL file
-    let file = File::open(&file_path)
-        .map_err(|e| DbError::InternalError(format!("Failed to open SQL file: {}", e)))?;
-
-    let reader = BufReader::new(file);
-    let mut sql_statements = Vec::new();
-    let mut current_statement = String::new();
-
-    // Parse SQL file into statements
-    for line in reader.lines() {
-        let line = line.map_err(|e| DbError::InternalError(format!("Failed to read SQL file: {}", e)))?;
-
-        // Skip comments
-        let trimmed = line.trim();
-        if trimmed.starts_with("--") || trimmed.is_empty() {
-            continue;
-        }
-
-        current_statement.push_str(&line);
-        current_statement.push('\n');
-
-        // Check if statement is complete (ends with semicolon)
-        if trimmed.ends_with(';') {
-            sql_statements.push(current_statement.clone());
-            current_statement.clear();
-        }
-    }
-
-    // Add last statement if not empty
-    if !current_statement.trim().is_empty() {
-        sql_statements.push(current_statement);
-    }
-
-    // Execute statements
+    cancel_flag: State<'_, Arc<AtomicBool>>,
+) -> Result<SqlImportResult, DbError> {
     use crate::commands::query::execute_query;
 
-    let mut executed = 0;
-    let mut errors = Vec::new();
+    // Reset cancel flag at the start of each import
+    cancel_flag.store(false, Ordering::Relaxed);
 
     // Get driver type from connection profile
     let driver = {
@@ -602,53 +591,374 @@ pub async fn import_from_sql(
             .ok_or_else(|| DbError::NotFound(format!("Connection profile {} not found", connection_id)))?
     };
 
-    // Check transaction support before starting
-    if options.use_transaction {
-        let begin_stmt = match driver {
-            DbDriver::Postgres | DbDriver::Sqlite => "BEGIN;",
-            DbDriver::MySql => "START TRANSACTION;",
-            _ => return Err(DbError::InvalidInput("Transactions not supported for this driver".to_string())),
-        };
+    // Open SQL file (stream it — don't load into memory)
+    let file = File::open(&file_path)
+        .map_err(|e| DbError::InternalError(format!("Failed to open SQL file: {}", e)))?;
+    let reader = BufReader::new(file);
 
-        execute_query(connection_id.clone(), begin_stmt.to_string(), state.clone()).await?;
+    // For MySQL dumps: disable FK/unique checks and strict mode for duration of import
+    if matches!(driver, DbDriver::MySql) {
+        for stmt in &[
+            "SET SESSION foreign_key_checks = 0",
+            "SET SESSION unique_checks = 0",
+            "SET SESSION sql_notes = 0",
+            "SET SESSION sql_mode = ''",
+            // MariaDB ignores SET SESSION for max_allowed_packet (global-only variable).
+            // Use SET GLOBAL so single-row statements with large BLOBs/TEXT can be imported.
+            // Requires SUPER privilege — silently ignored if the user lacks it.
+            "SET GLOBAL max_allowed_packet = 1073741824",
+        ] {
+            let _ = execute_query(connection_id.clone(), stmt.to_string(), state.clone()).await;
+        }
     }
 
-    for (i, stmt) in sql_statements.iter().enumerate() {
-        match execute_query(connection_id.clone(), stmt.clone(), state.clone()).await {
-            Ok(_) => {
-                executed += 1;
+    // Begin transaction if requested
+    if options.use_transaction {
+        let begin_stmt = match driver {
+            DbDriver::Postgres | DbDriver::Sqlite => "BEGIN",
+            DbDriver::MySql => "START TRANSACTION",
+            _ => return Err(DbError::InvalidInput("Transactions not supported for this driver".to_string())),
+        };
+        execute_query(connection_id.clone(), begin_stmt.to_string(), state.clone()).await
+            .map_err(|e| DbError::QueryError(format!("Failed to begin transaction: {}", e)))?;
+    }
+
+    let mut executed: usize = 0;
+    let mut skipped: usize = 0;
+    let mut errors: Vec<String> = Vec::new(); // all errors, no cap
+    let mut stmt_index: usize = 0;
+    let mut current_statement = String::new();
+    // Track current statement delimiter (mysqldump uses DELIMITER ;; for triggers/procedures)
+    let mut current_delimiter = ";".to_string();
+
+    for line_result in reader.lines() {
+        // Check for user-requested cancellation before processing each line
+        if cancel_flag.load(Ordering::Relaxed) {
+            break;
+        }
+
+        let line = line_result
+            .map_err(|e| DbError::InternalError(format!("Failed to read SQL file: {}", e)))?;
+        let trimmed = line.trim();
+
+        // Skip empty lines and full-line comments
+        if trimmed.is_empty() || trimmed.starts_with("--") {
+            continue;
+        }
+
+        // Handle DELIMITER meta-command (mysql client command, not SQL)
+        // e.g. "DELIMITER ;;" or "DELIMITER ;"
+        if trimmed.to_uppercase().starts_with("DELIMITER") {
+            if let Some(new_delim) = trimmed.split_whitespace().nth(1) {
+                current_delimiter = new_delim.to_string();
             }
-            Err(e) => {
-                errors.push(format!("Statement {}: {}", i + 1, e));
-                if !options.continue_on_error {
-                    if options.use_transaction {
-                        let rollback_stmt = match driver {
-                            DbDriver::Postgres | DbDriver::Sqlite | DbDriver::MySql => "ROLLBACK;",
-                            _ => "",
-                        };
-                        let _ = execute_query(connection_id.clone(), rollback_stmt.to_string(), state.clone()).await;
+            continue; // Never send DELIMITER to the server
+        }
+
+        current_statement.push_str(&line);
+        current_statement.push('\n');
+
+        // Statement is complete when the line ends with the current delimiter
+        if trimmed.ends_with(current_delimiter.as_str()) {
+            let stmt = current_statement.trim().to_string();
+            current_statement.clear();
+
+            // Strip trailing delimiter (when delimiter is not plain ";", strip it)
+            let stmt = if current_delimiter != ";" {
+                stmt.trim_end_matches(current_delimiter.as_str()).trim().to_string()
+            } else {
+                // Strip the trailing semicolon for clean execution
+                stmt.trim_end_matches(';').trim().to_string()
+            };
+
+            if stmt.is_empty() {
+                continue;
+            }
+
+            // Normalize known mysqldump quirks before execution.
+            // MySQL 8.0.x client dumping from MariaDB generates "REPLACE IGNORE INTO"
+            // which is invalid syntax on both MySQL and MariaDB — normalize to
+            // "INSERT IGNORE INTO" which preserves the duplicate-skip semantics.
+            let stmt = normalize_dump_stmt(stmt);
+
+            stmt_index += 1;
+
+            // Skip advisory/client-only statements that the server can't handle
+            let first_word = stmt
+                .split_whitespace()
+                .next()
+                .unwrap_or("")
+                .to_uppercase();
+            if matches!(first_word.as_str(), "LOCK" | "UNLOCK") {
+                skipped += 1;
+                continue;
+            }
+
+            // Proactively split large INSERT batches before sending to avoid
+            // exceeding the server's max_allowed_packet. MariaDB 10.x ignores
+            // SET SESSION for this variable, so large mysqldump batches must be
+            // split client-side. Threshold: 4 MB — conservative enough to stay
+            // under any reasonable server configuration (default is 16 MB).
+            const SPLIT_THRESHOLD: usize = 4 * 1024 * 1024;
+            let sub_stmts: Vec<String> = if stmt.len() > SPLIT_THRESHOLD {
+                let split = split_insert_values(&stmt, 50);
+                if split.len() > 1 {
+                    split
+                } else {
+                    // Single row larger than the server can accept — skip it.
+                    skipped += 1;
+                    errors.push(format!(
+                        "Statement {}: skipped — single row is {} MB, exceeds server max_allowed_packet",
+                        stmt_index,
+                        stmt.len() / 1024 / 1024
+                    ));
+                    continue;
+                }
+            } else {
+                vec![stmt.clone()]
+            };
+
+            'sub: for sub_stmt in &sub_stmts {
+                match execute_query(connection_id.clone(), sub_stmt.clone(), state.clone()).await {
+                    Ok(_) => executed += 1,
+                    Err(ref e) => {
+                        let msg = e.to_string().to_lowercase();
+                        // "broken pipe" / "os error 32" = server closed connection
+                        // because the packet exceeded its max_allowed_packet.
+                        let oversized = msg.contains("packet too large")
+                            || msg.contains("broken pipe")
+                            || msg.contains("os error 32");
+
+                        errors.push(format!(
+                            "Statement {}{}: {}",
+                            stmt_index,
+                            if oversized { " (oversized)" } else { "" },
+                            e
+                        ));
+                        if !options.continue_on_error {
+                            if options.use_transaction {
+                                let rollback = match driver {
+                                    DbDriver::Postgres | DbDriver::Sqlite | DbDriver::MySql => "ROLLBACK",
+                                    _ => "",
+                                };
+                                if !rollback.is_empty() {
+                                    let _ = execute_query(
+                                        connection_id.clone(),
+                                        rollback.to_string(),
+                                        state.clone(),
+                                    ).await;
+                                }
+                            }
+                            return Err(DbError::QueryError(format!(
+                                "Import failed at statement {}: {}",
+                                stmt_index, e
+                            )));
+                        }
+                        // After a broken pipe the connection is dead — skip remaining
+                        // sub-statements to avoid a cascade of connection errors.
+                        if oversized {
+                            break 'sub;
+                        }
                     }
-                    return Err(DbError::QueryError(format!("Import failed at statement {}: {}", i + 1, e)));
                 }
             }
         }
     }
 
-    if options.use_transaction {
-        let commit_stmt = match driver {
-            DbDriver::Postgres | DbDriver::Sqlite | DbDriver::MySql => "COMMIT;",
-            _ => "",
-        };
-        execute_query(connection_id, commit_stmt.to_string(), state).await?;
+    // Execute any remaining statement that lacked a trailing delimiter
+    let remaining = current_statement.trim().to_string();
+    if !remaining.is_empty() && !remaining.starts_with("--") {
+        let _ = execute_query(connection_id.clone(), remaining, state.clone()).await;
     }
 
-    let result = if errors.is_empty() {
-        format!("Successfully imported {} statements", executed)
+    // Commit transaction
+    if options.use_transaction {
+        let commit_stmt = match driver {
+            DbDriver::Postgres | DbDriver::Sqlite | DbDriver::MySql => "COMMIT",
+            _ => "",
+        };
+        if !commit_stmt.is_empty() {
+            execute_query(connection_id.clone(), commit_stmt.to_string(), state.clone()).await
+                .map_err(|e| DbError::QueryError(format!("Failed to commit: {}", e)))?;
+        }
+    }
+
+    // Restore MySQL session settings
+    if matches!(driver, DbDriver::MySql) {
+        for stmt in &[
+            "SET SESSION foreign_key_checks = 1",
+            "SET SESSION unique_checks = 1",
+            "SET SESSION sql_notes = 1",
+        ] {
+            let _ = execute_query(connection_id.clone(), stmt.to_string(), state.clone()).await;
+        }
+    }
+
+    // Write error log file if there were any errors
+    let log_file: Option<String> = if errors.is_empty() {
+        None
     } else {
-        format!("Imported {} statements with {} errors: {}", executed, errors.len(), errors.join("; "))
+        let log_path = derive_log_path(&file_path);
+        match write_import_log(&log_path, &file_path, executed, skipped, &errors) {
+            Ok(()) => Some(log_path),
+            Err(_) => None, // Don't fail the import just because log writing failed
+        }
     };
 
-    Ok(result)
+    Ok(SqlImportResult {
+        executed,
+        errors_count: errors.len(),
+        skipped,
+        first_error: errors.first().cloned(),
+        cancelled: cancel_flag.load(Ordering::Relaxed),
+        log_file,
+    })
+}
+
+/// Derive a log file path from the SQL file path.
+/// e.g. `/path/to/dump.sql` → `/path/to/dump_import_errors.log`
+fn derive_log_path(sql_path: &str) -> String {
+    let stem = sql_path.strip_suffix(".sql").unwrap_or(sql_path);
+    format!("{}_import_errors.log", stem)
+}
+
+/// Write all import errors to a plain-text log file.
+fn write_import_log(
+    log_path: &str,
+    sql_path: &str,
+    executed: usize,
+    skipped: usize,
+    errors: &[String],
+) -> std::io::Result<()> {
+    let mut f = File::create(log_path)?;
+    writeln!(f, "DB-Hive SQL Import Error Log")?;
+    writeln!(f, "Source file : {}", sql_path)?;
+    writeln!(f, "Timestamp   : {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"))?;
+    writeln!(f, "Executed    : {}", executed)?;
+    writeln!(f, "Skipped     : {}", skipped)?;
+    writeln!(f, "Errors      : {}", errors.len())?;
+    writeln!(f, "{}", "-".repeat(60))?;
+    for err in errors {
+        writeln!(f, "{}", err)?;
+    }
+    Ok(())
+}
+
+/// Split a multi-row INSERT statement into smaller batches.
+///
+/// Large mysqldump INSERT statements can exceed MySQL's `max_allowed_packet`.
+/// This splits `INSERT ... VALUES (r1),(r2),...` into multiple statements
+/// each containing at most `max_rows` value groups.
+///
+/// Returns a vec with the original single statement if splitting isn't possible
+/// or unnecessary.
+fn split_insert_values(stmt: &str, max_rows: usize) -> Vec<String> {
+    // Find the VALUES keyword (case-insensitive).
+    // mysqldump may emit "VALUES (" or "VALUES\n(" so we must not require a
+    // trailing space — just locate the keyword and skip any following whitespace.
+    let upper = stmt.to_uppercase();
+    let values_pos = match upper.find("VALUES") {
+        Some(p) => p,
+        None => return vec![stmt.to_string()],
+    };
+
+    let prefix = &stmt[..values_pos + "VALUES".len()]; // "INSERT ... VALUES"
+    let values_str = stmt[values_pos + "VALUES".len()..]
+        .trim_start()           // skip the whitespace / newline after VALUES
+        .trim_end_matches(';')
+        .trim();
+
+    let groups = parse_value_row_groups(values_str);
+
+    if groups.len() <= max_rows {
+        return vec![stmt.to_string()];
+    }
+
+    groups
+        .chunks(max_rows)
+        .map(|chunk| format!("{} {}", prefix, chunk.join(",")))
+        .collect()
+}
+
+/// Parse the VALUES portion `(a,b),(c,d),...` into individual row strings `["(a,b)","(c,d)",...]`.
+/// Handles nested parentheses, single-quoted strings, and backslash escapes.
+fn parse_value_row_groups(s: &str) -> Vec<String> {
+    let mut groups: Vec<String> = Vec::new();
+    let mut depth: i32 = 0;
+    let mut in_single_quote = false;
+    let mut escape_next = false;
+    let mut group_start: Option<usize> = None;
+    let bytes = s.as_bytes();
+    let len = bytes.len();
+    let mut i = 0;
+
+    while i < len {
+        let b = bytes[i];
+
+        if escape_next {
+            escape_next = false;
+            i += 1;
+            continue;
+        }
+
+        if in_single_quote {
+            if b == b'\\' {
+                escape_next = true;
+            } else if b == b'\'' {
+                in_single_quote = false;
+            }
+        } else {
+            match b {
+                b'\'' => in_single_quote = true,
+                b'(' => {
+                    depth += 1;
+                    if depth == 1 {
+                        group_start = Some(i);
+                    }
+                }
+                b')' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        if let Some(start) = group_start {
+                            groups.push(s[start..=i].to_string());
+                            group_start = None;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        i += 1;
+    }
+
+    groups
+}
+
+/// Normalize SQL statements from mysqldump to fix known cross-tool quirks.
+///
+/// MySQL 8.0.x client dumping from a MariaDB server generates invalid SQL like
+/// "REPLACE IGNORE INTO" which neither MySQL nor MariaDB accept. This function
+/// rewrites known bad patterns into equivalent valid SQL before execution.
+fn normalize_dump_stmt(stmt: String) -> String {
+    let words: Vec<&str> = stmt.split_ascii_whitespace().collect();
+
+    // "REPLACE [IGNORE] INTO ..." — MySQL 8.0 client / MariaDB dump artifact.
+    // REPLACE has no IGNORE modifier; convert to INSERT IGNORE which has the
+    // same "skip duplicate key errors" semantics.
+    if words.len() >= 3
+        && words[0].eq_ignore_ascii_case("REPLACE")
+        && words[1].eq_ignore_ascii_case("IGNORE")
+        && words[2].eq_ignore_ascii_case("INTO")
+    {
+        let after_replace = stmt
+            .find(|c: char| c.is_ascii_whitespace())
+            .map(|i| &stmt[i..])
+            .unwrap_or("");
+        return format!("INSERT{}", after_replace);
+    }
+
+    stmt
 }
 
 #[cfg(test)]

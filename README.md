@@ -2,134 +2,124 @@
 
 > A modern, cross-platform database client built with Tauri 2.0 and React 19
 
-![Version](https://img.shields.io/badge/version-0.16.0--beta-blue)
+![Version](https://img.shields.io/badge/version-0.19.0--beta-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Overview
 
-DB-Hive is a professional database client application designed to compete with industry tools like Beekeeper Studio and DbGate. Built with security, performance, and developer experience in mind, it provides a fast, native experience for database management.
+DB-Hive is a professional database client designed to compete with tools like Beekeeper Studio and DbGate. Built with security, performance, and developer experience in mind — fast, native, and lightweight.
 
 ## Features
 
-### ✅ Implemented (MVP)
+### ✅ Implemented
 
 - **Multi-Database Support**
-
-  - ✅ PostgreSQL with full metadata support
-  - ✅ SQLite with local database management
-  - ✅ MySQL/MariaDB with connection handling
+  - PostgreSQL with full metadata support
+  - MySQL / MariaDB with connection handling
+  - SQLite with local database management
 
 - **Connection Management**
-
-  - Save and manage multiple connection profiles
+  - Save and manage multiple connection profiles with folder organisation
   - Test connections before saving
   - Password persistence using Tauri plugin-store
-  - Quick connect from saved profiles
+  - SSH tunnelling with password and private key (OpenSSH/PEM) authentication
 
 - **SQL Editor**
-
-  - Monaco Editor with SQL syntax highlighting
-  - Execute single or multiple SQL statements
-  - Query history with automatic saving
+  - Monaco Editor with SQL syntax highlighting and autocomplete
+  - Execute single or multiple SQL statements (Ctrl+Enter)
+  - Multi-statement support with result tabs per statement
+  - Query history with automatic saving and search
   - Snippet management for reusable queries
-  - Keyboard shortcuts (Ctrl+Enter to execute)
 
 - **Schema Browser**
-
   - Browse databases, schemas, and tables
-  - View table structure (columns, indexes, data types)
-  - Table data preview with pagination
-  - Sample data viewer with 20 rows per page
-  - Row detail viewer (JSON format)
+  - View table structure: columns, types, indexes, foreign keys
+  - Switch databases from an inline dropdown
+  - Table row counts in the sidebar
+
+- **Table Inspector & Data Editing**
+  - Live data grid with pagination and sortable columns
+  - Inline cell editing via double-click; primary keys are read-only
+  - Right-click context menu: Copy Cell, Copy Row as JSON, Edit Cell, Set to NULL, Delete Row
+  - Bulk row selection with checkboxes and floating action bar (Copy JSON, Delete, Deselect All)
+  - Pending Changes Panel — Beekeeper Studio-inspired Visual/SQL diff view before committing
+  - Column type badges inline in headers (`#`, `T`, `B`, `{}`, `D`, `U`, `0x`, `[]`)
 
 - **Results Viewer**
-
-  - Multiple view modes (Grid, JSON, Raw)
+  - Grid, JSON, and Raw view modes
   - Sortable columns with visual indicators
-  - Click cells to copy values
-  - Copy entire rows or columns
   - NULL value indicators
   - Export results to CSV or JSON
 
-- **Query Management**
-
-  - Auto-save query history
-  - Create and manage snippets
-  - Search through history
-  - Load queries from history or snippets
-
-- **UI/UX**
-  - Dark/Light/System theme support
-  - Responsive layout with resizable panels
-  - Loading states and skeletons
-  - Error boundary for graceful error handling
-  - Toast notifications for user feedback
-
-- **SSH Tunneling**
-  - Secure remote database connections through SSH
-  - Password and private key authentication (OpenSSH/PEM)
-  - Automatic local port assignment
-  - Async bidirectional data forwarding
-  - Collapsible configuration in connection form
+- **Import / Export**
+  - SQL dump import with cancellable, progress-aware dialog
+  - Handles large `mysqldump` files including multi-row INSERT batches and BLOB-heavy rows
+  - Automatic splitting of INSERT statements that exceed server `max_allowed_packet`
+  - Continue-on-error mode; skips unsplittable oversized rows gracefully
+  - Full error log written next to the source file; open directly from the dialog
+  - SQL export with configurable options (DROP, CREATE, INSERT, table filter)
+  - CSV and JSON export for query results
 
 - **ER Diagram Generator**
-  - Interactive entity-relationship diagram visualization
-  - Automatic hierarchical layout with dagre algorithm
+  - Interactive entity-relationship diagram with automatic dagre layout
   - Foreign key relationship mapping (PostgreSQL, MySQL, SQLite)
-  - Junction table detection with smart color coding
-  - Zoom (0.05x-1.5x), pan, drag, and minimap controls
-  - SVG export functionality
-  - Column limiting with overflow indicators
-  - Professional node styling with PK/FK badges
+  - Junction table detection with smart colour coding
+  - Zoom (0.05×–1.5×), pan, drag, and minimap controls
+  - SVG export
 
-- **Data Import/Export**
-  - SQL export with configurable options (DROP, CREATE, INSERT)
-  - Schema and table filtering for targeted exports
-  - Transaction-safe SQL import with rollback support
-  - Continue-on-error mode for partial recovery
-  - Progress feedback and detailed error reporting
+- **Command Palette**
+  - VS Code / Raycast-style palette via `Cmd+K` / `Ctrl+K`
+  - Grouped commands: Navigation, Theme, Window, Actions
+  - Fuzzy search with keyboard navigation and shortcut hints
 
-- **Settings & Configuration**
-  - Comprehensive settings management system
+- **UI / UX**
+  - Dark / Light / System theme
+  - Collapsible sidebar (`Cmd+B` / `Ctrl+B`)
+  - Resizable panels, loading skeletons, and error boundaries
+  - Toast notifications (Sonner)
+  - Browser text selection disabled app-wide (inputs and editors remain selectable)
+  - In-app update banner with download progress and restart button
+
+- **Settings**
   - General, Appearance, Query Execution, Keyboard Shortcuts sections
-  - Persistent storage with Tauri Store plugin
-  - Theme mode (Light, Dark, System)
-  - Query timeout, max rows, auto-commit configuration
+  - Persistent storage via Tauri Store plugin
+  - Query timeout, max rows, auto-commit, theme mode
 
-### 🚧 Planned Features
+### 🚧 Planned
 
 - MongoDB support
 - SQL Server support
-- Advanced SQL autocomplete
-- Table data editing
-- Query plan visualizer
+- Advanced SQL autocomplete (schema-aware)
+- Query plan visualiser
 - Plugin system
 
 ## Technology Stack
 
 ### Frontend
 
-- React 19 with TypeScript
+- React 19 with TypeScript (strict mode)
 - Tauri 2.0 for native functionality
 - Monaco Editor for SQL editing
-- TanStack Table v8 for virtualized data grids
+- TanStack Table v8 for virtualised data grids
 - shadcn/ui + TailwindCSS for styling
+- Zustand for state management
 - Sonner for toast notifications
 
 ### Backend
 
 - Rust with Tokio async runtime
 - tokio-postgres for PostgreSQL
-- mysql_async for MySQL/MariaDB
+- mysql_async for MySQL / MariaDB
 - rusqlite for SQLite
 - tauri-plugin-store for persistence
-- serde for serialization
+- tauri-plugin-opener for opening files and URLs
+- serde for serialisation
 
 ## Getting Started
 
 ### Prerequisites
 
-- **Node.js** 18+ (Bun recommended for faster installs)
+- **Node.js** 18+ (Bun recommended)
 - **Rust** 1.70+
 - **Git**
 
@@ -140,7 +130,7 @@ DB-Hive is a professional database client application designed to compete with i
 git clone https://github.com/KwaminaWhyte/db-hive.git
 cd db-hive
 
-# Install dependencies (using Bun, or use npm/yarn/pnpm)
+# Install dependencies
 bun install
 
 # Run in development mode
@@ -150,16 +140,13 @@ npm run tauri dev
 ### Building for Production
 
 ```bash
-# Build frontend
-bun run build
+bun run build          # Frontend only
+npm run tauri build    # Full Tauri app
 
-# Build Tauri app
-npm run tauri build
-
-# Output will be in src-tauri/target/release/bundle/
-# - Linux: .deb, .rpm, .AppImage
-# - macOS: .dmg, .app
-# - Windows: .msi, .exe installer
+# Output in src-tauri/target/release/bundle/
+#   macOS  → .dmg / .app
+#   Linux  → .deb / .rpm / .AppImage
+#   Windows → .msi / .exe
 ```
 
 See [Code Signing Guide](docs/CODE_SIGNING.md) for signing binaries on all platforms.
@@ -168,264 +155,128 @@ See [Code Signing Guide](docs/CODE_SIGNING.md) for signing binaries on all platf
 
 ### Connecting to a Database
 
-1. Click the **"New Connection"** button or navigate to the Connections tab
-2. Fill in the connection details:
-   - **Name**: A friendly name for this connection
-   - **Driver**: Select PostgreSQL, MySQL, or SQLite
-   - **Host**: Database server hostname (e.g., localhost)
-   - **Port**: Database port (default: 5432 for PostgreSQL, 3306 for MySQL)
-   - **Database**: Database name to connect to
-   - **Username**: Your database username
-   - **Password**: Your database password (saved securely)
-3. Click **"Test Connection"** to verify
-4. Click **"Save"** to store the connection profile
-
-For SQLite:
-
-- Click **"Browse"** to select your .db file
-- No username/password required
+1. Click **"New Connection"** on the welcome screen
+2. Select the driver (PostgreSQL, MySQL, SQLite)
+3. Fill in host, port, database, username, and password
+4. Optionally configure an SSH tunnel
+5. Click **"Test Connection"** then **"Save"**
 
 ### Writing and Executing Queries
 
-1. Connect to a database from the Connections list
-2. The Query Editor will open automatically
-3. Write your SQL query in the Monaco editor
-4. Press **Ctrl+Enter** or click **"Execute"** to run
-5. View results in the Results panel (Grid/JSON/Raw tabs)
+1. Click a saved connection to open it
+2. Write SQL in the Monaco editor
+3. Press **Ctrl+Enter** (or **Cmd+Enter**) to execute
+4. View results in Grid / JSON / Raw tabs
 
-### Managing Query History and Snippets
-
-**History**:
-
-- All executed queries are automatically saved
-- Click the **History** tab in the query panel
-- Click any history item to load it into the editor
-
-**Snippets**:
-
-- Save frequently used queries as snippets
-- Click **"Save as Snippet"** button
-- Provide a name and optional description
-- Access snippets from the Snippets tab
-
-### Browsing Schema
+### Browsing and Editing Data
 
 1. After connecting, the Schema Explorer appears on the left
-2. Use the database dropdown to switch databases
-3. Click on a table to view:
-   - **Data tab**: Sample data with pagination
-   - **Columns tab**: Column definitions and data types
-   - **Indexes tab**: Index information
-4. Double-click a row to view JSON details
+2. Click a table to open the Table Inspector
+3. Use the **Data** tab to view, sort, filter, and edit rows
+4. Double-click a cell to edit; right-click for more options
+5. Changes queue in the Pending Changes Panel — click **Commit All** to apply
 
-### Copying Data
+### Importing a SQL Dump
 
-- **Single Cell**: Click any cell to copy its value
-- **Entire Row**: Hover over row number, click copy button
-- **Entire Column**: Hover over column header, click copy button
-- **Export**: Use CSV or JSON export buttons in results header
+1. From the toolbar or File menu, choose **Import SQL**
+2. Select your `.sql` file
+3. Choose options (continue-on-error, transaction mode)
+4. Click **Import** — the dialog locks during the operation
+5. Click **Stop** at any time to cancel gracefully
+6. If any statements were skipped, click **Open error log** to see details
+
+### Exporting Data
+
+- **Query results**: CSV or JSON via the results toolbar
+- **Database dump**: File → Export SQL, configure tables and options
 
 ## Project Structure
 
 ```
 db-hive/
-├── .claude/              # Claude Code configuration
-│   ├── agents/          # Specialized sub-agents
-│   └── skills/          # Reusable code patterns
-├── docs/                # Documentation
-│   ├── implementation-roadmap.md
-│   ├── base-plan.md
-│   └── difficulty.md
-├── src/                 # React frontend
-│   ├── components/     # React components
-│   ├── types/          # TypeScript type definitions
-│   └── App.tsx         # Main application
-├── src-tauri/          # Rust backend
+├── src/                  # React frontend
+│   ├── components/       # UI components
+│   ├── hooks/            # Custom React hooks
+│   ├── store/            # Zustand stores
+│   └── types/            # TypeScript type definitions
+├── src-tauri/            # Rust backend
 │   ├── src/
-│   │   ├── commands/   # Tauri command handlers
-│   │   ├── drivers/    # Database drivers
-│   │   ├── models/     # Data models
-│   │   └── state/      # Application state
+│   │   ├── commands/     # Tauri command handlers
+│   │   ├── drivers/      # Database drivers
+│   │   ├── models/       # Data models
+│   │   └── state/        # Application state
+│   ├── capabilities/     # Tauri permission config
 │   └── tauri.conf.json
-└── README.md
+└── docs/                 # Architecture and planning docs
 ```
 
 ## Development
 
-### Running Tests
-
 ```bash
-# Frontend tests (when implemented)
-npm test
-
-# Rust tests
-cd src-tauri
-cargo test
-```
-
-### Development Commands
-
-```bash
-# Run development server
+# Run dev server
 npm run tauri dev
 
-# Build frontend only
-bun run build
-
-# Build Rust backend only
+# Rust checks and tests
 cd src-tauri
-cargo build
-
-# Run Rust checks
 cargo check
-
-# Format code
+cargo test
 cargo fmt
+
+# Frontend build
+bun run build
 ```
 
 ## Architecture
 
 ### Multi-Process Design
 
-- **Core Process (Rust)**: Manages database connections, state, and credentials
-- **WebView Process (React)**: Handles UI rendering and user interactions
-- **IPC Communication**: Tauri Commands for frontend → backend, Events for backend → frontend
+- **Core Process (Rust)**: database connections, state, credentials, all I/O
+- **WebView Process (React)**: UI rendering, user interactions
+- **IPC**: Tauri Commands (frontend → backend), Events (backend → frontend)
 
 ### Security Model
 
-- Credentials stored using tauri-plugin-store (encrypted local storage)
+- Credentials stored via Tauri plugin-store (encrypted local storage)
 - No sensitive data in frontend state
-- SQL injection prevention through parameterized queries
-- Connection validation before saving
-
-### Performance
-
-- Virtualized tables with TanStack Table for smooth scrolling
-- Lazy loading of schema metadata
-- Pagination for large datasets
-- Async operations throughout (Tokio runtime)
-
-## Configuration
-
-### Database Connection Examples
-
-**PostgreSQL**:
-
-```
-Host: localhost
-Port: 5432
-Database: mydb
-Username: postgres
-Password: ••••••••
-```
-
-**MySQL**:
-
-```
-Host: localhost
-Port: 3306
-Database: mydb
-Username: root
-Password: ••••••••
-```
-
-**SQLite**:
-
-```
-Database File: /path/to/database.db
-```
+- SQL injection prevention through parameterised queries
+- SSH tunnelling for secure remote connections
 
 ## Troubleshooting
 
-### Connection Issues
+**"Connection refused"** — Verify the server is running, check host/port, confirm firewall rules.
 
-**Problem**: "Connection refused" or "Could not connect"
+**"Authentication failed"** — Double-check username and password; verify the user has access to the specified database.
 
-- Check that the database server is running
-- Verify host and port are correct
-- Ensure firewall allows the connection
-- Test with `psql`, `mysql`, or `sqlite3` CLI first
+**SQL import stuck or slow** — Large files are normal; the dialog shows live progress. Click **Stop** to cancel.
 
-**Problem**: "Authentication failed"
+**"Could not open log file"** — Check that the source SQL file's directory is writable.
 
-- Double-check username and password
-- Verify user has access to the specified database
-- Check database user permissions
-
-### Query Execution Issues
-
-**Problem**: Query syntax error
-
-- Verify SQL syntax for your database type
-- MySQL uses backticks (\`) for identifiers
-- PostgreSQL uses double quotes (") for identifiers
-
-**Problem**: Query takes too long
-
-- Add LIMIT clause to limit result size
-- Create indexes on frequently queried columns
-- Use WHERE clauses to filter data
-
-### Application Issues
-
-**Problem**: App won't start
-
-- Ensure all dependencies are installed: `bun install`
-- Check Rust toolchain: `rustc --version`
-- Clear build cache: `rm -rf src-tauri/target`
-
-**Problem**: Theme not working
-
-- Check system theme settings
-- Try switching theme manually in app
-- Reload application
+**App won't start** — Run `bun install` and `rustc --version` to verify dependencies.
 
 ## Contributing
 
-Contributions are welcome! Please:
-
 1. Fork the repository
 2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+3. Make your changes with tests where applicable
+4. Submit a pull request
 
 ## Roadmap
 
-See [Implementation Roadmap](docs/implementation-roadmap.md) for detailed development plan.
+See [Implementation Roadmap](docs/implementation-roadmap.md) for the full plan.
 
-**Current Status**: MVP Complete (v0.1.0)
-
-**Next Priorities**:
-
-- User documentation and guides
-- End-to-end testing
-- Bug fixes and polish
-- First stable release
+**Current status**: Active beta — `v0.19.0-beta`
 
 ## License
 
-MIT License - See [LICENSE](LICENSE) file for details
+MIT License — see [LICENSE](LICENSE)
 
 ## Acknowledgments
 
-Inspired by excellent tools:
+Inspired by [Beekeeper Studio](https://www.beekeeperstudio.io/), [DbGate](https://dbgate.org/), and [DBeaver](https://dbeaver.io/).
 
-- [Beekeeper Studio](https://www.beekeeperstudio.io/)
-- [DbGate](https://dbgate.org/)
-- [DBeaver](https://dbeaver.io/)
+Built with [Tauri](https://tauri.app/), [React](https://react.dev/), [Monaco Editor](https://microsoft.github.io/monaco-editor/), [TanStack Table](https://tanstack.com/table/), and [shadcn/ui](https://ui.shadcn.com/).
 
-Built with amazing technologies:
-
-- [Tauri](https://tauri.app/)
-- [React](https://react.dev/)
-- [Monaco Editor](https://microsoft.github.io/monaco-editor/)
-- [TanStack Table](https://tanstack.com/table/)
-- [shadcn/ui](https://ui.shadcn.com/)
-
-## Support
-
-For issues and feature requests, please use the [GitHub Issues](https://github.com/KwaminaWhyte/db-hive/issues) page.
+For issues and feature requests: [GitHub Issues](https://github.com/KwaminaWhyte/db-hive/issues)
 
 ---
 

@@ -10,6 +10,7 @@ mod ssh;
 mod state;
 
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::AtomicBool;
 use plugins::{loader::PluginLoader, PluginManager};
 use state::AppState;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
@@ -138,6 +139,9 @@ pub fn run() {
             // Manage the state
             app.manage(Mutex::new(state));
 
+            // Shared cancel flag for long-running import operations
+            app.manage(Arc::new(AtomicBool::new(false)));
+
             // Initialize AI state
             app.manage(commands::ai::AiState::default());
 
@@ -250,6 +254,7 @@ pub fn run() {
             commands::export::export_to_json,
             commands::export::export_to_sql,
             commands::export::import_from_sql,
+            commands::export::cancel_import,
             commands::settings::get_settings,
             commands::settings::update_settings,
             commands::settings::reset_settings,

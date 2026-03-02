@@ -44,7 +44,8 @@ impl DatabaseDriver for MysqlDriver {
             .tcp_port(port)
             .user(Some(user))
             .pass(Some(password))
-            .db_name(Some(database));
+            .db_name(Some(database))
+            .max_allowed_packet(Some(1073741824)); // 1GB — needed for large mysqldump imports
 
         let pool = Pool::new(opts_builder.clone());
         let conn = pool.get_conn().await.map_err(Self::map_mysql_error)?;
@@ -59,11 +60,12 @@ impl DatabaseDriver for MysqlDriver {
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, DbError> {
         let mut conn = self.conn.lock().await;
 
-        // Execute query
         let mut result = conn.query_iter(sql).await.map_err(Self::map_mysql_error)?;
 
-        // Check if this is a SELECT query (has result set)
-        if let Some(columns) = result.columns() {
+        // Capture columns before consuming rows (must be read before iteration)
+        let maybe_columns = result.columns();
+
+        if let Some(columns) = maybe_columns {
             let column_names: Vec<String> = columns
                 .iter()
                 .map(|col| col.name_str().to_string())
@@ -71,7 +73,6 @@ impl DatabaseDriver for MysqlDriver {
 
             let mut rows_data = Vec::new();
 
-            // Collect rows from the stream
             while let Some(row) = result.next().await.map_err(Self::map_mysql_error)? {
                 let mut values = Vec::new();
                 for i in 0..column_names.len() {
@@ -81,10 +82,19 @@ impl DatabaseDriver for MysqlDriver {
                 rows_data.push(values);
             }
 
+            // REQUIRED: release the connection back to a clean protocol state.
+            // Without this, mysql_async leaves the connection's state machine mid-stream
+            // and every subsequent query on this connection fails with "Connection closed".
+            result.drop_result().await.map_err(Self::map_mysql_error)?;
+
             Ok(QueryResult::with_data(column_names, rows_data))
         } else {
-            // DML query (INSERT, UPDATE, DELETE, etc.)
+            // DML statement (INSERT, UPDATE, DELETE, SET, etc.)
             let affected_rows = result.affected_rows();
+
+            // REQUIRED: same reason as above — must always call drop_result()
+            result.drop_result().await.map_err(Self::map_mysql_error)?;
+
             Ok(QueryResult::with_affected(affected_rows))
         }
     }

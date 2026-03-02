@@ -11,20 +11,24 @@ import { Button } from "./ui/button";
 import { Label } from "./ui/label";
 import { Checkbox } from "./ui/checkbox";
 import { Alert, AlertDescription } from "./ui/alert";
-import { Loader2, Upload, AlertCircle, CheckCircle2 } from "lucide-react";
+import {
+  Loader2,
+  Upload,
+  AlertCircle,
+  CheckCircle2,
+  FileText,
+  TriangleAlert,
+  Square,
+} from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { openPath } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
-import type { SqlImportOptions } from "@/types";
+import type { SqlImportOptions, SqlImportResult } from "@/types";
 
 interface SqlImportDialogProps {
-  /** Whether the dialog is open */
   open: boolean;
-
-  /** Callback to close the dialog */
   onClose: () => void;
-
-  /** Active connection ID */
   connectionId: string;
 }
 
@@ -34,27 +38,21 @@ export const SqlImportDialog: FC<SqlImportDialogProps> = ({
   connectionId,
 }) => {
   const [importing, setImporting] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<string | null>(null);
+  const [result, setResult] = useState<SqlImportResult | null>(null);
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
 
-  // Import options state
-  const [continueOnError, setContinueOnError] = useState(false);
-  const [useTransaction, setUseTransaction] = useState(true);
+  const [continueOnError, setContinueOnError] = useState(true);
+  const [useTransaction, setUseTransaction] = useState(false);
 
   const handleSelectFile = async () => {
     try {
       const filePath = await openDialog({
         title: "Select SQL Dump File",
         filters: [
-          {
-            name: "SQL",
-            extensions: ["sql"],
-          },
-          {
-            name: "All Files",
-            extensions: ["*"],
-          },
+          { name: "SQL", extensions: ["sql"] },
+          { name: "All Files", extensions: ["*"] },
         ],
         multiple: false,
       });
@@ -78,31 +76,51 @@ export const SqlImportDialog: FC<SqlImportDialogProps> = ({
 
     try {
       setImporting(true);
+      setStopping(false);
       setError(null);
       setResult(null);
 
-      // Build import options
-      const options: SqlImportOptions = {
-        continueOnError,
-        useTransaction,
-      };
+      const options: SqlImportOptions = { continueOnError, useTransaction };
 
-      // Call backend command
-      const importResult = await invoke<string>("import_from_sql", {
+      const importResult = await invoke<SqlImportResult>("import_from_sql", {
         connectionId,
         filePath: selectedFile,
         options,
       });
 
       setResult(importResult);
-      toast.success("Database imported successfully!");
+
+      if (importResult.cancelled) {
+        toast.info("Import stopped by user");
+      } else if (importResult.errorsCount === 0) {
+        toast.success("Database imported successfully!");
+      } else {
+        toast.warning(
+          `Import completed with ${importResult.errorsCount} skipped statement(s)`
+        );
+      }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorMessage =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: string }).message)
+            : String(err);
       setError(errorMessage);
       toast.error(`Import failed: ${errorMessage}`);
       console.error("SQL import failed:", err);
     } finally {
       setImporting(false);
+      setStopping(false);
+    }
+  };
+
+  const handleStop = async () => {
+    setStopping(true);
+    try {
+      await invoke("cancel_import");
+    } catch {
+      // Ignore — the import will finish naturally
     }
   };
 
@@ -115,9 +133,24 @@ export const SqlImportDialog: FC<SqlImportDialogProps> = ({
     }
   };
 
+  const handleOpenLog = async (logFile: string) => {
+    try {
+      await openPath(logFile);
+    } catch {
+      toast.error("Could not open log file");
+    }
+  };
+
+  const succeeded = result && result.errorsCount === 0 && !result.cancelled;
+
   return (
-    <Dialog open={open} onOpenChange={(open) => !open && handleClose()}>
-      <DialogContent className="sm:max-w-[500px]">
+    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && !importing && handleClose()}>
+      <DialogContent
+        className="sm:max-w-[500px]"
+        // Prevent dismissal while importing — user must Stop first
+        onInteractOutside={(e) => importing && e.preventDefault()}
+        onEscapeKeyDown={(e) => importing && e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Upload className="h-5 w-5" />
@@ -149,7 +182,7 @@ export const SqlImportDialog: FC<SqlImportDialogProps> = ({
             )}
           </div>
 
-          {/* Import options checkboxes */}
+          {/* Import options */}
           <div className="space-y-3">
             <Label>Import Options</Label>
 
@@ -160,10 +193,7 @@ export const SqlImportDialog: FC<SqlImportDialogProps> = ({
                 onCheckedChange={(checked) => setUseTransaction(checked === true)}
                 disabled={importing}
               />
-              <Label
-                htmlFor="useTransaction"
-                className="text-sm font-normal cursor-pointer"
-              >
+              <Label htmlFor="useTransaction" className="text-sm font-normal cursor-pointer">
                 Use transaction (rollback all on error)
               </Label>
             </div>
@@ -178,10 +208,7 @@ export const SqlImportDialog: FC<SqlImportDialogProps> = ({
                 onCheckedChange={(checked) => setContinueOnError(checked === true)}
                 disabled={importing || useTransaction}
               />
-              <Label
-                htmlFor="continueOnError"
-                className="text-sm font-normal cursor-pointer"
-              >
+              <Label htmlFor="continueOnError" className="text-sm font-normal cursor-pointer">
                 Continue on error
               </Label>
             </div>
@@ -191,15 +218,52 @@ export const SqlImportDialog: FC<SqlImportDialogProps> = ({
             </p>
           </div>
 
-          {/* Success result */}
-          {result && !error && (
-            <Alert className="border-green-500 text-green-700 dark:text-green-400">
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>{result}</AlertDescription>
+          {/* Result */}
+          {result && (
+            <Alert
+              className={
+                succeeded
+                  ? "border-green-500 text-green-700 dark:text-green-400"
+                  : result.cancelled
+                    ? "border-blue-500 text-blue-700 dark:text-blue-400"
+                    : "border-yellow-500 text-yellow-700 dark:text-yellow-400"
+              }
+            >
+              {succeeded ? (
+                <CheckCircle2 className="h-4 w-4" />
+              ) : (
+                <TriangleAlert className="h-4 w-4" />
+              )}
+              <AlertDescription className="space-y-2">
+                <p>
+                  {result.cancelled
+                    ? `Stopped after ${result.executed} statements (${result.skipped} skipped).`
+                    : result.errorsCount === 0
+                      ? `Imported ${result.executed} statements (${result.skipped} skipped).`
+                      : `Imported ${result.executed} statements — ${result.errorsCount} skipped, ${result.skipped} advisory.`}
+                </p>
+                {result.firstError && (
+                  <p className="text-xs opacity-80 break-words">
+                    {result.firstError}
+                    {result.errorsCount > 1 && ` (+${result.errorsCount - 1} more)`}
+                  </p>
+                )}
+                {result.logFile && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs mt-1"
+                    onClick={() => handleOpenLog(result.logFile!)}
+                  >
+                    <FileText className="h-3 w-3" />
+                    Open error log
+                  </Button>
+                )}
+              </AlertDescription>
             </Alert>
           )}
 
-          {/* Error display */}
+          {/* Fatal error */}
           {error && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -209,14 +273,33 @@ export const SqlImportDialog: FC<SqlImportDialogProps> = ({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={handleClose} disabled={importing}>
-            {result ? "Close" : "Cancel"}
-          </Button>
-          {!result && (
-            <Button onClick={handleImport} disabled={importing || !selectedFile}>
-              {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Import
-            </Button>
+          {importing ? (
+            <>
+              <Button
+                variant="destructive"
+                onClick={handleStop}
+                disabled={stopping}
+                className="gap-2"
+              >
+                {stopping ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Square className="h-3 w-3 fill-current" />
+                )}
+                {stopping ? "Stopping…" : "Stop"}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button variant="outline" onClick={handleClose}>
+                {result ? "Close" : "Cancel"}
+              </Button>
+              {!result && (
+                <Button onClick={handleImport} disabled={!selectedFile}>
+                  Import
+                </Button>
+              )}
+            </>
           )}
         </DialogFooter>
       </DialogContent>
