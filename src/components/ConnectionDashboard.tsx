@@ -292,6 +292,15 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
   };
 
   // Render list item
+  const getEnvColor = (env: string) => {
+    switch (env.toLowerCase()) {
+      case "local": return "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300";
+      case "staging": return "bg-yellow-500/20 border-yellow-500/40 text-yellow-600 dark:text-yellow-300";
+      case "production": return "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300";
+      default: return "bg-muted border-border text-muted-foreground";
+    }
+  };
+
   const renderListItem = (profile: ConnectionProfile) => {
     const colorClass = getDriverColor(profile.driver);
     const driverName = getDriverDisplayName(profile.driver);
@@ -323,6 +332,13 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
                   >
                     {driverName}
                   </span>
+                  {profile.environment && (
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded-full border font-medium ${getEnvColor(profile.environment)}`}
+                    >
+                      {profile.environment}
+                    </span>
+                  )}
                   {isConnecting && (
                     <span className="text-xs text-primary animate-pulse">
                       Connecting...

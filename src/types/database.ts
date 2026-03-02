@@ -230,6 +230,35 @@ export interface QueryExecutionResult {
 
   /** Query execution time in milliseconds */
   executionTime: number;
+
+  /** The type of query derived from the first SQL keyword (e.g. "SELECT", "INSERT", "UPDATE") */
+  queryType?: string;
+}
+
+/**
+ * Keyset pagination result for table data browsing
+ *
+ * Uses cursor-based pagination for efficient large table access.
+ * Pass `nextCursor` from one response as `cursorValue` in the next request.
+ */
+export interface KeysetPageResult {
+  /** Column names in the result set */
+  columns: string[];
+
+  /** Row data as array of arrays */
+  rows: unknown[][];
+
+  /** Cursor value for the next page request; null when there are no more rows */
+  nextCursor: unknown | null;
+
+  /** Whether more rows exist beyond this page */
+  hasMore: boolean;
+
+  /** Query execution time in milliseconds */
+  executionTime: number;
+
+  /** Number of rows returned in this page */
+  totalFetched: number;
 }
 
 /**

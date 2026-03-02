@@ -218,6 +218,17 @@ function ConnectedLayout() {
             <span className="text-xs font-medium">
               {connectionProfile.name}
             </span>
+            {connectionProfile.environment && (
+              <span className={`text-[0.6rem] px-1.5 py-0.5 rounded-full border font-medium ${
+                connectionProfile.environment === 'Production'
+                  ? 'bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300'
+                  : connectionProfile.environment === 'Staging'
+                  ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-600 dark:text-yellow-300'
+                  : 'bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300'
+              }`}>
+                {connectionProfile.environment}
+              </span>
+            )}
             {currentDatabase && (
               <>
                 <span className="text-xs text-muted-foreground">/</span>

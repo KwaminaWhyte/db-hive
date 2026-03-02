@@ -409,7 +409,11 @@ function QueryPanelRoute() {
           return (
             <div
               key={tabId}
-              className={`absolute inset-0 ${isActive ? "block" : "hidden"}`}
+              className="absolute inset-0"
+              style={{
+                visibility: isActive ? "visible" : "hidden",
+                pointerEvents: isActive ? "auto" : "none",
+              }}
             >
               {tabState.type === "query" ? (
                 <QueryPanel

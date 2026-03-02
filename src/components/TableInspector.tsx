@@ -5,6 +5,14 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
@@ -47,6 +55,7 @@ import {
   ClipboardCopy,
   Pencil,
   Ban,
+  Filter,
 } from "lucide-react";
 import { TableSchema, QueryExecutionResult } from "@/types";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
@@ -162,6 +171,27 @@ export function TableInspector({
   const [commitError, setCommitError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  type FilterOperator =
+    | 'contains' | 'not_contains'
+    | 'equals' | 'not_equals'
+    | 'starts_with' | 'ends_with'
+    | 'gt' | 'gte' | 'lt' | 'lte'
+    | 'is_null' | 'is_not_null';
+  interface FilterRow { id: string; column: string; operator: FilterOperator; value: string; }
+  const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
+  const [showFilters, setShowFilters] = useState(false);
+
+  const addFilterRow = () => {
+    if (!tableSchema) return;
+    const firstCol = tableSchema.columns[0]?.name || '';
+    setFilterRows(prev => [...prev, { id: crypto.randomUUID(), column: firstCol, operator: 'contains', value: '' }]);
+  };
+  const removeFilterRow = (id: string) => setFilterRows(prev => prev.filter(r => r.id !== id));
+  const updateFilterRow = (id: string, patch: Partial<FilterRow>) =>
+    setFilterRows(prev => prev.map(r => r.id === id ? { ...r, ...patch } : r));
+  const activeFilterCount = filterRows.filter(r =>
+    r.operator === 'is_null' || r.operator === 'is_not_null' || r.value.trim() !== ''
+  ).length;
 
   // Initialize table editor hook
   const editor = useTableEditor({
@@ -176,6 +206,34 @@ export function TableInspector({
     }
     // PostgreSQL, SQLite use double quotes
     return `"${identifier}"`;
+  };
+
+  // Build a WHERE clause from the structured filter rows
+  const buildWhereClause = (): string => {
+    const active = filterRows.filter(r =>
+      r.column && (r.operator === 'is_null' || r.operator === 'is_not_null' || r.value.trim() !== '')
+    );
+    if (active.length === 0) return '';
+    const clauses = active.map(r => {
+      const col = `CAST(${quoteIdentifier(r.column)} AS TEXT)`;
+      const v = r.value.replace(/'/g, "''");
+      switch (r.operator) {
+        case 'contains':     return `${col} ILIKE '%${v}%'`;
+        case 'not_contains': return `${col} NOT ILIKE '%${v}%'`;
+        case 'equals':       return `${col} = '${v}'`;
+        case 'not_equals':   return `${col} <> '${v}'`;
+        case 'starts_with':  return `${col} ILIKE '${v}%'`;
+        case 'ends_with':    return `${col} ILIKE '%${v}'`;
+        case 'gt':           return `${quoteIdentifier(r.column)} > '${v}'`;
+        case 'gte':          return `${quoteIdentifier(r.column)} >= '${v}'`;
+        case 'lt':           return `${quoteIdentifier(r.column)} < '${v}'`;
+        case 'lte':          return `${quoteIdentifier(r.column)} <= '${v}'`;
+        case 'is_null':      return `${quoteIdentifier(r.column)} IS NULL`;
+        case 'is_not_null':  return `${quoteIdentifier(r.column)} IS NOT NULL`;
+        default:             return '';
+      }
+    }).filter(Boolean);
+    return clauses.length ? `WHERE ${clauses.join(' AND ')}` : '';
   };
 
   // Copy helper functions
@@ -237,12 +295,18 @@ export function TableInspector({
     fetchTableSchema();
   }, [connectionId, schema, tableName]);
 
-  // Fetch sample data when Data tab is opened, schema is loaded, or page changes
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+    setTotalRows(null);
+  }, [filterRows]);
+
+  // Fetch sample data when Data tab is opened, schema is loaded, page changes, or filters change
   useEffect(() => {
     if (activeTab === "data" && tableSchema) {
       fetchSampleData();
     }
-  }, [activeTab, tableName, schema, tableSchema, currentPage]);
+  }, [activeTab, tableName, schema, tableSchema, currentPage, filterRows]);
 
   const fetchTableSchema = async () => {
     setLoading(true);
@@ -299,10 +363,10 @@ export function TableInspector({
           }
         }
 
-        // Fetch paginated data
+        // Fetch paginated data (with optional column filters)
         result = await invoke<QueryExecutionResult>("execute_query", {
           connectionId,
-          sql: `SELECT * FROM ${quoteIdentifier(schema)}.${quoteIdentifier(tableName)} LIMIT ${pageSize} OFFSET ${offset}`,
+          sql: `SELECT * FROM ${quoteIdentifier(schema)}.${quoteIdentifier(tableName)} ${buildWhereClause()} LIMIT ${pageSize} OFFSET ${offset}`,
         });
       }
 
@@ -921,6 +985,21 @@ export function TableInspector({
             </>
           )}
           <Button
+            variant={showFilters ? 'default' : 'outline'}
+            size="sm"
+            className="gap-1.5"
+            onClick={() => { setShowFilters(s => !s); if (!showFilters && filterRows.length === 0) addFilterRow(); }}
+            title="Toggle filters"
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Filter
+            {activeFilterCount > 0 && (
+              <span className="ml-1 rounded-full bg-primary/20 px-1.5 text-[10px]">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+          <Button
             variant="outline"
             size="sm"
             onClick={() => {
@@ -952,6 +1031,72 @@ export function TableInspector({
       <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
         {/* Data Tab */}
         <TabsContent value="data" className="flex-1 m-0 flex flex-col overflow-hidden">
+          {/* Filter builder */}
+          {showFilters && tableSchema && (
+            <div className="border-b bg-muted/20 px-3 py-2 space-y-1.5 shrink-0">
+              {filterRows.map((row) => (
+                <div key={row.id} className="flex items-center gap-2">
+                  {/* Column */}
+                  <Select value={row.column} onValueChange={v => updateFilterRow(row.id, { column: v })}>
+                    <SelectTrigger className="h-7 w-36 text-xs">
+                      <SelectValue placeholder="Column" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {tableSchema.columns.map(col => (
+                        <SelectItem key={col.name} value={col.name} className="text-xs">{col.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {/* Operator */}
+                  <Select value={row.operator} onValueChange={v => updateFilterRow(row.id, { operator: v as any })}>
+                    <SelectTrigger className="h-7 w-36 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="contains" className="text-xs">contains</SelectItem>
+                      <SelectItem value="not_contains" className="text-xs">does not contain</SelectItem>
+                      <SelectItem value="equals" className="text-xs">equals</SelectItem>
+                      <SelectItem value="not_equals" className="text-xs">not equals</SelectItem>
+                      <SelectItem value="starts_with" className="text-xs">starts with</SelectItem>
+                      <SelectItem value="ends_with" className="text-xs">ends with</SelectItem>
+                      <SelectItem value="gt" className="text-xs">&gt; greater than</SelectItem>
+                      <SelectItem value="gte" className="text-xs">&ge; greater or equal</SelectItem>
+                      <SelectItem value="lt" className="text-xs">&lt; less than</SelectItem>
+                      <SelectItem value="lte" className="text-xs">&le; less or equal</SelectItem>
+                      <SelectItem value="is_null" className="text-xs">is null</SelectItem>
+                      <SelectItem value="is_not_null" className="text-xs">is not null</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {/* Value */}
+                  {row.operator !== 'is_null' && row.operator !== 'is_not_null' && (
+                    <Input
+                      className="h-7 flex-1 text-xs"
+                      placeholder="value..."
+                      value={row.value}
+                      onChange={e => updateFilterRow(row.id, { value: e.target.value })}
+                      onKeyDown={e => e.key === 'Enter' && fetchSampleData()}
+                    />
+                  )}
+                  {/* Remove row */}
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => removeFilterRow(row.id)}>
+                    <X className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+              {/* Footer actions */}
+              <div className="flex items-center gap-2 pt-0.5">
+                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={addFilterRow}>
+                  <Filter className="h-3 w-3" /> Add Filter
+                </Button>
+                {filterRows.length > 0 && (
+                  <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setFilterRows([])}>
+                    Clear All
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           {loadingSampleData ? (
             <div className="flex-1 p-4 space-y-2">
               <div className="flex gap-2 mb-4">

@@ -10,6 +10,7 @@ export type {
   ConnectionStatus,
   DbError,
   QueryExecutionResult,
+  KeysetPageResult,
   QueryError,
   DatabaseInfo,
   SchemaInfo,

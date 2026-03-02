@@ -19,6 +19,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { NoConnectionsEmpty } from "@/components/empty-states";
 import { ConnectionLostError } from "@/components/ConnectionLostError";
 
+const ENV_COLORS: Record<string, string> = {
+  local: "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300",
+  staging: "bg-yellow-500/20 border-yellow-500/40 text-yellow-600 dark:text-yellow-300",
+  production: "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300",
+};
+const getEnvColorClass = (env: string) => ENV_COLORS[env.toLowerCase()] || "bg-muted border-border text-muted-foreground";
+
 // Module-level constant for driver colors - prevents recreation on each render
 const DRIVER_COLORS: Record<string, string> = {
   postgresql: "bg-blue-500/20 border-blue-500/40 text-blue-600 dark:text-blue-300",
@@ -326,6 +333,11 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                               <span className={`text-[10px] px-2 py-0.5 rounded-full border ${colorClass} font-medium`}>
                                 {driverName}
                               </span>
+                              {profile.environment && (
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${getEnvColorClass(profile.environment)}`}>
+                                  {profile.environment}
+                                </span>
+                              )}
                               {isConnecting && (
                                 <span className="text-xs text-amber-600 dark:text-amber-300 animate-pulse">
                                   Connecting...

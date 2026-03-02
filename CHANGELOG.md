@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.1-beta] - 2026-03-02
+
+### Added
+
+- **Query Status Bar**: A slim status bar at the bottom of the results pane shows the active connection name, database, query type (SELECT / INSERT / etc.), row count, and execution time. Pulses while a query is loading.
+
+- **Query Type on Results**: Every query result now carries the first SQL keyword (`queryType` field) — consumed by the status bar and available for future features.
+
+- **Keyset Pagination Command**: New `get_table_data_keyset` Tauri command for cursor-based (keyset) pagination. Eliminates `OFFSET` performance cliffs on large tables by using a cursor column + cursor value. Returns `{ rows, nextCursor, hasMore, executionTime }`.
+
+- **Structured Filter Builder**: The Table Inspector data tab now has a proper filter builder. Click **Filter** to open a panel where each row has a column selector, an operator dropdown (contains, equals, not equals, starts with, ends with, >, ≥, <, ≤, is null, is not null), and a value input. Multiple filters combine with AND. Filters reset pagination to page 1 automatically.
+
+- **Connection Environment Labels**: Connections can now be tagged with an environment — **Local**, **Staging**, or **Production** — via the connection form. A colour-coded badge (green / yellow / red) appears next to the connection name everywhere connections are listed: the home screen list, the connection info bar (shown while connected), grid cards, list view, and tree view.
+
+### Fixed
+
+- **Query Tab Flickering**: Switching between query editor tabs no longer flickers. Previously, a single Monaco Editor instance received a new `value` prop on every tab switch, triggering an internal `editor.setValue()` call that caused a visible flash. All tab editors are now kept mounted simultaneously; only the active one is shown via CSS, so Monaco never re-initialises.
+
+- **Top-Level Tab Flickering**: Switching between main tabs (Query / Table Inspector) no longer causes the layout to flash. The container was using the `hidden` CSS class (`display: none`) to hide inactive tabs, which caused `react-resizable-panels` to see zero dimensions and re-layout on every reveal. Switched to `visibility: hidden` + `pointer-events: none`, which keeps elements in the layout flow at all times.
+
+- **Environment Select Empty-Value Error**: The "None" option in the environment selector used `value=""`, which is forbidden by Radix UI Select. Replaced with a `"none"` sentinel value mapped to `null` on change.
+
+- **Environment Badge Missing from Home Screen**: The main connection list on the home page (`/`) is rendered inline in `index.tsx` and was not connected to any of the shared connection components. The environment badge is now rendered there directly.
+
+### Removed
+
+- **Tags Placeholder**: Removed the non-functional "Add tags" button from the connection form.
+
 ## [0.19.0-beta] - 2026-03-02
 
 ### Added

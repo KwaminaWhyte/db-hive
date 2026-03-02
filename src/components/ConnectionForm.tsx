@@ -44,6 +44,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     username: profile?.username || "",
     database: profile?.database || "",
     sslMode: profile?.sslMode || "Disable",
+    environment: profile?.environment ?? null,
   });
 
   const [password, setPassword] = useState("");
@@ -81,6 +82,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       username: profile?.username || "",
       database: profile?.database || "",
       sslMode: profile?.sslMode || "Disable",
+      environment: profile?.environment ?? null,
     });
     setSshMode(profile?.sshTunnel ? "ssh" : "off");
     setSshConfig({
@@ -236,7 +238,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     passwordKeyringKey: null,
     sshTunnel: buildSshConfig(),
     folder: null,
-    environment: null,
+    environment: formData.environment ?? null,
     lastConnectedAt: profile?.lastConnectedAt || null,
     connectionCount: profile?.connectionCount || 0,
     isFavorite: profile?.isFavorite || false,
@@ -376,16 +378,42 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         </p>
       </div>
 
-      {/* Tags placeholder */}
+      {/* Environment */}
       <div className="space-y-2">
-        <Label className="text-sm font-medium">Tags</Label>
-        <button
-          type="button"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-dashed border-muted-foreground/30 text-sm text-muted-foreground hover:border-muted-foreground/50 transition-colors"
+        <Label htmlFor="environment" className="text-sm font-medium">Environment</Label>
+        <Select
+          value={formData.environment ?? "none"}
+          onValueChange={(val) =>
+            setFormData((prev) => ({ ...prev, environment: val === "none" ? null : (val as any) }))
+          }
         >
-          <span>+</span> Add tags
-          <span className="text-xs">&#x25BE;</span>
-        </button>
+          <SelectTrigger id="environment" className="w-full h-11">
+            <SelectValue placeholder="None (optional)" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">
+              <span className="text-muted-foreground">None</span>
+            </SelectItem>
+            <SelectItem value="Local">
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                Local
+              </span>
+            </SelectItem>
+            <SelectItem value="Staging">
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" />
+                Staging
+              </span>
+            </SelectItem>
+            <SelectItem value="Production">
+              <span className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+                Production
+              </span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {/* SQLite: File path */}

@@ -39,6 +39,20 @@ interface FolderGroup {
   isExpanded: boolean;
 }
 
+// Environment badge colours
+const getEnvStyle = (env: string) => {
+  switch (env.toLowerCase()) {
+    case "local":
+      return "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300";
+    case "staging":
+      return "bg-yellow-500/20 border-yellow-500/40 text-yellow-600 dark:text-yellow-300";
+    case "production":
+      return "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300";
+    default:
+      return "bg-muted border-border text-muted-foreground";
+  }
+};
+
 // Helper to get badge color
 const getDriverColor = (driver: DbDriver) => {
   const driverName = getDriverDisplayName(driver).toLowerCase();
@@ -151,6 +165,13 @@ export const ConnectionTreeView: FC<ConnectionTreeViewProps> = ({
             >
               {driverName}
             </span>
+            {profile.environment && (
+              <span
+                className={`text-[0.65rem] px-1.5 py-0.5 rounded-full border font-medium flex-shrink-0 ${getEnvStyle(profile.environment)}`}
+              >
+                {profile.environment}
+              </span>
+            )}
             {isConnecting && (
               <span className="text-xs text-primary animate-pulse flex-shrink-0">
                 Connecting...

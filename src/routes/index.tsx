@@ -543,6 +543,17 @@ function HomeRoute() {
                         <span className="font-medium text-sm truncate">
                           {profile.name}
                         </span>
+                        {profile.environment && (
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium shrink-0 ${
+                            profile.environment === 'Production'
+                              ? 'bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300'
+                              : profile.environment === 'Staging'
+                              ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-600 dark:text-yellow-300'
+                              : 'bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300'
+                          }`}>
+                            {profile.environment}
+                          </span>
+                        )}
                         {isConnecting && (
                           <span className="text-xs text-primary animate-pulse">
                             Connecting...

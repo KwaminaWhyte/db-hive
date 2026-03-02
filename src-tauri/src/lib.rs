@@ -237,6 +237,7 @@ pub fn run() {
             commands::connection::get_recent_connections,
             commands::connection::duplicate_connection,
             commands::query::execute_query,
+            commands::query::get_table_data_keyset,
             commands::schema::get_databases,
             commands::schema::get_schemas,
             commands::schema::get_tables,

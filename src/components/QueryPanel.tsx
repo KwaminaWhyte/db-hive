@@ -14,6 +14,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Button } from './ui/button';
 import { GripHorizontal, GripVertical, Plus, X, Sparkles } from 'lucide-react';
+import { QueryStatusBar } from './QueryStatusBar';
 import { ConnectionLostError } from './ConnectionLostError';
 import { useNavigate } from '@tanstack/react-router';
 
@@ -351,10 +352,6 @@ export const QueryPanel: FC<QueryPanelProps> = ({
     handleExecute(query);
   };
 
-  // Handle SQL change
-  const handleSqlChange = (value: string) => {
-    updateTab(activeTabId, { sql: value });
-  };
 
   // If connection is lost, show the ConnectionLostError component
   if (connectionLost) {
@@ -420,16 +417,27 @@ export const QueryPanel: FC<QueryPanelProps> = ({
               </Button>
             </div>
 
-            {/* Active Tab Editor */}
-            <div className="flex-1 overflow-hidden">
-              <SQLEditor
-                connectionId={connectionId}
-                database={currentDatabase || null}
-                onExecuteQuery={handleExecute}
-                value={activeTab.sql}
-                onChange={(value) => handleSqlChange(value || '')}
-                loading={activeTab.loading}
-              />
+            {/* Tab Editors — all mounted, CSS toggle prevents Monaco flicker on tab switch */}
+            <div className="flex-1 overflow-hidden relative">
+              {tabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  className="absolute inset-0"
+                  style={{
+                    display: tab.id === activeTabId ? 'flex' : 'none',
+                    flexDirection: 'column',
+                  }}
+                >
+                  <SQLEditor
+                    connectionId={connectionId}
+                    database={currentDatabase || null}
+                    onExecuteQuery={handleExecute}
+                    value={tab.sql}
+                    onChange={(value) => updateTab(tab.id, { sql: value || '' })}
+                    loading={tab.loading}
+                  />
+                </div>
+              ))}
             </div>
           </Panel>
 
@@ -441,7 +449,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
           </PanelResizeHandle>
 
           {/* Results Viewer Panel */}
-          <Panel defaultSize={60} minSize={30} className="relative">
+          <Panel defaultSize={60} minSize={30} className="relative flex flex-col">
             {/* View Toggle for EXPLAIN queries */}
             {queryPlan && (
               <div className="absolute top-2 right-2 z-10 flex items-center gap-2">
@@ -468,20 +476,32 @@ export const QueryPanel: FC<QueryPanelProps> = ({
               </div>
             )}
 
-            {showPlanView && queryPlan ? (
-              <div className="h-full overflow-auto p-4">
-                <QueryPlanVisualizer planResult={queryPlan} />
-              </div>
-            ) : (
-              <ResultsViewer
-                columns={activeTab.results?.columns || []}
-                rows={activeTab.results?.rows || []}
-                rowsAffected={activeTab.results?.rowsAffected || null}
-                loading={activeTab.loading}
-                error={activeTab.error}
-                executionTime={activeTab.results?.executionTime}
-              />
-            )}
+            <div className="flex-1 overflow-hidden relative">
+              {showPlanView && queryPlan ? (
+                <div className="h-full overflow-auto p-4">
+                  <QueryPlanVisualizer planResult={queryPlan} />
+                </div>
+              ) : (
+                <ResultsViewer
+                  columns={activeTab.results?.columns || []}
+                  rows={activeTab.results?.rows || []}
+                  rowsAffected={activeTab.results?.rowsAffected || null}
+                  loading={activeTab.loading}
+                  error={activeTab.error}
+                  executionTime={activeTab.results?.executionTime}
+                />
+              )}
+            </div>
+
+            <QueryStatusBar
+              connectionName={connectionProfile?.name}
+              databaseName={currentDatabase}
+              rowCount={activeTab.results?.rows.length ?? null}
+              rowsAffected={activeTab.results?.rowsAffected ?? null}
+              executionTime={activeTab.results?.executionTime}
+              queryType={(activeTab.results as any)?.queryType}
+              loading={activeTab.loading}
+            />
           </Panel>
         </PanelGroup>
       </Panel>
