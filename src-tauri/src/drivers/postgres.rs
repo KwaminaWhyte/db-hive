@@ -159,7 +159,115 @@ impl PostgresDriver {
                         .flatten()
                         .unwrap_or(serde_json::Value::Null)
                 },
-                // For unknown types, try to get as string
+                // pgvector: deserialize as a JSON array of numbers
+                "vector" => {
+                    row.try_get::<_, Option<pgvector::Vector>>(i)
+                        .ok()
+                        .flatten()
+                        .map(|v| {
+                            serde_json::Value::Array(
+                                v.to_vec()
+                                    .iter()
+                                    .map(|&f| {
+                                        serde_json::Number::from_f64(f as f64)
+                                            .map(serde_json::Value::Number)
+                                            .unwrap_or(serde_json::Value::Null)
+                                    })
+                                    .collect(),
+                            )
+                        })
+                        .unwrap_or(serde_json::Value::Null)
+                },
+                // PostgreSQL array types: type names start with '_'
+                t if t.starts_with('_') => {
+                    let inner = &t[1..];
+                    match inner {
+                        "float4" => row
+                            .try_get::<_, Option<Vec<f32>>>(i)
+                            .ok()
+                            .flatten()
+                            .map(|v| {
+                                serde_json::Value::Array(
+                                    v.iter()
+                                        .map(|&f| {
+                                            serde_json::Number::from_f64(f as f64)
+                                                .map(serde_json::Value::Number)
+                                                .unwrap_or(serde_json::Value::Null)
+                                        })
+                                        .collect(),
+                                )
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "float8" => row
+                            .try_get::<_, Option<Vec<f64>>>(i)
+                            .ok()
+                            .flatten()
+                            .map(|v| {
+                                serde_json::Value::Array(
+                                    v.iter()
+                                        .map(|&f| {
+                                            serde_json::Number::from_f64(f)
+                                                .map(serde_json::Value::Number)
+                                                .unwrap_or(serde_json::Value::Null)
+                                        })
+                                        .collect(),
+                                )
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "int2" => row
+                            .try_get::<_, Option<Vec<i16>>>(i)
+                            .ok()
+                            .flatten()
+                            .map(|v| {
+                                serde_json::Value::Array(
+                                    v.iter().map(|&n| serde_json::Value::Number(n.into())).collect(),
+                                )
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "int4" => row
+                            .try_get::<_, Option<Vec<i32>>>(i)
+                            .ok()
+                            .flatten()
+                            .map(|v| {
+                                serde_json::Value::Array(
+                                    v.iter().map(|&n| serde_json::Value::Number(n.into())).collect(),
+                                )
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "int8" => row
+                            .try_get::<_, Option<Vec<i64>>>(i)
+                            .ok()
+                            .flatten()
+                            .map(|v| {
+                                serde_json::Value::Array(
+                                    v.iter().map(|&n| serde_json::Value::Number(n.into())).collect(),
+                                )
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        "bool" => row
+                            .try_get::<_, Option<Vec<bool>>>(i)
+                            .ok()
+                            .flatten()
+                            .map(|v| {
+                                serde_json::Value::Array(
+                                    v.iter().map(|&b| serde_json::Value::Bool(b)).collect(),
+                                )
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                        // text[], varchar[], and other text array types
+                        _ => row
+                            .try_get::<_, Option<Vec<String>>>(i)
+                            .ok()
+                            .flatten()
+                            .map(|v| {
+                                serde_json::Value::Array(
+                                    v.into_iter().map(serde_json::Value::String).collect(),
+                                )
+                            })
+                            .unwrap_or(serde_json::Value::Null),
+                    }
+                },
+                // For unknown/custom types, try to get as string
                 _ => row
                     .try_get::<_, Option<String>>(i)
                     .ok()

@@ -360,12 +360,12 @@ pub fn save_password(
     // Save to OS keyring
     crate::credentials::CredentialManager::save_password(&profile_id, &password)?;
 
-    // Remove password from in-memory store (we now use keyring)
+    // Keep password in in-memory store as a session cache so connecting
+    // works immediately without requiring a second keyring read
     let mut state = state.lock().unwrap();
-    state.connection_passwords.remove(&profile_id);
+    state.connection_passwords.insert(profile_id.clone(), password.clone());
 
-    // Save the updated passwords (without this one) to the store file
-    // This ensures we remove any existing plaintext password
+    // Persist to store as a backup in case keyring retrieval fails later
     state.save_passwords_to_store(&app)?;
 
     Ok(())
@@ -455,6 +455,26 @@ pub async fn connect_to_database(
                 DbError::NotFound(format!("Profile with ID {} not found", profile_id))
             })?
             .clone()
+    };
+
+    // If the frontend didn't supply a password (get_saved_password returned null),
+    // try to retrieve it directly from the keyring or in-memory cache
+    let password = if password.is_empty() {
+        let from_keyring = crate::credentials::CredentialManager::get_password(&profile_id)
+            .ok()
+            .flatten();
+        if let Some(p) = from_keyring {
+            p
+        } else {
+            let state_guard = state.lock().unwrap();
+            state_guard
+                .connection_passwords
+                .get(&profile_id)
+                .cloned()
+                .unwrap_or_default()
+        }
+    } else {
+        password
     };
 
     // Check if SSH tunnel is configured

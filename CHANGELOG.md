@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.19.2-beta] - 2026-03-10
+
+### Fixed
+
+- **PostgreSQL Connection: Password Lost After Save**: When `save_password` wrote a credential to the OS keyring it also removed the password from the in-memory store. If the keychain read subsequently failed (e.g. macOS permission prompt dismissed, keychain unavailable), the frontend passed an empty string to `connect_to_database` and the connection was rejected with an auth error even though the test had succeeded. Fixed by keeping the password in the in-memory session cache after saving to keyring, and by persisting it to `passwords.json` as a backup. Additionally, `connect_to_database` now falls back to keyring/in-memory lookup on the Rust side if the frontend provides an empty password, making the connection flow resilient to keyring retrieval failures.
+
+- **pgvector Embeddings Rendering as NULL**: Querying tables with `vector` columns (pgvector extension) returned `NULL` for every embedding value. The `row_to_json_vec` serialiser only handled a fixed set of built-in PostgreSQL types; `vector` and all array types (`_float4`, `_int4`, etc.) fell through to a default arm that tried `try_get::<_, Option<String>>`, which always fails for binary-encoded custom types, producing `NULL`. Added the `pgvector` crate (`v0.4`, `postgres` feature) and a dedicated `"vector"` match arm that deserialises via `pgvector::Vector` and emits a JSON number array. Also added match arms for all common PostgreSQL array types (`_float4`, `_float8`, `_int2/4/8`, `_bool`, `_text` and friends) so they render correctly as JSON arrays instead of NULL.
+
 ## [0.19.1-beta] - 2026-03-02
 
 ### Added

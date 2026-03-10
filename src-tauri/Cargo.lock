@@ -1290,7 +1290,7 @@ checksum = "2a2330da5de22e8a3cb63252ce2abb30116bf5265e89c0e01bc17015ce30a476"
 
 [[package]]
 name = "db-hive"
-version = "0.19.0"
+version = "0.19.2"
 dependencies = [
  "arboard",
  "async-trait",
@@ -1305,6 +1305,7 @@ dependencies = [
  "keyring",
  "mongodb",
  "mysql_async",
+ "pgvector",
  "regex",
  "reqwest",
  "rusqlite",
@@ -4425,6 +4426,16 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "pgvector"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fc58e2d255979a31caa7cabfa7aac654af0354220719ab7a68520ae7a91e8c0b"
+dependencies = [
+ "bytes",
+ "postgres-types",
+]
 
 [[package]]
 name = "phf"

@@ -913,6 +913,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Recently Completed:**
 
+- ✅ **v0.19.2 Bug Fixes** — PostgreSQL connection password retrieval resilience (keyring fallback in `connect_to_database`, session cache in `save_password`) + pgvector/array type rendering: `vector` columns now deserialise correctly via the `pgvector` crate and all PostgreSQL array types (`_float4`, `_int4`, `_text`, etc.) emit JSON arrays instead of NULL (2026-03-10)
 - ✅ Milestone 3.14: AI Assistant - Multi-provider AI with Ollama, OpenAI, Claude, Gemini support; natural language to SQL, query explanation, optimization, error fixing (2025-11-29)
 - ✅ Import Wizards - Import from Excel/CSV with column mapping, data type detection, batch import (2025-11-28)
 - ✅ Data Visualization - Interactive charts (bar, line, area, pie, scatter) from query results with recharts (2025-11-28)
