@@ -74,7 +74,8 @@ export const EditableCell: FC<EditableCellProps> = ({
   useEffect(() => {
     if (isEditing) {
       justMountedRef.current = true;
-      const initialValue = value === null || value === undefined ? '' : String(value);
+      const initialValue = value === null || value === undefined ? '' :
+        typeof value === 'object' ? JSON.stringify(value) : String(value);
       setEditValue(initialValue);
       // Focus input after a brief delay to ensure it's rendered
       setTimeout(() => {
@@ -111,6 +112,15 @@ export const EditableCell: FC<EditableCellProps> = ({
   };
 
   const handleCommit = () => {
+    // Serialize original the same way editValue was initialized, to detect real changes
+    const originalAsString = value === null || value === undefined ? '' :
+      typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+    if (editValue === originalAsString) {
+      onCancelEdit();
+      return;
+    }
+
     // Convert empty string to NULL if column is nullable
     let newValue: any = editValue;
 
@@ -163,7 +173,7 @@ export const EditableCell: FC<EditableCellProps> = ({
           onChange={(e) => setEditValue(e.target.value)}
           onKeyDown={handleKeyDown}
           onBlur={handleBlur}
-          className="h-8 border-2 border-primary font-mono text-sm px-2"
+          className="h-8 border border-primary font-mono text-sm px-2 rounded-none focus-visible:ring-0"
           placeholder={nullable ? "(NULL)" : ""}
         />
       </div>
