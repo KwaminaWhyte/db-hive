@@ -214,16 +214,22 @@ export function TableInspector({
       r.column && (r.operator === 'is_null' || r.operator === 'is_not_null' || r.value.trim() !== '')
     );
     if (active.length === 0) return '';
+    const isMySql = driverType === 'MySql';
+    const isSqlite = driverType === 'Sqlite';
+    const castType = isMySql ? 'CHAR' : 'TEXT';
+    const likeOp = (negated: boolean) => isMySql || isSqlite
+      ? (negated ? 'NOT LIKE' : 'LIKE')
+      : (negated ? 'NOT ILIKE' : 'ILIKE');
     const clauses = active.map(r => {
-      const col = `CAST(${quoteIdentifier(r.column)} AS TEXT)`;
+      const col = `CAST(${quoteIdentifier(r.column)} AS ${castType})`;
       const v = r.value.replace(/'/g, "''");
       switch (r.operator) {
-        case 'contains':     return `${col} ILIKE '%${v}%'`;
-        case 'not_contains': return `${col} NOT ILIKE '%${v}%'`;
+        case 'contains':     return `${col} ${likeOp(false)} '%${v}%'`;
+        case 'not_contains': return `${col} ${likeOp(true)} '%${v}%'`;
         case 'equals':       return `${col} = '${v}'`;
         case 'not_equals':   return `${col} <> '${v}'`;
-        case 'starts_with':  return `${col} ILIKE '${v}%'`;
-        case 'ends_with':    return `${col} ILIKE '%${v}'`;
+        case 'starts_with':  return `${col} ${likeOp(false)} '${v}%'`;
+        case 'ends_with':    return `${col} ${likeOp(false)} '%${v}'`;
         case 'gt':           return `${quoteIdentifier(r.column)} > '${v}'`;
         case 'gte':          return `${quoteIdentifier(r.column)} >= '${v}'`;
         case 'lt':           return `${quoteIdentifier(r.column)} < '${v}'`;

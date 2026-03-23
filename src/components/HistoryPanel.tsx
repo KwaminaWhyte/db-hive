@@ -80,7 +80,7 @@ export function HistoryPanel({
   refreshTrigger,
 }: HistoryPanelProps) {
   const [history, setHistory] = useState<QueryHistory[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [limit, setLimit] = useState(50);
 
