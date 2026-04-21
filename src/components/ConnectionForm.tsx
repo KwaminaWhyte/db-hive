@@ -51,7 +51,9 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testStatus, setTestStatus] = useState<string | null>(null);
+  const [testStatus, setTestStatus] = useState<{ kind: "success" | "failure"; message: string } | null>(null);
+  const [testing, setTesting] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // Connection string
   const [connectionString, setConnectionString] = useState("");
@@ -129,8 +131,11 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
 
     try {
       // Basic connection string parsing
+      const pgPattern = /^postgres(?:ql)?:\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/([^?]+))?/;
       const patterns: Record<string, RegExp> = {
-        Postgres: /^postgres(?:ql)?:\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
+        Postgres: pgPattern,
+        Supabase: pgPattern,
+        Neon: pgPattern,
         MySql: /^mysql:\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
         MongoDb: /^mongodb(?:\+srv)?:\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
         SqlServer: /^(?:mssql|sqlserver):\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
@@ -260,6 +265,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     }
 
     setLoading(true);
+    setTesting(true);
 
     try {
       const testProfile = buildProfile();
@@ -270,7 +276,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       });
 
       if (status === "Connected") {
-        setTestStatus("Connection successful!");
+        setTestStatus({ kind: "success", message: "Connection successful!" });
         if (testProfile.id && password) {
           try {
             await invoke("save_password", { profileId: testProfile.id, password });
@@ -286,13 +292,14 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
           }
         }
       } else {
-        setTestStatus("Connection failed");
+        setTestStatus({ kind: "failure", message: "Connection failed" });
       }
     } catch (err) {
       const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
       setError(`Connection test failed: ${errorMessage}`);
     } finally {
       setLoading(false);
+      setTesting(false);
     }
   };
 
@@ -309,6 +316,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     }
 
     setLoading(true);
+    setSaving(true);
 
     try {
       const saveProfile = buildProfile();
@@ -342,6 +350,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       setError(`Failed to save profile: ${errorMessage}`);
     } finally {
       setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -349,6 +358,8 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   const getConnectionStringPlaceholder = () => {
     switch (driver) {
       case "Postgres": return "postgresql://user:password@host:5432/database";
+      case "Supabase": return "postgresql://postgres:password@db.<project>.supabase.co:5432/postgres";
+      case "Neon": return "postgresql://user:password@ep-<id>.neon.tech/neondb?sslmode=require";
       case "MySql": return "mysql://user:password@host:3306/database";
       case "MongoDb": return "mongodb://user:password@host:27017/database";
       case "SqlServer": return "mssql://user:password@host:1433/database";
@@ -361,7 +372,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       {/* Connection Name */}
       <div className="space-y-2">
         <Label htmlFor="name" className="text-sm font-medium">
-          Connection Name
+          Connection Name <span className="text-destructive">*</span>
         </Label>
         <Input
           type="text"
@@ -420,7 +431,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       {driver === "Sqlite" ? (
         <div className="space-y-2">
           <Label htmlFor="database" className="text-sm font-medium">
-            Database File
+            Database File <span className="text-destructive">*</span>
           </Label>
           <div className="flex gap-2">
             <Input
@@ -462,7 +473,9 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
           {/* Host and Port */}
           <div className="grid grid-cols-5 gap-4">
             <div className="col-span-3 space-y-2">
-              <Label htmlFor="host" className="text-sm font-medium">Host</Label>
+              <Label htmlFor="host" className="text-sm font-medium">
+                Host <span className="text-destructive">*</span>
+              </Label>
               <Input
                 type="text"
                 id="host"
@@ -511,8 +524,10 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
             <div className="space-y-2">
               <Label htmlFor="username" className="text-sm font-medium">
                 Username
-                {driver === "MongoDb" && (
+                {driver === "MongoDb" ? (
                   <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+                ) : (
+                  <span className="text-destructive ml-1">*</span>
                 )}
               </Label>
               <Input
@@ -761,14 +776,20 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
         </div>
       )}
 
-      {/* Success Message */}
+      {/* Test Status Message */}
       {testStatus && (
-        <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
-          <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-          </svg>
-          {testStatus}
-        </div>
+        testStatus.kind === "success" ? (
+          <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
+            <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+            {testStatus.message}
+          </div>
+        ) : (
+          <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
+            {testStatus.message}
+          </div>
+        )
       )}
 
       {/* Buttons */}
@@ -780,14 +801,14 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
           disabled={loading}
           className="flex-1 h-11"
         >
-          {loading ? "Testing..." : "Test Connection"}
+          {testing ? "Testing..." : "Test Connection"}
         </Button>
         <Button
           type="submit"
           disabled={loading}
           className="flex-1 h-11"
         >
-          {loading ? "Saving..." : "Save Connection"}
+          {saving ? "Saving..." : "Save Connection"}
         </Button>
       </div>
     </form>

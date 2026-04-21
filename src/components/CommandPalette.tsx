@@ -9,7 +9,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback, useMemo, FC } from "react";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   Home,
@@ -31,6 +31,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
+import { openAppModal } from "@/store/useAppModal";
 import { Dialog } from "@/components/ui/dialog";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 
@@ -69,24 +70,16 @@ export const CommandPalette: FC<CommandPaletteProps> = ({
   const listRef = useRef<HTMLDivElement>(null);
 
   const navigate = useNavigate();
-  const router = useRouter();
   const { setTheme } = useTheme();
 
   // Build the list of commands
   const commands = useMemo<CommandItem[]>(() => {
     const appWindow = getCurrentWindow();
 
-    const navigateToSettings = () => {
-      const currentPath = router.state.location.pathname;
-      sessionStorage.setItem("db-hive-previous-route", currentPath);
-      navigate({ to: "/settings" });
-    };
-
-    const navigateToAbout = () => {
-      const currentPath = router.state.location.pathname;
-      sessionStorage.setItem("db-hive-previous-route", currentPath);
-      navigate({ to: "/about" });
-    };
+    // Open overlay modals rather than navigating to full-page routes, so the
+    // underlying route (e.g. the SQL editor) keeps its in-progress state.
+    const navigateToSettings = () => openAppModal("settings");
+    const navigateToAbout = () => openAppModal("about");
 
     return [
       // Navigation
@@ -132,7 +125,7 @@ export const CommandPalette: FC<CommandPaletteProps> = ({
         description: "Manage extensions",
         icon: Puzzle,
         group: "Navigation",
-        action: () => navigate({ to: "/plugins" }),
+        action: () => openAppModal("plugins"),
       },
       {
         id: "nav-settings",
@@ -217,7 +210,7 @@ export const CommandPalette: FC<CommandPaletteProps> = ({
         action: () => onShowShortcuts?.(),
       },
     ];
-  }, [navigate, router, setTheme, onShowShortcuts]);
+  }, [navigate, setTheme, onShowShortcuts]);
 
   // Filter commands by search query
   const filteredCommands = useMemo(() => {

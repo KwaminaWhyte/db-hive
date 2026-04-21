@@ -7,7 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { QueryExecutionResult } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { X, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
 import {
   ContextMenu,
@@ -63,6 +63,7 @@ function QueryPanelRoute() {
   const { connectionId, connectionProfile, currentDatabase } = useConnectionContext();
   const { getTabState, createTabState, removeTabState, getAllTabStates } = useTabContext();
   const [showCloseAllDialog, setShowCloseAllDialog] = useState(false);
+  const [, startTransition] = useTransition();
 
   // Parse tab IDs from URL
   const tabIds = tabsParam.split(",").filter(Boolean);
@@ -223,12 +224,14 @@ function QueryPanelRoute() {
   };
 
   const handleSwitchTab = (index: number) => {
-    navigate({
-      to: "/query",
-      search: {
-        tabs: tabsParam,
-        active: index,
-      },
+    startTransition(() => {
+      navigate({
+        to: "/query",
+        search: {
+          tabs: tabsParam,
+          active: index,
+        },
+      });
     });
   };
 

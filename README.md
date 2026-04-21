@@ -15,6 +15,8 @@ DB-Hive is a professional database client designed to compete with tools like Be
 
 - **Multi-Database Support**
   - PostgreSQL with full metadata support
+  - Supabase (PostgreSQL-compatible, TLS by default)
+  - Neon (PostgreSQL-compatible serverless, TLS required)
   - MySQL / MariaDB with connection handling
   - SQLite with local database management
 

@@ -13,7 +13,9 @@ export type DbDriver =
   | 'MySql'
   | 'Sqlite'
   | 'MongoDb'
-  | 'SqlServer';
+  | 'SqlServer'
+  | 'Supabase'
+  | 'Neon';
 
 /**
  * SSL/TLS connection mode
@@ -188,6 +190,9 @@ export function getDefaultPort(driver: DbDriver): number {
       return 27017;
     case 'SqlServer':
       return 1433;
+    case 'Supabase':
+    case 'Neon':
+      return 5432;
     default:
       return 0;
   }
@@ -208,6 +213,10 @@ export function getDriverDisplayName(driver: DbDriver): string {
       return 'MongoDB';
     case 'SqlServer':
       return 'SQL Server';
+    case 'Supabase':
+      return 'Supabase';
+    case 'Neon':
+      return 'Neon';
     default:
       return driver;
   }

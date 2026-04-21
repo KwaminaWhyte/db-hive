@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Supabase Driver**: New connection type that routes through the existing PostgreSQL driver. TLS is enabled automatically for all Supabase connections. Form shows a Supabase-branded tile on the new-connection picker and a Supabase-specific connection-string placeholder.
+
+- **Neon Driver**: New connection type for Neon serverless Postgres. TLS required by default (Neon endpoints mandate it). Driver reuses the PostgreSQL infrastructure; no separate codepath.
+
+- **TLS Support for PostgreSQL**: `ConnectionOptions` gained a `require_tls` flag. When set, the Postgres driver connects via `native-tls` + `postgres-native-tls` (`MakeTlsConnector`) instead of `NoTls`. Triggered automatically for Supabase / Neon and when `ssl_mode == Require` on a Postgres connection. Existing `Prefer` / `Disable` Postgres connections continue to use `NoTls`, preserving previous local-dev behavior.
+
+### Changed
+
+- `DbDriver` enum gained `Supabase` and `Neon` variants; added `is_postgres_compatible()` helper. All match sites (commands/connection.rs, commands/export.rs, ddl/mod.rs) route these variants through the Postgres codepath.
+- `models/connection.rs::default_port_for_driver` returns `5432` for `Supabase` and `Neon`.
+- Frontend `DbDriver` union, `getDefaultPort`, and `getDriverDisplayName` extended for the new drivers.
+- New-connection picker (`routes/index.tsx`) marks Supabase and Neon tiles as available with correct colors and icons.
+- **Command Palette Placement**: Titlebar search trigger no longer stretches/clips at the right edge — centered with a `max-w-[360px]` cap, truncating label, and balanced spacer on macOS.
+- **Home Screen**: Branding panel now hides on narrow windows (`md:` breakpoint); connections panel takes full width. Search placeholder corrected to "Search connections...". Footer version bumped to match `package.json` (0.19.2-beta).
+- **Database Picker**: Tile grid is now responsive (`grid-cols-1 sm:grid-cols-2`). Neon color darkened from `#00E699` to `#00A88E` for WCAG-compliant white-text contrast.
+- **Connection Form**: Required-field asterisks on Name / Host / Username / SQLite path. Split `loading` into separate `testing` / `saving` flags so each button shows its own label. Test-connection failures render in a destructive banner instead of the green success style.
+
+### Fixed
+
+- **Empty Home Screen**: Plain-text empty state replaced with icon + headline + "New Connection" CTA.
+- **Topbar Items Destroy Work**: Opening Settings, About, or Plugin Manager from the titlebar menus (or from the command palette, or via `Ctrl+,` / `⌘+,`) no longer navigates away from the current route — they now open as global modal dialogs overlaid on whatever you're doing (query editor, table inspector, etc.). A new lightweight modal store (`src/store/useAppModal.ts`) coordinates which modal is open; `<GlobalModals />` is mounted once at the app root. Routes `/settings`, `/about`, and `/plugins` remain intact for URL deep-linking.
+- **Command Palette Not Centered**: Trigger is now absolute-positioned (`left-1/2 -translate-x-1/2`), truly centered on the titlebar regardless of left/right group widths.
+- **Topbar Shows Connection-Only Items When Disconnected**: View menu now hides SQL Editor / Visual Query Builder / Activity Monitor when there is no active database connection. Plugin Manager and Theme remain available in all states.
+- **Connection Lost UI**: The inline oversized error card on the home screen now opens as a centered `Dialog` instead of crushing the connection list below it.
+
+### Added (UI)
+
+- **Real Database Brand Icons**: New shared `<DatabaseBrandIcon />` component replaces the custom abbreviation tiles (`PG`, `My`, `Sb`, etc.) with official brand logos via `react-icons/si`. Covered: PostgreSQL, MySQL, MariaDB, SQLite, MongoDB, Supabase, Redis, Turso. SQL Server and Neon fall back to the lucide `Database` icon in their brand colors (no simple-icons asset available). Used in the new-connection picker, saved-connections list, connection-form header, and `ConnectionCard`.
+
 ## [0.19.2-beta] - 2026-03-10
 
 ### Fixed

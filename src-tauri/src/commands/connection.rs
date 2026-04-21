@@ -84,11 +84,14 @@ pub async fn test_connection_command(
         password: Some(password),
         database: profile.database.clone(),
         timeout: Some(30),
+        require_tls: matches!(profile.driver, DbDriver::Supabase | DbDriver::Neon)
+            || (profile.driver.is_postgres_compatible()
+                && profile.ssl_mode == crate::models::SslMode::Require),
     };
 
     // Test connection based on driver type
     let result = match profile.driver {
-        DbDriver::Postgres => {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => {
             let driver = PostgresDriver::connect(opts).await?;
             driver.test_connection().await?;
             Ok(ConnectionStatus::Connected)
@@ -510,7 +513,7 @@ pub async fn connect_to_database(
 
     // Build connection options from profile
     // For PostgreSQL, default to "postgres" database if none specified
-    let database = if matches!(profile.driver, DbDriver::Postgres) {
+    let database = if profile.driver.is_postgres_compatible() {
         match &profile.database {
             None => Some("postgres".to_string()),
             Some(d) if d.is_empty() => Some("postgres".to_string()),
@@ -527,11 +530,14 @@ pub async fn connect_to_database(
         password: Some(password.clone()),
         database,
         timeout: Some(30),
+        require_tls: matches!(profile.driver, DbDriver::Supabase | DbDriver::Neon)
+            || (profile.driver.is_postgres_compatible()
+                && profile.ssl_mode == crate::models::SslMode::Require),
     };
 
     // Connect based on driver type
     let connection: Arc<dyn DatabaseDriver> = match profile.driver {
-        DbDriver::Postgres => {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => {
             let driver = PostgresDriver::connect(opts).await?;
             Arc::new(driver)
         }
@@ -722,11 +728,14 @@ pub async fn switch_database(
         password: Some(password.clone()),
         database: Some(new_database.clone()),
         timeout: Some(30),
+        require_tls: matches!(profile.driver, DbDriver::Supabase | DbDriver::Neon)
+            || (profile.driver.is_postgres_compatible()
+                && profile.ssl_mode == crate::models::SslMode::Require),
     };
 
     // Connect to the new database based on driver type
     let new_connection: Arc<dyn DatabaseDriver> = match profile.driver {
-        DbDriver::Postgres => {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => {
             let driver = PostgresDriver::connect(opts).await?;
             Arc::new(driver)
         }

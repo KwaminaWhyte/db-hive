@@ -20,6 +20,17 @@ pub enum DbDriver {
     MongoDb,
     /// Microsoft SQL Server
     SqlServer,
+    /// Supabase (PostgreSQL-compatible cloud database)
+    Supabase,
+    /// Neon (PostgreSQL-compatible serverless database)
+    Neon,
+}
+
+impl DbDriver {
+    /// Whether this driver speaks the PostgreSQL wire protocol.
+    pub fn is_postgres_compatible(&self) -> bool {
+        matches!(self, DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon)
+    }
 }
 
 /// SSL/TLS connection mode
@@ -228,6 +239,8 @@ impl ConnectionProfile {
             DbDriver::Sqlite => 0, // File-based, no port
             DbDriver::MongoDb => 27017,
             DbDriver::SqlServer => 1433,
+            DbDriver::Supabase => 5432,
+            DbDriver::Neon => 5432,
         }
     }
 }

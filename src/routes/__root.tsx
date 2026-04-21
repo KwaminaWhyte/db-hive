@@ -1,4 +1,4 @@
-import { Outlet, createRootRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { Outlet, createRootRoute } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { ThemeProvider, useTheme } from "@/components/theme-provider";
 import { ConnectionProvider, useConnectionContext } from "@/contexts/ConnectionContext";
@@ -12,12 +12,12 @@ import { useSettings } from "@/hooks/useSettings";
 import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { UpdateBanner } from "@/components/UpdateBanner";
 import { CommandPalette } from "@/components/CommandPalette";
+import { GlobalModals } from "@/components/GlobalModals";
+import { openAppModal } from "@/store/useAppModal";
 import { useEffect, useState } from "react";
 
 function RootComponent() {
   const { theme } = useTheme();
-  const navigate = useNavigate();
-  const router = useRouter();
   const [showShortcutsModal, setShowShortcutsModal] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
 
@@ -61,18 +61,14 @@ function RootComponent() {
     {
       key: "Ctrl+,",
       handler: () => {
-        const currentPath = router.state.location.pathname;
-        sessionStorage.setItem("db-hive-previous-route", currentPath);
-        navigate({ to: "/settings" });
+        openAppModal("settings");
       },
       description: "Open settings",
     },
     {
       key: "⌘+,",
       handler: () => {
-        const currentPath = router.state.location.pathname;
-        sessionStorage.setItem("db-hive-previous-route", currentPath);
-        navigate({ to: "/settings" });
+        openAppModal("settings");
       },
       description: "Open settings",
     },
@@ -103,6 +99,9 @@ function RootComponent() {
         open={showShortcutsModal}
         onOpenChange={setShowShortcutsModal}
       />
+
+      {/* Global overlay modals (Settings / About / Plugins) */}
+      <GlobalModals />
 
       {/* Command Palette */}
       <CommandPalette

@@ -847,19 +847,17 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Cloud & Serverless Databases**
 
-- [ ] **Supabase Driver:**
-  - [ ] PostgreSQL-compatible connection via Supabase URL
-  - [ ] Connection pooler support (Transaction/Session modes)
-  - [ ] Supabase-specific connection string parsing
-  - [ ] SSL/TLS configuration for cloud connections
-  - [ ] Reuse existing PostgreSQL driver infrastructure
+- [x] **Supabase Driver:** (2026-04-21)
+  - [x] PostgreSQL-compatible connection via Supabase URL
+  - [x] SSL/TLS enabled by default for cloud connections (native-tls + postgres-native-tls)
+  - [x] Reuse existing PostgreSQL driver infrastructure
+  - [ ] Connection pooler awareness (Transaction/Session modes) — user-selected by host (pooler vs direct)
 
-- [ ] **Neon Driver:**
-  - [ ] PostgreSQL-compatible serverless connection
-  - [ ] Connection string parsing with project/branch support
-  - [ ] Serverless-optimized connection handling
-  - [ ] Cold start handling and connection pooling
-  - [ ] Reuse existing PostgreSQL driver infrastructure
+- [x] **Neon Driver:** (2026-04-21)
+  - [x] PostgreSQL-compatible serverless connection
+  - [x] SSL required by default (Neon endpoints mandate TLS)
+  - [x] Reuse existing PostgreSQL driver infrastructure
+  - [ ] Cold start handling and dedicated pooling tuning
 
 - [ ] **Turso Driver:**
   - [ ] libSQL/SQLite edge database support
@@ -913,6 +911,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Recently Completed:**
 
+- ✅ **Supabase + Neon Drivers** — New `DbDriver::Supabase` and `DbDriver::Neon` variants route through the existing PostgreSQL driver. Added TLS support: `native-tls` + `postgres-native-tls` crates, `ConnectionOptions.require_tls` flag, auto-enabled for Supabase/Neon and when `ssl_mode == Require`. Frontend picker tiles activated, driver-specific connection-string placeholders added (Milestone 3.13 partial) (2026-04-21)
 - ✅ **v0.19.2 Bug Fixes** — PostgreSQL connection password retrieval resilience (keyring fallback in `connect_to_database`, session cache in `save_password`) + pgvector/array type rendering: `vector` columns now deserialise correctly via the `pgvector` crate and all PostgreSQL array types (`_float4`, `_int4`, `_text`, etc.) emit JSON arrays instead of NULL (2026-03-10)
 - ✅ Milestone 3.14: AI Assistant - Multi-provider AI with Ollama, OpenAI, Claude, Gemini support; natural language to SQL, query explanation, optimization, error fixing (2025-11-29)
 - ✅ Import Wizards - Import from Excel/CSV with column mapping, data type detection, batch import (2025-11-28)

@@ -291,17 +291,31 @@ impl DatabaseDriver for PostgresDriver {
     {
         let connection_string = Self::build_connection_string(&opts);
 
-        // Parse connection string and connect
-        let (client, connection) = tokio_postgres::connect(&connection_string, NoTls)
-            .await
-            .map_err(|e| DbError::ConnectionError(format!("Failed to connect: {}", e)))?;
-
-        // Spawn the connection handler in the background
-        tokio::spawn(async move {
-            if let Err(e) = connection.await {
-                eprintln!("PostgreSQL connection error: {}", e);
-            }
-        });
+        let client = if opts.require_tls {
+            let connector = native_tls::TlsConnector::builder()
+                .build()
+                .map_err(|e| DbError::ConnectionError(format!("TLS init failed: {}", e)))?;
+            let tls = postgres_native_tls::MakeTlsConnector::new(connector);
+            let (client, connection) = tokio_postgres::connect(&connection_string, tls)
+                .await
+                .map_err(|e| DbError::ConnectionError(format!("Failed to connect: {}", e)))?;
+            tokio::spawn(async move {
+                if let Err(e) = connection.await {
+                    eprintln!("PostgreSQL connection error: {}", e);
+                }
+            });
+            client
+        } else {
+            let (client, connection) = tokio_postgres::connect(&connection_string, NoTls)
+                .await
+                .map_err(|e| DbError::ConnectionError(format!("Failed to connect: {}", e)))?;
+            tokio::spawn(async move {
+                if let Err(e) = connection.await {
+                    eprintln!("PostgreSQL connection error: {}", e);
+                }
+            });
+            client
+        };
 
         Ok(Self { client })
     }
@@ -766,6 +780,7 @@ mod tests {
             password: Some("secret".to_string()),
             database: Some("testdb".to_string()),
             timeout: Some(30),
+            require_tls: false,
         };
 
         let conn_str = PostgresDriver::build_connection_string(&opts);
@@ -787,6 +802,7 @@ mod tests {
             password: Some("".to_string()),
             database: Some("testdb".to_string()),
             timeout: None,
+            require_tls: false,
         };
 
         let conn_str = PostgresDriver::build_connection_string(&opts);
@@ -806,6 +822,7 @@ mod tests {
             password: None,
             database: None,
             timeout: None,
+            require_tls: false,
         };
 
         let conn_str = PostgresDriver::build_connection_string(&opts);
