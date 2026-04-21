@@ -382,7 +382,7 @@ async fn export_table_to_sql(
     // DROP statement
     if options.include_drop {
         let drop_stmt = match driver {
-            DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite => {
+            DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite | DbDriver::Turso => {
                 format!("DROP TABLE IF EXISTS \"{}\".\"{}\" CASCADE;", schema, table)
             }
             DbDriver::MySql => {
@@ -428,7 +428,7 @@ async fn get_create_table_statement(
 
     // Build CREATE TABLE statement
     let mut create_stmt = match driver {
-        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite => {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite | DbDriver::Turso => {
             format!("CREATE TABLE \"{}\".\"{}\" (\n", schema, table)
         }
         DbDriver::MySql => {
@@ -476,7 +476,7 @@ async fn export_table_data_to_sql(
     use crate::commands::query::execute_query;
 
     let query = match driver {
-        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite => {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite | DbDriver::Turso => {
             format!("SELECT * FROM \"{}\".\"{}\"", schema, table)
         }
         DbDriver::MySql => {
@@ -501,7 +501,7 @@ async fn export_table_data_to_sql(
 
     for row in result.rows {
         let insert_stmt = match driver {
-            DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite => {
+            DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite | DbDriver::Turso => {
                 let values: Vec<String> = row.iter().map(|v| sql_value_to_string(v)).collect();
                 format!("INSERT INTO \"{}\".\"{}\" VALUES ({});", schema, table, values.join(", "))
             }
@@ -615,7 +615,7 @@ pub async fn import_from_sql(
     // Begin transaction if requested
     if options.use_transaction {
         let begin_stmt = match driver {
-            DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite => "BEGIN",
+            DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite | DbDriver::Turso => "BEGIN",
             DbDriver::MySql => "START TRANSACTION",
             _ => return Err(DbError::InvalidInput("Transactions not supported for this driver".to_string())),
         };
@@ -738,7 +738,7 @@ pub async fn import_from_sql(
                         if !options.continue_on_error {
                             if options.use_transaction {
                                 let rollback = match driver {
-                                    DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite | DbDriver::MySql => "ROLLBACK",
+                                    DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite | DbDriver::MySql | DbDriver::Turso => "ROLLBACK",
                                     _ => "",
                                 };
                                 if !rollback.is_empty() {
@@ -774,7 +774,7 @@ pub async fn import_from_sql(
     // Commit transaction
     if options.use_transaction {
         let commit_stmt = match driver {
-            DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite | DbDriver::MySql => "COMMIT",
+            DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite | DbDriver::MySql | DbDriver::Turso => "COMMIT",
             _ => "",
         };
         if !commit_stmt.is_empty() {

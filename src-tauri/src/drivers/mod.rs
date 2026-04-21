@@ -16,6 +16,7 @@ pub mod mysql;
 pub mod postgres;
 pub mod sqlite;
 pub mod sqlserver;
+pub mod turso;
 
 /// Connection options for establishing a database connection
 ///

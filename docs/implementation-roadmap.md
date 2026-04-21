@@ -363,8 +363,8 @@ For detailed architecture patterns, see `CLAUDE.md`.
   - [x] "Create Table" context menu on schema
   - [x] "Refresh Tables" context menu on schema
   - [x] Auto-refresh tables after creation
-- [ ] TableEditor component for existing tables (TODO: Future milestone)
-- [ ] ConfirmationDialog for destructive operations (TODO: Future enhancement)
+- [x] TableEditor component for existing tables (TableEditDialog: add/drop/rename columns, toggle nullability, SQL preview)
+- [x] ConfirmationDialog for destructive operations (ConfirmDestructiveDialog)
 
 **TypeScript Types & API:**
 
@@ -381,16 +381,16 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Preview SQL before execution
 - [x] Error handling with user-friendly messages
 - [ ] Rollback support for failed operations (TODO: Future enhancement)
-- [ ] Warning dialogs for destructive actions (TODO: Future enhancement)
-- [ ] Foreign key dependency checks (TODO: Future enhancement)
+- [x] Warning dialogs for destructive actions (ConfirmDestructiveDialog, wired into drop-table)
+- [x] Foreign key dependency checks (FK-referencing tables listed before drop)
 
 **Integration:**
 
 - [x] Context menu integration in SchemaExplorer
 - [x] Auto-refresh after table creation
-- [ ] Add "Schema" menu to CustomTitlebar (TODO: Future enhancement)
+- [x] Add "Schema" menu to CustomTitlebar (New Table..., Refresh Metadata; shown only when connected)
 - [ ] Add schema modification shortcuts to keyboard shortcuts modal (TODO: Future enhancement)
-- [ ] Update metadata cache after DDL operations (TODO: Future enhancement)
+- [x] Update metadata cache after DDL operations (useMetadataCache event bus + SchemaExplorer listener)
 
 **Implementation Date:** 2025-11-23
 
@@ -528,10 +528,10 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Deferred Features:**
 
-- [ ] Active queries list with real-time updates (requires database-specific queries)
-- [ ] CPU usage chart (requires system metrics collection)
-- [ ] Memory usage chart (requires system metrics collection)
-- [ ] Process list table (requires database-specific session queries)
+- [x] Active queries list with real-time updates (PostgreSQL/MySQL via `pg_stat_activity` / `information_schema.processlist`; 2s polling, kill-query support)
+- [x] Server metrics chart (connections, active, tx/sec) via `pg_stat_database` / `SHOW GLOBAL STATUS` with rolling 60-sample recharts line chart
+- [x] Process list table (database-side session queries with cancel action)
+- [ ] Host-level CPU/memory usage chart (would require OS-level metrics collection; server-side DB metrics implemented instead)
 
 ### Milestone 3.7: Plugin System ✅ COMPLETED (2025-11-28)
 
@@ -793,10 +793,10 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 ### Schema Migration Tools
 
-- [ ] Schema diff algorithm
-- [ ] Generate migration SQL
-- [ ] Version control integration
-- [ ] Apply migrations UI
+- [x] Schema diff algorithm
+- [x] Generate migration SQL
+- [ ] Version control integration (TODO: out of scope for initial pass)
+- [x] Apply migrations UI
 
 ### Milestone 3.14: AI Assistant ✅ COMPLETED (2025-11-29)
 

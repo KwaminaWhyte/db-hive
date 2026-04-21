@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
-use crate::drivers::{mongodb::MongoDbDriver, mysql::MysqlDriver, postgres::PostgresDriver, sqlite::SqliteDriver, sqlserver::SqlServerDriver, ConnectionOptions, DatabaseDriver};
+use crate::drivers::{mongodb::MongoDbDriver, mysql::MysqlDriver, postgres::PostgresDriver, sqlite::SqliteDriver, sqlserver::SqlServerDriver, turso::TursoDriver, ConnectionOptions, DatabaseDriver};
 use crate::models::{ConnectionProfile, ConnectionStatus, DbDriver, DbError};
 use crate::state::AppState;
 
@@ -113,6 +113,11 @@ pub async fn test_connection_command(
         }
         DbDriver::SqlServer => {
             let driver = SqlServerDriver::connect(opts).await?;
+            driver.test_connection().await?;
+            Ok(ConnectionStatus::Connected)
+        }
+        DbDriver::Turso => {
+            let driver = TursoDriver::connect(opts).await?;
             driver.test_connection().await?;
             Ok(ConnectionStatus::Connected)
         }
@@ -557,6 +562,10 @@ pub async fn connect_to_database(
             let driver = SqlServerDriver::connect(opts).await?;
             Arc::new(driver)
         }
+        DbDriver::Turso => {
+            let driver = TursoDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
     };
 
     // Store connection and password in state
@@ -751,9 +760,13 @@ pub async fn switch_database(
             let driver = MongoDbDriver::connect(opts).await?;
             Arc::new(driver)
         }
+        DbDriver::Turso => {
+            let driver = TursoDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
         _ => {
             return Err(DbError::InternalError(
-                "Database switching only supported for PostgreSQL, MySQL, SQLite, and MongoDB currently".to_string(),
+                "Database switching only supported for PostgreSQL, MySQL, SQLite, MongoDB, and Turso currently".to_string(),
             ))
         }
     };

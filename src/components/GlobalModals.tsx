@@ -44,6 +44,7 @@ import { relaunch } from "@tauri-apps/plugin-process";
 import { SettingsPage } from "@/components/SettingsPage";
 import { InstalledPlugins } from "@/components/InstalledPlugins";
 import { PluginMarketplace } from "@/components/PluginMarketplace";
+import { MigrationsDialog } from "@/components/MigrationsDialog";
 import { useAppModal, setAppModal } from "@/store/useAppModal";
 
 const APP_VERSION = "0.19.2-beta";
@@ -83,6 +84,12 @@ export function GlobalModals() {
           <PluginsModalBody />
         </DialogContent>
       </Dialog>
+
+      {/* Schema Migrations Modal */}
+      <MigrationsDialog
+        open={modal === "migrations"}
+        onOpenChange={handleOpenChange}
+      />
 
       {/* About Modal */}
       <Dialog open={modal === "about"} onOpenChange={handleOpenChange}>

@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (roadmap items)
+
+- **Turso / libSQL Driver**: New `DbDriver::Turso` variant using the `libsql` crate (0.9). Remote-mode connection via `Builder::new_remote(url, auth_token)`. SQLite-compatible metadata (`sqlite_master`, PRAGMA). Frontend picker enabled; connection form adapts: host accepts `libsql://...` URL, username field hidden, password field labelled "Auth Token".
+- **Activity Monitor — Real-time Process List & Server Metrics**: New Tauri commands `get_active_queries`, `kill_query`, `get_server_stats` driven by connection-profile driver type. PostgreSQL via `pg_stat_activity` / `pg_stat_database`; MySQL via `information_schema.PROCESSLIST` / `SHOW GLOBAL STATUS`. New `<ProcessList>` (polls 2s, per-row cancel) and `<ServerMetricsChart>` (60-sample rolling recharts line chart) in `src/components/activityMonitor/`. SQLite / MongoDB / SQL Server / Turso return `InvalidInput` and the UI shows a "Not supported" state.
+- **Table Editor for Existing Tables**: New `<TableEditDialog>` loads a table's schema and lets the user add/rename/drop columns, toggle nullability, and preview the generated `ALTER TABLE` SQL before committing. Wired to SchemaExplorer and the TableInspector Columns tab.
+- **Destructive Operation Confirmations**: Generic `<ConfirmDestructiveDialog>` (AlertDialog-based) used before DROP operations. Drop-table flow fetches foreign keys for the schema and lists dependent tables inline; CASCADE is applied automatically when dependents exist.
+- **Metadata Cache Refresh**: New `useMetadataCache` hook (+ `notifyMetadataChanged()`) dispatches a `metadata-changed` CustomEvent after any successful DDL. SchemaExplorer listens and refetches. Titlebar gains a "Refresh Metadata" entry powered by a sibling `metadata:refresh` event.
+- **Schema Menu in Titlebar**: New "Schema" dropdown between File and View, visible only when a connection is active. Items: "New Table..." (opens TableCreationDialog) and "Refresh Metadata".
+- **Schema Migration Tools**: Compare two connections' schemas and generate migration SQL.
+  - New `src-tauri/src/migrations/` module: `diff.rs` (pure `compute_diff(source, target) -> SchemaDiff`) and `sql_gen.rs` (driver-aware SQL emission reusing the existing DDL generators).
+  - Tauri commands `compute_schema_diff`, `generate_migration`, `apply_migration` (transactional by default with rollback on first error; returns `ApplyResult`).
+  - New `<MigrationsDialog>` with source/target pickers, diff preview grouped by added/removed/modified tables, Monaco SQL preview, and Apply-with-confirmation. Entry point added to the command palette ("Schema Migrations...").
+  - Coverage: PostgreSQL / Supabase / Neon full; MySQL columns + indexes + FKs; SQL Server type/nullable via `ALTER COLUMN`; SQLite + Turso CREATE/DROP + ADD/DROP column + indexes + FKs (no ALTER COLUMN TYPE — emits a `-- no-op` comment since SQLite doesn't support it). MongoDB rejected with `InvalidInput`.
+  - Known gaps: no column-rename detection (treated as drop+add), no check-constraint diffing, no view/trigger/sequence diffing, no FK `ON DELETE` action change detection on same-named FKs, cross-table FKs between two newly-added tables are omitted.
+
 ### Added
 
 - **Supabase Driver**: New connection type that routes through the existing PostgreSQL driver. TLS is enabled automatically for all Supabase connections. Form shows a Supabase-branded tile on the new-connection picker and a Supabase-specific connection-string placeholder.

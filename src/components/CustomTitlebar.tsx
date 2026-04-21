@@ -15,6 +15,8 @@ import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Minus, Square, X, ChevronDown, Search } from "lucide-react";
 import { PluginToolbar } from "./PluginToolbar";
+import { TableCreationDialog } from "./TableCreationDialog";
+import { notifyMetadataChanged } from "@/hooks/useMetadataCache";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -41,6 +43,7 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
   const { connectionId } = useConnectionContext();
   const isConnected = !!connectionId;
   const [isMaximized, setIsMaximized] = useState(false);
+  const [showCreateTableDialog, setShowCreateTableDialog] = useState(false);
 
   const appWindow = getCurrentWindow();
 
@@ -155,6 +158,35 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Schema Menu (only when connected) */}
+          {isConnected && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs hover:bg-accent"
+                >
+                  Schema
+                  <ChevronDown className="ml-1 h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => setShowCreateTableDialog(true)}>
+                  New Table...
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    notifyMetadataChanged({ reason: "manual-refresh" });
+                    window.dispatchEvent(new Event("metadata:refresh"));
+                  }}
+                >
+                  Refresh Metadata
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
 
           {/* View Menu */}
           <DropdownMenu>
@@ -313,6 +345,16 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
             <X className="h-4 w-4" />
           </button>
         </div>
+      )}
+
+      {/* Schema menu: New Table dialog */}
+      {connectionId && (
+        <TableCreationDialog
+          open={showCreateTableDialog}
+          onOpenChange={setShowCreateTableDialog}
+          connectionId={connectionId}
+          onSuccess={() => notifyMetadataChanged({ reason: "create-table" })}
+        />
       )}
     </div>
   );

@@ -15,7 +15,8 @@ export type DbDriver =
   | 'MongoDb'
   | 'SqlServer'
   | 'Supabase'
-  | 'Neon';
+  | 'Neon'
+  | 'Turso';
 
 /**
  * SSL/TLS connection mode
@@ -193,6 +194,8 @@ export function getDefaultPort(driver: DbDriver): number {
     case 'Supabase':
     case 'Neon':
       return 5432;
+    case 'Turso':
+      return 443;
     default:
       return 0;
   }
@@ -217,6 +220,8 @@ export function getDriverDisplayName(driver: DbDriver): string {
       return 'Supabase';
     case 'Neon':
       return 'Neon';
+    case 'Turso':
+      return 'Turso';
     default:
       return driver;
   }

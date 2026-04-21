@@ -24,6 +24,8 @@ pub enum DbDriver {
     Supabase,
     /// Neon (PostgreSQL-compatible serverless database)
     Neon,
+    /// Turso (libSQL edge database)
+    Turso,
 }
 
 impl DbDriver {
@@ -241,6 +243,7 @@ impl ConnectionProfile {
             DbDriver::SqlServer => 1433,
             DbDriver::Supabase => 5432,
             DbDriver::Neon => 5432,
+            DbDriver::Turso => 443,
         }
     }
 }

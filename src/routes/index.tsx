@@ -62,7 +62,7 @@ const DATABASE_TYPE_OPTIONS: DatabaseTypeOption[] = [
   { id: "redis", driver: null, brandKey: "Redis", name: "Redis", available: false },
   { id: "supabase", driver: "Supabase", brandKey: "Supabase", name: "Supabase", available: true },
   { id: "neon", driver: "Neon", brandKey: "Neon", name: "Neon", available: true },
-  { id: "turso", driver: null, brandKey: "Turso", name: "LibSQL / Turso", available: false },
+  { id: "turso", driver: "Turso", brandKey: "Turso", name: "LibSQL / Turso", available: true },
 ];
 
 type ViewState =

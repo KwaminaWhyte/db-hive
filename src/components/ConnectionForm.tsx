@@ -209,7 +209,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     }
 
     if (!formData.host?.trim()) return "Host is required";
-    if (driver !== "MongoDb" && !formData.username?.trim()) return "Username is required";
+    if (driver !== "MongoDb" && driver !== "Turso" && !formData.username?.trim()) return "Username is required";
     if (formData.port !== undefined && (formData.port < 0 || formData.port > 65535))
       return "Port must be between 0 and 65535";
 
@@ -363,6 +363,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       case "MySql": return "mysql://user:password@host:3306/database";
       case "MongoDb": return "mongodb://user:password@host:27017/database";
       case "SqlServer": return "mssql://user:password@host:1433/database";
+      case "Turso": return "libsql://your-db.turso.io";
       default: return "";
     }
   };
@@ -482,7 +483,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
                 name="host"
                 value={formData.host || ""}
                 onChange={handleChange}
-                placeholder="localhost"
+                placeholder={driver === "Turso" ? "libsql://your-db.turso.io" : "localhost"}
                 required
                 className="h-11"
               />
@@ -520,29 +521,31 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
           </div>
 
           {/* Username and Password */}
-          <div className="grid grid-cols-2 gap-4">
+          <div className={driver === "Turso" ? "space-y-2" : "grid grid-cols-2 gap-4"}>
+            {driver !== "Turso" && (
+              <div className="space-y-2">
+                <Label htmlFor="username" className="text-sm font-medium">
+                  Username
+                  {driver === "MongoDb" ? (
+                    <span className="text-muted-foreground font-normal ml-1">(optional)</span>
+                  ) : (
+                    <span className="text-destructive ml-1">*</span>
+                  )}
+                </Label>
+                <Input
+                  type="text"
+                  id="username"
+                  name="username"
+                  value={formData.username || ""}
+                  onChange={handleChange}
+                  placeholder={driver === "MongoDb" ? "root (optional)" : "postgres"}
+                  required={driver !== "MongoDb"}
+                  className="h-11"
+                />
+              </div>
+            )}
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-sm font-medium">
-                Username
-                {driver === "MongoDb" ? (
-                  <span className="text-muted-foreground font-normal ml-1">(optional)</span>
-                ) : (
-                  <span className="text-destructive ml-1">*</span>
-                )}
-              </Label>
-              <Input
-                type="text"
-                id="username"
-                name="username"
-                value={formData.username || ""}
-                onChange={handleChange}
-                placeholder={driver === "MongoDb" ? "root (optional)" : "postgres"}
-                required={driver !== "MongoDb"}
-                className="h-11"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+              <Label htmlFor="password" className="text-sm font-medium">{driver === "Turso" ? "Auth Token" : "Password"}</Label>
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}

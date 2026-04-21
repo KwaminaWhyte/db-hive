@@ -28,6 +28,7 @@ import {
   Plus,
   Keyboard,
   Search,
+  GitCompare,
   type LucideIcon,
 } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
@@ -199,6 +200,14 @@ export const CommandPalette: FC<CommandPaletteProps> = ({
         icon: Plus,
         group: "Actions",
         action: () => navigate({ to: "/" }),
+      },
+      {
+        id: "action-schema-migrations",
+        label: "Schema Migrations...",
+        description: "Compare two connections and generate migration SQL",
+        icon: GitCompare,
+        group: "Actions",
+        action: () => openAppModal("migrations"),
       },
       {
         id: "action-shortcuts",

@@ -10,6 +10,8 @@ pub mod data_import;
 pub mod ddl;
 pub mod export;
 pub mod history;
+pub mod migrations;
+pub mod monitoring;
 pub mod plugins;
 pub mod query;
 pub mod schema;
