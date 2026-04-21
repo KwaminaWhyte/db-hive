@@ -143,10 +143,10 @@ This is the largest gap-by-category. DB-Hive is desktop-only; DB Pro's paid tier
 
 Ordered by effort × strategic value. Pick from the top.
 
-1. **Write-query guards** — small, high value, visible safety net. Flag destructive statements without WHERE before sending.
-2. **Query folders** — small, organizational polish users ask for.
+1. ~~**Write-query guards**~~ ✅ shipped 2026-04-21
+2. ~~**Query folders**~~ ✅ shipped 2026-04-21
 3. **Table tags** — medium, user-visible organization feature that differentiates well.
-4. **OpenRouter AI provider** — small, broadens the AI offering.
+4. ~~**OpenRouter AI provider**~~ ✅ shipped 2026-04-21
 5. **AI chat history + favorite prompts** — small, user-visible polish in the AI Assistant.
 6. **Inspector with FK-related rows** — medium, high value for exploratory workflows.
 7. **Saved dashboards** — large, but fundamental parity gap vs DB Pro. Build on existing ResultsChart.

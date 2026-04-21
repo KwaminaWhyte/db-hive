@@ -13,6 +13,7 @@ pub mod history;
 pub mod migrations;
 pub mod monitoring;
 pub mod plugins;
+pub mod procedures;
 pub mod query;
 pub mod schema;
 pub mod settings;

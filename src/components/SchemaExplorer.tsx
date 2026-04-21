@@ -50,6 +50,7 @@ import {
   Workflow,
   Activity,
   Plus,
+  FunctionSquare,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 import { SqlExportDialog } from "./SqlExportDialog";
@@ -58,6 +59,13 @@ import { TableCreationDialog } from "./TableCreationDialog";
 import { TableEditDialog } from "./TableEditDialog";
 import { ConfirmDestructiveDialog } from "./ConfirmDestructiveDialog";
 import { DataImportWizard } from "./DataImportWizard";
+import { StoredProceduresPanel } from "./StoredProceduresPanel";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
 import { NoTablesEmpty, NoSearchResultsEmpty } from "./empty-states";
 import { ForeignKeyInfo } from "@/types/database";
 import { dropTable } from "@/api/ddl";
@@ -128,6 +136,8 @@ export function SchemaExplorer({
   const [dropLoading, setDropLoading] = useState(false);
   // Data import wizard state
   const [showDataImportWizard, setShowDataImportWizard] = useState(false);
+  // Stored procedures panel state
+  const [showProceduresPanel, setShowProceduresPanel] = useState(false);
   const [importTargetSchema, setImportTargetSchema] = useState<string>("");
   const [importTargetTable, setImportTargetTable] = useState<string>("");
 
@@ -942,6 +952,20 @@ export function SchemaExplorer({
                   No schemas found
                 </p>
               )}
+
+              {/* Procedures & Functions */}
+              <div className="mt-2 pt-2 border-t">
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left hover:bg-accent/50"
+                  onClick={() => setShowProceduresPanel(true)}
+                >
+                  <FunctionSquare className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                  <span className="flex-1 text-sm font-medium truncate">
+                    Procedures
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                </button>
+              </div>
             </div>
           </ScrollArea>
         )}
@@ -1035,6 +1059,24 @@ export function SchemaExplorer({
         loading={dropLoading}
         onConfirm={confirmDropTable}
       />
+
+      {/* Stored Procedures / Functions */}
+      <Dialog open={showProceduresPanel} onOpenChange={setShowProceduresPanel}>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Procedures & Functions</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            <StoredProceduresPanel
+              connectionId={connectionId}
+              onExecute={(sql) => {
+                onExecuteQuery?.(sql);
+                setShowProceduresPanel(false);
+              }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Data Import Wizard */}
       {showDataImportWizard && (

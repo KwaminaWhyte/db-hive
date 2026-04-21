@@ -10,12 +10,14 @@
 //! - OpenAI (GPT-4, GPT-3.5)
 //! - Anthropic (Claude)
 //! - Google (Gemini)
+//! - OpenRouter (multi-model gateway)
 
 pub mod provider;
 pub mod ollama;
 pub mod openai;
 pub mod anthropic;
 pub mod google;
+pub mod openrouter;
 
 // Re-export common types
 pub use provider::{
@@ -28,3 +30,4 @@ pub use ollama::{OllamaProvider, OllamaConfig};
 pub use openai::{OpenAiProvider, OpenAiConfig};
 pub use anthropic::{AnthropicProvider, AnthropicConfig};
 pub use google::{GoogleAiProvider, GoogleAiConfig};
+pub use openrouter::{OpenRouterProvider, OpenRouterConfig};

@@ -7,8 +7,11 @@ import { invoke } from "@tauri-apps/api/core";
 import { QueryExecutionResult } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { X, Plus } from "lucide-react";
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { analyzeDestructive, DestructiveWarning } from "@/utils/sqlGuards";
+import { DestructiveQueryGuard } from "@/components/DestructiveQueryGuard";
+import { useSettings } from "@/hooks/useSettings";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -64,6 +67,9 @@ function QueryPanelRoute() {
   const { getTabState, createTabState, removeTabState, getAllTabStates } = useTabContext();
   const [showCloseAllDialog, setShowCloseAllDialog] = useState(false);
   const [, startTransition] = useTransition();
+  const { settings } = useSettings();
+  const [guardWarnings, setGuardWarnings] = useState<DestructiveWarning[]>([]);
+  const guardResolverRef = useRef<((proceed: boolean) => void) | null>(null);
 
   // Parse tab IDs from URL
   const tabIds = tabsParam.split(",").filter(Boolean);
@@ -150,6 +156,20 @@ function QueryPanelRoute() {
   }, [tabIds, getTabState, createTabState, getAllTabStates, removeTabState]);
 
   const handleExecuteQuery = async (sql: string): Promise<QueryExecutionResult> => {
+    const confirmDestructive = settings?.query?.confirmDestructive ?? true;
+    if (confirmDestructive) {
+      const warnings = analyzeDestructive(sql);
+      if (warnings.length > 0) {
+        const proceed = await new Promise<boolean>((resolve) => {
+          guardResolverRef.current = resolve;
+          setGuardWarnings(warnings);
+        });
+        if (!proceed) {
+          throw new Error("Query cancelled by user");
+        }
+      }
+    }
+
     try {
       const result = await invoke<QueryExecutionResult>("execute_query", {
         connectionId,
@@ -159,6 +179,20 @@ function QueryPanelRoute() {
     } catch (error) {
       throw error;
     }
+  };
+
+  const handleGuardConfirm = () => {
+    const resolve = guardResolverRef.current;
+    guardResolverRef.current = null;
+    setGuardWarnings([]);
+    resolve?.(true);
+  };
+
+  const handleGuardCancel = () => {
+    const resolve = guardResolverRef.current;
+    guardResolverRef.current = null;
+    setGuardWarnings([]);
+    resolve?.(false);
   };
 
   const handleCloseTab = (index: number) => {
@@ -439,6 +473,14 @@ function QueryPanelRoute() {
           );
         })}
       </div>
+
+      {/* Destructive Query Guard Dialog */}
+      <DestructiveQueryGuard
+        open={guardWarnings.length > 0}
+        warnings={guardWarnings}
+        onConfirm={handleGuardConfirm}
+        onCancel={handleGuardCancel}
+      />
 
       {/* Close All Confirmation Dialog */}
       <AlertDialog open={showCloseAllDialog} onOpenChange={setShowCloseAllDialog}>

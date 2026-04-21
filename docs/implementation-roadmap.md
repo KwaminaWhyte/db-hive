@@ -922,6 +922,10 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Recently Completed:**
 
+- ✅ **Stored Procedures & Functions Viewer** — New commands `list_procedures`, `get_procedure_definition`, `execute_procedure` (PG via `pg_proc` + `pg_get_functiondef`, MySQL via `information_schema.ROUTINES` + `SHOW CREATE`, SQL Server via `sys.objects`). `<StoredProceduresPanel>` lazy-loads definitions and offers an execute dialog with JSON args (2026-04-21)
+- ✅ **Write-Query Guards (dbpro parity)** — Pre-execute analyzer intercepts destructive SQL (DELETE/UPDATE without WHERE, DROP/TRUNCATE/DROP COLUMN); `<DestructiveQueryGuard>` AlertDialog; wired through `_connected/query.tsx` so Ctrl+Enter is also guarded; respects `settings.query.confirmDestructive` (2026-04-21)
+- ✅ **Query Folders (dbpro parity)** — Nested `SnippetFolder` tree in SnippetSidebar with context-menu create/rename/delete/move, cycle prevention, cascade-delete-to-root, search auto-expand; persisted separately from snippets for backward compat (2026-04-21)
+- ✅ **OpenRouter AI Provider (dbpro parity)** — New provider routing through OpenAI-compatible `openrouter.ai/api/v1` with FQID models like `anthropic/claude-3.5-sonnet`; settings entry in `AiAssistant` (2026-04-21)
 - ✅ **Turso / libSQL Driver** — New `DbDriver::Turso` variant using `libsql` crate 0.9. Remote mode with auth-token auth. Routes through `SqliteDdlGenerator` for DDL and migrations. Form adapts for URL host + "Auth Token" field (2026-04-21)
 - ✅ **Schema Migration Tools** — `src-tauri/src/migrations/` module with pure diff algorithm + driver-aware SQL generator. Tauri commands `compute_schema_diff`, `generate_migration`, `apply_migration`. `<MigrationsDialog>` 3-step flow wired to command palette (2026-04-21)
 - ✅ **Activity Monitor — Live Process List + Server Metrics** — `get_active_queries`, `kill_query`, `get_server_stats` commands; PG via `pg_stat_activity`/`pg_stat_database`, MySQL via `PROCESSLIST`/`SHOW GLOBAL STATUS`; `<ProcessList>` (2s polling, per-row cancel) + `<ServerMetricsChart>` (60-sample rolling recharts) (2026-04-21)

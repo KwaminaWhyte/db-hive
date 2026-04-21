@@ -72,6 +72,16 @@ export interface QuerySnippet {
 }
 
 /**
+ * Folder for organizing query snippets into a tree
+ */
+export interface SnippetFolder {
+  id: string;
+  name: string;
+  parentId: string | null;
+  createdAt: number;
+}
+
+/**
  * Create a new query history record
  */
 export function createQueryHistory(

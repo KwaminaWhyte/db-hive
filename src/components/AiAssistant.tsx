@@ -468,6 +468,12 @@ export function AiAssistant({
                   {selectedProvider === "openai" && "Get your key at platform.openai.com"}
                   {selectedProvider === "anthropic" && "Get your key at console.anthropic.com"}
                   {selectedProvider === "google" && "Get your key at ai.google.dev"}
+                  {selectedProvider === "openrouter" && (
+                    <>
+                      Get your key at openrouter.ai/keys. Use fully-qualified model IDs
+                      like <code className="font-mono">anthropic/claude-3.5-sonnet</code>.
+                    </>
+                  )}
                 </p>
               </div>
             )}
