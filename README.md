@@ -151,7 +151,7 @@ npm run tauri build    # Full Tauri app
 #   Windows → .msi / .exe
 ```
 
-See [Code Signing Guide](docs/CODE_SIGNING.md) for signing binaries on all platforms.
+See [Code Signing Guide](docs/code-signing.md) for signing binaries on all platforms.
 
 ## Usage
 

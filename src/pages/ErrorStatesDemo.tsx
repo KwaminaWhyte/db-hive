@@ -320,7 +320,7 @@ LIMIT 100;`}
               <li>• Action buttons are optional and can be customized</li>
               <li>• See ErrorStateExamples.tsx for code examples</li>
               <li>
-                • See ERROR_AND_EMPTY_STATES.md for complete documentation
+                • See docs/dev/error-and-empty-states.md for complete documentation
               </li>
             </ul>
           </div>

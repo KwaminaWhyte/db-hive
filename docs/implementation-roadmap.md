@@ -791,12 +791,22 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - Extend TableDefinition types for visual metadata (position, color)
 - Store designs in Tauri Store or separate files
 
-### Schema Migration Tools
+### Schema Migration Tools ✅ COMPLETED (2026-04-21)
 
-- [x] Schema diff algorithm
-- [x] Generate migration SQL
+- [x] Schema diff algorithm (pure `compute_diff(source, target) -> SchemaDiff`)
+- [x] Generate migration SQL (driver-aware, reuses existing DDL generators)
+- [x] Apply migrations UI (`<MigrationsDialog>` with diff preview + Monaco SQL preview + transactional apply)
+- [x] Command palette entry ("Schema Migrations...")
 - [ ] Version control integration (TODO: out of scope for initial pass)
-- [x] Apply migrations UI
+
+**Driver coverage:**
+- PostgreSQL / Supabase / Neon — full
+- MySQL — columns, indexes, FKs (no standalone nullable/default toggle)
+- SQL Server — type + nullable via `ALTER COLUMN`
+- SQLite / Turso — CREATE/DROP, ADD/DROP column, indexes, FKs (no ALTER COLUMN TYPE)
+- MongoDB — rejected (`InvalidInput`)
+
+**Known gaps:** no column-rename detection (treated as drop+add), no check-constraint diffing, no view/trigger/sequence/procedure diffing, no FK `ON DELETE` action change detection, cross-table FKs between two newly-added tables omitted.
 
 ### Milestone 3.14: AI Assistant ✅ COMPLETED (2025-11-29)
 
@@ -859,12 +869,13 @@ For detailed architecture patterns, see `CLAUDE.md`.
   - [x] Reuse existing PostgreSQL driver infrastructure
   - [ ] Cold start handling and dedicated pooling tuning
 
-- [ ] **Turso Driver:**
-  - [ ] libSQL/SQLite edge database support
-  - [ ] HTTP API integration for serverless queries
-  - [ ] Embedded replica support
-  - [ ] Authentication token handling
-  - [ ] Custom Turso connection options
+- [x] **Turso Driver:** (2026-04-21)
+  - [x] libSQL/SQLite edge database support via `libsql` crate 0.9
+  - [x] Remote connection via `libsql://` / `https://` URL
+  - [x] Authentication token handling (stored in OS keyring)
+  - [x] Form adaptations: URL-accepting host, renamed "Auth Token" password field, hidden username
+  - [x] Routes through `SqliteDdlGenerator` in migration + DDL paths
+  - [ ] Embedded replica support (TODO: future)
 
 - [ ] **Redis Driver:**
   - [ ] Key-value store operations (GET, SET, DEL, etc.)
@@ -911,6 +922,10 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Recently Completed:**
 
+- ✅ **Turso / libSQL Driver** — New `DbDriver::Turso` variant using `libsql` crate 0.9. Remote mode with auth-token auth. Routes through `SqliteDdlGenerator` for DDL and migrations. Form adapts for URL host + "Auth Token" field (2026-04-21)
+- ✅ **Schema Migration Tools** — `src-tauri/src/migrations/` module with pure diff algorithm + driver-aware SQL generator. Tauri commands `compute_schema_diff`, `generate_migration`, `apply_migration`. `<MigrationsDialog>` 3-step flow wired to command palette (2026-04-21)
+- ✅ **Activity Monitor — Live Process List + Server Metrics** — `get_active_queries`, `kill_query`, `get_server_stats` commands; PG via `pg_stat_activity`/`pg_stat_database`, MySQL via `PROCESSLIST`/`SHOW GLOBAL STATUS`; `<ProcessList>` (2s polling, per-row cancel) + `<ServerMetricsChart>` (60-sample rolling recharts) (2026-04-21)
+- ✅ **Schema Management Deferred Items** — `<TableEditDialog>` for existing tables (add/rename/drop columns, toggle nullability, SQL preview); `<ConfirmDestructiveDialog>` with FK dependency listing + auto-CASCADE; `useMetadataCache` hook + `metadata-changed` CustomEvent; new "Schema" menu in titlebar (2026-04-21)
 - ✅ **Supabase + Neon Drivers** — New `DbDriver::Supabase` and `DbDriver::Neon` variants route through the existing PostgreSQL driver. Added TLS support: `native-tls` + `postgres-native-tls` crates, `ConnectionOptions.require_tls` flag, auto-enabled for Supabase/Neon and when `ssl_mode == Require`. Frontend picker tiles activated, driver-specific connection-string placeholders added (Milestone 3.13 partial) (2026-04-21)
 - ✅ **v0.19.2 Bug Fixes** — PostgreSQL connection password retrieval resilience (keyring fallback in `connect_to_database`, session cache in `save_password`) + pgvector/array type rendering: `vector` columns now deserialise correctly via the `pgvector` crate and all PostgreSQL array types (`_float4`, `_int4`, `_text`, etc.) emit JSON arrays instead of NULL (2026-03-10)
 - ✅ Milestone 3.14: AI Assistant - Multi-provider AI with Ollama, OpenAI, Claude, Gemini support; natural language to SQL, query explanation, optimization, error fixing (2025-11-29)
@@ -941,5 +956,5 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 - See `CLAUDE.md` for detailed architecture and development patterns
 - See `README.md` for feature list and installation
-- See `docs/USER_GUIDE.md` for complete user documentation
+- See `docs/user-guide.md` for complete user documentation
 - See `CHANGELOG.md` for detailed release notes
