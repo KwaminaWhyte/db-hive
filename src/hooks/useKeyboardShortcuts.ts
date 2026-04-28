@@ -18,7 +18,19 @@ export interface KeyboardShortcut {
 }
 
 /**
- * Parse shortcut string like "Ctrl+Enter" into key components
+ * Detect macOS at module load. Used to translate cross-platform
+ * "Ctrl+X" bindings into "Cmd+X" so a single stored shortcut works
+ * on both Windows/Linux and macOS.
+ */
+const IS_MAC =
+  typeof navigator !== "undefined" &&
+  navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+
+/**
+ * Parse shortcut string like "Ctrl+Enter" into key components.
+ *
+ * On macOS, a bare "Ctrl" modifier (without an explicit "Cmd") is
+ * remapped to "meta" so cross-platform shortcuts behave naturally.
  */
 export function parseShortcut(shortcut: string): {
   key: string;
@@ -28,11 +40,20 @@ export function parseShortcut(shortcut: string): {
   meta: boolean;
 } {
   const parts = shortcut.split("+").map((p) => p.trim().toLowerCase());
+  const hasCtrl = parts.includes("ctrl") || parts.includes("control");
+  const hasMeta =
+    parts.includes("meta") || parts.includes("cmd") || parts.includes("⌘");
+
+  // On macOS, treat a bare "Ctrl" (without "Cmd") as Cmd so users with
+  // a default "Ctrl+T" binding still trigger via Cmd+T.
+  const ctrl = IS_MAC && hasCtrl && !hasMeta ? false : hasCtrl;
+  const meta = IS_MAC && hasCtrl && !hasMeta ? true : hasMeta;
+
   const modifiers = {
-    ctrl: parts.includes("ctrl") || parts.includes("control"),
+    ctrl,
     alt: parts.includes("alt") || parts.includes("option") || parts.includes("⌥"),
     shift: parts.includes("shift") || parts.includes("⇧"),
-    meta: parts.includes("meta") || parts.includes("cmd") || parts.includes("⌘"),
+    meta,
   };
 
   // Last part is the key
@@ -90,6 +111,8 @@ export function useKeyboardShortcuts(shortcuts: KeyboardShortcut[]) {
       }
 
       for (const shortcut of shortcuts) {
+        // Skip unbound shortcuts (empty string means user cleared the binding)
+        if (!shortcut.key || !shortcut.key.trim()) continue;
         const parsed = parseShortcut(shortcut.key);
         if (matchesShortcut(event, parsed)) {
           event.preventDefault();
@@ -126,6 +149,8 @@ export function useRouteShortcuts(shortcuts: KeyboardShortcut[]) {
       }
 
       for (const shortcut of shortcuts) {
+        // Skip unbound shortcuts (empty string means user cleared the binding)
+        if (!shortcut.key || !shortcut.key.trim()) continue;
         const parsed = parseShortcut(shortcut.key);
         if (matchesShortcut(event, parsed)) {
           event.preventDefault();

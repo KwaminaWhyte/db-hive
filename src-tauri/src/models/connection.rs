@@ -20,6 +20,14 @@ pub enum DbDriver {
     MongoDb,
     /// Microsoft SQL Server
     SqlServer,
+    /// Supabase (managed PostgreSQL)
+    Supabase,
+    /// Neon (managed PostgreSQL, serverless)
+    Neon,
+    /// Turso (libSQL, hosted SQLite)
+    Turso,
+    /// Redis (in-memory key-value store)
+    Redis,
 }
 
 /// SSL/TLS connection mode
@@ -228,6 +236,10 @@ impl ConnectionProfile {
             DbDriver::Sqlite => 0, // File-based, no port
             DbDriver::MongoDb => 27017,
             DbDriver::SqlServer => 1433,
+            DbDriver::Supabase => 5432,
+            DbDriver::Neon => 5432,
+            DbDriver::Turso => 0, // libSQL URL-based
+            DbDriver::Redis => 6379,
         }
     }
 }

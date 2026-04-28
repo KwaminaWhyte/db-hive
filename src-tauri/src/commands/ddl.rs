@@ -5,11 +5,99 @@
 use crate::ddl::get_ddl_generator;
 use crate::models::{
     ddl::{AlterTableDefinition, DdlResult, DropTableDefinition, TableDefinition},
-    DbError,
+    DbDriver, DbError,
 };
 use crate::state::AppState;
 use std::sync::Mutex;
 use tauri::State;
+
+fn validate_identifier(name: &str) -> Result<(), DbError> {
+    if name.is_empty() {
+        return Err(DbError::InvalidInput("Database name cannot be empty".to_string()));
+    }
+    if name.len() > 63 {
+        return Err(DbError::InvalidInput("Database name too long (max 63 chars)".to_string()));
+    }
+    let valid = name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '$');
+    if !valid {
+        return Err(DbError::InvalidInput(
+            "Database name may only contain letters, digits, underscores, hyphens, and $".to_string(),
+        ));
+    }
+    if name.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+        return Err(DbError::InvalidInput(
+            "Database name cannot start with a digit".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// Create a new database on the connected server
+///
+/// Executes `CREATE DATABASE` for SQL drivers that support it. SQLite is
+/// file-based and MongoDB creates databases implicitly, so those drivers
+/// return an error here.
+#[tauri::command]
+pub async fn create_database(
+    connection_id: String,
+    name: String,
+    state: State<'_, Mutex<AppState>>,
+) -> Result<DdlResult, DbError> {
+    validate_identifier(&name)?;
+
+    let (driver, db_kind) = {
+        let state_guard = state.lock().unwrap();
+        let conn = state_guard
+            .connections
+            .get(&connection_id)
+            .ok_or_else(|| DbError::NotFound(format!("Connection '{}' not found", connection_id)))?
+            .clone();
+        let profile = state_guard
+            .connection_profiles
+            .get(&connection_id)
+            .ok_or_else(|| {
+                DbError::NotFound(format!("Connection profile for '{}' not found", connection_id))
+            })?;
+        (conn, profile.driver.clone())
+    };
+
+    let sql = match db_kind {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => {
+            format!("CREATE DATABASE \"{}\"", name)
+        }
+        DbDriver::MySql => format!("CREATE DATABASE `{}`", name),
+        DbDriver::SqlServer => format!("CREATE DATABASE [{}]", name),
+        DbDriver::Sqlite => {
+            return Err(DbError::InvalidInput(
+                "SQLite databases are individual files and cannot be created from an active connection".to_string(),
+            ));
+        }
+        DbDriver::MongoDb => {
+            return Err(DbError::InvalidInput(
+                "MongoDB databases are created implicitly when the first collection is written".to_string(),
+            ));
+        }
+        DbDriver::Turso => {
+            return Err(DbError::InvalidInput(
+                "Turso databases are provisioned via the Turso platform, not via SQL".to_string(),
+            ));
+        }
+        DbDriver::Redis => {
+            return Err(DbError::InvalidInput(
+                "Redis exposes a fixed set of numbered logical databases (0..15); no CREATE DATABASE".to_string(),
+            ));
+        }
+    };
+
+    driver.execute_query(&sql).await?;
+
+    Ok(DdlResult {
+        sql: vec![sql],
+        message: format!("Database '{}' created", name),
+    })
+}
 
 /// Preview CREATE TABLE SQL without executing it
 ///

@@ -43,6 +43,10 @@ export function ConnectionCard({
       sqlite: "bg-green-500",
       mongodb: "bg-emerald-500",
       sqlserver: "bg-red-500",
+      supabase: "bg-emerald-600",
+      neon: "bg-teal-500",
+      turso: "bg-purple-500",
+      redis: "bg-red-600",
     };
     return colors[driver.toLowerCase()] || "bg-gray-500";
   };

@@ -43,7 +43,9 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     port: profile?.port || getDefaultPort(driver),
     username: profile?.username || "",
     database: profile?.database || "",
-    sslMode: profile?.sslMode || "Disable",
+    sslMode:
+      profile?.sslMode ||
+      (driver === "Supabase" || driver === "Neon" ? "Require" : "Disable"),
     environment: profile?.environment ?? null,
   });
 
@@ -81,7 +83,9 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       port: profile?.port || getDefaultPort(driver),
       username: profile?.username || "",
       database: profile?.database || "",
-      sslMode: profile?.sslMode || "Disable",
+      sslMode:
+        profile?.sslMode ||
+        (driver === "Supabase" || driver === "Neon" ? "Require" : "Disable"),
       environment: profile?.environment ?? null,
     });
     setSshMode(profile?.sshTunnel ? "ssh" : "off");
@@ -131,9 +135,12 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       // Basic connection string parsing
       const patterns: Record<string, RegExp> = {
         Postgres: /^postgres(?:ql)?:\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
+        Supabase: /^postgres(?:ql)?:\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
+        Neon: /^postgres(?:ql)?:\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
         MySql: /^mysql:\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
         MongoDb: /^mongodb(?:\+srv)?:\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
         SqlServer: /^(?:mssql|sqlserver):\/\/(?:([^:@]+)(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
+        Redis: /^redis:\/\/(?:([^:@]+)?(?::([^@]*))?@)?([^:/?]+)(?::(\d+))?(?:\/(.+))?$/,
       };
 
       const pattern = patterns[driver];
@@ -204,7 +211,10 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     }
 
     if (!formData.host?.trim()) return "Host is required";
-    if (driver !== "MongoDb" && !formData.username?.trim()) return "Username is required";
+    const usernameOptional =
+      driver === "MongoDb" || driver === "Turso" || driver === "Redis";
+    if (!usernameOptional && !formData.username?.trim())
+      return "Username is required";
     if (formData.port !== undefined && (formData.port < 0 || formData.port > 65535))
       return "Port must be between 0 and 65535";
 
@@ -352,6 +362,10 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       case "MySql": return "mysql://user:password@host:3306/database";
       case "MongoDb": return "mongodb://user:password@host:27017/database";
       case "SqlServer": return "mssql://user:password@host:1433/database";
+      case "Supabase": return "postgresql://postgres.<ref>:password@aws-0-<region>.pooler.supabase.com:5432/postgres";
+      case "Neon": return "postgresql://user:password@ep-xxx.neon.tech:5432/neondb";
+      case "Turso": return "libsql://my-db-org.turso.io (token in password field)";
+      case "Redis": return "redis://:password@host:6379/0";
       default: return "";
     }
   };
@@ -460,40 +474,60 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
           </div>
 
           {/* Host and Port */}
-          <div className="grid grid-cols-5 gap-4">
-            <div className="col-span-3 space-y-2">
-              <Label htmlFor="host" className="text-sm font-medium">Host</Label>
+          {driver === "Turso" ? (
+            <div className="space-y-2">
+              <Label htmlFor="host" className="text-sm font-medium">libSQL URL</Label>
               <Input
                 type="text"
                 id="host"
                 name="host"
                 value={formData.host || ""}
                 onChange={handleChange}
-                placeholder="localhost"
+                placeholder="libsql://my-db-org.turso.io"
                 required
                 className="h-11"
               />
+              <p className="text-xs text-muted-foreground">
+                Paste the libsql:// URL. Put your Turso auth token in the Password field below.
+              </p>
             </div>
-            <div className="col-span-2 space-y-2">
-              <Label htmlFor="port" className="text-sm font-medium">Port</Label>
-              <Input
-                type="number"
-                id="port"
-                name="port"
-                value={formData.port || 0}
-                onChange={handleChange}
-                min="0"
-                max="65535"
-                required
-                className="h-11"
-              />
+          ) : (
+            <div className="grid grid-cols-5 gap-4">
+              <div className="col-span-3 space-y-2">
+                <Label htmlFor="host" className="text-sm font-medium">Host</Label>
+                <Input
+                  type="text"
+                  id="host"
+                  name="host"
+                  value={formData.host || ""}
+                  onChange={handleChange}
+                  placeholder="localhost"
+                  required
+                  className="h-11"
+                />
+              </div>
+              <div className="col-span-2 space-y-2">
+                <Label htmlFor="port" className="text-sm font-medium">Port</Label>
+                <Input
+                  type="number"
+                  id="port"
+                  name="port"
+                  value={formData.port || 0}
+                  onChange={handleChange}
+                  min="0"
+                  max="65535"
+                  required
+                  className="h-11"
+                />
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Database Name */}
           <div className="space-y-2">
             <Label htmlFor="database" className="text-sm font-medium">
-              Database Name <span className="text-muted-foreground font-normal">(optional)</span>
+              {driver === "Redis" ? "Database Index" : "Database Name"}
+              <span className="text-muted-foreground font-normal ml-1">(optional)</span>
             </Label>
             <Input
               type="text"
@@ -501,7 +535,11 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
               name="database"
               value={formData.database || ""}
               onChange={handleChange}
-              placeholder="Leave empty to select database after connecting"
+              placeholder={
+                driver === "Redis"
+                  ? "0 (default; range 0-15)"
+                  : "Leave empty to select database after connecting"
+              }
               className="h-11"
             />
           </div>
@@ -511,7 +549,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
             <div className="space-y-2">
               <Label htmlFor="username" className="text-sm font-medium">
                 Username
-                {driver === "MongoDb" && (
+                {(driver === "MongoDb" || driver === "Turso" || driver === "Redis") && (
                   <span className="text-muted-foreground font-normal ml-1">(optional)</span>
                 )}
               </Label>
@@ -521,13 +559,25 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
                 name="username"
                 value={formData.username || ""}
                 onChange={handleChange}
-                placeholder={driver === "MongoDb" ? "root (optional)" : "postgres"}
-                required={driver !== "MongoDb"}
+                placeholder={
+                  driver === "MongoDb"
+                    ? "root (optional)"
+                    : driver === "Turso"
+                    ? "(not used)"
+                    : driver === "Redis"
+                    ? "(optional)"
+                    : "postgres"
+                }
+                required={
+                  driver !== "MongoDb" && driver !== "Turso" && driver !== "Redis"
+                }
                 className="h-11"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+              <Label htmlFor="password" className="text-sm font-medium">
+                {driver === "Turso" ? "Auth Token" : "Password"}
+              </Label>
               <div className="relative">
                 <Input
                   type={showPassword ? "text" : "password"}

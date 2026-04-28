@@ -55,19 +55,28 @@ const getEnvStyle = (env: string) => {
 
 // Helper to get badge color
 const getDriverColor = (driver: DbDriver) => {
-  const driverName = getDriverDisplayName(driver).toLowerCase();
-  if (driverName.includes("postgresql")) {
-    return "bg-blue-500/20 border-blue-500/40 text-blue-600 dark:text-blue-300";
-  } else if (driverName.includes("mysql")) {
-    return "bg-orange-500/20 border-orange-500/40 text-orange-600 dark:text-orange-300";
-  } else if (driverName.includes("sqlite")) {
-    return "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300";
-  } else if (driverName.includes("mongodb")) {
-    return "bg-emerald-500/20 border-emerald-500/40 text-emerald-600 dark:text-emerald-300";
-  } else if (driverName.includes("sql server")) {
-    return "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300";
+  switch (driver) {
+    case "Postgres":
+      return "bg-blue-500/20 border-blue-500/40 text-blue-600 dark:text-blue-300";
+    case "MySql":
+      return "bg-orange-500/20 border-orange-500/40 text-orange-600 dark:text-orange-300";
+    case "Sqlite":
+      return "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300";
+    case "MongoDb":
+      return "bg-emerald-500/20 border-emerald-500/40 text-emerald-600 dark:text-emerald-300";
+    case "SqlServer":
+      return "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300";
+    case "Supabase":
+      return "bg-emerald-600/20 border-emerald-600/40 text-emerald-700 dark:text-emerald-300";
+    case "Neon":
+      return "bg-teal-500/20 border-teal-500/40 text-teal-600 dark:text-teal-300";
+    case "Turso":
+      return "bg-purple-500/20 border-purple-500/40 text-purple-600 dark:text-purple-300";
+    case "Redis":
+      return "bg-red-600/20 border-red-600/40 text-red-700 dark:text-red-300";
+    default:
+      return "bg-amber-300/10 border-amber-300/30 text-amber-700 dark:text-amber-200";
   }
-  return "bg-amber-300/10 border-amber-300/30 text-amber-700 dark:text-amber-200";
 };
 
 export const ConnectionTreeView: FC<ConnectionTreeViewProps> = ({

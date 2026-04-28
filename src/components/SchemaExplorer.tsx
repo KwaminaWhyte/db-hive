@@ -57,6 +57,14 @@ import { SqlImportDialog } from "./SqlImportDialog";
 import { TableCreationDialog } from "./TableCreationDialog";
 import { DataImportWizard } from "./DataImportWizard";
 import { NoTablesEmpty, NoSearchResultsEmpty } from "./empty-states";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface SchemaExplorerProps {
   connectionId: string;
@@ -114,6 +122,41 @@ export function SchemaExplorer({
   const [showDataImportWizard, setShowDataImportWizard] = useState(false);
   const [importTargetSchema, setImportTargetSchema] = useState<string>("");
   const [importTargetTable, setImportTargetTable] = useState<string>("");
+  // Create database dialog state
+  const [showCreateDatabaseDialog, setShowCreateDatabaseDialog] = useState(false);
+  const [newDatabaseName, setNewDatabaseName] = useState("");
+  const [creatingDatabase, setCreatingDatabase] = useState(false);
+  const [createDatabaseError, setCreateDatabaseError] = useState<string | null>(null);
+
+  // Driver capability: which drivers support CREATE DATABASE from an active connection
+  const supportsCreateDatabase = (() => {
+    const d = String(connectionProfile.driver).toLowerCase();
+    return d.includes("postgres") || d.includes("mysql") || d.includes("sqlserver");
+  })();
+
+  const handleCreateDatabase = async () => {
+    const name = newDatabaseName.trim();
+    if (!name) {
+      setCreateDatabaseError("Database name is required");
+      return;
+    }
+    setCreatingDatabase(true);
+    setCreateDatabaseError(null);
+    try {
+      await invoke("create_database", { connectionId, name });
+      setShowCreateDatabaseDialog(false);
+      setNewDatabaseName("");
+      await fetchDatabases();
+      // Switch to the new database
+      await handleDatabaseChange(name);
+    } catch (err) {
+      const msg =
+        typeof err === "string" ? err : (err as any)?.message || String(err);
+      setCreateDatabaseError(msg);
+    } finally {
+      setCreatingDatabase(false);
+    }
+  };
 
   // Get the connected database name from the connection profile
   const connectedDatabase = connectionProfile.database || "postgres";
@@ -439,6 +482,23 @@ export function SchemaExplorer({
               </PopoverTrigger>
               <PopoverContent className="w-56 p-2" align="end">
                 <div className="space-y-1">
+                  {/* Create Database */}
+                  {supportsCreateDatabase && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start"
+                      onClick={() => {
+                        setNewDatabaseName("");
+                        setCreateDatabaseError(null);
+                        setShowCreateDatabaseDialog(true);
+                      }}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Create Database
+                    </Button>
+                  )}
+
                   {/* View ER Diagram */}
                   {onOpenERDiagram && selectedSchema && (
                     <Button
@@ -869,6 +929,64 @@ export function SchemaExplorer({
           }
         }}
       />
+
+      {/* Create Database Dialog */}
+      <Dialog
+        open={showCreateDatabaseDialog}
+        onOpenChange={(open) => {
+          if (!creatingDatabase) {
+            setShowCreateDatabaseDialog(open);
+            if (!open) {
+              setNewDatabaseName("");
+              setCreateDatabaseError(null);
+            }
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Database</DialogTitle>
+            <DialogDescription>
+              Create a new database on this server. You can switch to it once
+              created.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Database name</label>
+            <Input
+              autoFocus
+              placeholder="my_new_database"
+              value={newDatabaseName}
+              onChange={(e) => {
+                setNewDatabaseName(e.target.value);
+                if (createDatabaseError) setCreateDatabaseError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !creatingDatabase) handleCreateDatabase();
+              }}
+              disabled={creatingDatabase}
+            />
+            <p className="text-xs text-muted-foreground">
+              Letters, digits, underscore, hyphen, $. Cannot start with a digit.
+            </p>
+            {createDatabaseError && (
+              <div className="text-sm text-destructive">{createDatabaseError}</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateDatabaseDialog(false)}
+              disabled={creatingDatabase}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleCreateDatabase} disabled={creatingDatabase}>
+              {creatingDatabase ? "Creating..." : "Create"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Data Import Wizard */}
       {showDataImportWizard && (

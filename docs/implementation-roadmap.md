@@ -357,7 +357,8 @@ For detailed architecture patterns, see `CLAUDE.md`.
   - [x] SQL preview panel with syntax highlighting
   - [x] Form validation (table name required, column names required)
   - [x] IF NOT EXISTS toggle
-  - [ ] Foreign key builder UI (TODO: Future enhancement - types ready)
+  - [x] Foreign key builder UI (referenced-table picker, column multi-select, ON DELETE/UPDATE actions) — 2026-04-28
+  - [x] Unique constraint builder UI (multi-column, optional name) — 2026-04-28
   - [ ] Index builder UI (TODO: Future enhancement - types ready)
 - [x] SchemaExplorer integration:
   - [x] "Create Table" context menu on schema
@@ -477,13 +478,13 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Build settings page with sidebar navigation: ✅
   - [x] General settings (language, default database, startup behavior) ✅
   - [x] Theme settings (Dark/Light/Auto, accent color, editor font) ✅
-  - [x] Keyboard Shortcuts display (read-only for now) ✅
+  - [x] Keyboard Shortcuts display + click-to-record customisation, live broadcast, reset-to-defaults ✅ (2026-04-28)
   - [x] Query Execution Settings (timeout, max rows, auto-commit, confirmDestructive) ✅
   - [ ] Backup & Import/Export preferences (TODO: Future enhancement)
   - [ ] Plugins management (TODO: Future enhancement)
 - [ ] Add search bar for quick settings filtering (TODO: Future enhancement)
 - [x] Use card layout with toggles, dropdowns, text inputs ✅
-- [ ] Implement keyboard shortcuts customization modal (TODO: Future enhancement)
+- [x] Implement keyboard shortcuts customization (in-place click-to-record per row, no separate modal) ✅ (2026-04-28)
 
 ### Milestone 3.6: Logs & Activity Monitor ✅ COMPLETED
 
@@ -843,51 +844,48 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Implementation Date:** 2025-11-29
 
-### Milestone 3.13: Additional Database Drivers
+### Milestone 3.13: Additional Database Drivers ✅ COMPLETED (2026-04-28)
 
 **Cloud & Serverless Databases**
 
-- [ ] **Supabase Driver:**
-  - [ ] PostgreSQL-compatible connection via Supabase URL
-  - [ ] Connection pooler support (Transaction/Session modes)
-  - [ ] Supabase-specific connection string parsing
-  - [ ] SSL/TLS configuration for cloud connections
-  - [ ] Reuse existing PostgreSQL driver infrastructure
+- [x] **Supabase Driver:**
+  - [x] PostgreSQL-compatible connection routed to existing `PostgresDriver`
+  - [x] Connection-string preset + URL sniffing for `*.supabase.co`
+  - [x] `sslMode` defaulted to `Require`
+  - [ ] Connection pooler mode toggle (Transaction vs Session) — future enhancement
+  - [x] Reuses existing PostgreSQL driver infrastructure
 
-- [ ] **Neon Driver:**
-  - [ ] PostgreSQL-compatible serverless connection
-  - [ ] Connection string parsing with project/branch support
-  - [ ] Serverless-optimized connection handling
-  - [ ] Cold start handling and connection pooling
-  - [ ] Reuse existing PostgreSQL driver infrastructure
+- [x] **Neon Driver:**
+  - [x] PostgreSQL-compatible serverless connection routed to `PostgresDriver`
+  - [x] Connection-string preset + URL sniffing for `*.neon.tech`
+  - [x] `sslMode` defaulted to `Require`
+  - [ ] Branch/project-aware UI hints — future enhancement
+  - [x] Reuses existing PostgreSQL driver infrastructure
 
-- [ ] **Turso Driver:**
-  - [ ] libSQL/SQLite edge database support
-  - [ ] HTTP API integration for serverless queries
-  - [ ] Embedded replica support
-  - [ ] Authentication token handling
-  - [ ] Custom Turso connection options
+- [x] **Turso Driver:**
+  - [x] libSQL HTTP/Hrana support via `libsql::Builder::new_remote`
+  - [x] Auth-token handling (entered as password, labelled "Auth Token")
+  - [x] URL field replaces host/port (accepts `libsql://`, `https://`, `wss://`, bare hostname)
+  - [x] SQLite-style metadata via PRAGMAs (`table_info`, `index_list`, `foreign_key_list`)
+  - [ ] Embedded replica support — future enhancement
 
-- [ ] **Redis Driver:**
-  - [ ] Key-value store operations (GET, SET, DEL, etc.)
-  - [ ] Data structure commands (Lists, Sets, Hashes, Sorted Sets)
-  - [ ] Redis connection string parsing
-  - [ ] Cluster and Sentinel support
-  - [ ] Custom Redis query interface (non-SQL)
-  - [ ] Key browser and data viewer UI
+- [x] **Redis Driver:**
+  - [x] Key-value store operations via `redis::cmd` with quoted-argv tokeniser
+  - [x] Multiple data-structure commands supported (Strings, Lists, Sets, Hashes, Sorted Sets via raw commands)
+  - [x] Connection-string preset + URL sniffing for `redis://` / `rediss://`
+  - [x] 16 numbered logical databases (`db0..db15`) exposed via `get_databases`
+  - [x] Non-blocking `SCAN` (capped at 1000) for `get_tables`
+  - [x] Per-key type/TTL inspection via `get_table_schema`
+  - [ ] Cluster and Sentinel support — future enhancement
 
 **Frontend Integration:**
 
-- [ ] Connection form updates for each driver type
-- [ ] Driver-specific icons and branding
-- [ ] Connection testing for cloud databases
-- [ ] SSL certificate handling UI
+- [x] Connection form updates for each driver type (URL field for Turso, DB-index field for Redis, optional username for both)
+- [x] Driver-specific icons + branding (Supabase emerald-600, Neon teal-500, Turso purple-500, Redis red-600)
+- [x] Connection testing reuses generic `test_connection_command` flow
+- [x] SSL defaults set per driver (Supabase/Neon → Require)
 
-**Notes:**
-
-- Supabase and Neon can leverage existing PostgreSQL driver
-- Turso requires libsql Rust crate integration
-- Redis requires custom UI (non-relational data model)
+**Implementation Date:** 2026-04-28
 
 ---
 

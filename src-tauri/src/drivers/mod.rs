@@ -14,8 +14,10 @@ use crate::models::{
 pub mod mongodb;
 pub mod mysql;
 pub mod postgres;
+pub mod redis;
 pub mod sqlite;
 pub mod sqlserver;
+pub mod turso;
 
 /// Connection options for establishing a database connection
 ///

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0-beta] - 2026-04-28
+
+### Added
+
+- **Cloud Database Drivers**: Four new connection types added to the dashboard and connection form.
+  - **Supabase** and **Neon**: managed PostgreSQL services. Routed internally to the existing PostgreSQL driver with `sslMode` defaulted to `Require`. Connection-string presets and URL sniffing recognise `*.supabase.co` and `*.neon.tech` Postgres URLs and select the branded variant automatically.
+  - **Turso** (libSQL): new driver in `src-tauri/src/drivers/turso.rs` over `libsql::Builder::new_remote`. Connection takes a `libsql://` / `https://` / `wss://` URL plus an auth token (entered in the password field, labelled "Auth Token"). SQLite-style metadata via PRAGMAs (`table_info`, `index_list`, `foreign_key_list`).
+  - **Redis**: new driver in `src-tauri/src/drivers/redis.rs` using the official `redis` crate with `MultiplexedConnection`. Executes raw Redis commands (`GET`, `KEYS`, `LRANGE`, `HGETALL`, etc.) via tokenised argv with quoted-string support. `get_databases` exposes the 16 numbered logical DBs (`db0..db15`); `get_tables` uses non-blocking `SCAN` capped at 1000 keys.
+  - Default ports, display names, badge colours, and form-field adjustments wired across `src/types/database.ts`, `ConnectionForm`, `ConnectionTreeView`, `ConnectionCard`, and the home dashboard grid.
+
+- **Create Database from Active Connection**: New `create_database` Tauri command and a "Create Database" item in the Schema Explorer's database-selector popover. Validates identifier (alnum + `_-$`, no leading digit, ≤63 chars) and emits dialect-correct SQL: `CREATE DATABASE "name"` (Postgres/Supabase/Neon), `` CREATE DATABASE `name` `` (MySQL), `CREATE DATABASE [name]` (SQL Server). SQLite, MongoDB, Turso, and Redis return explanatory errors. After creation the UI auto-switches to the new database.
+
+- **Foreign Key & Unique Constraint Builder**: The Constraints step in the Create Table wizard is no longer a "coming soon" placeholder. Users can now add named or unnamed unique constraints across multiple columns of the new table and full foreign-key constraints with referenced-table picker (lazy-loaded from `get_tables`), referenced-column multi-select (lazy-loaded from `get_table_schema` and cached per table), and `ON DELETE` / `ON UPDATE` actions (`NO_ACTION`, `RESTRICT`, `CASCADE`, `SET_NULL`, `SET_DEFAULT`). Validation gates the "Preview SQL" button until every constraint is well-formed.
+
+- **Customisable Keyboard Shortcuts**: Settings → Keyboard Shortcuts now lets users rebind every shortcut. Click a row to enter recording mode; the next keydown captures the combination. **Esc** cancels, **Backspace** clears (treated as unbound), invalid combos toast-error, and duplicate bindings emit a non-blocking warning. Each change persists immediately via `update_settings` and is broadcast app-wide via a `db-hive:settings-changed` window event so global handlers in `__root.tsx` and route-scoped handlers (e.g. query tab `newTab`/`closeTab`) pick up new bindings without an app reload. A "Reset all to defaults" button (with confirmation) calls the existing `reset_settings` command.
+
+### Changed
+
+- **Create Table Dialog Width**: Increased the dialog's max-width from `max-w-4xl` (~896px) to a responsive `min(1280px, 95vw)` so the column grid, constraint cards, and SQL preview have room to breathe on larger screens.
+
+- **`useKeyboardShortcuts` Hardening**: The hook now skips empty-string bindings (so unbound shortcuts no longer crash the matcher) and on macOS automatically remaps a stored `Ctrl+X` binding to `Cmd+X` so a single stored value works across platforms — replaces the old workaround of registering both variants explicitly.
+
+### Fixed
+
+- **Exhaustive `DbDriver` Matches**: All `match` arms over `DbDriver` (in `commands::connection`, `commands::ddl`, `commands::export`, `ddl::get_ddl_generator`) now handle every variant explicitly. Previously any new driver would have caused a non-exhaustive-match build error; the new fallbacks return clear `InvalidInput` / `InternalError` messages where the operation is genuinely not applicable.
+
 ## [0.19.2-beta] - 2026-03-10
 
 ### Fixed

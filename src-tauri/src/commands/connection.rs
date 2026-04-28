@@ -8,7 +8,11 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
-use crate::drivers::{mongodb::MongoDbDriver, mysql::MysqlDriver, postgres::PostgresDriver, sqlite::SqliteDriver, sqlserver::SqlServerDriver, ConnectionOptions, DatabaseDriver};
+use crate::drivers::{
+    mongodb::MongoDbDriver, mysql::MysqlDriver, postgres::PostgresDriver, redis::RedisDriver,
+    sqlite::SqliteDriver, sqlserver::SqlServerDriver, turso::TursoDriver, ConnectionOptions,
+    DatabaseDriver,
+};
 use crate::models::{ConnectionProfile, ConnectionStatus, DbDriver, DbError};
 use crate::state::AppState;
 
@@ -88,7 +92,7 @@ pub async fn test_connection_command(
 
     // Test connection based on driver type
     let result = match profile.driver {
-        DbDriver::Postgres => {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => {
             let driver = PostgresDriver::connect(opts).await?;
             driver.test_connection().await?;
             Ok(ConnectionStatus::Connected)
@@ -110,6 +114,16 @@ pub async fn test_connection_command(
         }
         DbDriver::SqlServer => {
             let driver = SqlServerDriver::connect(opts).await?;
+            driver.test_connection().await?;
+            Ok(ConnectionStatus::Connected)
+        }
+        DbDriver::Turso => {
+            let driver = TursoDriver::connect(opts).await?;
+            driver.test_connection().await?;
+            Ok(ConnectionStatus::Connected)
+        }
+        DbDriver::Redis => {
+            let driver = RedisDriver::connect(opts).await?;
             driver.test_connection().await?;
             Ok(ConnectionStatus::Connected)
         }
@@ -509,8 +523,11 @@ pub async fn connect_to_database(
     };
 
     // Build connection options from profile
-    // For PostgreSQL, default to "postgres" database if none specified
-    let database = if matches!(profile.driver, DbDriver::Postgres) {
+    // For PostgreSQL-family, default to "postgres" database if none specified
+    let database = if matches!(
+        profile.driver,
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon
+    ) {
         match &profile.database {
             None => Some("postgres".to_string()),
             Some(d) if d.is_empty() => Some("postgres".to_string()),
@@ -531,7 +548,7 @@ pub async fn connect_to_database(
 
     // Connect based on driver type
     let connection: Arc<dyn DatabaseDriver> = match profile.driver {
-        DbDriver::Postgres => {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => {
             let driver = PostgresDriver::connect(opts).await?;
             Arc::new(driver)
         }
@@ -549,6 +566,14 @@ pub async fn connect_to_database(
         }
         DbDriver::SqlServer => {
             let driver = SqlServerDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
+        DbDriver::Turso => {
+            let driver = TursoDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
+        DbDriver::Redis => {
+            let driver = RedisDriver::connect(opts).await?;
             Arc::new(driver)
         }
     };
@@ -726,7 +751,7 @@ pub async fn switch_database(
 
     // Connect to the new database based on driver type
     let new_connection: Arc<dyn DatabaseDriver> = match profile.driver {
-        DbDriver::Postgres => {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => {
             let driver = PostgresDriver::connect(opts).await?;
             Arc::new(driver)
         }
@@ -742,9 +767,13 @@ pub async fn switch_database(
             let driver = MongoDbDriver::connect(opts).await?;
             Arc::new(driver)
         }
+        DbDriver::Redis => {
+            let driver = RedisDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
         _ => {
             return Err(DbError::InternalError(
-                "Database switching only supported for PostgreSQL, MySQL, SQLite, and MongoDB currently".to_string(),
+                "Database switching not supported for this driver".to_string(),
             ))
         }
     };

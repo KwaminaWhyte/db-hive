@@ -31,12 +31,18 @@ pub trait DdlGenerator {
 /// Get DDL generator for a specific database driver
 pub fn get_ddl_generator(driver: &DbDriver) -> Result<Box<dyn DdlGenerator>, DbError> {
     match driver {
-        DbDriver::Postgres => Ok(Box::new(postgres::PostgresDdlGenerator)),
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => {
+            Ok(Box::new(postgres::PostgresDdlGenerator))
+        }
         DbDriver::MySql => Ok(Box::new(mysql::MySqlDdlGenerator)),
-        DbDriver::Sqlite => Ok(Box::new(sqlite::SqliteDdlGenerator)),
+        // Turso is libSQL — same DDL surface as SQLite.
+        DbDriver::Sqlite | DbDriver::Turso => Ok(Box::new(sqlite::SqliteDdlGenerator)),
         DbDriver::SqlServer => Ok(Box::new(sqlserver::SqlServerDdlGenerator)),
         DbDriver::MongoDb => Err(DbError::InvalidInput(
             "DDL operations not supported for MongoDB (NoSQL database)".to_string(),
+        )),
+        DbDriver::Redis => Err(DbError::InvalidInput(
+            "DDL operations not supported for Redis (key-value store)".to_string(),
         )),
     }
 }

@@ -60,10 +60,10 @@ const DATABASE_TYPE_OPTIONS: DatabaseTypeOption[] = [
   { id: "sqlserver", driver: "SqlServer", name: "SQL Server", color: "#CC2927", abbr: "SS", available: true },
   { id: "mongodb", driver: "MongoDb", name: "MongoDB", color: "#13AA52", abbr: "Mo", available: true },
   { id: "sqlite", driver: "Sqlite", name: "SQLite", color: "#003B57", abbr: "SL", available: true },
-  { id: "redis", driver: null, name: "Redis", color: "#DC382D", abbr: "Re", available: false },
-  { id: "supabase", driver: null, name: "Supabase", color: "#3ECF8E", abbr: "Sb", available: false },
-  { id: "neon", driver: null, name: "Neon", color: "#00E699", abbr: "Ne", available: false },
-  { id: "turso", driver: null, name: "LibSQL / Turso", color: "#4FF8D2", abbr: "Tu", available: false },
+  { id: "supabase", driver: "Supabase", name: "Supabase", color: "#3ECF8E", abbr: "Sb", available: true },
+  { id: "neon", driver: "Neon", name: "Neon", color: "#00E699", abbr: "Ne", available: true },
+  { id: "turso", driver: "Turso", name: "LibSQL / Turso", color: "#4FF8D2", abbr: "Tu", available: true },
+  { id: "redis", driver: "Redis", name: "Redis", color: "#DC382D", abbr: "Re", available: true },
 ];
 
 // Driver icon config for connection list
@@ -73,6 +73,10 @@ const DRIVER_ICON_CONFIG: Record<string, { color: string; abbr: string }> = {
   Sqlite: { color: "#003B57", abbr: "SL" },
   MongoDb: { color: "#13AA52", abbr: "Mo" },
   SqlServer: { color: "#CC2927", abbr: "SS" },
+  Supabase: { color: "#3ECF8E", abbr: "Sb" },
+  Neon: { color: "#00E699", abbr: "Ne" },
+  Turso: { color: "#4FF8D2", abbr: "Tu" },
+  Redis: { color: "#DC382D", abbr: "Re" },
 };
 
 // Small colored icon for database type
@@ -297,7 +301,13 @@ function HomeRoute() {
   // Detect driver from connection string
   const detectDriverFromConnectionString = (connStr: string): DbDriver | null => {
     const s = connStr.toLowerCase().trim();
-    if (s.startsWith("postgres://") || s.startsWith("postgresql://")) return "Postgres";
+    if (s.startsWith("postgres://") || s.startsWith("postgresql://")) {
+      if (s.includes("supabase.co") || s.includes("supabase.com")) return "Supabase";
+      if (s.includes("neon.tech")) return "Neon";
+      return "Postgres";
+    }
+    if (s.startsWith("libsql://")) return "Turso";
+    if (s.startsWith("redis://") || s.startsWith("rediss://")) return "Redis";
     if (s.startsWith("mysql://") || s.startsWith("mariadb://")) return "MySql";
     if (s.startsWith("mongodb://") || s.startsWith("mongodb+srv://")) return "MongoDb";
     if (s.startsWith("sqlite://") || s.startsWith("file:") || s.endsWith(".db") || s.endsWith(".sqlite")) return "Sqlite";

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Settings,
@@ -17,9 +17,80 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import { Separator } from "./ui/separator";
 import { ScrollArea } from "./ui/scroll-area";
-import type { AppSettings } from "@/types";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./ui/alert-dialog";
+import type { AppSettings, ShortcutsSettings } from "@/types";
 import { defaultSettings } from "@/types";
 import { useTheme } from "./theme-provider";
+import { broadcastSettingsChanged } from "@/hooks/useSettings";
+
+const IS_MAC =
+  typeof navigator !== "undefined" &&
+  navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+
+/**
+ * Convert a KeyboardEvent into the shortcut string format used by
+ * `parseShortcut` in useKeyboardShortcuts (e.g. "Ctrl+Shift+F", "Cmd+K").
+ *
+ * Returns null if `event.key` is itself a modifier (user still holding mods).
+ */
+function shortcutFromEvent(event: KeyboardEvent): string | null {
+  const key = event.key;
+  // Ignore pure modifier keystrokes — wait for a real key
+  if (
+    key === "Control" ||
+    key === "Shift" ||
+    key === "Alt" ||
+    key === "Meta" ||
+    key === "OS" ||
+    key === "Dead"
+  ) {
+    return null;
+  }
+
+  const parts: string[] = [];
+  if (event.ctrlKey) parts.push("Ctrl");
+  // Use Cmd on macOS, Meta elsewhere (parser accepts both)
+  if (event.metaKey) parts.push(IS_MAC ? "Cmd" : "Meta");
+  if (event.altKey) parts.push(IS_MAC ? "Option" : "Alt");
+  if (event.shiftKey) parts.push("Shift");
+
+  // Normalize key label
+  let label = key;
+  if (key === " ") label = "Space";
+  else if (key.length === 1) label = key.toUpperCase();
+  // Arrow keys / Enter / Escape / Tab / Backspace come through as-is
+  parts.push(label);
+  return parts.join("+");
+}
+
+/**
+ * A binding is valid if it has at least one non-Shift modifier OR is a
+ * single special key like "?" / "Escape" / function keys.
+ */
+function isValidShortcut(combo: string): boolean {
+  if (!combo) return false;
+  const parts = combo.split("+");
+  const last = parts[parts.length - 1];
+  const mods = parts.slice(0, -1).map((p) => p.toLowerCase());
+  const hasNonShiftModifier = mods.some(
+    (m) => m === "ctrl" || m === "cmd" || m === "meta" || m === "alt" || m === "option",
+  );
+  // Single-character keys without a real modifier are not allowed —
+  // would block ordinary typing. Allow special keys and "?".
+  if (!hasNonShiftModifier) {
+    if (last.length === 1 && last !== "?") return false;
+  }
+  return true;
+}
 
 type SettingsSection = "general" | "theme" | "query" | "shortcuts";
 
@@ -52,6 +123,7 @@ export function SettingsPage() {
     try {
       setIsSaving(true);
       await invoke("update_settings", { settings });
+      broadcastSettingsChanged();
       toast.success("Settings saved successfully");
     } catch (error) {
       console.error("Failed to save settings:", error);
@@ -63,14 +135,37 @@ export function SettingsPage() {
 
   const resetSettings = async () => {
     try {
-      const defaultSettings = await invoke<AppSettings>("reset_settings");
-      setSettings(defaultSettings);
+      const fresh = await invoke<AppSettings>("reset_settings");
+      setSettings(fresh);
+      broadcastSettingsChanged();
       toast.success("Settings reset to defaults");
     } catch (error) {
       console.error("Failed to reset settings:", error);
       toast.error("Failed to reset settings");
     }
   };
+
+  /**
+   * Update a single shortcut binding and persist immediately so the
+   * change applies app-wide without a manual save.
+   */
+  const updateShortcutBinding = useCallback(
+    async (key: keyof ShortcutsSettings, value: string) => {
+      const nextSettings: AppSettings = {
+        ...settings,
+        shortcuts: { ...settings.shortcuts, [key]: value },
+      };
+      setSettings(nextSettings);
+      try {
+        await invoke("update_settings", { settings: nextSettings });
+        broadcastSettingsChanged();
+      } catch (error) {
+        console.error("Failed to persist shortcut:", error);
+        toast.error("Failed to save shortcut");
+      }
+    },
+    [settings],
+  );
 
   const updateGeneralSettings = (key: keyof AppSettings["general"], value: any) => {
     setSettings((prev) => ({
@@ -533,44 +628,11 @@ export function SettingsPage() {
           )}
 
           {activeSection === "shortcuts" && (
-            <div className="space-y-6">
-              <div>
-                <h3 className="mb-1 text-2xl font-semibold">Keyboard Shortcuts</h3>
-                <p className="text-muted-foreground text-sm">
-                  View and customize keyboard shortcuts (customization coming soon)
-                </p>
-              </div>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Editor Shortcuts</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <ShortcutRow label="Execute Query" value={settings.shortcuts.executeQuery} />
-                    <ShortcutRow label="Clear Editor" value={settings.shortcuts.clearEditor} />
-                    <ShortcutRow label="Format SQL" value={settings.shortcuts.formatSql} />
-                    <ShortcutRow label="Save Snippet" value={settings.shortcuts.saveSnippet} />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Navigation Shortcuts</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    <ShortcutRow label="New Tab" value={settings.shortcuts.newTab} />
-                    <ShortcutRow label="Close Tab" value={settings.shortcuts.closeTab} />
-                    <ShortcutRow label="Toggle Sidebar" value={settings.shortcuts.toggleSidebar} />
-                    <ShortcutRow label="Search" value={settings.shortcuts.search} />
-                    <ShortcutRow label="Open Settings" value={settings.shortcuts.openSettings} />
-                    <ShortcutRow label="Show Shortcuts" value={settings.shortcuts.showShortcuts} />
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+            <ShortcutsSection
+              shortcuts={settings.shortcuts}
+              onChange={updateShortcutBinding}
+              onResetAll={resetSettings}
+            />
           )}
         </div>
       </ScrollArea>
@@ -578,13 +640,255 @@ export function SettingsPage() {
   );
 }
 
-function ShortcutRow({ label, value }: { label: string; value: string }) {
+interface ShortcutFieldDef {
+  label: string;
+  field: keyof ShortcutsSettings;
+}
+
+const EDITOR_SHORTCUT_FIELDS: ShortcutFieldDef[] = [
+  { label: "Execute Query", field: "executeQuery" },
+  { label: "Clear Editor", field: "clearEditor" },
+  { label: "Format SQL", field: "formatSql" },
+  { label: "Save Snippet", field: "saveSnippet" },
+];
+
+const NAVIGATION_SHORTCUT_FIELDS: ShortcutFieldDef[] = [
+  { label: "New Tab", field: "newTab" },
+  { label: "Close Tab", field: "closeTab" },
+  { label: "Toggle Sidebar", field: "toggleSidebar" },
+  { label: "Search", field: "search" },
+  { label: "Open Settings", field: "openSettings" },
+  { label: "Show Shortcuts", field: "showShortcuts" },
+];
+
+function ShortcutsSection({
+  shortcuts,
+  onChange,
+  onResetAll,
+}: {
+  shortcuts: ShortcutsSettings;
+  onChange: (key: keyof ShortcutsSettings, value: string) => Promise<void> | void;
+  onResetAll: () => Promise<void> | void;
+}) {
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  // Lookup current binding -> list of field labels using it (for duplicate warning)
+  const findDuplicates = useCallback(
+    (newValue: string, ownField: keyof ShortcutsSettings): string[] => {
+      if (!newValue) return [];
+      const dupes: string[] = [];
+      const allFields = [...EDITOR_SHORTCUT_FIELDS, ...NAVIGATION_SHORTCUT_FIELDS];
+      for (const f of allFields) {
+        if (f.field === ownField) continue;
+        if (
+          shortcuts[f.field] &&
+          shortcuts[f.field].toLowerCase() === newValue.toLowerCase()
+        ) {
+          dupes.push(f.label);
+        }
+      }
+      return dupes;
+    },
+    [shortcuts],
+  );
+
+  const handleChange = useCallback(
+    (field: keyof ShortcutsSettings, value: string) => {
+      const dupes = findDuplicates(value, field);
+      if (dupes.length > 0) {
+        toast.warning(
+          `"${value}" is already bound to: ${dupes.join(", ")}`,
+        );
+      }
+      void onChange(field, value);
+    },
+    [findDuplicates, onChange],
+  );
+
   return (
-    <div className="flex items-center justify-between py-2">
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="mb-1 text-2xl font-semibold">Keyboard Shortcuts</h3>
+          <p className="text-muted-foreground text-sm">
+            View and customize keyboard shortcuts (click any shortcut to rebind)
+          </p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setConfirmReset(true)}
+          className="shrink-0"
+        >
+          <RotateCcw className="mr-2 size-4" />
+          Reset all to defaults
+        </Button>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Editor Shortcuts</CardTitle>
+          <CardDescription>
+            Bindings active inside the SQL editor and query view
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {EDITOR_SHORTCUT_FIELDS.map((f) => (
+              <ShortcutRow
+                key={f.field}
+                label={f.label}
+                value={shortcuts[f.field]}
+                onChange={(v) => handleChange(f.field, v)}
+              />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Navigation Shortcuts</CardTitle>
+          <CardDescription>
+            Global navigation and window-level bindings
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {NAVIGATION_SHORTCUT_FIELDS.map((f) => (
+              <ShortcutRow
+                key={f.field}
+                label={f.label}
+                value={shortcuts[f.field]}
+                onChange={(v) => handleChange(f.field, v)}
+              />
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={confirmReset} onOpenChange={setConfirmReset}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset all settings to defaults?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This restores every setting (not only shortcuts) to its default
+              value. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setConfirmReset(false);
+                void onResetAll();
+              }}
+            >
+              Reset
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function ShortcutRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [recording, setRecording] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Capture the next valid keystroke while in recording mode
+  useEffect(() => {
+    if (!recording) return;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Always swallow keys while recording so they don't fall through
+      // to other shortcut handlers.
+      event.preventDefault();
+      event.stopPropagation();
+
+      // Escape cancels recording without changing the binding
+      if (event.key === "Escape") {
+        setRecording(false);
+        return;
+      }
+
+      // Backspace clears the binding
+      if (event.key === "Backspace" && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        onChange("");
+        setRecording(false);
+        return;
+      }
+
+      const combo = shortcutFromEvent(event);
+      if (!combo) return; // still holding modifiers; wait for real key
+
+      if (!isValidShortcut(combo)) {
+        toast.error(
+          "Invalid shortcut: needs at least one modifier (Ctrl, Cmd, Alt) for letter keys",
+        );
+        return; // stay in recording mode
+      }
+
+      onChange(combo);
+      setRecording(false);
+    };
+
+    // Capture phase so we beat global hooks (which use bubble phase)
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => window.removeEventListener("keydown", handleKeyDown, true);
+  }, [recording, onChange]);
+
+  // Auto-blur the button so the global "input/textarea" guard in the
+  // shortcut hooks does not need any change
+  useEffect(() => {
+    if (recording && buttonRef.current) {
+      buttonRef.current.focus();
+    }
+  }, [recording]);
+
+  const display = value || "(unbound)";
+
+  return (
+    <div className="flex items-center justify-between gap-3 py-2">
       <span className="text-sm">{label}</span>
-      <kbd className="bg-muted border-border rounded border px-2 py-1 text-xs font-mono">
-        {value}
-      </kbd>
+      <div className="flex items-center gap-2">
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={() => setRecording((r) => !r)}
+          onBlur={() => setRecording(false)}
+          className={`rounded border px-2 py-1 text-xs font-mono min-w-[110px] text-center transition-colors ${
+            recording
+              ? "border-primary bg-primary/10 text-primary animate-pulse"
+              : value
+              ? "bg-muted border-border hover:border-primary/40"
+              : "bg-muted/50 border-dashed border-border text-muted-foreground hover:border-primary/40"
+          }`}
+          aria-label={`Edit shortcut for ${label}`}
+        >
+          {recording ? "Press shortcut…" : display}
+        </button>
+        {value && !recording && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+            aria-label={`Clear shortcut for ${label}`}
+            title="Clear binding"
+          >
+            clear
+          </button>
+        )}
+      </div>
     </div>
   );
 }

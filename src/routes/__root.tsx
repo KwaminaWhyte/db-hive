@@ -56,10 +56,12 @@ function RootComponent() {
     return cleanup;
   }, []);
 
-  // Global keyboard shortcuts (work across all routes)
+  // Global keyboard shortcuts (sourced from user settings; re-bind on change)
+  const openSettingsKey = settings?.shortcuts?.openSettings ?? "Ctrl+,";
+  const showShortcutsKey = settings?.shortcuts?.showShortcuts ?? "?";
   useKeyboardShortcuts([
     {
-      key: "Ctrl+,",
+      key: openSettingsKey,
       handler: () => {
         const currentPath = router.state.location.pathname;
         sessionStorage.setItem("db-hive-previous-route", currentPath);
@@ -68,16 +70,7 @@ function RootComponent() {
       description: "Open settings",
     },
     {
-      key: "⌘+,",
-      handler: () => {
-        const currentPath = router.state.location.pathname;
-        sessionStorage.setItem("db-hive-previous-route", currentPath);
-        navigate({ to: "/settings" });
-      },
-      description: "Open settings",
-    },
-    {
-      key: "?",
+      key: showShortcutsKey,
       handler: () => {
         setShowShortcutsModal(true);
       },

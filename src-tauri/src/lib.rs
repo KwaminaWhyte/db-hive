@@ -272,6 +272,7 @@ pub fn run() {
             commands::ddl::alter_table,
             commands::ddl::preview_drop_table,
             commands::ddl::drop_table,
+            commands::ddl::create_database,
             commands::plugins::get_installed_plugins,
             commands::plugins::get_plugin,
             commands::plugins::install_plugin,

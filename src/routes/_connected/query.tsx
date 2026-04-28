@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { X, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
+import { useSettings } from "@/hooks/useSettings";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -315,25 +316,18 @@ function QueryPanelRoute() {
     return state?.label || tabId;
   };
 
-  // Keyboard shortcuts for query panel
+  // Keyboard shortcuts for query panel (sourced from user settings)
+  const { settings: appSettings } = useSettings();
+  const newTabKey = appSettings?.shortcuts?.newTab ?? "Ctrl+T";
+  const closeTabKey = appSettings?.shortcuts?.closeTab ?? "Ctrl+W";
   useRouteShortcuts([
     {
-      key: "Ctrl+T",
+      key: newTabKey,
       handler: handleAddQueryTab,
       description: "New query tab",
     },
     {
-      key: "⌘+T",
-      handler: handleAddQueryTab,
-      description: "New query tab",
-    },
-    {
-      key: "Ctrl+W",
-      handler: () => handleCloseTab(activeIndex),
-      description: "Close current tab",
-    },
-    {
-      key: "⌘+W",
+      key: closeTabKey,
       handler: () => handleCloseTab(activeIndex),
       description: "Close current tab",
     },
