@@ -197,7 +197,7 @@ export function getDefaultPort(driver: DbDriver): number {
     case 'Neon':
       return 5432;
     case 'Turso':
-      return 0;
+      return 443;
     case 'Redis':
       return 6379;
     default:
@@ -532,6 +532,24 @@ export interface TableSchema {
 
   /** Indexes defined on the table */
   indexes: IndexInfo[];
+}
+
+/**
+ * Stored procedure / function metadata
+ */
+export interface ProcedureInfo {
+  /** Schema the routine lives in */
+  schema: string;
+  /** Routine name */
+  name: string;
+  /** "procedure" or "function" */
+  kind: 'procedure' | 'function';
+  /** Implementation language (PostgreSQL only) */
+  language?: string | null;
+  /** Return type for functions (null for procedures) */
+  returnType?: string | null;
+  /** Rendered argument signature, e.g. "(a integer, b text)" */
+  argumentSignature: string;
 }
 
 /**

@@ -59,7 +59,7 @@ export const EmptyState: FC<EmptyStateProps> = ({
     <div
       className={cn(
         "flex flex-col items-center justify-center text-center max-w-md mx-auto px-6",
-        "animate-in fade-in-0 slide-in-from-bottom-4 duration-500",
+        "animate-in fade-in-0 duration-150",
         config.container,
         className
       )}
@@ -75,7 +75,6 @@ export const EmptyState: FC<EmptyStateProps> = ({
             className={cn(
               "rounded-full bg-muted/50 p-4 text-muted-foreground/70",
               "transition-all duration-300 hover:bg-muted/70 hover:scale-105",
-              "animate-in fade-in-0 zoom-in-95 duration-700 delay-100",
               iconClassName
             )}
           >

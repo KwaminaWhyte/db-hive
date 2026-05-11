@@ -9,6 +9,7 @@ use crate::ai::{
     OpenAiProvider, OpenAiConfig,
     AnthropicProvider, AnthropicConfig,
     GoogleAiProvider, GoogleAiConfig,
+    OpenRouterProvider, OpenRouterConfig,
 };
 use crate::models::DbError;
 use serde::{Deserialize, Serialize};
@@ -29,6 +30,8 @@ pub struct AiConfig {
     pub anthropic: AnthropicConfig,
     /// Google AI configuration
     pub google: GoogleAiConfig,
+    /// OpenRouter configuration
+    pub openrouter: OpenRouterConfig,
 }
 
 /// AI Assistant state
@@ -106,6 +109,7 @@ fn get_provider(config: &AiConfig, provider_type: Option<AiProviderType>) -> Box
         AiProviderType::OpenAI => Box::new(OpenAiProvider::with_config(config.openai.clone())),
         AiProviderType::Anthropic => Box::new(AnthropicProvider::with_config(config.anthropic.clone())),
         AiProviderType::Google => Box::new(GoogleAiProvider::with_config(config.google.clone())),
+        AiProviderType::OpenRouter => Box::new(OpenRouterProvider::with_config(config.openrouter.clone())),
     }
 }
 
@@ -129,6 +133,7 @@ pub async fn check_ai_provider_status(
         AiProviderType::OpenAI => !config.openai.api_key.is_empty(),
         AiProviderType::Anthropic => !config.anthropic.api_key.is_empty(),
         AiProviderType::Google => !config.google.api_key.is_empty(),
+        AiProviderType::OpenRouter => !config.openrouter.api_key.is_empty(),
     };
 
     Ok(ProviderStatus {
@@ -196,6 +201,7 @@ pub async fn set_ai_api_key(
         AiProviderType::OpenAI => config.openai.api_key = api_key,
         AiProviderType::Anthropic => config.anthropic.api_key = api_key,
         AiProviderType::Google => config.google.api_key = api_key,
+        AiProviderType::OpenRouter => config.openrouter.api_key = api_key,
     }
 
     Ok(())
@@ -360,5 +366,6 @@ fn get_default_model(config: &AiConfig, provider: Option<AiProviderType>) -> Str
         AiProviderType::OpenAI => config.openai.default_model.clone(),
         AiProviderType::Anthropic => config.anthropic.default_model.clone(),
         AiProviderType::Google => config.google.default_model.clone(),
+        AiProviderType::OpenRouter => config.openrouter.default_model.clone(),
     }
 }

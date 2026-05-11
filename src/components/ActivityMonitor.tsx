@@ -62,6 +62,8 @@ import type {
   QueryType,
   QueryStatus,
 } from '@/types/activity';
+import { ProcessList } from './activityMonitor/ProcessList';
+import { ServerMetricsChart } from './activityMonitor/ServerMetricsChart';
 
 interface ActivityMonitorProps {
   /** Optional initial connection ID filter */
@@ -110,6 +112,7 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
   // UI State
   const [filtersOpen, setFiltersOpen] = useState(true);
   const [statsOpen, setStatsOpen] = useState(true);
+  const [liveOpen, setLiveOpen] = useState(true);
   const [availableConnections, setAvailableConnections] = useState<
     { id: string; name: string }[]
   >([]);
@@ -545,6 +548,43 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
           {/* Right Panel - Statistics and Filters */}
           <ResizablePanel defaultSize={40} minSize={30}>
             <div className="h-full overflow-auto p-6 space-y-4">
+              {/* Live Activity Card */}
+              <Collapsible open={liveOpen} onOpenChange={setLiveOpen}>
+                <Card>
+                  <CollapsibleTrigger asChild>
+                    <CardHeader className="cursor-pointer hover:bg-accent/50 transition-colors pb-3">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {liveOpen ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                          <CardTitle className="text-base">Live Activity</CardTitle>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <CardContent className="space-y-4">
+                      <div>
+                        <div className="text-xs font-medium mb-2 text-muted-foreground">
+                          Server Metrics
+                        </div>
+                        <ServerMetricsChart connectionId={filters.connectionId} />
+                      </div>
+                      <Separator />
+                      <div>
+                        <div className="text-xs font-medium mb-2 text-muted-foreground">
+                          Active Queries
+                        </div>
+                        <ProcessList connectionId={filters.connectionId} />
+                      </div>
+                    </CardContent>
+                  </CollapsibleContent>
+                </Card>
+              </Collapsible>
+
               {/* Statistics Card */}
               <Collapsible open={statsOpen} onOpenChange={setStatsOpen}>
                 <Card>

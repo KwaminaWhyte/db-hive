@@ -109,7 +109,7 @@ jobs:
 
             ### Code Signing & Verification
 
-            See [CODE_SIGNING.md](https://github.com/${{ github.repository }}/blob/main/docs/CODE_SIGNING.md) for instructions on verifying signatures.
+            See [code-signing.md](https://github.com/${{ github.repository }}/blob/main/docs/code-signing.md) for instructions on verifying signatures.
 
             ### Checksums
             SHA256 checksums are available in the release assets.

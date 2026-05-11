@@ -30,6 +30,13 @@ pub enum DbDriver {
     Redis,
 }
 
+impl DbDriver {
+    /// Whether this driver speaks the PostgreSQL wire protocol.
+    pub fn is_postgres_compatible(&self) -> bool {
+        matches!(self, DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon)
+    }
+}
+
 /// SSL/TLS connection mode
 ///
 /// Defines how SSL/TLS should be handled for database connections.
@@ -238,7 +245,7 @@ impl ConnectionProfile {
             DbDriver::SqlServer => 1433,
             DbDriver::Supabase => 5432,
             DbDriver::Neon => 5432,
-            DbDriver::Turso => 0, // libSQL URL-based
+            DbDriver::Turso => 443,
             DbDriver::Redis => 6379,
         }
     }

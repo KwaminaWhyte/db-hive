@@ -364,8 +364,8 @@ For detailed architecture patterns, see `CLAUDE.md`.
   - [x] "Create Table" context menu on schema
   - [x] "Refresh Tables" context menu on schema
   - [x] Auto-refresh tables after creation
-- [ ] TableEditor component for existing tables (TODO: Future milestone)
-- [ ] ConfirmationDialog for destructive operations (TODO: Future enhancement)
+- [x] TableEditor component for existing tables (TableEditDialog: add/drop/rename columns, toggle nullability, SQL preview)
+- [x] ConfirmationDialog for destructive operations (ConfirmDestructiveDialog)
 
 **TypeScript Types & API:**
 
@@ -382,16 +382,16 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Preview SQL before execution
 - [x] Error handling with user-friendly messages
 - [ ] Rollback support for failed operations (TODO: Future enhancement)
-- [ ] Warning dialogs for destructive actions (TODO: Future enhancement)
-- [ ] Foreign key dependency checks (TODO: Future enhancement)
+- [x] Warning dialogs for destructive actions (ConfirmDestructiveDialog, wired into drop-table)
+- [x] Foreign key dependency checks (FK-referencing tables listed before drop)
 
 **Integration:**
 
 - [x] Context menu integration in SchemaExplorer
 - [x] Auto-refresh after table creation
-- [ ] Add "Schema" menu to CustomTitlebar (TODO: Future enhancement)
+- [x] Add "Schema" menu to CustomTitlebar (New Table..., Refresh Metadata; shown only when connected)
 - [ ] Add schema modification shortcuts to keyboard shortcuts modal (TODO: Future enhancement)
-- [ ] Update metadata cache after DDL operations (TODO: Future enhancement)
+- [x] Update metadata cache after DDL operations (useMetadataCache event bus + SchemaExplorer listener)
 
 **Implementation Date:** 2025-11-23
 
@@ -529,10 +529,10 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Deferred Features:**
 
-- [ ] Active queries list with real-time updates (requires database-specific queries)
-- [ ] CPU usage chart (requires system metrics collection)
-- [ ] Memory usage chart (requires system metrics collection)
-- [ ] Process list table (requires database-specific session queries)
+- [x] Active queries list with real-time updates (PostgreSQL/MySQL via `pg_stat_activity` / `information_schema.processlist`; 2s polling, kill-query support)
+- [x] Server metrics chart (connections, active, tx/sec) via `pg_stat_database` / `SHOW GLOBAL STATUS` with rolling 60-sample recharts line chart
+- [x] Process list table (database-side session queries with cancel action)
+- [ ] Host-level CPU/memory usage chart (would require OS-level metrics collection; server-side DB metrics implemented instead)
 
 ### Milestone 3.7: Plugin System ✅ COMPLETED (2025-11-28)
 
@@ -792,12 +792,22 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - Extend TableDefinition types for visual metadata (position, color)
 - Store designs in Tauri Store or separate files
 
-### Schema Migration Tools
+### Schema Migration Tools ✅ COMPLETED (2026-04-21)
 
-- [ ] Schema diff algorithm
-- [ ] Generate migration SQL
-- [ ] Version control integration
-- [ ] Apply migrations UI
+- [x] Schema diff algorithm (pure `compute_diff(source, target) -> SchemaDiff`)
+- [x] Generate migration SQL (driver-aware, reuses existing DDL generators)
+- [x] Apply migrations UI (`<MigrationsDialog>` with diff preview + Monaco SQL preview + transactional apply)
+- [x] Command palette entry ("Schema Migrations...")
+- [ ] Version control integration (TODO: out of scope for initial pass)
+
+**Driver coverage:**
+- PostgreSQL / Supabase / Neon — full
+- MySQL — columns, indexes, FKs (no standalone nullable/default toggle)
+- SQL Server — type + nullable via `ALTER COLUMN`
+- SQLite / Turso — CREATE/DROP, ADD/DROP column, indexes, FKs (no ALTER COLUMN TYPE)
+- MongoDB — rejected (`InvalidInput`)
+
+**Known gaps:** no column-rename detection (treated as drop+add), no check-constraint diffing, no view/trigger/sequence/procedure diffing, no FK `ON DELETE` action change detection, cross-table FKs between two newly-added tables omitted.
 
 ### Milestone 3.14: AI Assistant ✅ COMPLETED (2025-11-29)
 
@@ -848,25 +858,26 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Cloud & Serverless Databases**
 
-- [x] **Supabase Driver:**
+- [x] **Supabase Driver:** (2026-04-21)
   - [x] PostgreSQL-compatible connection routed to existing `PostgresDriver`
   - [x] Connection-string preset + URL sniffing for `*.supabase.co`
-  - [x] `sslMode` defaulted to `Require`
-  - [ ] Connection pooler mode toggle (Transaction vs Session) — future enhancement
+  - [x] `sslMode` defaulted to `Require` (SSL/TLS via native-tls + postgres-native-tls)
   - [x] Reuses existing PostgreSQL driver infrastructure
+  - [ ] Connection pooler mode toggle (Transaction vs Session) — future enhancement
 
-- [x] **Neon Driver:**
+- [x] **Neon Driver:** (2026-04-21)
   - [x] PostgreSQL-compatible serverless connection routed to `PostgresDriver`
   - [x] Connection-string preset + URL sniffing for `*.neon.tech`
-  - [x] `sslMode` defaulted to `Require`
-  - [ ] Branch/project-aware UI hints — future enhancement
+  - [x] `sslMode` defaulted to `Require` (Neon endpoints mandate TLS)
   - [x] Reuses existing PostgreSQL driver infrastructure
+  - [ ] Branch/project-aware UI hints, cold start / pooling tuning — future enhancement
 
-- [x] **Turso Driver:**
-  - [x] libSQL HTTP/Hrana support via `libsql::Builder::new_remote`
-  - [x] Auth-token handling (entered as password, labelled "Auth Token")
+- [x] **Turso Driver:** (2026-04-21)
+  - [x] libSQL HTTP/Hrana support via `libsql::Builder::new_remote` (`libsql` crate 0.9)
+  - [x] Auth-token handling (entered as password, labelled "Auth Token"; stored in OS keyring)
   - [x] URL field replaces host/port (accepts `libsql://`, `https://`, `wss://`, bare hostname)
   - [x] SQLite-style metadata via PRAGMAs (`table_info`, `index_list`, `foreign_key_list`)
+  - [x] Routes through `SqliteDdlGenerator` in migration + DDL paths
   - [ ] Embedded replica support — future enhancement
 
 - [x] **Redis Driver:**
@@ -911,6 +922,15 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Recently Completed:**
 
+- ✅ **Stored Procedures & Functions Viewer** — New commands `list_procedures`, `get_procedure_definition`, `execute_procedure` (PG via `pg_proc` + `pg_get_functiondef`, MySQL via `information_schema.ROUTINES` + `SHOW CREATE`, SQL Server via `sys.objects`). `<StoredProceduresPanel>` lazy-loads definitions and offers an execute dialog with JSON args (2026-04-21)
+- ✅ **Write-Query Guards (dbpro parity)** — Pre-execute analyzer intercepts destructive SQL (DELETE/UPDATE without WHERE, DROP/TRUNCATE/DROP COLUMN); `<DestructiveQueryGuard>` AlertDialog; wired through `_connected/query.tsx` so Ctrl+Enter is also guarded; respects `settings.query.confirmDestructive` (2026-04-21)
+- ✅ **Query Folders (dbpro parity)** — Nested `SnippetFolder` tree in SnippetSidebar with context-menu create/rename/delete/move, cycle prevention, cascade-delete-to-root, search auto-expand; persisted separately from snippets for backward compat (2026-04-21)
+- ✅ **OpenRouter AI Provider (dbpro parity)** — New provider routing through OpenAI-compatible `openrouter.ai/api/v1` with FQID models like `anthropic/claude-3.5-sonnet`; settings entry in `AiAssistant` (2026-04-21)
+- ✅ **Turso / libSQL Driver** — New `DbDriver::Turso` variant using `libsql` crate 0.9. Remote mode with auth-token auth. Routes through `SqliteDdlGenerator` for DDL and migrations. Form adapts for URL host + "Auth Token" field (2026-04-21)
+- ✅ **Schema Migration Tools** — `src-tauri/src/migrations/` module with pure diff algorithm + driver-aware SQL generator. Tauri commands `compute_schema_diff`, `generate_migration`, `apply_migration`. `<MigrationsDialog>` 3-step flow wired to command palette (2026-04-21)
+- ✅ **Activity Monitor — Live Process List + Server Metrics** — `get_active_queries`, `kill_query`, `get_server_stats` commands; PG via `pg_stat_activity`/`pg_stat_database`, MySQL via `PROCESSLIST`/`SHOW GLOBAL STATUS`; `<ProcessList>` (2s polling, per-row cancel) + `<ServerMetricsChart>` (60-sample rolling recharts) (2026-04-21)
+- ✅ **Schema Management Deferred Items** — `<TableEditDialog>` for existing tables (add/rename/drop columns, toggle nullability, SQL preview); `<ConfirmDestructiveDialog>` with FK dependency listing + auto-CASCADE; `useMetadataCache` hook + `metadata-changed` CustomEvent; new "Schema" menu in titlebar (2026-04-21)
+- ✅ **Supabase + Neon Drivers** — New `DbDriver::Supabase` and `DbDriver::Neon` variants route through the existing PostgreSQL driver. Added TLS support: `native-tls` + `postgres-native-tls` crates, `ConnectionOptions.require_tls` flag, auto-enabled for Supabase/Neon and when `ssl_mode == Require`. Frontend picker tiles activated, driver-specific connection-string placeholders added (Milestone 3.13 partial) (2026-04-21)
 - ✅ **v0.19.2 Bug Fixes** — PostgreSQL connection password retrieval resilience (keyring fallback in `connect_to_database`, session cache in `save_password`) + pgvector/array type rendering: `vector` columns now deserialise correctly via the `pgvector` crate and all PostgreSQL array types (`_float4`, `_int4`, `_text`, etc.) emit JSON arrays instead of NULL (2026-03-10)
 - ✅ Milestone 3.14: AI Assistant - Multi-provider AI with Ollama, OpenAI, Claude, Gemini support; natural language to SQL, query explanation, optimization, error fixing (2025-11-29)
 - ✅ Import Wizards - Import from Excel/CSV with column mapping, data type detection, batch import (2025-11-28)
@@ -940,5 +960,5 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 - See `CLAUDE.md` for detailed architecture and development patterns
 - See `README.md` for feature list and installation
-- See `docs/USER_GUIDE.md` for complete user documentation
+- See `docs/user-guide.md` for complete user documentation
 - See `CHANGELOG.md` for detailed release notes

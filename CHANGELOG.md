@@ -12,10 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Cloud Database Drivers**: Four new connection types added to the dashboard and connection form.
-  - **Supabase** and **Neon**: managed PostgreSQL services. Routed internally to the existing PostgreSQL driver with `sslMode` defaulted to `Require`. Connection-string presets and URL sniffing recognise `*.supabase.co` and `*.neon.tech` Postgres URLs and select the branded variant automatically.
+  - **Supabase** and **Neon**: managed PostgreSQL services. Routed internally to the existing PostgreSQL driver with `sslMode` defaulted to `Require`. Connection-string presets and URL sniffing recognise `*.supabase.co` and `*.neon.tech` Postgres URLs and select the branded variant automatically. TLS enabled automatically for both.
   - **Turso** (libSQL): new driver in `src-tauri/src/drivers/turso.rs` over `libsql::Builder::new_remote`. Connection takes a `libsql://` / `https://` / `wss://` URL plus an auth token (entered in the password field, labelled "Auth Token"). SQLite-style metadata via PRAGMAs (`table_info`, `index_list`, `foreign_key_list`).
   - **Redis**: new driver in `src-tauri/src/drivers/redis.rs` using the official `redis` crate with `MultiplexedConnection`. Executes raw Redis commands (`GET`, `KEYS`, `LRANGE`, `HGETALL`, etc.) via tokenised argv with quoted-string support. `get_databases` exposes the 16 numbered logical DBs (`db0..db15`); `get_tables` uses non-blocking `SCAN` capped at 1000 keys.
   - Default ports, display names, badge colours, and form-field adjustments wired across `src/types/database.ts`, `ConnectionForm`, `ConnectionTreeView`, `ConnectionCard`, and the home dashboard grid.
+
+- **TLS Support for PostgreSQL**: `ConnectionOptions` gained a `require_tls` flag. When set, the Postgres driver connects via `native-tls` + `postgres-native-tls` (`MakeTlsConnector`) instead of `NoTls`. Triggered automatically for Supabase / Neon and when `ssl_mode == Require` on a Postgres connection. Existing `Prefer` / `Disable` Postgres connections continue to use `NoTls`, preserving previous local-dev behavior.
 
 - **Create Database from Active Connection**: New `create_database` Tauri command and a "Create Database" item in the Schema Explorer's database-selector popover. Validates identifier (alnum + `_-$`, no leading digit, ≤63 chars) and emits dialect-correct SQL: `CREATE DATABASE "name"` (Postgres/Supabase/Neon), `` CREATE DATABASE `name` `` (MySQL), `CREATE DATABASE [name]` (SQL Server). SQLite, MongoDB, Turso, and Redis return explanatory errors. After creation the UI auto-switches to the new database.
 
@@ -23,15 +25,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Customisable Keyboard Shortcuts**: Settings → Keyboard Shortcuts now lets users rebind every shortcut. Click a row to enter recording mode; the next keydown captures the combination. **Esc** cancels, **Backspace** clears (treated as unbound), invalid combos toast-error, and duplicate bindings emit a non-blocking warning. Each change persists immediately via `update_settings` and is broadcast app-wide via a `db-hive:settings-changed` window event so global handlers in `__root.tsx` and route-scoped handlers (e.g. query tab `newTab`/`closeTab`) pick up new bindings without an app reload. A "Reset all to defaults" button (with confirmation) calls the existing `reset_settings` command.
 
+- **Stored Procedures & Functions Viewer**: New Tauri commands `list_procedures`, `get_procedure_definition`, `execute_procedure`. PostgreSQL uses `pg_proc` + `pg_get_function_arguments` / `pg_get_functiondef`; MySQL uses `information_schema.ROUTINES` + `SHOW CREATE`; SQL Server uses `sys.objects`; SQLite / Turso / MongoDB return empty. New `<StoredProceduresPanel>` groups routines by schema, lazy-loads definitions, and offers an execute dialog with JSON-parsed arguments. Reachable from a "Procedures" entry in SchemaExplorer.
+
+- **Write-Query Guards** (dbpro parity): Pre-execute safety net that intercepts destructive SQL (`DELETE`/`UPDATE` without `WHERE`, `DROP TABLE`, `TRUNCATE`, `DROP DATABASE`/`SCHEMA`, `ALTER TABLE ... DROP COLUMN`). New `analyzeDestructive()` utility strips comments/strings before regex matching. `<DestructiveQueryGuard>` AlertDialog requires explicit confirm; default-focused Cancel button. Wired into `_connected/query.tsx` execute path so Ctrl+Enter and Execute button both pass through it. Respects existing `settings.query.confirmDestructive` toggle.
+
+- **Query Folders** (dbpro parity): Nested folder organization for saved snippets. New `SnippetFolder` entity stored in `snippet-folders.json` (separate from `list_snippets` backend to preserve backward compat). `<SnippetFolderTree>` with right-click context menus (New Folder, New Snippet here, Rename, Delete, Move to folder…), cycle prevention on move, cascade-delete moves children to root. Search matches folder + snippet names and auto-expands ancestors. Expand state persisted to localStorage.
+
+- **OpenRouter AI Provider** (dbpro parity): New `AiProviderType::OpenRouter` routes through `openrouter.ai/api/v1/chat/completions` with `HTTP-Referer` + `X-Title` headers. Default model `anthropic/claude-3.5-sonnet`; model field accepts the full FQID format (e.g. `openai/gpt-4o`, `google/gemini-2.0-flash-exp`). Settings entry in `AiAssistant` with link to openrouter.ai/keys.
+
+- **Activity Monitor — Real-time Process List & Server Metrics**: New Tauri commands `get_active_queries`, `kill_query`, `get_server_stats` driven by connection-profile driver type. PostgreSQL via `pg_stat_activity` / `pg_stat_database`; MySQL via `information_schema.PROCESSLIST` / `SHOW GLOBAL STATUS`. New `<ProcessList>` (polls 2s, per-row cancel) and `<ServerMetricsChart>` (60-sample rolling recharts line chart) in `src/components/activityMonitor/`. SQLite / MongoDB / SQL Server / Turso return `InvalidInput` and the UI shows a "Not supported" state.
+
+- **Table Editor for Existing Tables**: New `<TableEditDialog>` loads a table's schema and lets the user add/rename/drop columns, toggle nullability, and preview the generated `ALTER TABLE` SQL before committing. Wired to SchemaExplorer and the TableInspector Columns tab.
+
+- **Destructive Operation Confirmations**: Generic `<ConfirmDestructiveDialog>` (AlertDialog-based) used before DROP operations. Drop-table flow fetches foreign keys for the schema and lists dependent tables inline; CASCADE is applied automatically when dependents exist.
+
+- **Metadata Cache Refresh**: New `useMetadataCache` hook (+ `notifyMetadataChanged()`) dispatches a `metadata-changed` CustomEvent after any successful DDL. SchemaExplorer listens and refetches. Titlebar gains a "Refresh Metadata" entry powered by a sibling `metadata:refresh` event.
+
+- **Schema Menu in Titlebar**: New "Schema" dropdown between File and View, visible only when a connection is active. Items: "New Table..." (opens TableCreationDialog) and "Refresh Metadata".
+
+- **Schema Migration Tools**: Compare two connections' schemas and generate migration SQL.
+  - New `src-tauri/src/migrations/` module: `diff.rs` (pure `compute_diff(source, target) -> SchemaDiff`) and `sql_gen.rs` (driver-aware SQL emission reusing the existing DDL generators).
+  - Tauri commands `compute_schema_diff`, `generate_migration`, `apply_migration` (transactional by default with rollback on first error; returns `ApplyResult`).
+  - New `<MigrationsDialog>` with source/target pickers, diff preview grouped by added/removed/modified tables, Monaco SQL preview, and Apply-with-confirmation. Entry point added to the command palette ("Schema Migrations...").
+  - Coverage: PostgreSQL / Supabase / Neon full; MySQL columns + indexes + FKs; SQL Server type/nullable via `ALTER COLUMN`; SQLite + Turso CREATE/DROP + ADD/DROP column + indexes + FKs (no ALTER COLUMN TYPE — emits a `-- no-op` comment since SQLite doesn't support it). MongoDB rejected with `InvalidInput`.
+  - Known gaps: no column-rename detection (treated as drop+add), no check-constraint diffing, no view/trigger/sequence diffing, no FK `ON DELETE` action change detection on same-named FKs, cross-table FKs between two newly-added tables are omitted.
+
+- **Real Database Brand Icons**: New shared `<DatabaseBrandIcon />` component replaces the custom abbreviation tiles (`PG`, `My`, `Sb`, etc.) with official brand logos via `react-icons/si`. Covered: PostgreSQL, MySQL, MariaDB, SQLite, MongoDB, Supabase, Redis, Turso. SQL Server and Neon fall back to the lucide `Database` icon in their brand colors (no simple-icons asset available). Used in the new-connection picker, saved-connections list, connection-form header, and `ConnectionCard`.
+
 ### Changed
 
+- `DbDriver` enum gained `Supabase`, `Neon`, `Turso`, `Redis` variants; added `is_postgres_compatible()` helper. All match sites (commands/connection.rs, commands/export.rs, ddl/mod.rs) route Supabase/Neon through the Postgres codepath.
+- `models/connection.rs::default_port_for_driver` returns `5432` for `Supabase` and `Neon`.
+- Frontend `DbDriver` union, `getDefaultPort`, and `getDriverDisplayName` extended for the new drivers.
+- New-connection picker (`routes/index.tsx`) marks Supabase and Neon tiles as available with correct colors and icons.
 - **Create Table Dialog Width**: Increased the dialog's max-width from `max-w-4xl` (~896px) to a responsive `min(1280px, 95vw)` so the column grid, constraint cards, and SQL preview have room to breathe on larger screens.
-
 - **`useKeyboardShortcuts` Hardening**: The hook now skips empty-string bindings (so unbound shortcuts no longer crash the matcher) and on macOS automatically remaps a stored `Ctrl+X` binding to `Cmd+X` so a single stored value works across platforms — replaces the old workaround of registering both variants explicitly.
+- **Command Palette Placement**: Titlebar search trigger no longer stretches/clips at the right edge — centered with a `max-w-[360px]` cap, truncating label, and balanced spacer on macOS.
+- **Home Screen**: Branding panel now hides on narrow windows (`md:` breakpoint); connections panel takes full width. Search placeholder corrected to "Search connections...". Footer version bumped to match `package.json`.
+- **Database Picker**: Tile grid is now responsive (`grid-cols-1 sm:grid-cols-2`). Neon color darkened from `#00E699` to `#00A88E` for WCAG-compliant white-text contrast.
+- **Connection Form**: Required-field asterisks on Name / Host / Username / SQLite path. Split `loading` into separate `testing` / `saving` flags so each button shows its own label. Test-connection failures render in a destructive banner instead of the green success style.
+- **App Icon**: Replaced with HiveLogo honey-hex design.
 
 ### Fixed
 
 - **Exhaustive `DbDriver` Matches**: All `match` arms over `DbDriver` (in `commands::connection`, `commands::ddl`, `commands::export`, `ddl::get_ddl_generator`) now handle every variant explicitly. Previously any new driver would have caused a non-exhaustive-match build error; the new fallbacks return clear `InvalidInput` / `InternalError` messages where the operation is genuinely not applicable.
+- **Empty Home Screen**: Plain-text empty state replaced with icon + headline + "New Connection" CTA.
+- **Topbar Items Destroy Work**: Opening Settings, About, or Plugin Manager from the titlebar menus (or from the command palette, or via `Ctrl+,` / `⌘+,`) no longer navigates away from the current route — they now open as global modal dialogs overlaid on whatever you're doing (query editor, table inspector, etc.). A new lightweight modal store (`src/store/useAppModal.ts`) coordinates which modal is open; `<GlobalModals />` is mounted once at the app root. Routes `/settings`, `/about`, and `/plugins` remain intact for URL deep-linking.
+- **Command Palette Not Centered**: Trigger is now absolute-positioned (`left-1/2 -translate-x-1/2`), truly centered on the titlebar regardless of left/right group widths.
+- **Topbar Shows Connection-Only Items When Disconnected**: View menu now hides SQL Editor / Visual Query Builder / Activity Monitor when there is no active database connection. Plugin Manager and Theme remain available in all states.
+- **Connection Lost UI**: The inline oversized error card on the home screen now opens as a centered `Dialog` instead of crushing the connection list below it.
 
 ## [0.19.2-beta] - 2026-03-10
 

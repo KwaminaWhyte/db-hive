@@ -4,6 +4,7 @@ mod commands;
 mod credentials;
 mod ddl;
 mod drivers;
+mod migrations;
 mod models;
 mod plugins;
 mod ssh;
@@ -266,6 +267,12 @@ pub fn run() {
             commands::activity::export_query_logs,
             commands::activity::update_query_log_tags,
             commands::activity::get_query_logs_count,
+            commands::monitoring::get_active_queries,
+            commands::monitoring::kill_query,
+            commands::monitoring::get_server_stats,
+            commands::procedures::list_procedures,
+            commands::procedures::get_procedure_definition,
+            commands::procedures::execute_procedure,
             commands::ddl::preview_create_table,
             commands::ddl::create_table,
             commands::ddl::preview_alter_table,
@@ -273,6 +280,9 @@ pub fn run() {
             commands::ddl::preview_drop_table,
             commands::ddl::drop_table,
             commands::ddl::create_database,
+            commands::migrations::compute_schema_diff,
+            commands::migrations::generate_migration,
+            commands::migrations::apply_migration,
             commands::plugins::get_installed_plugins,
             commands::plugins::get_plugin,
             commands::plugins::install_plugin,

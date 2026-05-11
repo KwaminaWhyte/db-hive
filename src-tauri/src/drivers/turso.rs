@@ -1,59 +1,67 @@
 //! Turso (libSQL) database driver implementation
 //!
-//! Turso is a hosted libSQL service. libSQL is a fork of SQLite with remote
-//! and replication support. Connection uses the libSQL URL (e.g.
-//! `libsql://my-db.turso.io`) plus an auth token (placed in the password field).
+//! Connects to Turso / libSQL remote databases over HTTP using the official
+//! `libsql` crate. Metadata queries reuse SQLite's `sqlite_master` and
+//! `pragma_*` surface because libSQL is a SQLite superset.
 
 use async_trait::async_trait;
-use libsql::{params, Builder, Connection, Database, Value};
+use libsql::{Builder, Connection, Value};
 
 use super::{ConnectionOptions, DatabaseDriver, QueryResult};
 use crate::models::{
-    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo,
-    TableSchema,
+    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
 
-/// Turso (libSQL) database driver
 pub struct TursoDriver {
-    /// libSQL Database handle (used to obtain Connections)
-    db: Database,
-    /// Underlying URL for diagnostics
+    conn: Connection,
     url: String,
 }
 
 impl TursoDriver {
-    fn build_url(host: &str) -> String {
-        let h = host.trim();
-        if h.starts_with("libsql://")
-            || h.starts_with("https://")
-            || h.starts_with("http://")
-            || h.starts_with("wss://")
-            || h.starts_with("ws://")
-        {
-            h.to_string()
-        } else if h.is_empty() {
-            String::new()
-        } else {
-            format!("libsql://{}", h)
-        }
-    }
-
-    async fn conn(&self) -> Result<Connection, DbError> {
-        self.db
-            .connect()
-            .map_err(|e| DbError::ConnectionError(format!("libsql connect failed: {}", e)))
-    }
-
-    fn value_to_json(v: &Value) -> serde_json::Value {
+    fn value_to_json(v: Value) -> serde_json::Value {
         match v {
             Value::Null => serde_json::Value::Null,
-            Value::Integer(n) => serde_json::Value::Number((*n).into()),
-            Value::Real(f) => serde_json::Number::from_f64(*f)
+            Value::Integer(n) => serde_json::Value::Number(n.into()),
+            Value::Real(f) => serde_json::Number::from_f64(f)
                 .map(serde_json::Value::Number)
                 .unwrap_or(serde_json::Value::Null),
-            Value::Text(s) => serde_json::Value::String(s.clone()),
+            Value::Text(s) => serde_json::Value::String(s),
             Value::Blob(b) => serde_json::Value::String(format!("<BLOB {} bytes>", b.len())),
         }
+    }
+
+    async fn collect_rows(&self, sql: &str) -> Result<Vec<Vec<Value>>, DbError> {
+        let mut rows = self
+            .conn
+            .query(sql, ())
+            .await
+            .map_err(|e| DbError::QueryError(format!("Failed to execute query: {}", e)))?;
+
+        let col_count = rows.column_count();
+        let mut out = Vec::new();
+        while let Some(row) = rows
+            .next()
+            .await
+            .map_err(|e| DbError::QueryError(format!("Failed to fetch row: {}", e)))?
+        {
+            let mut vals = Vec::with_capacity(col_count as usize);
+            for i in 0..col_count {
+                let v = row
+                    .get_value(i)
+                    .map_err(|e| DbError::QueryError(format!("Failed to read column: {}", e)))?;
+                vals.push(v);
+            }
+            out.push(vals);
+        }
+        Ok(out)
+    }
+
+    fn is_select(sql: &str) -> bool {
+        let trimmed = sql.trim_start().to_ascii_lowercase();
+        trimmed.starts_with("select")
+            || trimmed.starts_with("pragma")
+            || trimmed.starts_with("with")
+            || trimmed.starts_with("explain")
     }
 }
 
@@ -63,91 +71,73 @@ impl DatabaseDriver for TursoDriver {
     where
         Self: Sized,
     {
-        let url = Self::build_url(&opts.host);
-        if url.is_empty() {
+        if opts.host.trim().is_empty() {
             return Err(DbError::ConnectionError(
-                "Turso requires a libsql URL (e.g. libsql://my-db.turso.io)".to_string(),
+                "Turso requires a database URL in the host field (e.g. libsql://...turso.io)"
+                    .to_string(),
             ));
         }
+        let auth_token = opts.password.unwrap_or_default();
 
-        let token = opts.password.unwrap_or_default();
-
-        let db = Builder::new_remote(url.clone(), token)
+        let db = Builder::new_remote(opts.host.clone(), auth_token)
             .build()
             .await
-            .map_err(|e| DbError::ConnectionError(format!("Failed to build libsql client: {}", e)))?;
+            .map_err(|e| DbError::ConnectionError(format!("Failed to build Turso database: {}", e)))?;
 
-        // Verify connectivity early
         let conn = db
             .connect()
-            .map_err(|e| DbError::ConnectionError(format!("libsql connect failed: {}", e)))?;
-        conn.execute("SELECT 1", params![])
-            .await
-            .map_err(|e| DbError::ConnectionError(format!("Connection probe failed: {}", e)))?;
+            .map_err(|e| DbError::ConnectionError(format!("Failed to open Turso connection: {}", e)))?;
 
-        Ok(Self { db, url })
+        Ok(Self { conn, url: opts.host })
     }
 
     async fn test_connection(&self) -> Result<(), DbError> {
-        let conn = self.conn().await?;
-        conn.execute("SELECT 1", params![])
+        self.conn
+            .query("SELECT 1", ())
             .await
             .map_err(|e| DbError::ConnectionError(format!("Connection test failed: {}", e)))?;
         Ok(())
     }
 
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, DbError> {
-        let conn = self.conn().await?;
-
-        // Prepare statement to inspect column count
-        let stmt = conn
-            .prepare(sql)
-            .await
-            .map_err(|e| DbError::QueryError(format!("Failed to prepare statement: {}", e)))?;
-
-        let column_count = stmt.column_count();
-
-        if column_count > 0 {
-            let columns: Vec<String> = (0..column_count)
-                .map(|i| {
-                    stmt.columns()
-                        .get(i)
-                        .map(|c| c.name().to_string())
-                        .unwrap_or_else(|| format!("col_{}", i))
-                })
-                .collect();
-
-            let mut rows = stmt
-                .query(params![])
+        if Self::is_select(sql) {
+            let mut rows = self
+                .conn
+                .query(sql, ())
                 .await
                 .map_err(|e| DbError::QueryError(format!("Failed to execute query: {}", e)))?;
 
-            let mut data: Vec<Vec<serde_json::Value>> = Vec::new();
-            loop {
-                match rows.next().await {
-                    Ok(Some(row)) => {
-                        let mut values = Vec::with_capacity(column_count);
-                        for i in 0..column_count {
-                            let v = row
-                                .get_value(i as i32)
-                                .map_err(|e| {
-                                    DbError::QueryError(format!("Failed to read column: {}", e))
-                                })?;
-                            values.push(Self::value_to_json(&v));
-                        }
-                        data.push(values);
-                    }
-                    Ok(None) => break,
-                    Err(e) => {
-                        return Err(DbError::QueryError(format!("Row iteration failed: {}", e)));
-                    }
-                }
+            let col_count = rows.column_count();
+            let mut columns = Vec::with_capacity(col_count as usize);
+            for i in 0..col_count {
+                columns.push(
+                    rows.column_name(i)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| format!("column_{}", i)),
+                );
             }
+
+            let mut data = Vec::new();
+            while let Some(row) = rows
+                .next()
+                .await
+                .map_err(|e| DbError::QueryError(format!("Failed to fetch row: {}", e)))?
+            {
+                let mut json_row = Vec::with_capacity(col_count as usize);
+                for i in 0..col_count {
+                    let v = row.get_value(i).map_err(|e| {
+                        DbError::QueryError(format!("Failed to read column: {}", e))
+                    })?;
+                    json_row.push(Self::value_to_json(v));
+                }
+                data.push(json_row);
+            }
+
             Ok(QueryResult::with_data(columns, data))
         } else {
-            // Mutation / DDL — re-execute via execute()
-            let affected = conn
-                .execute(sql, params![])
+            let affected = self
+                .conn
+                .execute(sql, ())
                 .await
                 .map_err(|e| DbError::QueryError(format!("Failed to execute statement: {}", e)))?;
             Ok(QueryResult::with_affected(affected))
@@ -155,7 +145,6 @@ impl DatabaseDriver for TursoDriver {
     }
 
     async fn get_databases(&self) -> Result<Vec<DatabaseInfo>, DbError> {
-        // libSQL/SQLite presents a single attached "main" database
         Ok(vec![DatabaseInfo {
             name: "main".to_string(),
             owner: None,
@@ -166,184 +155,204 @@ impl DatabaseDriver for TursoDriver {
     async fn get_schemas(&self, _database: &str) -> Result<Vec<SchemaInfo>, DbError> {
         Ok(vec![SchemaInfo {
             name: "main".to_string(),
-            database: "main".to_string(),
+            database: self.url.clone(),
         }])
     }
 
     async fn get_tables(&self, schema: &str) -> Result<Vec<TableInfo>, DbError> {
-        let conn = self.conn().await?;
-        let sql = "SELECT name, type FROM sqlite_master \
-                   WHERE type IN ('table', 'view') AND name NOT LIKE 'sqlite_%' \
-                   ORDER BY name";
+        let rows = self
+            .collect_rows(
+                "SELECT name, type FROM sqlite_master \
+                 WHERE type IN ('table','view') AND name NOT LIKE 'sqlite_%' \
+                 ORDER BY name",
+            )
+            .await?;
 
-        let mut rows = conn
-            .query(sql, params![])
-            .await
-            .map_err(|e| DbError::QueryError(format!("Failed to query tables: {}", e)))?;
+        let mut tables = Vec::with_capacity(rows.len());
+        for row in rows {
+            let name = match &row[0] {
+                Value::Text(s) => s.clone(),
+                _ => continue,
+            };
+            let table_type = match &row[1] {
+                Value::Text(s) => s.to_uppercase(),
+                _ => "TABLE".to_string(),
+            };
 
-        let mut tables = Vec::new();
-        while let Some(row) = rows
-            .next()
-            .await
-            .map_err(|e| DbError::QueryError(format!("Failed to read table row: {}", e)))?
-        {
-            let name: String = row
-                .get(0)
-                .map_err(|e| DbError::QueryError(format!("name: {}", e)))?;
-            let table_type: String = row
-                .get(1)
-                .map_err(|e| DbError::QueryError(format!("type: {}", e)))?;
+            let row_count = if table_type == "TABLE" {
+                let count_sql = format!("SELECT COUNT(*) FROM \"{}\"", name.replace('"', "\"\""));
+                self.collect_rows(&count_sql)
+                    .await
+                    .ok()
+                    .and_then(|r| r.into_iter().next())
+                    .and_then(|r| r.into_iter().next())
+                    .and_then(|v| match v {
+                        Value::Integer(n) => Some(n as u64),
+                        _ => None,
+                    })
+            } else {
+                None
+            };
+
             tables.push(TableInfo {
                 name,
                 schema: schema.to_string(),
-                row_count: None,
-                table_type: table_type.to_uppercase(),
+                row_count,
+                table_type,
             });
         }
         Ok(tables)
     }
 
     async fn get_table_schema(&self, schema: &str, table: &str) -> Result<TableSchema, DbError> {
-        let conn = self.conn().await?;
+        let escaped = table.replace('"', "\"\"");
 
-        let pragma = format!("PRAGMA table_info(\"{}\")", table.replace('"', ""));
-        let mut rows = conn
-            .query(&pragma, params![])
-            .await
-            .map_err(|e| DbError::QueryError(format!("Failed PRAGMA table_info: {}", e)))?;
+        let col_rows = self
+            .collect_rows(&format!("PRAGMA table_info(\"{}\")", escaped))
+            .await?;
 
-        let mut columns = Vec::new();
-        while let Some(row) = rows
-            .next()
-            .await
-            .map_err(|e| DbError::QueryError(format!("Row error: {}", e)))?
-        {
-            let name: String = row.get(1).map_err(|e| DbError::QueryError(e.to_string()))?;
-            let data_type: String = row.get(2).map_err(|e| DbError::QueryError(e.to_string()))?;
-            let not_null: i64 = row.get(3).map_err(|e| DbError::QueryError(e.to_string()))?;
-            let default_value: Option<String> =
-                row.get(4).ok();
-            let is_pk: i64 = row.get(5).map_err(|e| DbError::QueryError(e.to_string()))?;
-
-            let is_auto_increment =
-                is_pk > 0 && data_type.to_uppercase() == "INTEGER";
+        let mut columns = Vec::with_capacity(col_rows.len());
+        for row in col_rows {
+            // PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
+            let name = match &row[1] {
+                Value::Text(s) => s.clone(),
+                _ => continue,
+            };
+            let data_type = match &row[2] {
+                Value::Text(s) => s.clone(),
+                _ => String::new(),
+            };
+            let not_null = matches!(&row[3], Value::Integer(n) if *n != 0);
+            let default_value = match &row[4] {
+                Value::Text(s) => Some(s.clone()),
+                Value::Integer(n) => Some(n.to_string()),
+                Value::Real(f) => Some(f.to_string()),
+                _ => None,
+            };
+            let pk = matches!(&row[5], Value::Integer(n) if *n > 0);
+            let is_auto_increment = pk && data_type.to_uppercase() == "INTEGER";
 
             columns.push(ColumnInfo {
                 name,
                 data_type,
-                nullable: not_null == 0,
+                nullable: !not_null,
                 default_value,
-                is_primary_key: is_pk > 0,
+                is_primary_key: pk,
                 is_auto_increment,
             });
         }
 
-        // Indexes
-        let pragma_idx = format!("PRAGMA index_list(\"{}\")", table.replace('"', ""));
-        let mut idx_rows = conn
-            .query(&pragma_idx, params![])
-            .await
-            .map_err(|e| DbError::QueryError(format!("Failed PRAGMA index_list: {}", e)))?;
+        let idx_list = self
+            .collect_rows(&format!("PRAGMA index_list(\"{}\")", escaped))
+            .await?;
 
         let mut indexes = Vec::new();
-        let mut index_metas: Vec<(String, bool, bool)> = Vec::new();
-        while let Some(row) = idx_rows
-            .next()
-            .await
-            .map_err(|e| DbError::QueryError(e.to_string()))?
-        {
-            let name: String = row.get(1).map_err(|e| DbError::QueryError(e.to_string()))?;
-            let unique: i64 = row.get(2).map_err(|e| DbError::QueryError(e.to_string()))?;
-            let origin: String = row.get(3).map_err(|e| DbError::QueryError(e.to_string()))?;
-            index_metas.push((name, unique != 0, origin == "pk"));
-        }
+        for row in idx_list {
+            // index_list columns: seq, name, unique, origin, partial
+            let idx_name = match &row[1] {
+                Value::Text(s) => s.clone(),
+                _ => continue,
+            };
+            let is_unique = matches!(&row[2], Value::Integer(n) if *n != 0);
+            let is_primary = matches!(&row[3], Value::Text(s) if s == "pk");
 
-        for (idx_name, is_unique, is_primary) in index_metas {
-            let pragma_info = format!("PRAGMA index_info(\"{}\")", idx_name.replace('"', ""));
-            let mut info_rows = conn
-                .query(&pragma_info, params![])
-                .await
-                .map_err(|e| DbError::QueryError(e.to_string()))?;
-            let mut cols = Vec::new();
-            while let Some(row) = info_rows
-                .next()
-                .await
-                .map_err(|e| DbError::QueryError(e.to_string()))?
-            {
-                let col: String = row.get(2).map_err(|e| DbError::QueryError(e.to_string()))?;
-                cols.push(col);
+            let idx_escaped = idx_name.replace('"', "\"\"");
+            let col_info = self
+                .collect_rows(&format!("PRAGMA index_info(\"{}\")", idx_escaped))
+                .await?;
+
+            let mut index_columns = Vec::new();
+            for c in col_info {
+                // index_info columns: seqno, cid, name
+                if let Some(Value::Text(s)) = c.get(2) {
+                    index_columns.push(s.clone());
+                }
             }
+
             indexes.push(IndexInfo {
                 name: idx_name,
-                columns: cols,
+                columns: index_columns,
                 is_unique,
                 is_primary,
             });
         }
 
-        let table_info = TableInfo {
-            name: table.to_string(),
-            schema: schema.to_string(),
-            row_count: None,
-            table_type: "TABLE".to_string(),
-        };
+        let row_count = self
+            .collect_rows(&format!("SELECT COUNT(*) FROM \"{}\"", escaped))
+            .await
+            .ok()
+            .and_then(|r| r.into_iter().next())
+            .and_then(|r| r.into_iter().next())
+            .and_then(|v| match v {
+                Value::Integer(n) => Some(n as u64),
+                _ => None,
+            });
 
         Ok(TableSchema {
-            table: table_info,
+            table: TableInfo {
+                name: table.to_string(),
+                schema: schema.to_string(),
+                row_count,
+                table_type: "TABLE".to_string(),
+            },
             columns,
             indexes,
         })
     }
 
     async fn get_foreign_keys(&self, schema: &str) -> Result<Vec<ForeignKeyInfo>, DbError> {
-        let conn = self.conn().await?;
-        let mut rows = conn
-            .query(
-                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
-                params![],
-            )
-            .await
-            .map_err(|e| DbError::QueryError(e.to_string()))?;
-
-        let mut tables: Vec<String> = Vec::new();
-        while let Some(row) = rows
-            .next()
-            .await
-            .map_err(|e| DbError::QueryError(e.to_string()))?
-        {
-            tables.push(row.get(0).map_err(|e| DbError::QueryError(e.to_string()))?);
-        }
+        let table_rows = self
+            .collect_rows("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
+            .await?;
 
         let mut foreign_keys = Vec::new();
-        for tbl in tables {
-            let pragma = format!("PRAGMA foreign_key_list(\"{}\")", tbl.replace('"', ""));
-            let mut fk_rows = conn
-                .query(&pragma, params![])
-                .await
-                .map_err(|e| DbError::QueryError(e.to_string()))?;
+        use std::collections::HashMap;
 
-            use std::collections::HashMap;
+        for trow in table_rows {
+            let table_name = match trow.into_iter().next() {
+                Some(Value::Text(s)) => s,
+                _ => continue,
+            };
+            let escaped = table_name.replace('"', "\"\"");
+            let fk_rows = self
+                .collect_rows(&format!("PRAGMA foreign_key_list(\"{}\")", escaped))
+                .await?;
+
+            // foreign_key_list columns: id, seq, table, from, to, on_update, on_delete, match
             let mut fk_map: HashMap<i64, (String, Vec<String>, Vec<String>, String, String)> =
                 HashMap::new();
 
-            while let Some(row) = fk_rows
-                .next()
-                .await
-                .map_err(|e| DbError::QueryError(e.to_string()))?
-            {
-                let id: i64 = row.get(0).map_err(|e| DbError::QueryError(e.to_string()))?;
-                let _seq: i64 = row.get(1).map_err(|e| DbError::QueryError(e.to_string()))?;
-                let ref_table: String = row.get(2).map_err(|e| DbError::QueryError(e.to_string()))?;
-                let from_col: String = row.get(3).map_err(|e| DbError::QueryError(e.to_string()))?;
-                let to_col: String = row.get(4).map_err(|e| DbError::QueryError(e.to_string()))?;
-                let on_update: String = row.get(5).map_err(|e| DbError::QueryError(e.to_string()))?;
-                let on_delete: String = row.get(6).map_err(|e| DbError::QueryError(e.to_string()))?;
+            for row in fk_rows {
+                let id = match row.get(0) {
+                    Some(Value::Integer(n)) => *n,
+                    _ => continue,
+                };
+                let ref_table = match row.get(2) {
+                    Some(Value::Text(s)) => s.clone(),
+                    _ => continue,
+                };
+                let from_col = match row.get(3) {
+                    Some(Value::Text(s)) => s.clone(),
+                    _ => continue,
+                };
+                let to_col = match row.get(4) {
+                    Some(Value::Text(s)) => s.clone(),
+                    _ => continue,
+                };
+                let on_update = match row.get(5) {
+                    Some(Value::Text(s)) => s.clone(),
+                    _ => String::new(),
+                };
+                let on_delete = match row.get(6) {
+                    Some(Value::Text(s)) => s.clone(),
+                    _ => String::new(),
+                };
 
                 fk_map
                     .entry(id)
-                    .and_modify(|(_, cols, refs, _, _)| {
+                    .and_modify(|(_, cols, ref_cols, _, _)| {
                         cols.push(from_col.clone());
-                        refs.push(to_col.clone());
+                        ref_cols.push(to_col.clone());
                     })
                     .or_insert((
                         ref_table,
@@ -354,15 +363,15 @@ impl DatabaseDriver for TursoDriver {
                     ));
             }
 
-            for (id, (ref_table, cols, refs, on_update, on_delete)) in fk_map {
+            for (id, (ref_table, cols, ref_cols, on_update, on_delete)) in fk_map {
                 foreign_keys.push(ForeignKeyInfo {
-                    name: format!("{}_{}_fkey", tbl, id),
-                    table: tbl.clone(),
+                    name: format!("{}_{}_fkey", table_name, id),
+                    table: table_name.clone(),
                     schema: schema.to_string(),
                     columns: cols,
                     referenced_table: ref_table,
                     referenced_schema: schema.to_string(),
-                    referenced_columns: refs,
+                    referenced_columns: ref_cols,
                     on_delete: Some(on_delete),
                     on_update: Some(on_update),
                 });
@@ -373,8 +382,6 @@ impl DatabaseDriver for TursoDriver {
     }
 
     async fn close(&self) -> Result<(), DbError> {
-        // Database handle drops automatically; nothing to close explicitly.
-        let _ = &self.url;
         Ok(())
     }
 }

@@ -23,7 +23,7 @@ pub mod turso;
 ///
 /// Contains all the necessary information to connect to a database,
 /// extracted from a ConnectionProfile.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ConnectionOptions {
     /// Database server hostname or IP address
     pub host: String,
@@ -42,6 +42,9 @@ pub struct ConnectionOptions {
 
     /// Connection timeout in seconds
     pub timeout: Option<u64>,
+
+    /// Whether to require TLS/SSL
+    pub require_tls: bool,
 }
 
 /// Result of a query execution

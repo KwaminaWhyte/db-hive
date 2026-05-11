@@ -8,13 +8,14 @@
 import { invoke } from "@tauri-apps/api/core";
 
 // Provider types
-export type AiProviderType = "ollama" | "openai" | "anthropic" | "google";
+export type AiProviderType = "ollama" | "openai" | "anthropic" | "google" | "openrouter";
 
 export const AI_PROVIDERS: { value: AiProviderType; label: string; description: string }[] = [
   { value: "ollama", label: "Ollama", description: "Local LLM (free, private)" },
   { value: "openai", label: "OpenAI", description: "GPT-4, GPT-3.5" },
   { value: "anthropic", label: "Claude", description: "Claude 3.5, Claude 3" },
   { value: "google", label: "Gemini", description: "Gemini Pro, Gemini Flash" },
+  { value: "openrouter", label: "OpenRouter", description: "Multi-model gateway" },
 ];
 
 // Configuration types
@@ -46,12 +47,20 @@ export interface GoogleAiConfig {
   timeoutSecs: number;
 }
 
+export interface OpenRouterConfig {
+  apiKey: string;
+  baseUrl: string;
+  defaultModel: string;
+  timeoutSecs: number;
+}
+
 export interface AiConfig {
   activeProvider: AiProviderType;
   ollama: OllamaConfig;
   openai: OpenAiConfig;
   anthropic: AnthropicConfig;
   google: GoogleAiConfig;
+  openrouter: OpenRouterConfig;
 }
 
 // Model information

@@ -4,6 +4,7 @@
 
 export { ConnectionForm } from './ConnectionForm';
 export { ConnectionList } from './ConnectionList';
+export { StoredProceduresPanel } from './StoredProceduresPanel';
 
 // Error State Components
 export { ErrorState } from './ErrorState';

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Database, Star, MoreVertical, Pencil, Trash2, PlayCircle } from "lucide-react";
+import { Star, MoreVertical, Pencil, Trash2, PlayCircle } from "lucide-react";
+import { DatabaseBrandIcon } from "@/components/DatabaseBrandIcon";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,26 +31,6 @@ export function ConnectionCard({
   onToggleFavorite,
 }: ConnectionCardProps) {
   const [isHovered, setIsHovered] = useState(false);
-
-  const getDriverIcon = () => {
-    // You could add driver-specific icons here
-    return <Database className="size-8" />;
-  };
-
-  const getDriverColor = (driver: string) => {
-    const colors: Record<string, string> = {
-      postgres: "bg-blue-500",
-      mysql: "bg-orange-500",
-      sqlite: "bg-green-500",
-      mongodb: "bg-emerald-500",
-      sqlserver: "bg-red-500",
-      supabase: "bg-emerald-600",
-      neon: "bg-teal-500",
-      turso: "bg-purple-500",
-      redis: "bg-red-600",
-    };
-    return colors[driver.toLowerCase()] || "bg-gray-500";
-  };
 
   const getEnvironmentColor = (env?: string) => {
     const colors: Record<string, string> = {
@@ -87,13 +68,8 @@ export function ConnectionCard({
 
       <CardHeader className="pb-3">
         <div className="flex items-start gap-3">
-          {/* Driver Icon */}
-          <div
-            className={`flex-shrink-0 p-3 rounded-lg ${getDriverColor(
-              profile.driver
-            )} text-white`}
-          >
-            {getDriverIcon()}
+          <div className="flex-shrink-0 p-3 rounded-lg bg-muted">
+            <DatabaseBrandIcon driver={profile.driver} size={32} />
           </div>
 
           <div className="flex-1 min-w-0">

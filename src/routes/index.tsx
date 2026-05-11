@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { ConnectionForm } from "@/components/ConnectionForm";
+import { DatabaseBrandIcon } from "@/components/DatabaseBrandIcon";
 import { HiveLogo } from "@/components/WelcomeScreen";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -43,59 +44,27 @@ import {
   RefreshCw,
 } from "lucide-react";
 
-// Database type for the selection grid
 interface DatabaseTypeOption {
   id: string;
   driver: DbDriver | null;
+  brandKey: string;
   name: string;
-  color: string;
-  abbr: string;
   available: boolean;
 }
 
 const DATABASE_TYPE_OPTIONS: DatabaseTypeOption[] = [
-  { id: "postgres", driver: "Postgres", name: "PostgreSQL", color: "#336791", abbr: "PG", available: true },
-  { id: "mysql", driver: "MySql", name: "MySQL", color: "#F29111", abbr: "My", available: true },
-  { id: "mariadb", driver: "MySql", name: "MariaDB", color: "#003545", abbr: "Ma", available: true },
-  { id: "sqlserver", driver: "SqlServer", name: "SQL Server", color: "#CC2927", abbr: "SS", available: true },
-  { id: "mongodb", driver: "MongoDb", name: "MongoDB", color: "#13AA52", abbr: "Mo", available: true },
-  { id: "sqlite", driver: "Sqlite", name: "SQLite", color: "#003B57", abbr: "SL", available: true },
-  { id: "supabase", driver: "Supabase", name: "Supabase", color: "#3ECF8E", abbr: "Sb", available: true },
-  { id: "neon", driver: "Neon", name: "Neon", color: "#00E699", abbr: "Ne", available: true },
-  { id: "turso", driver: "Turso", name: "LibSQL / Turso", color: "#4FF8D2", abbr: "Tu", available: true },
-  { id: "redis", driver: "Redis", name: "Redis", color: "#DC382D", abbr: "Re", available: true },
+  { id: "postgres", driver: "Postgres", brandKey: "Postgres", name: "PostgreSQL", available: true },
+  { id: "mysql", driver: "MySql", brandKey: "MySql", name: "MySQL", available: true },
+  { id: "mariadb", driver: "MySql", brandKey: "MariaDb", name: "MariaDB", available: true },
+  { id: "sqlserver", driver: "SqlServer", brandKey: "SqlServer", name: "SQL Server", available: true },
+  { id: "mongodb", driver: "MongoDb", brandKey: "MongoDb", name: "MongoDB", available: true },
+  { id: "sqlite", driver: "Sqlite", brandKey: "Sqlite", name: "SQLite", available: true },
+  { id: "redis", driver: "Redis", brandKey: "Redis", name: "Redis", available: true },
+  { id: "supabase", driver: "Supabase", brandKey: "Supabase", name: "Supabase", available: true },
+  { id: "neon", driver: "Neon", brandKey: "Neon", name: "Neon", available: true },
+  { id: "turso", driver: "Turso", brandKey: "Turso", name: "LibSQL / Turso", available: true },
 ];
 
-// Driver icon config for connection list
-const DRIVER_ICON_CONFIG: Record<string, { color: string; abbr: string }> = {
-  Postgres: { color: "#336791", abbr: "PG" },
-  MySql: { color: "#F29111", abbr: "My" },
-  Sqlite: { color: "#003B57", abbr: "SL" },
-  MongoDb: { color: "#13AA52", abbr: "Mo" },
-  SqlServer: { color: "#CC2927", abbr: "SS" },
-  Supabase: { color: "#3ECF8E", abbr: "Sb" },
-  Neon: { color: "#00E699", abbr: "Ne" },
-  Turso: { color: "#4FF8D2", abbr: "Tu" },
-  Redis: { color: "#DC382D", abbr: "Re" },
-};
-
-// Small colored icon for database type
-function DatabaseIcon({ driver, size = 36 }: { driver: string; size?: number }) {
-  const config = DRIVER_ICON_CONFIG[driver] || { color: "#666", abbr: "DB" };
-  return (
-    <div
-      className="rounded-lg flex items-center justify-center text-white font-bold shrink-0"
-      style={{
-        backgroundColor: config.color,
-        width: size,
-        height: size,
-        fontSize: size * 0.35,
-      }}
-    >
-      {config.abbr}
-    </div>
-  );
-}
 
 type ViewState =
   | { view: "home" }
@@ -362,7 +331,7 @@ function HomeRoute() {
             </div>
 
             {/* Database Grid */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {DATABASE_TYPE_OPTIONS.map((db) => (
                 <button
                   key={db.id}
@@ -378,11 +347,8 @@ function HomeRoute() {
                       : "border-border/50 opacity-40 cursor-not-allowed"
                   }`}
                 >
-                  <div
-                    className="w-10 h-10 rounded-lg flex items-center justify-center text-white font-bold text-xs shrink-0"
-                    style={{ backgroundColor: db.color }}
-                  >
-                    {db.abbr}
+                  <div className="w-10 h-10 rounded-lg bg-muted/50 flex items-center justify-center shrink-0">
+                    <DatabaseBrandIcon driver={db.brandKey} size={24} />
                   </div>
                   <span className="text-sm font-medium">{db.name}</span>
                 </button>
@@ -411,7 +377,7 @@ function HomeRoute() {
             <ArrowLeft className="h-4 w-4" />
             Back
           </button>
-          <DatabaseIcon driver={viewState.driver} size={24} />
+          <DatabaseBrandIcon driver={viewState.driver} size={22} />
           <span className="font-semibold">
             {viewState.editProfile
               ? viewState.editProfile.name
@@ -436,8 +402,8 @@ function HomeRoute() {
   // ── Home View ──
   return (
     <div className="flex-1 flex h-full relative">
-      {/* Left Panel: Branding */}
-      <div className="w-1/2 bg-muted/30 flex flex-col items-center justify-center border-r border-border">
+      {/* Left Panel: Branding (hidden on narrow windows) */}
+      <div className="hidden md:flex w-1/2 bg-muted/30 flex-col items-center justify-center border-r border-border">
         <HiveLogo />
         <div className="mt-8 text-center">
           <div className="flex items-center justify-center gap-2">
@@ -453,7 +419,7 @@ function HomeRoute() {
       </div>
 
       {/* Right Panel: Connections */}
-      <div className="w-1/2 flex flex-col bg-background">
+      <div className="w-full md:w-1/2 flex flex-col bg-background">
         {/* Header */}
         <div className="px-6 pt-6 pb-4 space-y-4">
           <div className="flex items-center justify-between">
@@ -490,7 +456,7 @@ function HomeRoute() {
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search by tag..."
+              placeholder="Search connections..."
               className="pl-10 h-10"
             />
           </div>
@@ -503,22 +469,27 @@ function HomeRoute() {
           </div>
         )}
 
-        {connectionError && (
-          <div className="mx-6 mb-3">
-            <ConnectionLostError
-              databaseName={connectionError.profileName}
-              message={connectionError.message}
-              onReconnect={async () => {
-                const profile = profiles.find((p) => p.id === connectionError.profileId);
-                if (profile) {
-                  setConnectionError(null);
-                  await handleConnectClick(profile);
-                }
-              }}
-              onGoToDashboard={() => setConnectionError(null)}
-            />
-          </div>
-        )}
+        <Dialog
+          open={!!connectionError}
+          onOpenChange={(open) => { if (!open) setConnectionError(null); }}
+        >
+          <DialogContent className="sm:max-w-md">
+            {connectionError && (
+              <ConnectionLostError
+                databaseName={connectionError.profileName}
+                message={connectionError.message}
+                onReconnect={async () => {
+                  const profile = profiles.find((p) => p.id === connectionError.profileId);
+                  if (profile) {
+                    setConnectionError(null);
+                    await handleConnectClick(profile);
+                  }
+                }}
+                onGoToDashboard={() => setConnectionError(null)}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Connection List */}
         <div className="flex-1 overflow-y-auto px-6">
@@ -529,12 +500,32 @@ function HomeRoute() {
               ))}
             </div>
           ) : filteredProfiles.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <p className="text-muted-foreground text-sm">
-                {profiles.length === 0
-                  ? "No connections yet. Click 'New +' to get started."
-                  : "No connections match your search."}
-              </p>
+            <div className="flex flex-col items-center justify-center py-16 text-center gap-4">
+              {profiles.length === 0 ? (
+                <>
+                  <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                    <Plus className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium">No connections yet</p>
+                    <p className="text-xs text-muted-foreground">
+                      Create your first connection to get started.
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => setViewState({ view: "new-connection" })}
+                    className="gap-1.5 h-9"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    New Connection
+                  </Button>
+                </>
+              ) : (
+                <p className="text-muted-foreground text-sm">
+                  No connections match your search.
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-0.5">
@@ -547,7 +538,9 @@ function HomeRoute() {
                     onDoubleClick={() => handleConnectClick(profile)}
                     title="Double-click to connect"
                   >
-                    <DatabaseIcon driver={profile.driver} />
+                    <div className="w-9 h-9 rounded-lg bg-muted/60 flex items-center justify-center shrink-0">
+                      <DatabaseBrandIcon driver={profile.driver} size={22} />
+                    </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-sm truncate">
@@ -631,7 +624,7 @@ function HomeRoute() {
         {/* Footer */}
         <footer className="border-t border-border px-6 py-3">
           <div className="flex items-center justify-center text-xs text-muted-foreground">
-            <span>Version 0.18.0-beta</span>
+            <span>Version 0.19.2-beta</span>
           </div>
           <div className="flex items-center justify-center gap-3 mt-1 text-xs text-muted-foreground">
             <a

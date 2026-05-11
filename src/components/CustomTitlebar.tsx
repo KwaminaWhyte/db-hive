@@ -9,10 +9,14 @@
  */
 
 import { useState, useEffect } from "react";
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
+import { openAppModal } from "@/store/useAppModal";
+import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Minus, Square, X, ChevronDown, Search } from "lucide-react";
 import { PluginToolbar } from "./PluginToolbar";
+import { TableCreationDialog } from "./TableCreationDialog";
+import { notifyMetadataChanged } from "@/hooks/useMetadataCache";
 import { Button } from "./ui/button";
 import {
   DropdownMenu,
@@ -35,9 +39,11 @@ const isMacOS = navigator.userAgent.includes("Mac");
 
 export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: CustomTitlebarProps) {
   const navigate = useNavigate();
-  const router = useRouter();
   const { setTheme } = useTheme();
+  const { connectionId } = useConnectionContext();
+  const isConnected = !!connectionId;
   const [isMaximized, setIsMaximized] = useState(false);
+  const [showCreateTableDialog, setShowCreateTableDialog] = useState(false);
 
   const appWindow = getCurrentWindow();
 
@@ -92,24 +98,16 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
     }
   };
 
-  const handleNavigateToSettings = () => {
-    // Save current route before navigating to settings
-    const currentPath = router.state.location.pathname;
-    sessionStorage.setItem("db-hive-previous-route", currentPath);
-    navigate({ to: "/settings" });
-  };
-
-  const handleNavigateToAbout = () => {
-    // Save current route before navigating to about
-    const currentPath = router.state.location.pathname;
-    sessionStorage.setItem("db-hive-previous-route", currentPath);
-    navigate({ to: "/about" });
-  };
+  // Open overlay modals instead of navigating to full-page routes so the
+  // underlying route (e.g. SQL query editor) keeps its in-progress state.
+  const handleOpenSettings = () => openAppModal("settings");
+  const handleOpenAbout = () => openAppModal("about");
+  const handleOpenPlugins = () => openAppModal("plugins");
 
   return (
     <div
       data-tauri-drag-region
-      className="flex items-center justify-between h-10 bg-background border-b border-border select-none"
+      className="relative flex items-center justify-between h-10 bg-background border-b border-border select-none"
       onMouseDown={handleDragStart}
     >
       {/* Left: Logo and Menu — extra left padding on macOS for native traffic lights */}
@@ -161,6 +159,35 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
             </DropdownMenuContent>
           </DropdownMenu>
 
+          {/* Schema Menu (only when connected) */}
+          {isConnected && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs hover:bg-accent"
+                >
+                  Schema
+                  <ChevronDown className="ml-1 h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onClick={() => setShowCreateTableDialog(true)}>
+                  New Table...
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    notifyMetadataChanged({ reason: "manual-refresh" });
+                    window.dispatchEvent(new Event("metadata:refresh"));
+                  }}
+                >
+                  Refresh Metadata
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           {/* View Menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -174,16 +201,21 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => navigate({ to: "/query", search: { tabs: "query-0", active: 0 } })}>
-                SQL Editor
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate({ to: "/visual-query" })}>
-                Visual Query Builder
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate({ to: "/activity" })}>
-                Activity Monitor
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate({ to: "/plugins" })}>
+              {isConnected && (
+                <>
+                  <DropdownMenuItem onClick={() => navigate({ to: "/query", search: { tabs: "query-0", active: 0 } })}>
+                    SQL Editor
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate({ to: "/visual-query" })}>
+                    Visual Query Builder
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate({ to: "/activity" })}>
+                    Activity Monitor
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                </>
+              )}
+              <DropdownMenuItem onClick={handleOpenPlugins}>
                 Plugin Manager
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -217,7 +249,7 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={handleNavigateToSettings}>
+              <DropdownMenuItem onClick={handleOpenSettings}>
                 Settings
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -256,7 +288,7 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
                 GitHub Repository
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleNavigateToAbout}>
+              <DropdownMenuItem onClick={handleOpenAbout}>
                 About DB-Hive
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -269,22 +301,27 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
         </div>
       </div>
 
-      {/* Center: Command Palette Trigger */}
-      <div className="flex-1 flex justify-center" onMouseDown={(e) => e.stopPropagation()}>
+      {/* Center: Command Palette Trigger — absolute-centered on the titlebar so side groups don't skew it */}
+      <div
+        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        onMouseDown={(e) => e.stopPropagation()}
+      >
         <button
           onClick={onOpenCommandPalette}
-          className="flex items-center gap-2 px-3 h-7 rounded-md border border-border bg-muted/50 text-xs text-muted-foreground hover:bg-accent transition-colors min-w-[200px]"
+          className="pointer-events-auto flex items-center gap-2 px-3 h-7 rounded-md border border-border bg-muted/50 text-xs text-muted-foreground hover:bg-accent transition-colors w-[360px]"
         >
-          <Search className="h-3.5 w-3.5" />
-          <span>Search or run commands...</span>
-          <kbd className="ml-auto text-[10px] bg-background px-1 rounded border border-border">
+          <Search className="h-3.5 w-3.5 shrink-0" />
+          <span className="truncate">Search or run commands...</span>
+          <kbd className="ml-auto shrink-0 text-[10px] bg-background px-1 rounded border border-border">
             {isMacOS ? "\u2318" : "Ctrl+"}K
           </kbd>
         </button>
       </div>
 
       {/* Right: Window Controls (hidden on macOS where native traffic lights are used) */}
-      {!isMacOS && (
+      {isMacOS ? (
+        <div className="w-4 shrink-0" />
+      ) : (
         <div className="flex items-center" onMouseDown={(e) => e.stopPropagation()}>
           <button
             onClick={handleMinimize}
@@ -308,6 +345,16 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
             <X className="h-4 w-4" />
           </button>
         </div>
+      )}
+
+      {/* Schema menu: New Table dialog */}
+      {connectionId && (
+        <TableCreationDialog
+          open={showCreateTableDialog}
+          onOpenChange={setShowCreateTableDialog}
+          connectionId={connectionId}
+          onSuccess={() => notifyMetadataChanged({ reason: "create-table" })}
+        />
       )}
     </div>
   );

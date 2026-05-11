@@ -428,6 +428,7 @@ mod tests {
             password: None,
             database: Some(db_path.to_str().unwrap().to_string()),
             timeout: None,
+            require_tls: false,
         };
 
         let driver = SqliteDriver::connect(opts).await.unwrap();
@@ -474,6 +475,7 @@ mod tests {
             password: None,
             database: Some(db_path.to_str().unwrap().to_string()),
             timeout: None,
+            require_tls: false,
         };
 
         let driver = SqliteDriver::connect(opts).await.unwrap();

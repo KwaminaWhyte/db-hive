@@ -14,6 +14,7 @@ pub enum AiProviderType {
     OpenAI,
     Anthropic,
     Google,
+    OpenRouter,
 }
 
 impl std::fmt::Display for AiProviderType {
@@ -23,6 +24,7 @@ impl std::fmt::Display for AiProviderType {
             AiProviderType::OpenAI => write!(f, "OpenAI"),
             AiProviderType::Anthropic => write!(f, "Claude"),
             AiProviderType::Google => write!(f, "Gemini"),
+            AiProviderType::OpenRouter => write!(f, "OpenRouter"),
         }
     }
 }
@@ -305,5 +307,6 @@ mod tests {
         assert_eq!(AiProviderType::OpenAI.to_string(), "OpenAI");
         assert_eq!(AiProviderType::Anthropic.to_string(), "Claude");
         assert_eq!(AiProviderType::Google.to_string(), "Gemini");
+        assert_eq!(AiProviderType::OpenRouter.to_string(), "OpenRouter");
     }
 }

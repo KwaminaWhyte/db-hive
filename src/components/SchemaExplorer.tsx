@@ -50,13 +50,16 @@ import {
   Workflow,
   Activity,
   Plus,
+  FunctionSquare,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
 import { SqlExportDialog } from "./SqlExportDialog";
 import { SqlImportDialog } from "./SqlImportDialog";
 import { TableCreationDialog } from "./TableCreationDialog";
+import { TableEditDialog } from "./TableEditDialog";
+import { ConfirmDestructiveDialog } from "./ConfirmDestructiveDialog";
 import { DataImportWizard } from "./DataImportWizard";
-import { NoTablesEmpty, NoSearchResultsEmpty } from "./empty-states";
+import { StoredProceduresPanel } from "./StoredProceduresPanel";
 import {
   Dialog,
   DialogContent,
@@ -64,7 +67,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
+} from "./ui/dialog";
+import { NoTablesEmpty, NoSearchResultsEmpty } from "./empty-states";
+import { ForeignKeyInfo } from "@/types/database";
+import { dropTable } from "@/api/ddl";
+import { useMetadataChangeListener, notifyMetadataChanged } from "@/hooks/useMetadataCache";
+import { Pencil, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface SchemaExplorerProps {
   connectionId: string;
@@ -118,8 +127,19 @@ export function SchemaExplorer({
   const [createTableSchema, setCreateTableSchema] = useState<
     string | undefined
   >(undefined);
+  // Table edit dialog state
+  const [editTable, setEditTable] = useState<{ schema: string; name: string } | null>(null);
+  // Drop table confirmation state
+  const [dropTarget, setDropTarget] = useState<{
+    schema: string;
+    name: string;
+    dependents: string[];
+  } | null>(null);
+  const [dropLoading, setDropLoading] = useState(false);
   // Data import wizard state
   const [showDataImportWizard, setShowDataImportWizard] = useState(false);
+  // Stored procedures panel state
+  const [showProceduresPanel, setShowProceduresPanel] = useState(false);
   const [importTargetSchema, setImportTargetSchema] = useState<string>("");
   const [importTargetTable, setImportTargetTable] = useState<string>("");
   // Create database dialog state
@@ -252,6 +272,75 @@ export function SchemaExplorer({
       setError(`Failed to load tables: ${errorMessage}`);
     } finally {
       setLoadingTablesForSchema((prev) => ({ ...prev, [schema]: false }));
+    }
+  };
+
+  // Refresh schemas/tables whenever a DDL operation dispatches a metadata-changed event
+  useMetadataChangeListener(
+    useCallback(
+      (payload) => {
+        fetchSchemas();
+        if (payload.schema) {
+          fetchTables(payload.schema);
+        } else {
+          expandedSchemas.forEach((s) => fetchTables(s));
+        }
+      },
+      [expandedSchemas, connectionId, selectedDatabase],
+    ),
+  );
+
+  // Also listen for a window-level "metadata:refresh" trigger from the titlebar.
+  useEffect(() => {
+    const handler = () => {
+      fetchSchemas();
+      expandedSchemas.forEach((s) => fetchTables(s));
+    };
+    window.addEventListener("metadata:refresh", handler);
+    return () => window.removeEventListener("metadata:refresh", handler);
+  }, [expandedSchemas]);
+
+  // Prepare a drop confirmation by probing for FK dependents
+  const requestDropTable = async (schemaName: string, tableNm: string) => {
+    let dependents: string[] = [];
+    try {
+      const fks = await invoke<ForeignKeyInfo[]>("get_foreign_keys", {
+        connectionId,
+        schema: schemaName,
+      });
+      dependents = Array.from(
+        new Set(
+          fks
+            .filter((fk) => fk.referencedTable === tableNm)
+            .map((fk) => `${fk.schema}.${fk.table}`),
+        ),
+      );
+    } catch (err) {
+      // If the FK probe fails, proceed without dependents; the dialog still confirms.
+      console.warn("Failed to probe foreign keys for drop:", err);
+    }
+    setDropTarget({ schema: schemaName, name: tableNm, dependents });
+  };
+
+  const confirmDropTable = async () => {
+    if (!dropTarget) return;
+    try {
+      setDropLoading(true);
+      await dropTable(connectionId, {
+        schema: dropTarget.schema,
+        name: dropTarget.name,
+        cascade: dropTarget.dependents.length > 0,
+        ifExists: true,
+      });
+      toast.success(`Dropped ${dropTarget.schema}.${dropTarget.name}`);
+      notifyMetadataChanged({ schema: dropTarget.schema, reason: "drop-table" });
+      setDropTarget(null);
+    } catch (err: any) {
+      toast.error("Drop Failed", {
+        description: err?.message || err?.toString() || "Failed to drop table",
+      });
+    } finally {
+      setDropLoading(false);
     }
   };
 
@@ -865,6 +954,26 @@ export function SchemaExplorer({
                                           <RefreshCw className="h-4 w-4 mr-2" />
                                           Refresh
                                         </ContextMenuItem>
+                                        <ContextMenuItem
+                                          onClick={() =>
+                                            setEditTable({
+                                              schema: schema.name,
+                                              name: table.name,
+                                            })
+                                          }
+                                        >
+                                          <Pencil className="h-4 w-4 mr-2" />
+                                          Edit Table
+                                        </ContextMenuItem>
+                                        <ContextMenuItem
+                                          className="text-destructive focus:text-destructive"
+                                          onClick={() =>
+                                            requestDropTable(schema.name, table.name)
+                                          }
+                                        >
+                                          <Trash2 className="h-4 w-4 mr-2" />
+                                          Drop Table
+                                        </ContextMenuItem>
                                       </ContextMenuContent>
                                     </ContextMenu>
                                   );
@@ -897,6 +1006,20 @@ export function SchemaExplorer({
                   No schemas found
                 </p>
               )}
+
+              {/* Procedures & Functions */}
+              <div className="mt-2 pt-2 border-t">
+                <button
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left hover:bg-accent/50"
+                  onClick={() => setShowProceduresPanel(true)}
+                >
+                  <FunctionSquare className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                  <span className="flex-1 text-sm font-medium truncate">
+                    Procedures
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                </button>
+              </div>
             </div>
           </ScrollArea>
         )}
@@ -927,6 +1050,7 @@ export function SchemaExplorer({
           if (createTableSchema) {
             fetchTables(createTableSchema);
           }
+          notifyMetadataChanged({ schema: createTableSchema, reason: "create-table" });
         }}
       />
 
@@ -985,6 +1109,84 @@ export function SchemaExplorer({
               {creatingDatabase ? "Creating..." : "Create"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Table Edit Dialog */}
+      {editTable && (
+        <TableEditDialog
+          open={!!editTable}
+          onOpenChange={(open) => !open && setEditTable(null)}
+          connectionId={connectionId}
+          schema={editTable.schema}
+          tableName={editTable.name}
+          onSuccess={() => {
+            fetchTables(editTable.schema);
+          }}
+        />
+      )}
+
+      {/* Drop Table Confirmation */}
+      <ConfirmDestructiveDialog
+        open={!!dropTarget}
+        onOpenChange={(open) => !open && !dropLoading && setDropTarget(null)}
+        title={
+          dropTarget
+            ? `Drop table "${dropTarget.schema}.${dropTarget.name}"?`
+            : "Drop table?"
+        }
+        description={
+          dropTarget && (
+            <>
+              <p>
+                This action cannot be undone. All data in{" "}
+                <span className="font-mono font-semibold text-foreground">
+                  {dropTarget.schema}.{dropTarget.name}
+                </span>{" "}
+                will be permanently removed.
+              </p>
+              {dropTarget.dependents.length > 0 && (
+                <div className="rounded-md border border-destructive/50 bg-destructive/10 p-2">
+                  <p className="text-destructive font-medium text-xs mb-1">
+                    {dropTarget.dependents.length} table
+                    {dropTarget.dependents.length === 1 ? "" : "s"} reference this
+                    table via foreign keys:
+                  </p>
+                  <ul className="list-disc list-inside text-xs font-mono">
+                    {dropTarget.dependents.map((d) => (
+                      <li key={d}>{d}</li>
+                    ))}
+                  </ul>
+                  <p className="text-xs mt-1">
+                    CASCADE will be used to also drop the dependent constraints.
+                  </p>
+                </div>
+              )}
+            </>
+          )
+        }
+        confirmLabel={
+          dropTarget && dropTarget.dependents.length > 0 ? "Drop with CASCADE" : "Drop Table"
+        }
+        loading={dropLoading}
+        onConfirm={confirmDropTable}
+      />
+
+      {/* Stored Procedures / Functions */}
+      <Dialog open={showProceduresPanel} onOpenChange={setShowProceduresPanel}>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Procedures & Functions</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            <StoredProceduresPanel
+              connectionId={connectionId}
+              onExecute={(sql) => {
+                onExecuteQuery?.(sql);
+                setShowProceduresPanel(false);
+              }}
+            />
+          </div>
         </DialogContent>
       </Dialog>
 

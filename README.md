@@ -15,6 +15,8 @@ DB-Hive is a professional database client designed to compete with tools like Be
 
 - **Multi-Database Support**
   - PostgreSQL with full metadata support
+  - Supabase (PostgreSQL-compatible, TLS by default)
+  - Neon (PostgreSQL-compatible serverless, TLS required)
   - MySQL / MariaDB with connection handling
   - SQLite with local database management
 
@@ -149,7 +151,7 @@ npm run tauri build    # Full Tauri app
 #   Windows → .msi / .exe
 ```
 
-See [Code Signing Guide](docs/CODE_SIGNING.md) for signing binaries on all platforms.
+See [Code Signing Guide](docs/code-signing.md) for signing binaries on all platforms.
 
 ## Usage
 

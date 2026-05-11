@@ -196,11 +196,13 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    -webkit-data-detectors: none;
   }
   body {
     @apply bg-background text-foreground;
     user-select: none;
     -webkit-user-select: none;
+    -webkit-data-detectors: none;
   }
 
   /* Allow text selection in inputs, textareas, code editors, and pre blocks */

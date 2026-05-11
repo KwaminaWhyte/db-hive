@@ -62,6 +62,7 @@ import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { RowJsonViewer } from "./RowJsonViewer";
 import { EditableCell } from "./EditableCell";
 import { TransactionPreview } from "./TransactionPreview";
+import { TableEditDialog } from "./TableEditDialog";
 import { useTableEditor } from "@/hooks/useTableEditor";
 import { toast } from "sonner";
 
@@ -171,6 +172,7 @@ export function TableInspector({
   const [commitError, setCommitError] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   type FilterOperator =
     | 'contains' | 'not_contains'
     | 'equals' | 'not_equals'
@@ -214,16 +216,22 @@ export function TableInspector({
       r.column && (r.operator === 'is_null' || r.operator === 'is_not_null' || r.value.trim() !== '')
     );
     if (active.length === 0) return '';
+    const isMySql = driverType === 'MySql';
+    const isSqlite = driverType === 'Sqlite';
+    const castType = isMySql ? 'CHAR' : 'TEXT';
+    const likeOp = (negated: boolean) => isMySql || isSqlite
+      ? (negated ? 'NOT LIKE' : 'LIKE')
+      : (negated ? 'NOT ILIKE' : 'ILIKE');
     const clauses = active.map(r => {
-      const col = `CAST(${quoteIdentifier(r.column)} AS TEXT)`;
+      const col = `CAST(${quoteIdentifier(r.column)} AS ${castType})`;
       const v = r.value.replace(/'/g, "''");
       switch (r.operator) {
-        case 'contains':     return `${col} ILIKE '%${v}%'`;
-        case 'not_contains': return `${col} NOT ILIKE '%${v}%'`;
+        case 'contains':     return `${col} ${likeOp(false)} '%${v}%'`;
+        case 'not_contains': return `${col} ${likeOp(true)} '%${v}%'`;
         case 'equals':       return `${col} = '${v}'`;
         case 'not_equals':   return `${col} <> '${v}'`;
-        case 'starts_with':  return `${col} ILIKE '${v}%'`;
-        case 'ends_with':    return `${col} ILIKE '%${v}'`;
+        case 'starts_with':  return `${col} ${likeOp(false)} '${v}%'`;
+        case 'ends_with':    return `${col} ${likeOp(false)} '%${v}'`;
         case 'gt':           return `${quoteIdentifier(r.column)} > '${v}'`;
         case 'gte':          return `${quoteIdentifier(r.column)} >= '${v}'`;
         case 'lt':           return `${quoteIdentifier(r.column)} < '${v}'`;
@@ -1226,8 +1234,23 @@ export function TableInspector({
         </TabsContent>
 
         {/* Columns Tab */}
-        <TabsContent value="columns" className="flex-1 m-0 overflow-hidden">
-          <ScrollArea className="h-full w-full">
+        <TabsContent value="columns" className="flex-1 m-0 overflow-hidden flex flex-col">
+          <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30 shrink-0">
+            <span className="text-xs text-muted-foreground">
+              {tableSchema.columns.length} column{tableSchema.columns.length === 1 ? "" : "s"}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7"
+              onClick={() => setShowEditDialog(true)}
+              title="Edit table schema"
+            >
+              <Pencil className="h-3.5 w-3.5 mr-1" />
+              Edit Table
+            </Button>
+          </div>
+          <ScrollArea className="flex-1 w-full">
             <div className="min-w-max">
               <Table className="[&_th]:border-r [&_th]:border-border [&_td]:border-r [&_td]:border-border">
                 <TableHeader className="sticky top-0 bg-background z-10">
@@ -1406,6 +1429,25 @@ export function TableInspector({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Table Edit Dialog */}
+      {showEditDialog && (
+        <TableEditDialog
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          connectionId={connectionId}
+          schema={schema}
+          tableName={tableName}
+          onSuccess={() => {
+            fetchTableSchema();
+            if (activeTab === "data") {
+              setSampleData(null);
+              setTotalRows(null);
+              fetchSampleData();
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
