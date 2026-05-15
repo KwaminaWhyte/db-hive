@@ -209,7 +209,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
     }
 
     if (!formData.host?.trim()) return "Host is required";
-    if (driver !== "MongoDb" && driver !== "Turso" && !formData.username?.trim()) return "Username is required";
+    if (driver !== "MongoDb" && driver !== "Turso" && driver !== "Redis" && !formData.username?.trim()) return "Username is required";
     if (formData.port !== undefined && (formData.port < 0 || formData.port > 65535))
       return "Port must be between 0 and 65535";
 
@@ -364,6 +364,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       case "MongoDb": return "mongodb://user:password@host:27017/database";
       case "SqlServer": return "mssql://user:password@host:1433/database";
       case "Turso": return "libsql://your-db.turso.io";
+      case "Redis": return "redis://localhost:6379";
       default: return "";
     }
   };

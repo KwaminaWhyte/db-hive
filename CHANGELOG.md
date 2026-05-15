@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (2026-05-15)
+
+- **Redis Driver**: New `DbDriver::Redis` variant. Uses `redis` crate 0.27 with `tokio-comp` + `connection-manager` features. `MultiplexedConnection` wrapped in `Arc<Mutex<...>>` for thread-safe async access. Default port 6379. `execute_query` interprets the SQL input as a raw Redis command string (e.g. `GET mykey`, `HGETALL myhash`). `get_databases` returns 16 logical DBs (0–15). `get_tables` samples key types via SCAN and maps them to pseudo-tables: `strings`, `hashes`, `lists`, `sets`, `zsets`. `get_table_schema` returns a conceptual column layout per type (e.g. `key/field/value` for hashes). Foreign keys not applicable; returns empty vec. Wired into `test_connection_command` and `connect_to_database` in `commands/connection.rs`.
+
+- **Visual Schema Designer**: New drag-and-drop canvas for designing database schemas and generating DDL. ReactFlow-based 3-panel layout: table list (left) + canvas (center) + properties editor (right). Custom `TableSchemaNode` displays columns with PK/UNQ/NN badges and handles for FK edge drawing. Right panel: table name, schema, 12 column types (TEXT/INTEGER/BIGINT/BOOLEAN/DECIMAL/VARCHAR/UUID/TIMESTAMP/DATE/JSONB/FLOAT/BLOB), per-column PK/nullable/unique toggles, FK reference inputs. FK edges automatically drawn between nodes when `referencesTable` is set. "Preview SQL" calls existing `preview_create_table` backend command; "Create Tables" calls `create_table` sequentially. Route: `/_connected/visual-schema-designer`. Accessible from titlebar "Schema Designer" menu item.
+
+- **Backup Manager (backend)**: 6 new Tauri commands for database backup/restore. `get_backup_directory` returns `~/Library/Application Support/db-hive/backups/`. `list_backups` scans for `.sql/.dump/.bak/.sqlite/.gz` files sorted by date. `create_backup` invokes `pg_dump` (Postgres/Supabase/Neon), `mysqldump` (MySQL), `std::fs::copy` (SQLite), or `mongodump` (MongoDB) as subprocesses; passes credentials via env vars/args; returns `BackupEntry`. `restore_backup` invokes `psql`, `mysql` (stdin pipe), or file copy. `delete_backup` removes file. `open_backup_directory` opens in OS file manager. Data models: `BackupEntry`, `BackupOptions`, `BackupStatus`, `RestoreOptions`, `BackupProgress` in `src-tauri/src/models/backup.rs`.
+
 ### Added (roadmap items)
 
 - **Stored Procedures & Functions Viewer**: New Tauri commands `list_procedures`, `get_procedure_definition`, `execute_procedure`. PostgreSQL uses `pg_proc` + `pg_get_function_arguments` / `pg_get_functiondef`; MySQL uses `information_schema.ROUTINES` + `SHOW CREATE`; SQL Server uses `sys.objects`; SQLite / Turso / MongoDB return empty. New `<StoredProceduresPanel>` groups routines by schema, lazy-loads definitions, and offers an execute dialog with JSON-parsed arguments. Reachable from a "Procedures" entry in SchemaExplorer.

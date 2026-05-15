@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "db-hive",
+  "productName": "DB Hive",
   "version": "0.19.2",
   "identifier": "com.kwamina.db-hive",
   "build": {

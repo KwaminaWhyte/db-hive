@@ -59,7 +59,7 @@ const DATABASE_TYPE_OPTIONS: DatabaseTypeOption[] = [
   { id: "sqlserver", driver: "SqlServer", brandKey: "SqlServer", name: "SQL Server", available: true },
   { id: "mongodb", driver: "MongoDb", brandKey: "MongoDb", name: "MongoDB", available: true },
   { id: "sqlite", driver: "Sqlite", brandKey: "Sqlite", name: "SQLite", available: true },
-  { id: "redis", driver: null, brandKey: "Redis", name: "Redis", available: false },
+  { id: "redis", driver: "Redis", brandKey: "Redis", name: "Redis", available: true },
   { id: "supabase", driver: "Supabase", brandKey: "Supabase", name: "Supabase", available: true },
   { id: "neon", driver: "Neon", brandKey: "Neon", name: "Neon", available: true },
   { id: "turso", driver: "Turso", brandKey: "Turso", name: "LibSQL / Turso", available: true },

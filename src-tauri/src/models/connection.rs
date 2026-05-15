@@ -26,6 +26,8 @@ pub enum DbDriver {
     Neon,
     /// Turso (libSQL edge database)
     Turso,
+    /// Redis key-value store
+    Redis,
 }
 
 impl DbDriver {
@@ -244,6 +246,7 @@ impl ConnectionProfile {
             DbDriver::Supabase => 5432,
             DbDriver::Neon => 5432,
             DbDriver::Turso => 443,
+            DbDriver::Redis => 6379,
         }
     }
 }

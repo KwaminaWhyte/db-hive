@@ -209,6 +209,9 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
                   <DropdownMenuItem onClick={() => navigate({ to: "/visual-query" })}>
                     Visual Query Builder
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate({ to: "/visual-schema-designer" })}>
+                    Schema Designer
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate({ to: "/activity" })}>
                     Activity Monitor
                   </DropdownMenuItem>

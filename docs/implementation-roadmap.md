@@ -720,44 +720,49 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Support JOINs, WHERE, GROUP BY
 - [ ] Add preview mode
 
-### Milestone 3.15: Visual Schema Designer (Database Builder)
+### Milestone 3.15: Visual Schema Designer (Database Builder) ✅ COMPLETED (2026-05-15)
 
 **Drag-and-Drop Database Schema Creation**
 
-- [ ] **Canvas & Table Creation:**
-  - [ ] ReactFlow-based canvas (reuse ERD infrastructure)
-  - [ ] Drag-and-drop to create new table nodes
-  - [ ] Table toolbox/palette with "New Table" drag source
-  - [ ] Double-click table to edit properties
-  - [ ] Delete tables with confirmation
-  - [ ] Undo/redo support
+- [x] **Canvas & Table Creation:**
+  - [x] ReactFlow-based canvas (reuses ERD ReactFlow infrastructure)
+  - [x] "+ Add Table" button drops new table node at staggered canvas position
+  - [x] Draggable table nodes with position sync back to state
+  - [x] Delete table button (×) in node header
+  - [x] MiniMap + Controls for zoom/pan
 
-- [ ] **Column Designer (in-table editing):**
-  - [ ] Add columns directly in table box
-  - [ ] Column name, type, nullable, default value
-  - [ ] Primary key checkbox with visual indicator
-  - [ ] Auto-increment toggle
-  - [ ] Inline column reordering (drag within table)
-  - [ ] Quick type selector (common types)
+- [x] **Table Node Display:**
+  - [x] `TableSchemaNode` custom ReactFlow node (280px wide)
+  - [x] Header: primary color background + table name + delete button
+  - [x] Column rows: PK key icon, FK link icon, type label, UNQ/NN badges
+  - [x] ReactFlow handles on left/right for FK edge drawing
 
-- [ ] **Relationship Builder:**
-  - [ ] Draw lines between tables to create foreign keys
-  - [ ] Source column → Target column mapping
-  - [ ] ON DELETE/UPDATE action selector
-  - [ ] Cardinality indicators (1:1, 1:N, M:N)
-  - [ ] Junction table auto-generation for M:N
-  - [ ] Visual relationship editing (click to modify)
+- [x] **Right Panel Properties Editor:**
+  - [x] Table name + schema inputs
+  - [x] Column list: name, type dropdown (12 types), PK/nullable/unique toggles
+  - [x] FK reference inputs (references table + column)
+  - [x] Add/remove column buttons
 
-- [ ] **Index Designer:**
-  - [ ] Add indexes to tables visually
-  - [ ] Multi-column index support
-  - [ ] Unique index toggle
-  - [ ] Index type selection (B-tree, Hash, etc.)
-  - [ ] Visual index indicator on columns
+- [x] **Relationship Builder:**
+  - [x] FK edges auto-drawn when `referencesTable` set on a column
+  - [x] Animated edges with primary color
+  - [x] ReactFlow `onConnect` for manual edge drawing
 
-- [ ] **Constraints:**
-  - [ ] Unique constraints (visual indicator)
-  - [ ] Check constraints with expression editor
+- [x] **SQL Generation:**
+  - [x] "Preview SQL" → calls `preview_create_table` for each table → shows in Dialog
+  - [x] "Create Tables" → calls `create_table` sequentially with success/error toasts
+  - [x] Maps 12 designer types to backend `ColumnType` enum
+
+- [x] **UI/UX:**
+  - [x] 3-panel layout: table list (200px) + canvas + properties (300px)
+  - [x] Left panel table list with click-to-select
+  - [x] Route: `/_connected/visual-schema-designer`
+  - [x] Accessible from titlebar "Schema Designer" menu item
+
+- [ ] Undo/redo support (TODO: future)
+- [ ] Index designer (TODO: future)
+- [ ] Check constraints editor (TODO: future)
+- [ ] Cardinality indicators (TODO: future)
   - [ ] Not null constraints
   - [ ] Default value expressions
 
@@ -877,13 +882,17 @@ For detailed architecture patterns, see `CLAUDE.md`.
   - [x] Routes through `SqliteDdlGenerator` in migration + DDL paths
   - [ ] Embedded replica support (TODO: future)
 
-- [ ] **Redis Driver:**
-  - [ ] Key-value store operations (GET, SET, DEL, etc.)
-  - [ ] Data structure commands (Lists, Sets, Hashes, Sorted Sets)
-  - [ ] Redis connection string parsing
-  - [ ] Cluster and Sentinel support
-  - [ ] Custom Redis query interface (non-SQL)
-  - [ ] Key browser and data viewer UI
+- [x] **Redis Driver:** ✅ COMPLETED (2026-05-15)
+  - [x] `DbDriver::Redis` variant, default port 6379
+  - [x] `redis` crate 0.27 with `tokio-comp` + `connection-manager` features
+  - [x] `MultiplexedConnection` via `Arc<Mutex<...>>` for thread-safe async access
+  - [x] Key-value store operations via raw Redis command string execution
+  - [x] Data structure types mapped as pseudo-tables: strings, hashes, lists, sets, zsets
+  - [x] `get_databases` returns logical DBs 0-15; `get_schemas` returns virtual "keys" namespace
+  - [x] `get_tables` samples key types via SCAN; `get_table_schema` returns conceptual column layout per type
+  - [x] Wired into `test_connection_command` + `connect_to_database` in `commands/connection.rs`
+  - [ ] Key browser and data viewer UI (TODO: future)
+  - [ ] Cluster and Sentinel support (TODO: future)
 
 **Frontend Integration:**
 
@@ -922,6 +931,9 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Recently Completed:**
 
+- ✅ **Redis Driver** — `DbDriver::Redis` variant with `redis` crate 0.27. `MultiplexedConnection` via `Arc<Mutex<...>>`. Key-type pseudo-tables (strings/hashes/lists/sets/zsets) via SCAN sampling. Raw Redis command execution (GET, SET, HGETALL, etc.). Wired into `test_connection_command` + `connect_to_database`. Default port 6379. (2026-05-15)
+- ✅ **Visual Schema Designer** — ReactFlow 3-panel drag-and-drop schema builder. Custom `TableSchemaNode` with column display (PK/UNQ/NN badges). Right-panel properties editor for table name, schema, 12 column types, FK references. FK edges auto-drawn between nodes. "Preview SQL" via `preview_create_table` + "Create Tables" via `create_table`. Route `/_connected/visual-schema-designer`, accessible from titlebar. (2026-05-15)
+- ✅ **Backup Manager** — `commands/backup.rs` with 6 commands: `get_backup_directory`, `list_backups`, `create_backup` (pg_dump / mysqldump / sqlite copy / mongodump subprocess), `restore_backup` (psql / mysql / sqlite copy), `delete_backup`, `open_backup_directory`. Data models in `models/backup.rs` (BackupEntry, BackupOptions, BackupStatus, RestoreOptions, BackupProgress). (2026-05-15)
 - ✅ **Stored Procedures & Functions Viewer** — New commands `list_procedures`, `get_procedure_definition`, `execute_procedure` (PG via `pg_proc` + `pg_get_functiondef`, MySQL via `information_schema.ROUTINES` + `SHOW CREATE`, SQL Server via `sys.objects`). `<StoredProceduresPanel>` lazy-loads definitions and offers an execute dialog with JSON args (2026-04-21)
 - ✅ **Write-Query Guards (dbpro parity)** — Pre-execute analyzer intercepts destructive SQL (DELETE/UPDATE without WHERE, DROP/TRUNCATE/DROP COLUMN); `<DestructiveQueryGuard>` AlertDialog; wired through `_connected/query.tsx` so Ctrl+Enter is also guarded; respects `settings.query.confirmDestructive` (2026-04-21)
 - ✅ **Query Folders (dbpro parity)** — Nested `SnippetFolder` tree in SnippetSidebar with context-menu create/rename/delete/move, cycle prevention, cascade-delete-to-root, search auto-expand; persisted separately from snippets for backward compat (2026-04-21)
@@ -946,15 +958,13 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Next Priorities (Pick from these):**
 
-1. **Visual Schema Designer** - Drag-and-drop database builder (tables, relationships, indexes) with DDL generation
-2. **Additional Database Drivers** - Supabase, Neon, Turso, Redis support
-3. **Schema Migration Tools** - Schema diff, migration SQL generation, version control
-4. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections
-5. **Stored Procedures** - View, edit, and execute stored procedures/functions
-6. **Database Comparison** - Compare schemas between two databases
-7. **Backup Manager** - Schedule and manage database backups
-8. **Performance Dashboard** - Real-time database performance metrics
-9. **Query Scheduler** - Schedule and automate recurring queries
+1. **Database Comparison** - Compare schemas between two connections (dev/staging/prod diffs)
+2. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections
+3. **Query Scheduler** - Schedule and automate recurring queries
+4. **Backup Manager UI** - Frontend for the existing backup commands (BackupManagerDialog component)
+5. **Redis Key Browser UI** - Dedicated key browser + data viewer for Redis connections
+6. **Performance Dashboard** - Real-time database performance metrics
+7. **Visual Schema Designer Enhancements** - Undo/redo, index designer, cardinality indicators
 
 **Documentation:**
 

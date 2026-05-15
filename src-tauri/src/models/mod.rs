@@ -4,6 +4,7 @@
 //! including connection profiles, metadata types, and error definitions.
 
 pub mod activity;
+pub mod backup;
 pub mod connection;
 pub mod ddl;
 pub mod error;
@@ -27,4 +28,5 @@ pub use history::{QueryHistory, QuerySnippet};
 pub use metadata::{
     ColumnInfo, DatabaseInfo, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
+pub use backup::{BackupEntry, BackupOptions, BackupProgress, BackupStatus, RestoreOptions};
 pub use settings::AppSettings;

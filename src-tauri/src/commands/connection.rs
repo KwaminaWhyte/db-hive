@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, State};
 use uuid::Uuid;
 
-use crate::drivers::{mongodb::MongoDbDriver, mysql::MysqlDriver, postgres::PostgresDriver, sqlite::SqliteDriver, sqlserver::SqlServerDriver, turso::TursoDriver, ConnectionOptions, DatabaseDriver};
+use crate::drivers::{mongodb::MongoDbDriver, mysql::MysqlDriver, postgres::PostgresDriver, redis::RedisDriver, sqlite::SqliteDriver, sqlserver::SqlServerDriver, turso::TursoDriver, ConnectionOptions, DatabaseDriver};
 use crate::models::{ConnectionProfile, ConnectionStatus, DbDriver, DbError};
 use crate::state::AppState;
 
@@ -118,6 +118,11 @@ pub async fn test_connection_command(
         }
         DbDriver::Turso => {
             let driver = TursoDriver::connect(opts).await?;
+            driver.test_connection().await?;
+            Ok(ConnectionStatus::Connected)
+        }
+        DbDriver::Redis => {
+            let driver = RedisDriver::connect(opts).await?;
             driver.test_connection().await?;
             Ok(ConnectionStatus::Connected)
         }
@@ -564,6 +569,10 @@ pub async fn connect_to_database(
         }
         DbDriver::Turso => {
             let driver = TursoDriver::connect(opts).await?;
+            Arc::new(driver)
+        }
+        DbDriver::Redis => {
+            let driver = RedisDriver::connect(opts).await?;
             Arc::new(driver)
         }
     };

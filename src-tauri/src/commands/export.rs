@@ -388,7 +388,7 @@ async fn export_table_to_sql(
             DbDriver::MySql => {
                 format!("DROP TABLE IF EXISTS `{}`.`{}`;", schema, table)
             }
-            DbDriver::MongoDb => {
+            DbDriver::MongoDb | DbDriver::Redis => {
                 format!("// db.{}.drop();", table)
             }
             DbDriver::SqlServer => {

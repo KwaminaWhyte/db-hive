@@ -33,7 +33,7 @@ const DATABASE_TYPES: DatabaseType[] = [
   { id: "supabase", name: "Supabase", icon: "⚡", bgColor: "bg-[#3ECF8E]", available: false },
   { id: "turso", name: "Turso", icon: "🐂", bgColor: "bg-[#4FF8D2]", available: false },
   { id: "neon", name: "Neon", icon: "💚", bgColor: "bg-[#00E699]", available: false },
-  { id: "redis", name: "Redis", icon: "🔴", bgColor: "bg-[#DC382D]", available: false },
+  { id: "redis", name: "Redis", icon: "🔴", bgColor: "bg-[#DC382D]", available: true },
 ];
 
 interface WelcomeScreenProps {
