@@ -16,7 +16,8 @@ export type DbDriver =
   | 'SqlServer'
   | 'Supabase'
   | 'Neon'
-  | 'Turso';
+  | 'Turso'
+  | 'Redis';
 
 /**
  * SSL/TLS connection mode
@@ -196,6 +197,8 @@ export function getDefaultPort(driver: DbDriver): number {
       return 5432;
     case 'Turso':
       return 443;
+    case 'Redis':
+      return 6379;
     default:
       return 0;
   }
@@ -222,6 +225,8 @@ export function getDriverDisplayName(driver: DbDriver): string {
       return 'Neon';
     case 'Turso':
       return 'Turso';
+    case 'Redis':
+      return 'Redis';
     default:
       return driver;
   }

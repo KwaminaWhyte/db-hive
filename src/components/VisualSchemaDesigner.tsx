@@ -9,11 +9,10 @@ import ReactFlow, {
   MiniMap,
   Node,
   NodeTypes,
+  OnConnect,
   Position,
   ReactFlowProvider,
   addEdge,
-  useEdgesState,
-  useNodesState,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import {
@@ -263,22 +262,23 @@ function VisualSchemaDesignerInner({ connectionId }: VisualSchemaDesignerInnerPr
     return edges;
   }, [tables]);
 
-  const [nodes, , onNodesChange] = useNodesState(rfNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(rfEdges);
+  // Manual edges added by drawing connections on canvas
+  const [manualEdges, setManualEdges] = useState<Edge[]>([]);
 
-  // Sync nodes back when tables change
-  const syncedNodes = rfNodes;
-  const syncedEdges = rfEdges;
-
-  const onConnect = useCallback(
-    (params: any) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
+  // Merge FK-derived edges with manually drawn edges
+  const allEdges = useMemo(
+    () => [...rfEdges, ...manualEdges],
+    [rfEdges, manualEdges]
   );
 
-  // Keep position in sync when user drags nodes
+  const onConnect: OnConnect = useCallback(
+    (params) => setManualEdges((eds) => addEdge(params, eds)),
+    []
+  );
+
+  // Handle node position changes from dragging
   const handleNodesChange = useCallback(
     (changes: any[]) => {
-      onNodesChange(changes);
       for (const change of changes) {
         if (change.type === "position" && change.position) {
           setTables((prev) =>
@@ -289,7 +289,19 @@ function VisualSchemaDesignerInner({ connectionId }: VisualSchemaDesignerInnerPr
         }
       }
     },
-    [onNodesChange]
+    []
+  );
+
+  const handleEdgesChange = useCallback(
+    (changes: any[]) => {
+      setManualEdges((eds) => {
+        const removed = new Set(
+          changes.filter((c) => c.type === "remove").map((c) => c.id)
+        );
+        return eds.filter((e) => !removed.has(e.id));
+      });
+    },
+    []
   );
 
   // ── Selected table helpers ───────────────────────────────────────────────
@@ -434,10 +446,10 @@ function VisualSchemaDesignerInner({ connectionId }: VisualSchemaDesignerInnerPr
         {/* Center: ReactFlow canvas */}
         <div className="flex-1 bg-muted/30">
           <ReactFlow
-            nodes={syncedNodes}
-            edges={syncedEdges}
+            nodes={rfNodes}
+            edges={allEdges}
             onNodesChange={handleNodesChange}
-            onEdgesChange={onEdgesChange}
+            onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
             nodeTypes={nodeTypes}
             fitView
