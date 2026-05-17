@@ -408,6 +408,7 @@ mod tests {
     use super::*;
     use crate::drivers::DatabaseDriver;
     use std::sync::Arc;
+    use tauri::Manager;
 
     // Mock driver for testing
     struct MockDriver;
@@ -472,19 +473,24 @@ mod tests {
         }
     }
 
-    fn create_test_state() -> Mutex<AppState> {
+    /// `tauri::State` has no public constructor, so command unit tests build a
+    /// mock app (requires the `tauri` `test` dev feature), manage the state on
+    /// it, and pull a real `State<'_, _>` via `app.state()`.
+    fn create_test_app() -> tauri::App<tauri::test::MockRuntime> {
         let mut state = AppState::new();
 
         // Add the mock driver as an active connection
         state.add_connection("test-conn-id".to_string(), Arc::new(MockDriver));
 
-        Mutex::new(state)
+        let app = tauri::test::mock_app();
+        app.manage(Mutex::new(state));
+        app
     }
 
     #[tokio::test]
     async fn test_get_databases() {
-        let state = create_test_state();
-        let result = get_databases("test-conn-id".to_string(), State::from(&state)).await;
+        let app = create_test_app();
+        let result = get_databases("test-conn-id".to_string(), app.state()).await;
 
         assert!(result.is_ok());
         let databases = result.unwrap();
@@ -494,8 +500,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_databases_invalid_connection() {
-        let state = create_test_state();
-        let result = get_databases("invalid-id".to_string(), State::from(&state)).await;
+        let app = create_test_app();
+        let result = get_databases("invalid-id".to_string(), app.state()).await;
 
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -506,11 +512,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_schemas() {
-        let state = create_test_state();
+        let app = create_test_app();
         let result = get_schemas(
             "test-conn-id".to_string(),
             "test_db".to_string(),
-            State::from(&state),
+            app.state(),
         )
         .await;
 
@@ -522,11 +528,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_tables() {
-        let state = create_test_state();
+        let app = create_test_app();
         let result = get_tables(
             "test-conn-id".to_string(),
             "public".to_string(),
-            State::from(&state),
+            app.state(),
         )
         .await;
 
@@ -538,12 +544,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_table_schema() {
-        let state = create_test_state();
+        let app = create_test_app();
         let result = get_table_schema(
             "test-conn-id".to_string(),
             "public".to_string(),
             "users".to_string(),
-            State::from(&state),
+            app.state(),
         )
         .await;
 

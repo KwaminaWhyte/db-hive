@@ -68,3 +68,8 @@ redis = { version = "0.27", features = ["tokio-comp", "connection-manager"] }
 [target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
 tauri-plugin-updater = "2.9.0"
 
+[dev-dependencies]
+# `test` feature enables tauri::test::mock_app(), used by command unit
+# tests to obtain a real `State<'_, _>` (the type has no public ctor).
+tauri = { version = "2", features = ["test"] }
+

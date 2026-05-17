@@ -19,6 +19,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Foreign-key tab "db error"**: FK drill-down tabs were created with a `table-…-fk{ts}` id that the URL-sync recreation re-parsed via `replace("table-","").split(".")`, yielding a non-existent table name (e.g. `forms-fk1779022533436`) and dropping the filter — producing `Query execution failed: db error`. Switched to a self-describing `tablefk-` id with a dedicated recreation branch that decodes schema/table/column/value and restores the filter.
 
+- **Keyset cursor SQL bug**: `get_table_data_keyset` interpolated the cursor via `serde_json::Value::to_string()`, emitting double-quoted string literals (invalid SQL in every engine) and breaking entirely for UUID / date / timestamp cursor columns. Replaced with a type-aware `cursor_sql_literal` that emits standard single-quoted, `'`-escaped literals.
+
+- **Test harness compile errors**: `commands/schema.rs` unit tests called `State::from(&Mutex<…>)`, which does not exist — the entire `cargo test --lib` target failed to compile, so *no* Rust test could run. Tests now build a `tauri::test::mock_app()` (new `tauri` `test` dev-feature) and obtain a real `State<'_, _>` via `app.state()`. Full suite restored: 118 tests run, 115 pass (the 3 `credentials` failures are environmental — no OS keyring in headless runs).
+
+### Performance (2026-05-17)
+
+- **Raw query row cap**: `execute_query` now caps materialized results at 50,000 rows (`MAX_RESULT_ROWS`) and returns a `truncated` flag; the query route shows a "add a LIMIT clause" toast. Bounds the OOM path for unbounded `SELECT *` without rewriting user SQL (driver-agnostic).
+
+- **Autocomplete metadata N×M → bounded concurrency**: `get_autocomplete_metadata` previously fetched tables per schema then column schema per table in a fully sequential `await` chain (200-table DB ≈ 200+ serial round-trips). Now fans the per-table fetches out via a `tokio::task::JoinSet` capped at 16 in-flight, and drops a redundant per-schema `Vec` clone.
+
+- **SQLite N+1 collapse**: `get_tables` row counts went from one `COUNT(*)` prepare per table to a single `UNION ALL`; `get_foreign_keys` went from one `PRAGMA foreign_key_list` per table to a single `pragma_foreign_key_list` join over `sqlite_master`.
+
+- **PostgreSQL connection pool**: `PostgresDriver` replaced its single `tokio_postgres::Client` with a `deadpool-postgres` pool (max 8, `RecyclingMethod::Fast`); TLS and NoTls paths preserved, `DatabaseDriver` trait signatures unchanged. Removes head-of-line blocking between concurrent tabs/queries on one connection.
+
+- **PostgreSQL zero-count N+1 collapse**: `get_tables` ran one `SELECT COUNT(*)` per table whose statistics estimate was 0; collapsed into a single `UNION ALL` round-trip.
+
+- **Non-blocking log export**: `export_query_logs` no longer calls `std::fs::write` on the async runtime; the serialized payload is written via `tokio::task::spawn_blocking`, and the state `MutexGuard` is dropped before the await.
+
+- **ActivityMonitor refetch decoupling**: split the single init effect so `fetchMetadata` (lists connection profiles + databases) no longer re-runs on every pagination / sort change — it now fires only on mount and `connectionId` change. Logs/stats refetch behavior unchanged.
+
+- **Vite vendor code-splitting**: added `build.rollupOptions.manualChunks` splitting `monaco` / `dagre` / `reactflow` / `radix` / `react-vendor` / `icons` / `tanstack` into separate chunks (was one combined bundle); `__APP_VERSION__` injection preserved.
+
+- **TableInspector keyset pagination**: when a table has exactly one primary-key column and the driver is not MongoDB, the data grid pages via the (now filter/sort-aware) `get_table_data_keyset` with a per-page cursor stack and First/Prev/Next controls — deep pages become index seeks instead of `OFFSET` scan-and-discard. Falls back to the original numbered-`OFFSET` path (with its deep-offset guard) for MongoDB / no-or-composite PK so the column-filter and FK drill-down features cannot regress.
+
 ### Added (2026-05-15)
 
 - **Redis Driver**: New `DbDriver::Redis` variant. Uses `redis` crate 0.27 with `tokio-comp` + `connection-manager` features. `MultiplexedConnection` wrapped in `Arc<Mutex<...>>` for thread-safe async access. Default port 6379. `execute_query` interprets the SQL input as a raw Redis command string (e.g. `GET mykey`, `HGETALL myhash`). `get_databases` returns 16 logical DBs (0–15). `get_tables` samples key types via SCAN and maps them to pseudo-tables: `strings`, `hashes`, `lists`, `sets`, `zsets`. `get_table_schema` returns a conceptual column layout per type (e.g. `key/field/value` for hashes). Foreign keys not applicable; returns empty vec. Wired into `test_connection_command` and `connect_to_database` in `commands/connection.rs`.
