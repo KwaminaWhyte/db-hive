@@ -617,7 +617,7 @@ function HomeRoute() {
         {/* Footer */}
         <footer className="border-t border-border px-6 py-3">
           <div className="flex items-center justify-center text-xs text-muted-foreground">
-            <span>Version 0.19.2-beta</span>
+            <span>Version 0.19.5-beta</span>
           </div>
           <div className="flex items-center justify-center gap-3 mt-1 text-xs text-muted-foreground">
             <a

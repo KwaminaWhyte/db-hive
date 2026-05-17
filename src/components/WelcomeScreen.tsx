@@ -233,7 +233,7 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                   <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]"></span>
                   <span>DB Hive</span>
                 </span>
-                <span className="text-muted-foreground/70">v0.4.0-beta</span>
+                <span className="text-muted-foreground/70">v0.19.5-beta</span>
                 <span className="hidden sm:inline text-border">•</span>
                 <span className="hidden sm:inline">
                   Dark mode · Keyboard-first
