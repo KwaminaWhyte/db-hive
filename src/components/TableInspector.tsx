@@ -47,6 +47,7 @@ import {
   RefreshCw,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
   Copy,
   Save,
   Trash2,
@@ -58,7 +59,12 @@ import {
   Filter,
   ExternalLink,
 } from "lucide-react";
-import { TableSchema, QueryExecutionResult, ForeignKeyInfo } from "@/types";
+import {
+  TableSchema,
+  QueryExecutionResult,
+  ForeignKeyInfo,
+  KeysetPageResult,
+} from "@/types";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { RowJsonViewer } from "./RowJsonViewer";
 import { EditableCell } from "./EditableCell";
@@ -186,6 +192,21 @@ export function TableInspector({
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize] = useState(35);
   const [totalRows, setTotalRows] = useState<number | null>(null);
+  // Keyset pagination cursor stack. `cursorStack[i]` holds the `cursorValue`
+  // required to fetch page `i` (0-based); `cursorStack[0]` is always `null`
+  // (first page). Only used when the table is keyset-eligible (see
+  // `keysetEligible` below); the OFFSET fallback path ignores it entirely.
+  const [cursorStack, setCursorStack] = useState<(any | null)[]>([null]);
+  // Whether the most recent keyset fetch reported additional rows. Drives the
+  // Next button in keyset mode (no COUNT-derived totalPages there).
+  const [keysetHasMore, setKeysetHasMore] = useState(false);
+  // Mirror of `cursorStack` so the fetch effect can read the cursor for the
+  // page being requested without taking `cursorStack` as an effect dep
+  // (appending the next cursor must not re-fire the same fetch).
+  const cursorStackRef = useRef<(any | null)[]>([null]);
+  useEffect(() => {
+    cursorStackRef.current = cursorStack;
+  }, [cursorStack]);
   const [selectedRow, setSelectedRow] = useState<any[] | null>(null);
   const [showRowViewer, setShowRowViewer] = useState(false);
   const [showTransactionPreview, setShowTransactionPreview] = useState(false);
@@ -221,6 +242,20 @@ export function TableInspector({
       });
     return m;
   }, [foreignKeys, tableName]);
+
+  // Single primary-key column (if exactly one exists). This is the cursor
+  // column for keyset pagination.
+  const keysetCursorColumn = useMemo(() => {
+    if (!tableSchema) return null;
+    const pks = tableSchema.columns.filter((c) => c.isPrimaryKey);
+    return pks.length === 1 ? pks[0].name : null;
+  }, [tableSchema]);
+
+  // Keyset is used ONLY when ALL of: not MongoDB, and exactly ONE primary-key
+  // column exists. Otherwise the existing OFFSET path (with its deep-offset
+  // guard) is kept exactly as-is.
+  const keysetEligible =
+    driverType !== "MongoDb" && keysetCursorColumn !== null;
 
   // Seed the structured filter once when opened from a foreign-key click
   const seededFilterRef = useRef(false);
@@ -355,24 +390,54 @@ export function TableInspector({
     setCurrentPage(1);
     setTotalRows(null);
     setDeepOffsetBlocked(false);
+    // Reset keyset pagination state when the table changes.
+    setCursorStack([null]);
+    setKeysetHasMore(false);
 
     // Fetch new table schema
     fetchTableSchema();
   }, [connectionId, schema, tableName]);
 
-  // Reset to page 1 when filters change
+  // Reset to page 1 when filters change (covers FK drill-down too: the seeded
+  // initialFilter flows into filterRows, which resets the cursor stack so the
+  // filtered keyset query starts from its own first page).
   useEffect(() => {
     setCurrentPage(1);
     setTotalRows(null);
     setDeepOffsetBlocked(false);
+    setCursorStack([null]);
+    setKeysetHasMore(false);
   }, [filterRows]);
 
-  // Fetch sample data when Data tab is opened, schema is loaded, page changes, or filters change
+  // Reset pagination when eligibility flips (e.g. schema loads and reveals a
+  // single-PK table, or driver/PK shape changes), so we never reuse an OFFSET
+  // page number as a keyset stack index or vice versa.
+  useEffect(() => {
+    setCurrentPage(1);
+    setTotalRows(null);
+    setDeepOffsetBlocked(false);
+    setCursorStack([null]);
+    setKeysetHasMore(false);
+  }, [keysetEligible]);
+
+  // Fetch sample data when Data tab is opened, schema is loaded, page changes,
+  // filters change, or pagination strategy (keyset vs offset) flips.
   useEffect(() => {
     if (activeTab === "data" && tableSchema) {
       fetchSampleData();
     }
-  }, [activeTab, tableName, schema, tableSchema, currentPage, filterRows]);
+    // `cursorStack` is intentionally NOT a dependency: the keyset fetch reads
+    // it via the functional setter / a ref-free snapshot and a stack append
+    // must not re-trigger the same page fetch.
+  }, [
+    activeTab,
+    tableName,
+    schema,
+    tableSchema,
+    currentPage,
+    filterRows,
+    keysetEligible,
+  ]);
 
   const fetchTableSchema = async () => {
     setLoading(true);
@@ -408,6 +473,90 @@ export function TableInspector({
     setLoadingSampleData(true);
     setError(null);
     try {
+      // ---- Keyset pagination path ----------------------------------------
+      // Used only for non-MongoDB tables with exactly one primary-key column.
+      // The deep-offset guard is irrelevant here (the DB seeks by indexed PK
+      // instead of scanning + discarding), so `deepOffsetBlocked` stays false.
+      if (keysetEligible && keysetCursorColumn) {
+        setDeepOffsetBlocked(false);
+
+        // Fetch total row count once (drives the "N rows" label, same as the
+        // OFFSET path). Filtered/FK-seeded queries reuse the existing
+        // unfiltered COUNT(*) for the label — this matches prior behavior.
+        if (totalRows === null) {
+          try {
+            const countResult = await invoke<QueryExecutionResult>(
+              "execute_query",
+              {
+                connectionId,
+                sql: `SELECT COUNT(*) FROM ${quoteIdentifier(
+                  schema
+                )}.${quoteIdentifier(tableName)}`,
+              }
+            );
+            const count = countResult.rows[0]?.[0];
+            setTotalRows(
+              typeof count === "number"
+                ? count
+                : parseInt(String(count)) || 0
+            );
+          } catch (err) {
+            console.error("Failed to fetch row count:", err);
+          }
+        }
+
+        // Cursor value required to fetch `currentPage` (1-based). Read from
+        // the ref so a stack append doesn't re-trigger this fetch.
+        const stack = cursorStackRef.current;
+        const cursorValue =
+          stack[currentPage - 1] !== undefined ? stack[currentPage - 1] : null;
+
+        // FK drill-down / structured filters reach the backend here:
+        // buildWhereClause() turns filterRows (seeded from initialFilter) into
+        // a `WHERE ...` string the command accepts and ANDs with the cursor.
+        const whereClause = buildWhereClause();
+
+        const page = await invoke<KeysetPageResult>(
+          "get_table_data_keyset",
+          {
+            connectionId,
+            schema,
+            table: tableName,
+            cursorColumn: keysetCursorColumn,
+            cursorValue: cursorValue ?? null,
+            pageSize,
+            filterClause: whereClause === "" ? null : whereClause,
+            sortDirection: "ASC",
+          }
+        );
+
+        setKeysetHasMore(page.hasMore);
+
+        // Append the next cursor so the following page can be fetched, but
+        // only if there is one and we don't already have it (avoids clobbering
+        // the stack when re-fetching a page, e.g. after an edit/commit).
+        if (page.hasMore && page.nextCursor !== null) {
+          setCursorStack((prev) => {
+            if (prev.length > currentPage) return prev;
+            return [...prev, page.nextCursor];
+          });
+        }
+
+        // Map KeysetPageResult into the QueryExecutionResult shape the table
+        // renderer / editor expect (it only needs `columns` + `rows`).
+        const mapped: QueryExecutionResult = {
+          columns: page.columns,
+          rows: page.rows as any[][],
+          rowsAffected: null,
+          executionTime: page.executionTime,
+          queryType: "SELECT",
+        };
+        setSampleData(mapped);
+        setLoadingSampleData(false);
+        return;
+      }
+
+      // ---- OFFSET fallback path (unchanged) ------------------------------
       // Calculate offset based on current page
       const offset = (currentPage - 1) * pageSize;
 
@@ -485,6 +634,15 @@ export function TableInspector({
   const maxSafePage = Math.floor(MAX_SAFE_OFFSET / pageSize) + 1;
 
   const handleNextPage = () => {
+    if (keysetEligible) {
+      // Advance only when the last fetch reported more rows. The cursor for
+      // the next page was appended to `cursorStack` by `fetchSampleData`.
+      if (keysetHasMore) {
+        setCurrentPage((p) => p + 1);
+      }
+      return;
+    }
+    // OFFSET fallback (unchanged behavior).
     if (totalRows === null) return;
     const totalPages = Math.ceil(totalRows / pageSize);
     if (currentPage < totalPages && currentPage < maxSafePage) {
@@ -494,8 +652,15 @@ export function TableInspector({
 
   const handlePreviousPage = () => {
     if (currentPage > 1) {
+      // In keyset mode the cursor for the previous page is already in the
+      // stack, so just stepping back is sufficient.
       setCurrentPage(currentPage - 1);
     }
+  };
+
+  // Keyset-only: jump back to the first page.
+  const handleFirstPage = () => {
+    setCurrentPage(1);
   };
 
   const totalPages = totalRows !== null ? Math.ceil(totalRows / pageSize) : null;
@@ -1528,60 +1693,106 @@ export function TableInspector({
                 {totalRows !== null ? `${totalRows.toLocaleString()} rows` : `${sampleData.rows.length} rows`}
               </span>
               <span className="text-muted-foreground">|</span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={handlePreviousPage}
-                disabled={currentPage === 1 || loadingSampleData}
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <div className="flex items-center gap-1 text-xs">
-                <input
-                  type="number"
-                  value={currentPage}
-                  onChange={(e) => {
-                    const page = parseInt(e.target.value);
-                    if (!isNaN(page) && page >= 1) {
-                      // Clamp manual jumps to the deep-offset-safe range so a
-                      // typed page number can't trigger a pathological query.
-                      const clamped = Math.min(page, maxSafePage);
-                      if (totalPages && clamped <= totalPages) {
-                        setCurrentPage(clamped);
-                      } else if (!totalPages) {
-                        setCurrentPage(clamped);
-                      }
-                    }
-                  }}
-                  className="w-12 h-7 text-center bg-muted border border-border rounded text-xs select-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-1 focus:ring-ring"
-                  min={1}
-                  max={Math.min(totalPages ?? maxSafePage, maxSafePage)}
-                />
-                <span className="text-muted-foreground">of {totalPages ?? "?"}</span>
-                {hasPagesBeyondCap && (
-                  <span
-                    className="text-amber-600 dark:text-amber-500"
-                    title={`Paging is capped at page ${maxSafePage.toLocaleString()} to avoid slow deep-offset queries. Filter to reach later rows.`}
+              {keysetEligible ? (
+                /* Keyset mode: cursor-based First/Prev/Next. There is no
+                   random page jump (no total page count from a cursor scan),
+                   so the numbered input is replaced by a read-only
+                   "Page N" indicator. */
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handleFirstPage}
+                    disabled={currentPage === 1 || loadingSampleData}
+                    title="First page"
                   >
-                    (capped at {maxSafePage.toLocaleString()})
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handlePreviousPage}
+                    disabled={currentPage === 1 || loadingSampleData}
+                    title="Previous page"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-xs text-muted-foreground px-1 select-none">
+                    Page {currentPage.toLocaleString()}
                   </span>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={handleNextPage}
-                disabled={
-                  totalPages === null ||
-                  currentPage >= totalPages ||
-                  currentPage >= maxSafePage ||
-                  loadingSampleData
-                }
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handleNextPage}
+                    disabled={!keysetHasMore || loadingSampleData}
+                    title="Next page"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </>
+              ) : (
+                /* OFFSET fallback: original numbered-page UI + deep-offset
+                   cap, kept exactly as-is. */
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handlePreviousPage}
+                    disabled={currentPage === 1 || loadingSampleData}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="flex items-center gap-1 text-xs">
+                    <input
+                      type="number"
+                      value={currentPage}
+                      onChange={(e) => {
+                        const page = parseInt(e.target.value);
+                        if (!isNaN(page) && page >= 1) {
+                          // Clamp manual jumps to the deep-offset-safe range so a
+                          // typed page number can't trigger a pathological query.
+                          const clamped = Math.min(page, maxSafePage);
+                          if (totalPages && clamped <= totalPages) {
+                            setCurrentPage(clamped);
+                          } else if (!totalPages) {
+                            setCurrentPage(clamped);
+                          }
+                        }
+                      }}
+                      className="w-12 h-7 text-center bg-muted border border-border rounded text-xs select-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-1 focus:ring-ring"
+                      min={1}
+                      max={Math.min(totalPages ?? maxSafePage, maxSafePage)}
+                    />
+                    <span className="text-muted-foreground">of {totalPages ?? "?"}</span>
+                    {hasPagesBeyondCap && (
+                      <span
+                        className="text-amber-600 dark:text-amber-500"
+                        title={`Paging is capped at page ${maxSafePage.toLocaleString()} to avoid slow deep-offset queries. Filter to reach later rows.`}
+                      >
+                        (capped at {maxSafePage.toLocaleString()})
+                      </span>
+                    )}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={handleNextPage}
+                    disabled={
+                      totalPages === null ||
+                      currentPage >= totalPages ||
+                      currentPage >= maxSafePage ||
+                      loadingSampleData
+                    }
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
               <span className="text-xs text-muted-foreground border-l border-border pl-2 ml-1">
                 {pageSize} / page
               </span>
