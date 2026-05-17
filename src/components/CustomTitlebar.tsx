@@ -13,6 +13,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { openAppModal } from "@/store/useAppModal";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { openDatabaseWindow } from "@/utils/multiWindow";
 import { Minus, Square, X, ChevronDown, Search } from "lucide-react";
 import { PluginToolbar } from "./PluginToolbar";
 import { TableCreationDialog } from "./TableCreationDialog";
@@ -151,6 +152,12 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
             <DropdownMenuContent align="start">
               <DropdownMenuItem onClick={() => navigate({ to: "/" })}>
                 New Connection
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => openDatabaseWindow()}>
+                New Window
+                <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                  {isMacOS ? "⌘⇧N" : "Ctrl+⇧N"}
+                </span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleClose}>

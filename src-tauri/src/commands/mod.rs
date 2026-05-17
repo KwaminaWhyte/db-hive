@@ -18,3 +18,4 @@ pub mod procedures;
 pub mod query;
 pub mod schema;
 pub mod settings;
+pub mod window;

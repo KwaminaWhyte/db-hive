@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-05-17
+
+### Added (2026-05-17)
+
+- **Multi-window support**: DB-Hive can now open multiple independent OS windows, each with its own connection. The Rust core stays a single process with one shared `AppState`; active connections are keyed by connection ID, so two windows talking to different databases never collide, and the OS keyring/credential layer remains shared and safe. New windows are created on the Rust side via `open_database_window` (`commands/window.rs`) with a unique `win-{uuid}` label; window chrome mirrors `main` (macOS overlay title bar / non-macOS decorations off). Affordances: per-connection **"Open in New Window"** in the home-screen profile menu (auto-connects the new window to that profile via a one-shot `PendingWindowProfiles` map consumed by `take_pending_window_profile` on boot), **File → New Window** in the custom titlebar, a **New Window** tray menu item, and a global **⌘⇧N / Ctrl+⇧N** shortcut. The Tauri capability now matches `win-*` windows; per-window geometry persistence (`windowState.ts`) is keyed by window label so windows no longer clobber each other's position/size (the `main` window keeps its legacy key).
+
 ## [0.20.0] - 2026-05-17
 
 ### Added (2026-05-17)
