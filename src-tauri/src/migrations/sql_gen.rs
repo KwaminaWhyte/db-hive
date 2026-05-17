@@ -303,8 +303,8 @@ impl Quoter {
             }
             DbDriver::MySql => Ok(Self { open: '`', close: '`' }),
             DbDriver::SqlServer => Ok(Self { open: '[', close: ']' }),
-            DbDriver::MongoDb => Err(DbError::InvalidInput(
-                "Schema migrations are not supported for MongoDB".to_string(),
+            DbDriver::MongoDb | DbDriver::Redis => Err(DbError::InvalidInput(
+                "Schema migrations are not supported for this driver".to_string(),
             )),
             DbDriver::Redis => Err(DbError::InvalidInput(
                 "Schema migrations are not supported for Redis".to_string(),

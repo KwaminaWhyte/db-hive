@@ -1,10 +1,12 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { openDatabaseWindow, takePendingWindowProfile } from "@/utils/multiWindow";
 import { ConnectionForm } from "@/components/ConnectionForm";
 import { DatabaseBrandIcon } from "@/components/DatabaseBrandIcon";
 import { HiveLogo } from "@/components/WelcomeScreen";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
+import { APP_VERSION } from "@/version";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
 import {
   ConnectionProfile,
@@ -42,6 +44,7 @@ import {
   Trash2,
   ChevronDown,
   RefreshCw,
+  AppWindow,
 } from "lucide-react";
 
 interface DatabaseTypeOption {
@@ -104,6 +107,10 @@ function HomeRoute() {
 
   // Connection string for new connection view
   const [connectionString, setConnectionString] = useState("");
+
+  // Multi-window: when this window was opened for a specific saved profile,
+  // auto-connect to it once profiles have loaded. One-shot.
+  const autoConnectAttempted = useRef(false);
 
   // Keyboard shortcuts
   useRouteShortcuts([
@@ -223,6 +230,25 @@ function HomeRoute() {
       setConnectingId(null);
     }
   };
+
+  // Auto-connect when this window was spawned for a saved profile
+  useEffect(() => {
+    if (autoConnectAttempted.current || loading) return;
+    autoConnectAttempted.current = true;
+    (async () => {
+      try {
+        const profileId = await takePendingWindowProfile();
+        if (!profileId) return;
+        const profile = profiles.find((p) => p.id === profileId);
+        if (profile) {
+          await handleConnectClick(profile);
+        }
+      } catch (err) {
+        console.error("Auto-connect for spawned window failed:", err);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   // Handle delete
   const handleDeleteConfirm = async () => {
@@ -595,6 +621,13 @@ function HomeRoute() {
                           <Copy className="h-4 w-4 mr-2" />
                           Copy Details
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onClick={() => openDatabaseWindow(profile.id)}
+                        >
+                          <AppWindow className="h-4 w-4 mr-2" />
+                          Open in New Window
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleDuplicate(profile)}>
                           <Files className="h-4 w-4 mr-2" />
                           Duplicate
@@ -624,7 +657,7 @@ function HomeRoute() {
         {/* Footer */}
         <footer className="border-t border-border px-6 py-3">
           <div className="flex items-center justify-center text-xs text-muted-foreground">
-            <span>Version 0.19.2-beta</span>
+            <span>Version {APP_VERSION}</span>
           </div>
           <div className="flex items-center justify-center gap-3 mt-1 text-xs text-muted-foreground">
             <a

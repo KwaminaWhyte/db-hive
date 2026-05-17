@@ -1,4 +1,5 @@
 import { FC } from "react";
+import { APP_VERSION } from "@/version";
 import { Button } from "./ui/button";
 import {
   Database,
@@ -33,7 +34,7 @@ const DATABASE_TYPES: DatabaseType[] = [
   { id: "supabase", name: "Supabase", icon: "⚡", bgColor: "bg-[#3ECF8E]", available: false },
   { id: "turso", name: "Turso", icon: "🐂", bgColor: "bg-[#4FF8D2]", available: false },
   { id: "neon", name: "Neon", icon: "💚", bgColor: "bg-[#00E699]", available: false },
-  { id: "redis", name: "Redis", icon: "🔴", bgColor: "bg-[#DC382D]", available: false },
+  { id: "redis", name: "Redis", icon: "🔴", bgColor: "bg-[#DC382D]", available: true },
 ];
 
 interface WelcomeScreenProps {
@@ -233,7 +234,7 @@ export const WelcomeScreen: FC<WelcomeScreenProps> = ({
                   <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(16,185,129,0.16)]"></span>
                   <span>DB Hive</span>
                 </span>
-                <span className="text-muted-foreground/70">v0.4.0-beta</span>
+                <span className="text-muted-foreground/70">v{APP_VERSION}</span>
                 <span className="hidden sm:inline text-border">•</span>
                 <span className="hidden sm:inline">
                   Dark mode · Keyboard-first

@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { APP_VERSION } from "@/version";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -32,7 +33,7 @@ function AboutRoute() {
   const [previousRoute, setPreviousRoute] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const version = "0.18.0-beta";
+  const version = APP_VERSION;
 
   // Store the previous route before navigating to about
   useEffect(() => {

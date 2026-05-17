@@ -58,6 +58,28 @@ DB-Hive follows Tauri's multi-process architecture:
    - State management will use Zustand
    - No sensitive data stored in frontend
 
+### Multi-Window Model
+
+DB-Hive is **multi-window**: any number of OS windows, each an independent
+WebView with its own connection context, backed by the single shared Rust
+core.
+
+- **Window creation is Rust-side** — `commands/window.rs::open_database_window`
+  builds a `WebviewWindowBuilder` window with a unique `win-{uuid}` label.
+  Never spawn windows from JS (the capability is intentionally not granted);
+  call the `open_database_window` command (`src/utils/multiWindow.ts`).
+- **No connection collision** — `AppState.connections` is keyed by connection
+  ID, so windows on different databases coexist safely; the OS keyring is
+  global and shared. Do not add window-scoped fields to `AppState`; if a
+  window must remember something, pass it via a one-shot map keyed by window
+  label (see `PendingWindowProfiles`).
+- **Per-window UI state must be window-scoped** — anything persisted to
+  `localStorage` that is window-specific must be keyed by
+  `getCurrentWindow().label` (e.g. `windowState.ts`). The `main` window keeps
+  legacy un-suffixed keys for backward compat.
+- **Capability**: `capabilities/default.json` `windows` must match both
+  `main` and `win-*`.
+
 ### IPC Communication Pattern
 
 **Frontend → Rust (Commands)**

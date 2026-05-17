@@ -197,12 +197,21 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
     }
   }, [filters.connectionId]);
 
-  // Initial fetch
+  // Fetch logs + stats whenever query inputs change (filters, sort, page, pageSize).
+  // fetchLogs depends on [filters, sort, page, pageSize] and fetchStats on [filters],
+  // so this effect re-runs only when those inputs actually change.
   useEffect(() => {
     fetchLogs();
     fetchStats();
+  }, [fetchLogs, fetchStats]);
+
+  // Fetch metadata (connection profiles, databases) only when its real input
+  // changes. fetchMetadata depends on [filters.connectionId], so this effect
+  // runs on mount and when the selected connection changes -- NOT on page,
+  // sort, pageSize, or other filter-field changes.
+  useEffect(() => {
     fetchMetadata();
-  }, [fetchLogs, fetchStats, fetchMetadata]);
+  }, [fetchMetadata]);
 
   // Auto-refresh effect
   useEffect(() => {

@@ -357,8 +357,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
   - [x] SQL preview panel with syntax highlighting
   - [x] Form validation (table name required, column names required)
   - [x] IF NOT EXISTS toggle
-  - [x] Foreign key builder UI (referenced-table picker, column multi-select, ON DELETE/UPDATE actions) — 2026-04-28
-  - [x] Unique constraint builder UI (multi-column, optional name) — 2026-04-28
+  - [ ] Foreign key builder UI (TODO: Future enhancement - types ready)
   - [ ] Index builder UI (TODO: Future enhancement - types ready)
 - [x] SchemaExplorer integration:
   - [x] "Create Table" context menu on schema
@@ -478,13 +477,13 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [x] Build settings page with sidebar navigation: ✅
   - [x] General settings (language, default database, startup behavior) ✅
   - [x] Theme settings (Dark/Light/Auto, accent color, editor font) ✅
-  - [x] Keyboard Shortcuts display + click-to-record customisation, live broadcast, reset-to-defaults ✅ (2026-04-28)
+  - [x] Keyboard Shortcuts display (read-only for now) ✅
   - [x] Query Execution Settings (timeout, max rows, auto-commit, confirmDestructive) ✅
   - [ ] Backup & Import/Export preferences (TODO: Future enhancement)
   - [ ] Plugins management (TODO: Future enhancement)
 - [ ] Add search bar for quick settings filtering (TODO: Future enhancement)
 - [x] Use card layout with toggles, dropdowns, text inputs ✅
-- [x] Implement keyboard shortcuts customization (in-place click-to-record per row, no separate modal) ✅ (2026-04-28)
+- [ ] Implement keyboard shortcuts customization modal (TODO: Future enhancement)
 
 ### Milestone 3.6: Logs & Activity Monitor ✅ COMPLETED
 
@@ -721,44 +720,49 @@ For detailed architecture patterns, see `CLAUDE.md`.
 - [ ] Support JOINs, WHERE, GROUP BY
 - [ ] Add preview mode
 
-### Milestone 3.15: Visual Schema Designer (Database Builder)
+### Milestone 3.15: Visual Schema Designer (Database Builder) ✅ COMPLETED (2026-05-15)
 
 **Drag-and-Drop Database Schema Creation**
 
-- [ ] **Canvas & Table Creation:**
-  - [ ] ReactFlow-based canvas (reuse ERD infrastructure)
-  - [ ] Drag-and-drop to create new table nodes
-  - [ ] Table toolbox/palette with "New Table" drag source
-  - [ ] Double-click table to edit properties
-  - [ ] Delete tables with confirmation
-  - [ ] Undo/redo support
+- [x] **Canvas & Table Creation:**
+  - [x] ReactFlow-based canvas (reuses ERD ReactFlow infrastructure)
+  - [x] "+ Add Table" button drops new table node at staggered canvas position
+  - [x] Draggable table nodes with position sync back to state
+  - [x] Delete table button (×) in node header
+  - [x] MiniMap + Controls for zoom/pan
 
-- [ ] **Column Designer (in-table editing):**
-  - [ ] Add columns directly in table box
-  - [ ] Column name, type, nullable, default value
-  - [ ] Primary key checkbox with visual indicator
-  - [ ] Auto-increment toggle
-  - [ ] Inline column reordering (drag within table)
-  - [ ] Quick type selector (common types)
+- [x] **Table Node Display:**
+  - [x] `TableSchemaNode` custom ReactFlow node (280px wide)
+  - [x] Header: primary color background + table name + delete button
+  - [x] Column rows: PK key icon, FK link icon, type label, UNQ/NN badges
+  - [x] ReactFlow handles on left/right for FK edge drawing
 
-- [ ] **Relationship Builder:**
-  - [ ] Draw lines between tables to create foreign keys
-  - [ ] Source column → Target column mapping
-  - [ ] ON DELETE/UPDATE action selector
-  - [ ] Cardinality indicators (1:1, 1:N, M:N)
-  - [ ] Junction table auto-generation for M:N
-  - [ ] Visual relationship editing (click to modify)
+- [x] **Right Panel Properties Editor:**
+  - [x] Table name + schema inputs
+  - [x] Column list: name, type dropdown (12 types), PK/nullable/unique toggles
+  - [x] FK reference inputs (references table + column)
+  - [x] Add/remove column buttons
 
-- [ ] **Index Designer:**
-  - [ ] Add indexes to tables visually
-  - [ ] Multi-column index support
-  - [ ] Unique index toggle
-  - [ ] Index type selection (B-tree, Hash, etc.)
-  - [ ] Visual index indicator on columns
+- [x] **Relationship Builder:**
+  - [x] FK edges auto-drawn when `referencesTable` set on a column
+  - [x] Animated edges with primary color
+  - [x] ReactFlow `onConnect` for manual edge drawing
 
-- [ ] **Constraints:**
-  - [ ] Unique constraints (visual indicator)
-  - [ ] Check constraints with expression editor
+- [x] **SQL Generation:**
+  - [x] "Preview SQL" → calls `preview_create_table` for each table → shows in Dialog
+  - [x] "Create Tables" → calls `create_table` sequentially with success/error toasts
+  - [x] Maps 12 designer types to backend `ColumnType` enum
+
+- [x] **UI/UX:**
+  - [x] 3-panel layout: table list (200px) + canvas + properties (300px)
+  - [x] Left panel table list with click-to-select
+  - [x] Route: `/_connected/visual-schema-designer`
+  - [x] Accessible from titlebar "Schema Designer" menu item
+
+- [ ] Undo/redo support (TODO: future)
+- [ ] Index designer (TODO: future)
+- [ ] Check constraints editor (TODO: future)
+- [ ] Cardinality indicators (TODO: future)
   - [ ] Not null constraints
   - [ ] Default value expressions
 
@@ -854,49 +858,54 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Implementation Date:** 2025-11-29
 
-### Milestone 3.13: Additional Database Drivers ✅ COMPLETED (2026-04-28)
+### Milestone 3.13: Additional Database Drivers
 
 **Cloud & Serverless Databases**
 
 - [x] **Supabase Driver:** (2026-04-21)
-  - [x] PostgreSQL-compatible connection routed to existing `PostgresDriver`
-  - [x] Connection-string preset + URL sniffing for `*.supabase.co`
-  - [x] `sslMode` defaulted to `Require` (SSL/TLS via native-tls + postgres-native-tls)
-  - [x] Reuses existing PostgreSQL driver infrastructure
-  - [ ] Connection pooler mode toggle (Transaction vs Session) — future enhancement
+  - [x] PostgreSQL-compatible connection via Supabase URL
+  - [x] SSL/TLS enabled by default for cloud connections (native-tls + postgres-native-tls)
+  - [x] Reuse existing PostgreSQL driver infrastructure
+  - [ ] Connection pooler awareness (Transaction/Session modes) — user-selected by host (pooler vs direct)
 
 - [x] **Neon Driver:** (2026-04-21)
-  - [x] PostgreSQL-compatible serverless connection routed to `PostgresDriver`
-  - [x] Connection-string preset + URL sniffing for `*.neon.tech`
-  - [x] `sslMode` defaulted to `Require` (Neon endpoints mandate TLS)
-  - [x] Reuses existing PostgreSQL driver infrastructure
-  - [ ] Branch/project-aware UI hints, cold start / pooling tuning — future enhancement
+  - [x] PostgreSQL-compatible serverless connection
+  - [x] SSL required by default (Neon endpoints mandate TLS)
+  - [x] Reuse existing PostgreSQL driver infrastructure
+  - [ ] Cold start handling and dedicated pooling tuning
 
 - [x] **Turso Driver:** (2026-04-21)
-  - [x] libSQL HTTP/Hrana support via `libsql::Builder::new_remote` (`libsql` crate 0.9)
-  - [x] Auth-token handling (entered as password, labelled "Auth Token"; stored in OS keyring)
-  - [x] URL field replaces host/port (accepts `libsql://`, `https://`, `wss://`, bare hostname)
-  - [x] SQLite-style metadata via PRAGMAs (`table_info`, `index_list`, `foreign_key_list`)
+  - [x] libSQL/SQLite edge database support via `libsql` crate 0.9
+  - [x] Remote connection via `libsql://` / `https://` URL
+  - [x] Authentication token handling (stored in OS keyring)
+  - [x] Form adaptations: URL-accepting host, renamed "Auth Token" password field, hidden username
   - [x] Routes through `SqliteDdlGenerator` in migration + DDL paths
-  - [ ] Embedded replica support — future enhancement
+  - [ ] Embedded replica support (TODO: future)
 
-- [x] **Redis Driver:**
-  - [x] Key-value store operations via `redis::cmd` with quoted-argv tokeniser
-  - [x] Multiple data-structure commands supported (Strings, Lists, Sets, Hashes, Sorted Sets via raw commands)
-  - [x] Connection-string preset + URL sniffing for `redis://` / `rediss://`
-  - [x] 16 numbered logical databases (`db0..db15`) exposed via `get_databases`
-  - [x] Non-blocking `SCAN` (capped at 1000) for `get_tables`
-  - [x] Per-key type/TTL inspection via `get_table_schema`
-  - [ ] Cluster and Sentinel support — future enhancement
+- [x] **Redis Driver:** ✅ COMPLETED (2026-05-15)
+  - [x] `DbDriver::Redis` variant, default port 6379
+  - [x] `redis` crate 0.27 with `tokio-comp` + `connection-manager` features
+  - [x] `MultiplexedConnection` via `Arc<Mutex<...>>` for thread-safe async access
+  - [x] Key-value store operations via raw Redis command string execution
+  - [x] Data structure types mapped as pseudo-tables: strings, hashes, lists, sets, zsets
+  - [x] `get_databases` returns logical DBs 0-15; `get_schemas` returns virtual "keys" namespace
+  - [x] `get_tables` samples key types via SCAN; `get_table_schema` returns conceptual column layout per type
+  - [x] Wired into `test_connection_command` + `connect_to_database` in `commands/connection.rs`
+  - [ ] Key browser and data viewer UI (TODO: future)
+  - [ ] Cluster and Sentinel support (TODO: future)
 
 **Frontend Integration:**
 
-- [x] Connection form updates for each driver type (URL field for Turso, DB-index field for Redis, optional username for both)
-- [x] Driver-specific icons + branding (Supabase emerald-600, Neon teal-500, Turso purple-500, Redis red-600)
-- [x] Connection testing reuses generic `test_connection_command` flow
-- [x] SSL defaults set per driver (Supabase/Neon → Require)
+- [ ] Connection form updates for each driver type
+- [ ] Driver-specific icons and branding
+- [ ] Connection testing for cloud databases
+- [ ] SSL certificate handling UI
 
-**Implementation Date:** 2026-04-28
+**Notes:**
+
+- Supabase and Neon can leverage existing PostgreSQL driver
+- Turso requires libsql Rust crate integration
+- Redis requires custom UI (non-relational data model)
 
 ---
 
@@ -922,6 +931,14 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Recently Completed:**
 
+- ✅ **Multi-Window Support** — Multiple independent OS windows, each with its own connection. Single Rust process / shared `AppState` (connections keyed by ID → no cross-window collision; keyring shared & safe). Rust-side window creation in `commands/window.rs` (`open_database_window`, unique `win-{uuid}` label, chrome mirrors `main`); one-shot `PendingWindowProfiles` map + `take_pending_window_profile` drives per-window auto-connect. Affordances: home-screen "Open in New Window" per profile, titlebar File → New Window, tray "New Window", global ⌘⇧N / Ctrl+⇧N. Capability widened to `win-*`; `windowState.ts` geometry keyed per window label (legacy key kept for `main`). (2026-05-17)
+- ✅ **Performance Hardening Pass** — Audit-driven backend/frontend optimizations: 50k row cap on `execute_query` (+`truncated` flag/toast); `get_autocomplete_metadata` N×M sequential awaits → `tokio::task::JoinSet` bounded at 16; SQLite `get_tables`/`get_foreign_keys` and PostgreSQL zero-count N+1 collapsed into single round-trips; `PostgresDriver` moved to a `deadpool-postgres` pool (max 8); `export_query_logs` writes off-runtime via `spawn_blocking`; ActivityMonitor metadata refetch decoupled from pagination; Vite `manualChunks` vendor splitting; TableInspector keyset pagination (single-PK/non-Mongo) with OFFSET fallback, backed by a hardened filter/sort-aware `get_table_data_keyset` (fixed an invalid-SQL cursor-literal bug). Also restored the `cargo test --lib` target (was uncompilable due to `State::from` in `schema.rs` tests; now uses `tauri::test::mock_app()` — 118 tests run, 115 pass, 3 keyring failures environmental). (2026-05-17)
+- ✅ **Backup Manager UI** — `<BackupManagerDialog>` over the existing backup commands. Titlebar View-menu entry via `useAppModal` (`"backup"`, rendered in `GlobalModals`). Directory header (Open Folder/Refresh), create panel (schema/data toggles, note, slow-op loading), backups table with per-row Restore (destructive confirm + drop-existing checkbox) and Delete. (2026-05-17)
+- ✅ **Redis Key Browser (left sidebar)** — For Redis connections SchemaExplorer renders `<RedisSchemaTree>` instead of the relational tree: five key-type groups lazy-loaded via type-filtered `SCAN … TYPE`, search-box glob, "Load more…". Clicking a key opens `<RedisValuePanel>` in a main-area tab (new `"redis"` TabContext type, `rediskey-` tab id). Replaced the earlier titlebar-menu `/redis-keys` two-pane browser. (2026-05-17)
+- ✅ **Foreign-Key Drill-Down** — Table Inspector FK cells expose an external-link button + "Open Referenced Record" context entry; opens the referenced table in a new tab pre-filtered to the related row via a self-describing `tablefk-` tab id (URL-sync recreation rebuilds schema/table/column/value + filter). (2026-05-17)
+- ✅ **Redis Driver** — `DbDriver::Redis` variant with `redis` crate 0.27. `MultiplexedConnection` via `Arc<Mutex<...>>`. Key-type pseudo-tables (strings/hashes/lists/sets/zsets) via SCAN sampling. Raw Redis command execution (GET, SET, HGETALL, etc.). Wired into `test_connection_command` + `connect_to_database`. Default port 6379. (2026-05-15)
+- ✅ **Visual Schema Designer** — ReactFlow 3-panel drag-and-drop schema builder. Custom `TableSchemaNode` with column display (PK/UNQ/NN badges). Right-panel properties editor for table name, schema, 12 column types, FK references. FK edges auto-drawn between nodes. "Preview SQL" via `preview_create_table` + "Create Tables" via `create_table`. Route `/_connected/visual-schema-designer`, accessible from titlebar. (2026-05-15)
+- ✅ **Backup Manager** — `commands/backup.rs` with 6 commands: `get_backup_directory`, `list_backups`, `create_backup` (pg_dump / mysqldump / sqlite copy / mongodump subprocess), `restore_backup` (psql / mysql / sqlite copy), `delete_backup`, `open_backup_directory`. Data models in `models/backup.rs` (BackupEntry, BackupOptions, BackupStatus, RestoreOptions, BackupProgress). (2026-05-15)
 - ✅ **Stored Procedures & Functions Viewer** — New commands `list_procedures`, `get_procedure_definition`, `execute_procedure` (PG via `pg_proc` + `pg_get_functiondef`, MySQL via `information_schema.ROUTINES` + `SHOW CREATE`, SQL Server via `sys.objects`). `<StoredProceduresPanel>` lazy-loads definitions and offers an execute dialog with JSON args (2026-04-21)
 - ✅ **Write-Query Guards (dbpro parity)** — Pre-execute analyzer intercepts destructive SQL (DELETE/UPDATE without WHERE, DROP/TRUNCATE/DROP COLUMN); `<DestructiveQueryGuard>` AlertDialog; wired through `_connected/query.tsx` so Ctrl+Enter is also guarded; respects `settings.query.confirmDestructive` (2026-04-21)
 - ✅ **Query Folders (dbpro parity)** — Nested `SnippetFolder` tree in SnippetSidebar with context-menu create/rename/delete/move, cycle prevention, cascade-delete-to-root, search auto-expand; persisted separately from snippets for backward compat (2026-04-21)
@@ -946,15 +963,11 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Next Priorities (Pick from these):**
 
-1. **Visual Schema Designer** - Drag-and-drop database builder (tables, relationships, indexes) with DDL generation
-2. **Additional Database Drivers** - Supabase, Neon, Turso, Redis support
-3. **Schema Migration Tools** - Schema diff, migration SQL generation, version control
-4. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections
-5. **Stored Procedures** - View, edit, and execute stored procedures/functions
-6. **Database Comparison** - Compare schemas between two databases
-7. **Backup Manager** - Schedule and manage database backups
-8. **Performance Dashboard** - Real-time database performance metrics
-9. **Query Scheduler** - Schedule and automate recurring queries
+1. **Database Comparison** - Compare schemas between two connections (dev/staging/prod diffs)
+2. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections
+3. **Query Scheduler** - Schedule and automate recurring queries
+4. **Performance Dashboard** - Real-time database performance metrics
+5. **Visual Schema Designer Enhancements** - Undo/redo, index designer, cardinality indicators
 
 **Documentation:**
 

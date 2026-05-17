@@ -7,12 +7,15 @@ import { createContext, useContext, useState, ReactNode, useCallback, useEffect,
  */
 export interface TabState {
   id: string;
-  type: "query" | "table";
+  type: "query" | "table" | "redis";
   label: string;
 
   // For query tabs
   sql?: string;
   results?: any;
+
+  // For redis key-value tabs
+  redisKey?: string;
 
   // For table tabs
   schema?: string;

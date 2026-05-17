@@ -4,7 +4,8 @@
 //! using tokio-postgres for async database operations.
 
 use async_trait::async_trait;
-use tokio_postgres::{Client, NoTls};
+use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
+use tokio_postgres::NoTls;
 
 use super::{ConnectionOptions, DatabaseDriver, QueryResult};
 use crate::models::{
@@ -22,9 +23,17 @@ fn quote_ident(ident: &str) -> String {
 /// Manages connections to PostgreSQL databases and provides query execution
 /// and metadata retrieval capabilities.
 pub struct PostgresDriver {
-    /// The active PostgreSQL client connection
-    client: Client,
+    /// Connection pool backing all queries.
+    ///
+    /// Using a pool (instead of a single shared `Client`) means concurrent
+    /// queries from multiple tabs no longer serialize on one connection, and a
+    /// single dropped connection no longer kills the whole driver: deadpool
+    /// recycles/recreates connections transparently.
+    pool: Pool,
 }
+
+/// Default maximum number of pooled connections.
+const POOL_MAX_SIZE: usize = 8;
 
 impl PostgresDriver {
     /// Build PostgreSQL connection string from options
@@ -54,6 +63,17 @@ impl PostgresDriver {
         }
 
         parts.join(" ")
+    }
+
+    /// Acquire a pooled client.
+    ///
+    /// Pool acquisition failures are mapped to `DbError::ConnectionError`
+    /// (matching the variants already used elsewhere in this file).
+    async fn client(&self) -> Result<deadpool_postgres::Client, DbError> {
+        self.pool
+            .get()
+            .await
+            .map_err(|e| DbError::ConnectionError(format!("Failed to acquire connection: {}", e)))
     }
 
     /// Convert a postgres::Row to a Vec of JSON values
@@ -291,37 +311,53 @@ impl DatabaseDriver for PostgresDriver {
     {
         let connection_string = Self::build_connection_string(&opts);
 
-        let client = if opts.require_tls {
+        let pg_config: tokio_postgres::Config = connection_string
+            .parse()
+            .map_err(|e| DbError::ConnectionError(format!("Failed to parse config: {}", e)))?;
+
+        let mgr_config = ManagerConfig {
+            recycling_method: RecyclingMethod::Fast,
+        };
+
+        // Build the connection manager, preserving the original TLS vs NoTls
+        // branching. The deadpool `Manager` is generic over the TLS connector,
+        // so each branch produces a differently-typed `Pool::builder` chain;
+        // both arms still yield a `deadpool_postgres::Pool`.
+        let pool = if opts.require_tls {
             let connector = native_tls::TlsConnector::builder()
                 .build()
                 .map_err(|e| DbError::ConnectionError(format!("TLS init failed: {}", e)))?;
             let tls = postgres_native_tls::MakeTlsConnector::new(connector);
-            let (client, connection) = tokio_postgres::connect(&connection_string, tls)
-                .await
-                .map_err(|e| DbError::ConnectionError(format!("Failed to connect: {}", e)))?;
-            tokio::spawn(async move {
-                if let Err(e) = connection.await {
-                    eprintln!("PostgreSQL connection error: {}", e);
-                }
-            });
-            client
+            let manager = Manager::from_config(pg_config, tls, mgr_config);
+            Pool::builder(manager)
+                .max_size(POOL_MAX_SIZE)
+                .build()
+                .map_err(|e| {
+                    DbError::ConnectionError(format!("Failed to build connection pool: {}", e))
+                })?
         } else {
-            let (client, connection) = tokio_postgres::connect(&connection_string, NoTls)
-                .await
-                .map_err(|e| DbError::ConnectionError(format!("Failed to connect: {}", e)))?;
-            tokio::spawn(async move {
-                if let Err(e) = connection.await {
-                    eprintln!("PostgreSQL connection error: {}", e);
-                }
-            });
-            client
+            let manager = Manager::from_config(pg_config, NoTls, mgr_config);
+            Pool::builder(manager)
+                .max_size(POOL_MAX_SIZE)
+                .build()
+                .map_err(|e| {
+                    DbError::ConnectionError(format!("Failed to build connection pool: {}", e))
+                })?
         };
 
-        Ok(Self { client })
+        // Validate that we can actually establish a connection now, preserving
+        // the original behaviour where `connect()` failed fast on bad creds.
+        let _ = pool
+            .get()
+            .await
+            .map_err(|e| DbError::ConnectionError(format!("Failed to connect: {}", e)))?;
+
+        Ok(Self { pool })
     }
 
     async fn test_connection(&self) -> Result<(), DbError> {
-        self.client
+        let client = self.client().await?;
+        client
             .query("SELECT 1", &[])
             .await
             .map_err(|e| DbError::ConnectionError(format!("Connection test failed: {}", e)))?;
@@ -334,9 +370,11 @@ impl DatabaseDriver for PostgresDriver {
         // Simple heuristic: contains semicolons not in quotes
         let has_multiple_statements = sql.matches(';').count() > 1;
 
+        let client = self.client().await?;
+
         if has_multiple_statements {
             // Use batch_execute for multi-statement SQL (transactions)
-            self.client
+            client
                 .batch_execute(sql)
                 .await
                 .map_err(|e| DbError::QueryError(format!("Transaction execution failed: {}", e)))?;
@@ -346,12 +384,12 @@ impl DatabaseDriver for PostgresDriver {
         }
 
         // Try to execute as a query first (for SELECT statements)
-        match self.client.query(sql, &[]).await {
+        match client.query(sql, &[]).await {
             Ok(rows) => {
                 // Extract column names from the statement, even if there are no rows
                 let columns: Vec<String> = if rows.is_empty() {
                     // For empty result sets, we need to execute the query to get column metadata
-                    match self.client.prepare(sql).await {
+                    match client.prepare(sql).await {
                         Ok(statement) => statement
                             .columns()
                             .iter()
@@ -375,7 +413,7 @@ impl DatabaseDriver for PostgresDriver {
             }
             Err(query_err) => {
                 // If query failed, try as an execute (for INSERT/UPDATE/DELETE)
-                match self.client.execute(sql, &[]).await {
+                match client.execute(sql, &[]).await {
                     Ok(rows_affected) => Ok(QueryResult::with_affected(rows_affected)),
                     Err(_execute_err) => {
                         // Both query and execute failed, return the query error with full details
@@ -397,8 +435,8 @@ impl DatabaseDriver for PostgresDriver {
             ORDER BY datname
         "#;
 
-        let rows = self
-            .client
+        let client = self.client().await?;
+        let rows = client
             .query(query, &[])
             .await
             .map_err(|e| DbError::QueryError(format!("Failed to fetch databases: {}", e)))?;
@@ -435,8 +473,8 @@ impl DatabaseDriver for PostgresDriver {
             ORDER BY nspname
         "#;
 
-        let rows = self
-            .client
+        let client = self.client().await?;
+        let rows = client
             .query(query, &[])
             .await
             .map_err(|e| DbError::QueryError(format!("Failed to fetch schemas: {}", e)))?;
@@ -505,8 +543,8 @@ impl DatabaseDriver for PostgresDriver {
             ORDER BY name
         "#;
 
-        let rows = self
-            .client
+        let client = self.client().await?;
+        let rows = client
             .query(query, &[&schema])
             .await
             .map_err(|e| DbError::QueryError(format!("Failed to fetch tables: {}", e)))?;
@@ -538,18 +576,31 @@ impl DatabaseDriver for PostgresDriver {
             .map(|t| t.name.clone())
             .collect();
 
-        for table_name in &zero_count_tables {
-            // Use quoted identifier to handle special characters in table names
-            let count_sql = format!(
-                "SELECT COUNT(*) FROM {}.{}",
-                quote_ident(schema),
-                quote_ident(table_name)
-            );
+        // Collapse the per-table COUNT(*) into a single round-trip: one
+        // UNION ALL of `SELECT 'name', COUNT(*)` instead of N sequential
+        // query_one() calls. `'...'` escapes the name as a string literal;
+        // quote_ident() handles the FROM identifier.
+        if !zero_count_tables.is_empty() {
+            let union = zero_count_tables
+                .iter()
+                .map(|name| {
+                    format!(
+                        "SELECT '{}' AS n, COUNT(*) AS c FROM {}.{}",
+                        name.replace('\'', "''"),
+                        quote_ident(schema),
+                        quote_ident(name)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" UNION ALL ");
 
-            if let Ok(row) = self.client.query_one(&count_sql, &[]).await {
-                let actual_count: i64 = row.get(0);
-                if let Some(table) = tables.iter_mut().find(|t| &t.name == table_name) {
-                    table.row_count = Some(actual_count as u64);
+            if let Ok(rows) = client.query(&union, &[]).await {
+                for row in &rows {
+                    let name: String = row.get(0);
+                    let actual_count: i64 = row.get(1);
+                    if let Some(table) = tables.iter_mut().find(|t| t.name == name) {
+                        table.row_count = Some(actual_count.max(0) as u64);
+                    }
                 }
             }
         }
@@ -582,8 +633,8 @@ impl DatabaseDriver for PostgresDriver {
             ORDER BY c.ordinal_position
         "#;
 
-        let column_rows = self
-            .client
+        let client = self.client().await?;
+        let column_rows = client
             .query(column_query, &[&schema, &table])
             .await
             .map_err(|e| DbError::QueryError(format!("Failed to fetch columns: {}", e)))?;
@@ -639,8 +690,7 @@ impl DatabaseDriver for PostgresDriver {
             ORDER BY i.relname
         "#;
 
-        let index_rows = self
-            .client
+        let index_rows = client
             .query(index_query, &[&schema, &table])
             .await
             .map_err(|e| DbError::QueryError(format!("Failed to fetch indexes: {}", e)))?;
@@ -704,8 +754,8 @@ impl DatabaseDriver for PostgresDriver {
             ORDER BY tc.table_name, tc.constraint_name, kcu.ordinal_position
         "#;
 
-        let rows = self
-            .client
+        let client = self.client().await?;
+        let rows = client
             .query(query, &[&schema])
             .await
             .map_err(|e| DbError::QueryError(format!("Failed to fetch foreign keys: {}", e)))?;

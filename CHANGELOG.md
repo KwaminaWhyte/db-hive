@@ -7,6 +7,58 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.21.0] - 2026-05-17
+
+### Added (2026-05-17)
+
+- **Multi-window support**: DB-Hive can now open multiple independent OS windows, each with its own connection. The Rust core stays a single process with one shared `AppState`; active connections are keyed by connection ID, so two windows talking to different databases never collide, and the OS keyring/credential layer remains shared and safe. New windows are created on the Rust side via `open_database_window` (`commands/window.rs`) with a unique `win-{uuid}` label; window chrome mirrors `main` (macOS overlay title bar / non-macOS decorations off). Affordances: per-connection **"Open in New Window"** in the home-screen profile menu (auto-connects the new window to that profile via a one-shot `PendingWindowProfiles` map consumed by `take_pending_window_profile` on boot), **File → New Window** in the custom titlebar, a **New Window** tray menu item, and a global **⌘⇧N / Ctrl+⇧N** shortcut. The Tauri capability now matches `win-*` windows; per-window geometry persistence (`windowState.ts`) is keyed by window label so windows no longer clobber each other's position/size (the `main` window keeps its legacy key).
+
+## [0.20.0] - 2026-05-17
+
+### Added (2026-05-17)
+
+- **Backup Manager UI**: New `<BackupManagerDialog>` driving the existing backup commands. Opened from the titlebar View menu ("Backup Manager") via the `useAppModal` store (modal key `"backup"`, rendered in `GlobalModals`). Header shows the backup directory with Open Folder (`open_backup_directory`) + Refresh. Create panel: Include Schema / Include Data checkboxes, optional note, slow-op loading state, disabled with hint when no active connection or nothing selected. Backups list: shadcn table (file, connection, driver badge, human-readable size, created date, status) with per-row Restore (destructive `AlertDialog` + "Drop & recreate database first" checkbox bound to `dropExisting`) and Delete (confirm → `delete_backup`). Operates on the active connection via `useConnectionContext`; errors surfaced through `sonner`.
+
+- **Redis Key Browser (left sidebar)**: For Redis connections the left schema tree is replaced by `<RedisSchemaTree>` — five collapsible key-type groups (Strings/Hashes/Lists/Sets/Sorted Sets) that lazy-load via a server-side type-filtered `SCAN <cursor> MATCH <pattern> COUNT 300 TYPE <t>` (no per-key TYPE calls), honour the SchemaExplorer search box as a glob pattern, de-dupe, and offer "Load more…" until the cursor exhausts. Clicking a key opens its value in a main-area tab (`<RedisValuePanel>`, tab id `rediskey-{encodeURIComponent(key)}`, rebuildable by the query route's URL-sync recreation): copyable key name, type badge, TTL label, type-appropriate rendering (string with JSON pretty-print, hash, list, set, zset), Refresh, and per-key Delete (`DEL`) behind a destructive `AlertDialog`. New TabContext tab type `"redis"` (+ `redisKey`). Everything runs through the Redis driver's raw-command `execute_query`. (Supersedes the earlier titlebar-menu `/redis-keys` two-pane browser, which was removed.)
+
+- **Foreign-Key Drill-Down**: Hovering a foreign-key cell in the Table Inspector reveals an external-link button; a "Open Referenced Record" entry is also added to the cell context menu. Activating it opens a new tab on the referenced table pre-filtered to the related row. `TableInspector` now fetches `get_foreign_keys` on schema load and maps FK columns → referenced schema/table/column. New props `initialFilter` (seeds an `equals` filter row + auto-opens the filter bar) and `onOpenRelated`. Drill-down tabs use a deterministic `tablefk-{schema}.{table}::{column}::{encodeURIComponent(value)}` id so the URL-sync recreation can rebuild them authoritatively (schema/table/column/value + filter) even if pruned before the URL syncs; re-clicking the same FK focuses the existing tab instead of duplicating it. `ForeignKeyInfo` is now re-exported from `@/types`.
+
+### Fixed (2026-05-17)
+
+- **Foreign-key tab "db error"**: FK drill-down tabs were created with a `table-…-fk{ts}` id that the URL-sync recreation re-parsed via `replace("table-","").split(".")`, yielding a non-existent table name (e.g. `forms-fk1779022533436`) and dropping the filter — producing `Query execution failed: db error`. Switched to a self-describing `tablefk-` id with a dedicated recreation branch that decodes schema/table/column/value and restores the filter.
+
+- **Keyset cursor SQL bug**: `get_table_data_keyset` interpolated the cursor via `serde_json::Value::to_string()`, emitting double-quoted string literals (invalid SQL in every engine) and breaking entirely for UUID / date / timestamp cursor columns. Replaced with a type-aware `cursor_sql_literal` that emits standard single-quoted, `'`-escaped literals.
+
+- **Test harness compile errors**: `commands/schema.rs` unit tests called `State::from(&Mutex<…>)`, which does not exist — the entire `cargo test --lib` target failed to compile, so *no* Rust test could run. Tests now build a `tauri::test::mock_app()` (new `tauri` `test` dev-feature) and obtain a real `State<'_, _>` via `app.state()`. Full suite restored: 118 tests run, 115 pass (the 3 `credentials` failures are environmental — no OS keyring in headless runs).
+
+### Performance (2026-05-17)
+
+- **Raw query row cap**: `execute_query` now caps materialized results at 50,000 rows (`MAX_RESULT_ROWS`) and returns a `truncated` flag; the query route shows a "add a LIMIT clause" toast. Bounds the OOM path for unbounded `SELECT *` without rewriting user SQL (driver-agnostic).
+
+- **Autocomplete metadata N×M → bounded concurrency**: `get_autocomplete_metadata` previously fetched tables per schema then column schema per table in a fully sequential `await` chain (200-table DB ≈ 200+ serial round-trips). Now fans the per-table fetches out via a `tokio::task::JoinSet` capped at 16 in-flight, and drops a redundant per-schema `Vec` clone.
+
+- **SQLite N+1 collapse**: `get_tables` row counts went from one `COUNT(*)` prepare per table to a single `UNION ALL`; `get_foreign_keys` went from one `PRAGMA foreign_key_list` per table to a single `pragma_foreign_key_list` join over `sqlite_master`.
+
+- **PostgreSQL connection pool**: `PostgresDriver` replaced its single `tokio_postgres::Client` with a `deadpool-postgres` pool (max 8, `RecyclingMethod::Fast`); TLS and NoTls paths preserved, `DatabaseDriver` trait signatures unchanged. Removes head-of-line blocking between concurrent tabs/queries on one connection.
+
+- **PostgreSQL zero-count N+1 collapse**: `get_tables` ran one `SELECT COUNT(*)` per table whose statistics estimate was 0; collapsed into a single `UNION ALL` round-trip.
+
+- **Non-blocking log export**: `export_query_logs` no longer calls `std::fs::write` on the async runtime; the serialized payload is written via `tokio::task::spawn_blocking`, and the state `MutexGuard` is dropped before the await.
+
+- **ActivityMonitor refetch decoupling**: split the single init effect so `fetchMetadata` (lists connection profiles + databases) no longer re-runs on every pagination / sort change — it now fires only on mount and `connectionId` change. Logs/stats refetch behavior unchanged.
+
+- **Vite vendor code-splitting**: added `build.rollupOptions.manualChunks` splitting `monaco` / `dagre` / `reactflow` / `radix` / `react-vendor` / `icons` / `tanstack` into separate chunks (was one combined bundle); `__APP_VERSION__` injection preserved.
+
+- **TableInspector keyset pagination**: when a table has exactly one primary-key column and the driver is not MongoDB, the data grid pages via the (now filter/sort-aware) `get_table_data_keyset` with a per-page cursor stack and First/Prev/Next controls — deep pages become index seeks instead of `OFFSET` scan-and-discard. Falls back to the original numbered-`OFFSET` path (with its deep-offset guard) for MongoDB / no-or-composite PK so the column-filter and FK drill-down features cannot regress.
+
+### Added (2026-05-15)
+
+- **Redis Driver**: New `DbDriver::Redis` variant. Uses `redis` crate 0.27 with `tokio-comp` + `connection-manager` features. `MultiplexedConnection` wrapped in `Arc<Mutex<...>>` for thread-safe async access. Default port 6379. `execute_query` interprets the SQL input as a raw Redis command string (e.g. `GET mykey`, `HGETALL myhash`). `get_databases` returns 16 logical DBs (0–15). `get_tables` samples key types via SCAN and maps them to pseudo-tables: `strings`, `hashes`, `lists`, `sets`, `zsets`. `get_table_schema` returns a conceptual column layout per type (e.g. `key/field/value` for hashes). Foreign keys not applicable; returns empty vec. Wired into `test_connection_command` and `connect_to_database` in `commands/connection.rs`.
+
+- **Visual Schema Designer**: New drag-and-drop canvas for designing database schemas and generating DDL. ReactFlow-based 3-panel layout: table list (left) + canvas (center) + properties editor (right). Custom `TableSchemaNode` displays columns with PK/UNQ/NN badges and handles for FK edge drawing. Right panel: table name, schema, 12 column types (TEXT/INTEGER/BIGINT/BOOLEAN/DECIMAL/VARCHAR/UUID/TIMESTAMP/DATE/JSONB/FLOAT/BLOB), per-column PK/nullable/unique toggles, FK reference inputs. FK edges automatically drawn between nodes when `referencesTable` is set. "Preview SQL" calls existing `preview_create_table` backend command; "Create Tables" calls `create_table` sequentially. Route: `/_connected/visual-schema-designer`. Accessible from titlebar "Schema Designer" menu item.
+
+- **Backup Manager (backend)**: 6 new Tauri commands for database backup/restore. `get_backup_directory` returns `~/Library/Application Support/db-hive/backups/`. `list_backups` scans for `.sql/.dump/.bak/.sqlite/.gz` files sorted by date. `create_backup` invokes `pg_dump` (Postgres/Supabase/Neon), `mysqldump` (MySQL), `std::fs::copy` (SQLite), or `mongodump` (MongoDB) as subprocesses; passes credentials via env vars/args; returns `BackupEntry`. `restore_backup` invokes `psql`, `mysql` (stdin pipe), or file copy. `delete_backup` removes file. `open_backup_directory` opens in OS file manager. Data models: `BackupEntry`, `BackupOptions`, `BackupStatus`, `RestoreOptions`, `BackupProgress` in `src-tauri/src/models/backup.rs`.
+
 ## [0.20.0-beta] - 2026-04-28
 
 ### Added
@@ -24,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Foreign Key & Unique Constraint Builder**: The Constraints step in the Create Table wizard is no longer a "coming soon" placeholder. Users can now add named or unnamed unique constraints across multiple columns of the new table and full foreign-key constraints with referenced-table picker (lazy-loaded from `get_tables`), referenced-column multi-select (lazy-loaded from `get_table_schema` and cached per table), and `ON DELETE` / `ON UPDATE` actions (`NO_ACTION`, `RESTRICT`, `CASCADE`, `SET_NULL`, `SET_DEFAULT`). Validation gates the "Preview SQL" button until every constraint is well-formed.
 
 - **Customisable Keyboard Shortcuts**: Settings → Keyboard Shortcuts now lets users rebind every shortcut. Click a row to enter recording mode; the next keydown captures the combination. **Esc** cancels, **Backspace** clears (treated as unbound), invalid combos toast-error, and duplicate bindings emit a non-blocking warning. Each change persists immediately via `update_settings` and is broadcast app-wide via a `db-hive:settings-changed` window event so global handlers in `__root.tsx` and route-scoped handlers (e.g. query tab `newTab`/`closeTab`) pick up new bindings without an app reload. A "Reset all to defaults" button (with confirmation) calls the existing `reset_settings` command.
+
+### Added (roadmap items)
 
 - **Stored Procedures & Functions Viewer**: New Tauri commands `list_procedures`, `get_procedure_definition`, `execute_procedure`. PostgreSQL uses `pg_proc` + `pg_get_function_arguments` / `pg_get_functiondef`; MySQL uses `information_schema.ROUTINES` + `SHOW CREATE`; SQL Server uses `sys.objects`; SQLite / Turso / MongoDB return empty. New `<StoredProceduresPanel>` groups routines by schema, lazy-loads definitions, and offers an execute dialog with JSON-parsed arguments. Reachable from a "Procedures" entry in SchemaExplorer.
 

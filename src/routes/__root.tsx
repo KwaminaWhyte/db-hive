@@ -7,6 +7,7 @@ import { CustomTitlebar } from "@/components/CustomTitlebar";
 import { Toaster } from "sonner";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { setupWindowStatePersistence } from "@/utils/windowState";
+import { openDatabaseWindow } from "@/utils/multiWindow";
 import { KeyboardShortcutsModal } from "@/components/KeyboardShortcutsModal";
 import { useSettings } from "@/hooks/useSettings";
 import { useAutoUpdater } from "@/hooks/useAutoUpdater";
@@ -73,6 +74,20 @@ function RootComponent() {
         setShowShortcutsModal(true);
       },
       description: "Show keyboard shortcuts",
+    },
+    {
+      key: "⌘+⇧+N",
+      handler: () => {
+        openDatabaseWindow();
+      },
+      description: "Open new window",
+    },
+    {
+      key: "Ctrl+⇧+N",
+      handler: () => {
+        openDatabaseWindow();
+      },
+      description: "Open new window",
     },
   ]);
 

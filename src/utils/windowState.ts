@@ -14,7 +14,14 @@ interface WindowState {
   maximized: boolean;
 }
 
-const STORAGE_KEY = "db-hive-window-state";
+// Window position/size is scoped per OS window so multiple open windows
+// (multi-window mode) don't clobber each other's geometry. The `main` window
+// keeps the legacy key for backward compatibility with existing installs.
+function storageKey(label: string): string {
+  return label === "main"
+    ? "db-hive-window-state"
+    : `db-hive-window-state-${label}`;
+}
 
 /**
  * Save current window state to localStorage
@@ -22,6 +29,7 @@ const STORAGE_KEY = "db-hive-window-state";
 export async function saveWindowState(): Promise<void> {
   try {
     const appWindow = getCurrentWindow();
+    const key = storageKey(appWindow.label);
 
     const [position, size, maximized] = await Promise.all([
       appWindow.outerPosition(),
@@ -37,7 +45,7 @@ export async function saveWindowState(): Promise<void> {
       maximized,
     };
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(key, JSON.stringify(state));
   } catch (error) {
     console.error("Failed to save window state:", error);
   }
@@ -48,11 +56,11 @@ export async function saveWindowState(): Promise<void> {
  */
 export async function restoreWindowState(): Promise<void> {
   try {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const appWindow = getCurrentWindow();
+    const saved = localStorage.getItem(storageKey(appWindow.label));
     if (!saved) return;
 
     const state: WindowState = JSON.parse(saved);
-    const appWindow = getCurrentWindow();
 
     // Restore size and position
     await Promise.all([

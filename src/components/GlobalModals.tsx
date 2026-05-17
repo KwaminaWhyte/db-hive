@@ -45,9 +45,9 @@ import { SettingsPage } from "@/components/SettingsPage";
 import { InstalledPlugins } from "@/components/InstalledPlugins";
 import { PluginMarketplace } from "@/components/PluginMarketplace";
 import { MigrationsDialog } from "@/components/MigrationsDialog";
+import { BackupManagerDialog } from "@/components/BackupManagerDialog";
 import { useAppModal, setAppModal } from "@/store/useAppModal";
-
-const APP_VERSION = "0.19.2-beta";
+import { APP_VERSION } from "@/version";
 
 export function GlobalModals() {
   const modal = useAppModal();
@@ -88,6 +88,12 @@ export function GlobalModals() {
       {/* Schema Migrations Modal */}
       <MigrationsDialog
         open={modal === "migrations"}
+        onOpenChange={handleOpenChange}
+      />
+
+      {/* Backup Manager Modal */}
+      <BackupManagerDialog
+        open={modal === "backup"}
         onOpenChange={handleOpenChange}
       />
 

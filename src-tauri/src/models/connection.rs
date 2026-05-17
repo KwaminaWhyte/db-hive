@@ -26,7 +26,7 @@ pub enum DbDriver {
     Neon,
     /// Turso (libSQL, hosted SQLite)
     Turso,
-    /// Redis (in-memory key-value store)
+    /// Redis key-value store
     Redis,
 }
 

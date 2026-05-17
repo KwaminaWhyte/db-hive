@@ -11,7 +11,13 @@
 
 import { useSyncExternalStore } from "react";
 
-export type AppModal = "settings" | "about" | "plugins" | "migrations" | null;
+export type AppModal =
+  | "settings"
+  | "about"
+  | "plugins"
+  | "migrations"
+  | "backup"
+  | null;
 
 type Listener = () => void;
 

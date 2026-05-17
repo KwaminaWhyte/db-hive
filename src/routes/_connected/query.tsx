@@ -1,9 +1,11 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { QueryPanel } from "@/components/QueryPanel";
 import { TableInspector } from "@/components/TableInspector";
+import { RedisValuePanel } from "@/components/RedisValuePanel";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { useTabContext } from "@/contexts/TabContext";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { QueryExecutionResult } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { X, Plus } from "lucide-react";
@@ -141,6 +143,43 @@ function QueryPanelRoute() {
             label: "Query",
             sql: "",
           });
+        } else if (tabId.startsWith("tablefk-")) {
+          // tablefk-{schema}.{table}::{column}::{encodeURIComponent(value)}
+          const body = tabId.slice("tablefk-".length);
+          const [loc, column, ...rest] = body.split("::");
+          const dot = loc.indexOf(".");
+          const schema = dot >= 0 ? loc.slice(0, dot) : "";
+          const tableName = dot >= 0 ? loc.slice(dot + 1) : loc;
+          let value = "";
+          try {
+            value = decodeURIComponent(rest.join("::"));
+          } catch {
+            value = rest.join("::");
+          }
+          createTabState({
+            id: tabId,
+            type: "table",
+            label: `${tableName} · ${column}=${
+              value.length > 20 ? `${value.slice(0, 20)}…` : value
+            }`,
+            schema,
+            tableName,
+            filter: JSON.stringify({ column, value }),
+          });
+        } else if (tabId.startsWith("rediskey-")) {
+          // rediskey-{encodeURIComponent(key)}
+          let redisKey = "";
+          try {
+            redisKey = decodeURIComponent(tabId.slice("rediskey-".length));
+          } catch {
+            redisKey = tabId.slice("rediskey-".length);
+          }
+          createTabState({
+            id: tabId,
+            type: "redis",
+            label: redisKey.length > 24 ? `${redisKey.slice(0, 24)}…` : redisKey,
+            redisKey,
+          });
         } else if (tabId.startsWith("table-")) {
           const [schema, tableName] = tabId.replace("table-", "").split(".");
           createTabState({
@@ -175,6 +214,11 @@ function QueryPanelRoute() {
         connectionId,
         sql,
       });
+      if (result.truncated) {
+        toast.warning(
+          `Result capped at ${result.rows.length.toLocaleString()} rows. Add a LIMIT clause to see the rest.`
+        );
+      }
       return result;
     } catch (error) {
       throw error;
@@ -278,6 +322,48 @@ function QueryPanelRoute() {
       sql: "",
     });
 
+    const newTabIds = [...tabIds, newTabId];
+    navigate({
+      to: "/query",
+      search: {
+        tabs: newTabIds.join(","),
+        active: newTabIds.length - 1,
+      },
+    });
+  };
+
+  // Open the referenced record of a foreign key in a new, pre-filtered table tab
+  const handleOpenRelated = (target: {
+    schema: string;
+    tableName: string;
+    column: string;
+    value: string;
+  }) => {
+    // Encode everything in the id so the URL-sync recreation can rebuild this
+    // tab authoritatively (schema/table/column/value) even if it gets pruned
+    // before the URL catches up. Deterministic id => reuses tab on re-click.
+    const newTabId = `tablefk-${target.schema}.${target.tableName}::${target.column}::${encodeURIComponent(target.value)}`;
+
+    // Already open for this exact record → just focus it
+    const existingIndex = tabIds.indexOf(newTabId);
+    if (existingIndex >= 0) {
+      navigate({
+        to: "/query",
+        search: { tabs: tabsParam, active: existingIndex },
+      });
+      return;
+    }
+
+    const shortVal =
+      target.value.length > 20 ? `${target.value.slice(0, 20)}…` : target.value;
+    createTabState({
+      id: newTabId,
+      type: "table",
+      label: `${target.tableName} · ${target.column}=${shortVal}`,
+      schema: target.schema,
+      tableName: target.tableName,
+      filter: JSON.stringify({ column: target.column, value: target.value }),
+    });
     const newTabIds = [...tabIds, newTabId];
     navigate({
       to: "/query",
@@ -436,6 +522,21 @@ function QueryPanelRoute() {
 
           const isActive = index === activeIndex;
 
+          let initialFilter: { column: string; value: string } | undefined;
+          if (tabState.filter) {
+            try {
+              const parsed = JSON.parse(tabState.filter);
+              if (parsed && parsed.column) {
+                initialFilter = {
+                  column: parsed.column,
+                  value: String(parsed.value),
+                };
+              }
+            } catch {
+              // Non-JSON legacy filter string — ignore
+            }
+          }
+
           return (
             <div
               key={tabId}
@@ -453,6 +554,12 @@ function QueryPanelRoute() {
                   onExecuteQuery={handleExecuteQuery}
                   pendingQuery={tabState.sql || null}
                 />
+              ) : tabState.type === "redis" ? (
+                <RedisValuePanel
+                  connectionId={connectionId!}
+                  redisKey={tabState.redisKey!}
+                  onClose={() => handleCloseTab(index)}
+                />
               ) : (
                 <TableInspector
                   connectionId={connectionId!}
@@ -460,6 +567,8 @@ function QueryPanelRoute() {
                   tableName={tabState.tableName!}
                   onClose={() => handleCloseTab(index)}
                   driverType={connectionProfile?.driver}
+                  initialFilter={initialFilter}
+                  onOpenRelated={handleOpenRelated}
                 />
               )}
             </div>

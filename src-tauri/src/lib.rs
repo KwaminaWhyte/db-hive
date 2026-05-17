@@ -140,6 +140,9 @@ pub fn run() {
             // Manage the state
             app.manage(Mutex::new(state));
 
+            // Per-window pending profile map (multi-window auto-connect)
+            app.manage(commands::window::PendingWindowProfiles::default());
+
             // Shared cancel flag for long-running import operations
             app.manage(Arc::new(AtomicBool::new(false)));
 
@@ -169,8 +172,10 @@ pub fn run() {
 
             // Create system tray menu
             let show_hide_i = MenuItem::with_id(app, "show_hide", "Show/Hide", true, None::<&str>)?;
+            let new_window_i =
+                MenuItem::with_id(app, "new_window", "New Window", true, None::<&str>)?;
             let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show_hide_i, &quit_i])?;
+            let menu = Menu::with_items(app, &[&show_hide_i, &new_window_i, &quit_i])?;
 
             // Create tray icon with menu and event handler
             let _tray = TrayIconBuilder::new()
@@ -180,6 +185,15 @@ pub fn run() {
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show_hide" => {
                         toggle_window_visibility(app);
+                    }
+                    "new_window" => {
+                        let pending =
+                            app.state::<commands::window::PendingWindowProfiles>();
+                        if let Err(e) =
+                            commands::window::spawn_window(app, &pending, None)
+                        {
+                            eprintln!("Failed to open new window: {}", e);
+                        }
                     }
                     "quit" => {
                         app.exit(0);
@@ -260,6 +274,14 @@ pub fn run() {
             commands::settings::get_settings,
             commands::settings::update_settings,
             commands::settings::reset_settings,
+            commands::window::open_database_window,
+            commands::window::take_pending_window_profile,
+            commands::backup::get_backup_directory,
+            commands::backup::list_backups,
+            commands::backup::create_backup,
+            commands::backup::restore_backup,
+            commands::backup::delete_backup,
+            commands::backup::open_backup_directory,
             commands::activity::get_query_logs,
             commands::activity::get_activity_stats,
             commands::activity::clear_query_logs,

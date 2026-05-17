@@ -13,6 +13,14 @@ use crate::models::{DbError, QueryLog};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 
+/// Hard cap on the number of rows materialized from a single `execute_query`
+/// call. Raw user SQL (e.g. `SELECT * FROM huge_table`) has no inherent bound;
+/// without this cap the driver collects every row into a `Vec`, serializes the
+/// whole set across IPC, and the WebView re-allocates it again — enough to OOM
+/// the app on large tables. Results beyond this are dropped and `truncated` is
+/// set so the UI can warn the user to add a `LIMIT`.
+const MAX_RESULT_ROWS: usize = 50_000;
+
 /// Result of a query execution
 ///
 /// This structure contains the complete result of executing a SQL query,
@@ -42,6 +50,10 @@ pub struct QueryExecutionResult {
 
     /// The type of query derived from the first SQL keyword (e.g. "SELECT", "INSERT", "UPDATE")
     pub query_type: String,
+
+    /// `true` when the result set exceeded `MAX_RESULT_ROWS` and `rows` was
+    /// truncated. The UI should surface a "add a LIMIT clause" hint.
+    pub truncated: bool,
 }
 
 impl QueryExecutionResult {
@@ -60,12 +72,19 @@ impl QueryExecutionResult {
         execution_time_ms: u64,
         query_type: String,
     ) -> Self {
+        let mut rows = query_result.rows;
+        let truncated = rows.len() > MAX_RESULT_ROWS;
+        if truncated {
+            rows.truncate(MAX_RESULT_ROWS);
+        }
+
         Self {
             columns: query_result.columns,
-            rows: query_result.rows,
+            rows,
             rows_affected: query_result.rows_affected,
             execution_time: execution_time_ms,
             query_type,
+            truncated,
         }
     }
 }
@@ -298,6 +317,27 @@ pub struct KeysetPageResult {
 ///     });
 /// }
 /// ```
+/// Render a JSON cursor value as a safe SQL literal.
+///
+/// The previous implementation used `serde_json::Value::to_string()`, which
+/// produces `"abc"` (double-quoted) for strings — invalid SQL in every
+/// supported engine — and broke entirely for UUID/date/timestamp cursor
+/// columns (they arrive as JSON strings). This emits standard single-quoted
+/// literals with `'` escaped, matching the quoting the rest of the codebase
+/// already relies on. Returns `None` for values that cannot anchor a cursor
+/// (null), so the caller falls back to "start from the beginning".
+fn cursor_sql_literal(value: &serde_json::Value) -> Option<String> {
+    match value {
+        serde_json::Value::Null => None,
+        serde_json::Value::Bool(b) => Some(if *b { "TRUE".into() } else { "FALSE".into() }),
+        serde_json::Value::Number(n) => Some(n.to_string()),
+        serde_json::Value::String(s) => Some(format!("'{}'", s.replace('\'', "''"))),
+        // Arrays/objects can't be a sensible keyset cursor; quote the JSON text
+        // defensively so we never emit raw unescaped SQL.
+        other => Some(format!("'{}'", other.to_string().replace('\'', "''"))),
+    }
+}
+
 #[tauri::command]
 pub async fn get_table_data_keyset(
     connection_id: String,
@@ -306,6 +346,13 @@ pub async fn get_table_data_keyset(
     cursor_column: String,
     cursor_value: Option<serde_json::Value>,
     page_size: u64,
+    // `filter_clause`: optional extra predicate (the structured column filters
+    //   / FK drill-down built by the UI). Accepted with or without a leading
+    //   `WHERE`; it is ANDed with the keyset cursor predicate.
+    // `sort_direction`: "ASC" (default) or "DESC". Anything else is rejected
+    //   to keep the value out of the interpolated ORDER BY.
+    filter_clause: Option<String>,
+    sort_direction: Option<String>,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<KeysetPageResult, DbError> {
     // Clone the Arc<dyn DatabaseDriver> out of the state before any await points
@@ -319,42 +366,71 @@ pub async fn get_table_data_keyset(
             .clone()
     };
 
-    // Build the paginated SQL query.
-    // We fetch page_size + 1 rows so we can determine whether more rows exist
-    // without a separate COUNT query.
-    let sql = match &cursor_value {
-        None => {
-            // First page: no WHERE clause, just ORDER BY + LIMIT
-            format!(
-                r#"SELECT * FROM "{schema}"."{table}" ORDER BY "{cursor_column}" LIMIT {limit}"#,
-                schema = schema,
-                table = table,
-                cursor_column = cursor_column,
-                limit = page_size + 1,
-            )
-        }
-        Some(serde_json::Value::Null) | Some(serde_json::Value::Bool(_)) => {
-            // Null or boolean cursor — treat as "start from beginning"
-            format!(
-                r#"SELECT * FROM "{schema}"."{table}" ORDER BY "{cursor_column}" LIMIT {limit}"#,
-                schema = schema,
-                table = table,
-                cursor_column = cursor_column,
-                limit = page_size + 1,
-            )
-        }
-        Some(val) => {
-            // Subsequent pages: add a WHERE clause filtering rows after the cursor
-            format!(
-                r#"SELECT * FROM "{schema}"."{table}" WHERE "{cursor_column}" > {cursor_val} ORDER BY "{cursor_column}" LIMIT {limit}"#,
-                schema = schema,
-                table = table,
-                cursor_column = cursor_column,
-                cursor_val = val.to_string(),
-                limit = page_size + 1,
-            )
+    // Whitelist the sort direction — it is interpolated into ORDER BY, so it
+    // must never come from raw user text.
+    let descending = match sort_direction.as_deref().map(str::trim) {
+        Some(d) if d.eq_ignore_ascii_case("desc") => true,
+        None | Some("") => false,
+        Some(d) if d.eq_ignore_ascii_case("asc") => false,
+        Some(other) => {
+            return Err(DbError::QueryError(format!(
+                "Invalid sort direction: {}",
+                other
+            )))
         }
     };
+    let order_dir = if descending { "DESC" } else { "ASC" };
+    // For ascending order the next page starts after the cursor (`>`); for
+    // descending it continues below it (`<`).
+    let cursor_op = if descending { "<" } else { ">" };
+
+    // Normalize the optional UI filter: strip a leading `WHERE` so we can
+    // compose it with the cursor predicate.
+    let filter_predicate = filter_clause
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            let s = s.trim();
+            if s[..s.len().min(5)].eq_ignore_ascii_case("where") {
+                s[5..].trim().to_string()
+            } else {
+                s.to_string()
+            }
+        })
+        .filter(|s| !s.is_empty());
+
+    // The cursor predicate only applies once we have a real anchor value.
+    let cursor_predicate = cursor_value
+        .as_ref()
+        .and_then(cursor_sql_literal)
+        .map(|lit| format!(r#""{}" {} {}"#, cursor_column, cursor_op, lit));
+
+    // Compose the WHERE clause from (optional) UI filter + (optional) cursor.
+    let mut conditions: Vec<String> = Vec::new();
+    if let Some(f) = &filter_predicate {
+        conditions.push(format!("({})", f));
+    }
+    if let Some(c) = &cursor_predicate {
+        conditions.push(c.clone());
+    }
+    let where_clause = if conditions.is_empty() {
+        String::new()
+    } else {
+        format!(" WHERE {}", conditions.join(" AND "))
+    };
+
+    // We fetch page_size + 1 rows so we can determine whether more rows exist
+    // without a separate COUNT query.
+    let sql = format!(
+        r#"SELECT * FROM "{schema}"."{table}"{where_clause} ORDER BY "{cursor_column}" {order_dir} LIMIT {limit}"#,
+        schema = schema,
+        table = table,
+        where_clause = where_clause,
+        cursor_column = cursor_column,
+        order_dir = order_dir,
+        limit = page_size + 1,
+    );
 
     // Measure execution time
     let start = Instant::now();

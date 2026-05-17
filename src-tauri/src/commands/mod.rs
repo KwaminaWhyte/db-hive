@@ -5,6 +5,7 @@
 
 pub mod activity;
 pub mod ai;
+pub mod backup;
 pub mod connection;
 pub mod data_import;
 pub mod ddl;
@@ -17,3 +18,4 @@ pub mod procedures;
 pub mod query;
 pub mod schema;
 pub mod settings;
+pub mod window;
