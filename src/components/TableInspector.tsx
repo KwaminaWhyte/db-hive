@@ -166,10 +166,19 @@ export function TableInspector({
   initialFilter,
   onOpenRelated,
 }: TableInspectorProps) {
+  // Deep-offset guard. OFFSET pagination forces the database to scan and
+  // discard every prior row, so navigating thousands of pages into a large
+  // table degrades badly (and the backend keyset command cannot apply this
+  // table's WHERE filters / FK drill-down, so it can't be used here without a
+  // backend change). We cap how deep the user may page by raw offset and show
+  // a notice steering them toward filtering to a range instead.
+  const MAX_SAFE_OFFSET = 100_000;
+
   const [tableSchema, setTableSchema] = useState<TableSchema | null>(null);
   const [sampleData, setSampleData] = useState<QueryExecutionResult | null>(
     null
   );
+  const [deepOffsetBlocked, setDeepOffsetBlocked] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingSampleData, setLoadingSampleData] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -345,6 +354,7 @@ export function TableInspector({
     setActiveTab("data");
     setCurrentPage(1);
     setTotalRows(null);
+    setDeepOffsetBlocked(false);
 
     // Fetch new table schema
     fetchTableSchema();
@@ -354,6 +364,7 @@ export function TableInspector({
   useEffect(() => {
     setCurrentPage(1);
     setTotalRows(null);
+    setDeepOffsetBlocked(false);
   }, [filterRows]);
 
   // Fetch sample data when Data tab is opened, schema is loaded, page changes, or filters change
@@ -399,6 +410,19 @@ export function TableInspector({
     try {
       // Calculate offset based on current page
       const offset = (currentPage - 1) * pageSize;
+
+      // Deep-offset guard: refuse to issue a pathologically slow
+      // `OFFSET <huge>` query. Keyset pagination would normally fix this, but
+      // the backend keyset command cannot apply this table's WHERE filters or
+      // the FK drill-down, so we mitigate in-place instead by stopping deep
+      // paging and nudging the user to filter to a range. Filters/FK seeding,
+      // sort, page size, and the pagination UI all remain unchanged.
+      if (offset > MAX_SAFE_OFFSET) {
+        setDeepOffsetBlocked(true);
+        setLoadingSampleData(false);
+        return;
+      }
+      setDeepOffsetBlocked(false);
 
       let result: QueryExecutionResult;
 
@@ -456,10 +480,14 @@ export function TableInspector({
     }
   };
 
+  // The deepest page reachable before OFFSET becomes pathologically slow.
+  // (page N uses OFFSET (N-1)*pageSize; cap that at MAX_SAFE_OFFSET.)
+  const maxSafePage = Math.floor(MAX_SAFE_OFFSET / pageSize) + 1;
+
   const handleNextPage = () => {
     if (totalRows === null) return;
     const totalPages = Math.ceil(totalRows / pageSize);
-    if (currentPage < totalPages) {
+    if (currentPage < totalPages && currentPage < maxSafePage) {
       setCurrentPage(currentPage + 1);
     }
   };
@@ -471,6 +499,9 @@ export function TableInspector({
   };
 
   const totalPages = totalRows !== null ? Math.ceil(totalRows / pageSize) : null;
+  // Whether more (unfiltered/unreachable-by-paging) rows exist past the cap.
+  const hasPagesBeyondCap =
+    totalPages !== null && totalPages > maxSafePage;
 
   // Handle commit changes
   const handleCommit = async () => {
@@ -1199,6 +1230,47 @@ export function TableInspector({
             </div>
           )}
 
+          {/* Deep-offset guard notice */}
+          {deepOffsetBlocked && (
+            <div className="border-b bg-amber-500/10 text-amber-700 dark:text-amber-400 px-3 py-2 text-xs flex items-start gap-2 shrink-0">
+              <Ban className="h-4 w-4 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-medium">
+                  Page {currentPage.toLocaleString()} is too deep to load efficiently.
+                </p>
+                <p className="text-muted-foreground">
+                  Offset pagination would make the database scan and discard{" "}
+                  {((currentPage - 1) * pageSize).toLocaleString()} rows. Use the
+                  Filter button to jump straight to the range you want (e.g.
+                  filter by an indexed/primary-key column) instead of paging this
+                  far. Showing the last loaded page below.
+                </p>
+                <div className="flex items-center gap-2 pt-0.5">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => setCurrentPage(maxSafePage)}
+                  >
+                    Go to page {maxSafePage.toLocaleString()}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 px-2 text-xs gap-1"
+                    onClick={() => {
+                      setShowFilters(true);
+                      if (filterRows.length === 0) addFilterRow();
+                    }}
+                  >
+                    <Filter className="h-3 w-3" />
+                    Filter to a range
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {loadingSampleData ? (
             <div className="flex-1 p-4 space-y-2">
               <div className="flex gap-2 mb-4">
@@ -1472,25 +1544,41 @@ export function TableInspector({
                   onChange={(e) => {
                     const page = parseInt(e.target.value);
                     if (!isNaN(page) && page >= 1) {
-                      if (totalPages && page <= totalPages) {
-                        setCurrentPage(page);
+                      // Clamp manual jumps to the deep-offset-safe range so a
+                      // typed page number can't trigger a pathological query.
+                      const clamped = Math.min(page, maxSafePage);
+                      if (totalPages && clamped <= totalPages) {
+                        setCurrentPage(clamped);
                       } else if (!totalPages) {
-                        setCurrentPage(page);
+                        setCurrentPage(clamped);
                       }
                     }
                   }}
                   className="w-12 h-7 text-center bg-muted border border-border rounded text-xs select-text [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none focus:outline-none focus:ring-1 focus:ring-ring"
                   min={1}
-                  max={totalPages || undefined}
+                  max={Math.min(totalPages ?? maxSafePage, maxSafePage)}
                 />
                 <span className="text-muted-foreground">of {totalPages ?? "?"}</span>
+                {hasPagesBeyondCap && (
+                  <span
+                    className="text-amber-600 dark:text-amber-500"
+                    title={`Paging is capped at page ${maxSafePage.toLocaleString()} to avoid slow deep-offset queries. Filter to reach later rows.`}
+                  >
+                    (capped at {maxSafePage.toLocaleString()})
+                  </span>
+                )}
               </div>
               <Button
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
                 onClick={handleNextPage}
-                disabled={totalPages === null || currentPage >= totalPages || loadingSampleData}
+                disabled={
+                  totalPages === null ||
+                  currentPage >= totalPages ||
+                  currentPage >= maxSafePage ||
+                  loadingSampleData
+                }
               >
                 <ChevronRight className="h-4 w-4" />
               </Button>
