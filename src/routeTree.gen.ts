@@ -17,6 +17,7 @@ import { Route as ConnectedRouteRouteImport } from './routes/_connected/route'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ConnectedVisualSchemaDesignerRouteImport } from './routes/_connected/visual-schema-designer'
 import { Route as ConnectedVisualQueryRouteImport } from './routes/_connected/visual-query'
+import { Route as ConnectedRedisKeysRouteImport } from './routes/_connected/redis-keys'
 import { Route as ConnectedQueryRouteImport } from './routes/_connected/query'
 import { Route as ConnectedActivityRouteImport } from './routes/_connected/activity'
 import { Route as ConnectedErDiagramSchemaRouteImport } from './routes/_connected/er-diagram.$schema'
@@ -63,6 +64,11 @@ const ConnectedVisualQueryRoute = ConnectedVisualQueryRouteImport.update({
   path: '/visual-query',
   getParentRoute: () => ConnectedRouteRoute,
 } as any)
+const ConnectedRedisKeysRoute = ConnectedRedisKeysRouteImport.update({
+  id: '/redis-keys',
+  path: '/redis-keys',
+  getParentRoute: () => ConnectedRouteRoute,
+} as any)
 const ConnectedQueryRoute = ConnectedQueryRouteImport.update({
   id: '/query',
   path: '/query',
@@ -100,6 +106,7 @@ export interface FileRoutesByFullPath {
   '/settings': typeof SettingsRoute
   '/activity': typeof ConnectedActivityRoute
   '/query': typeof ConnectedQueryRoute
+  '/redis-keys': typeof ConnectedRedisKeysRoute
   '/visual-query': typeof ConnectedVisualQueryRoute
   '/visual-schema-designer': typeof ConnectedVisualSchemaDesignerRoute
   '/er-diagram/$schema': typeof ConnectedErDiagramSchemaRoute
@@ -114,6 +121,7 @@ export interface FileRoutesByTo {
   '/settings': typeof SettingsRoute
   '/activity': typeof ConnectedActivityRoute
   '/query': typeof ConnectedQueryRoute
+  '/redis-keys': typeof ConnectedRedisKeysRoute
   '/visual-query': typeof ConnectedVisualQueryRoute
   '/visual-schema-designer': typeof ConnectedVisualSchemaDesignerRoute
   '/er-diagram/$schema': typeof ConnectedErDiagramSchemaRoute
@@ -129,6 +137,7 @@ export interface FileRoutesById {
   '/settings': typeof SettingsRoute
   '/_connected/activity': typeof ConnectedActivityRoute
   '/_connected/query': typeof ConnectedQueryRoute
+  '/_connected/redis-keys': typeof ConnectedRedisKeysRoute
   '/_connected/visual-query': typeof ConnectedVisualQueryRoute
   '/_connected/visual-schema-designer': typeof ConnectedVisualSchemaDesignerRoute
   '/_connected/er-diagram/$schema': typeof ConnectedErDiagramSchemaRoute
@@ -145,6 +154,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/activity'
     | '/query'
+    | '/redis-keys'
     | '/visual-query'
     | '/visual-schema-designer'
     | '/er-diagram/$schema'
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/activity'
     | '/query'
+    | '/redis-keys'
     | '/visual-query'
     | '/visual-schema-designer'
     | '/er-diagram/$schema'
@@ -173,6 +184,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/_connected/activity'
     | '/_connected/query'
+    | '/_connected/redis-keys'
     | '/_connected/visual-query'
     | '/_connected/visual-schema-designer'
     | '/_connected/er-diagram/$schema'
@@ -247,6 +259,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ConnectedVisualQueryRouteImport
       parentRoute: typeof ConnectedRouteRoute
     }
+    '/_connected/redis-keys': {
+      id: '/_connected/redis-keys'
+      path: '/redis-keys'
+      fullPath: '/redis-keys'
+      preLoaderRoute: typeof ConnectedRedisKeysRouteImport
+      parentRoute: typeof ConnectedRouteRoute
+    }
     '/_connected/query': {
       id: '/_connected/query'
       path: '/query'
@@ -303,6 +322,7 @@ const ConnectedTableSchemaTableNameRouteRouteWithChildren =
 interface ConnectedRouteRouteChildren {
   ConnectedActivityRoute: typeof ConnectedActivityRoute
   ConnectedQueryRoute: typeof ConnectedQueryRoute
+  ConnectedRedisKeysRoute: typeof ConnectedRedisKeysRoute
   ConnectedVisualQueryRoute: typeof ConnectedVisualQueryRoute
   ConnectedVisualSchemaDesignerRoute: typeof ConnectedVisualSchemaDesignerRoute
   ConnectedErDiagramSchemaRoute: typeof ConnectedErDiagramSchemaRoute
@@ -312,6 +332,7 @@ interface ConnectedRouteRouteChildren {
 const ConnectedRouteRouteChildren: ConnectedRouteRouteChildren = {
   ConnectedActivityRoute: ConnectedActivityRoute,
   ConnectedQueryRoute: ConnectedQueryRoute,
+  ConnectedRedisKeysRoute: ConnectedRedisKeysRoute,
   ConnectedVisualQueryRoute: ConnectedVisualQueryRoute,
   ConnectedVisualSchemaDesignerRoute: ConnectedVisualSchemaDesignerRoute,
   ConnectedErDiagramSchemaRoute: ConnectedErDiagramSchemaRoute,

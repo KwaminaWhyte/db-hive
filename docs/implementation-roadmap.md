@@ -931,6 +931,9 @@ For detailed architecture patterns, see `CLAUDE.md`.
 
 **Recently Completed:**
 
+- ✅ **Backup Manager UI** — `<BackupManagerDialog>` over the existing backup commands. Titlebar View-menu entry via `useAppModal` (`"backup"`, rendered in `GlobalModals`). Directory header (Open Folder/Refresh), create panel (schema/data toggles, note, slow-op loading), backups table with per-row Restore (destructive confirm + drop-existing checkbox) and Delete. (2026-05-17)
+- ✅ **Redis Key Browser UI** — `<RedisKeyBrowser>` + `/_connected/redis-keys` route (titlebar entry shown only for Redis connections). Cursor-based SCAN key list with pattern filter + DBSIZE badge; type-aware value viewer (string/hash/list/set/zset) via raw-command `execute_query`; copyable key, TTL label, per-key DEL behind a destructive dialog. (2026-05-17)
+- ✅ **Foreign-Key Drill-Down** — Table Inspector FK cells expose an external-link button + "Open Referenced Record" context entry; opens the referenced table in a new tab pre-filtered to the related row via a self-describing `tablefk-` tab id (URL-sync recreation rebuilds schema/table/column/value + filter). (2026-05-17)
 - ✅ **Redis Driver** — `DbDriver::Redis` variant with `redis` crate 0.27. `MultiplexedConnection` via `Arc<Mutex<...>>`. Key-type pseudo-tables (strings/hashes/lists/sets/zsets) via SCAN sampling. Raw Redis command execution (GET, SET, HGETALL, etc.). Wired into `test_connection_command` + `connect_to_database`. Default port 6379. (2026-05-15)
 - ✅ **Visual Schema Designer** — ReactFlow 3-panel drag-and-drop schema builder. Custom `TableSchemaNode` with column display (PK/UNQ/NN badges). Right-panel properties editor for table name, schema, 12 column types, FK references. FK edges auto-drawn between nodes. "Preview SQL" via `preview_create_table` + "Create Tables" via `create_table`. Route `/_connected/visual-schema-designer`, accessible from titlebar. (2026-05-15)
 - ✅ **Backup Manager** — `commands/backup.rs` with 6 commands: `get_backup_directory`, `list_backups`, `create_backup` (pg_dump / mysqldump / sqlite copy / mongodump subprocess), `restore_backup` (psql / mysql / sqlite copy), `delete_backup`, `open_backup_directory`. Data models in `models/backup.rs` (BackupEntry, BackupOptions, BackupStatus, RestoreOptions, BackupProgress). (2026-05-15)
@@ -961,10 +964,8 @@ For detailed architecture patterns, see `CLAUDE.md`.
 1. **Database Comparison** - Compare schemas between two connections (dev/staging/prod diffs)
 2. **Workspace Sync** - Cloud sync with E2E encryption for settings and connections
 3. **Query Scheduler** - Schedule and automate recurring queries
-4. **Backup Manager UI** - Frontend for the existing backup commands (BackupManagerDialog component)
-5. **Redis Key Browser UI** - Dedicated key browser + data viewer for Redis connections
-6. **Performance Dashboard** - Real-time database performance metrics
-7. **Visual Schema Designer Enhancements** - Undo/redo, index designer, cardinality indicators
+4. **Performance Dashboard** - Real-time database performance metrics
+5. **Visual Schema Designer Enhancements** - Undo/redo, index designer, cardinality indicators
 
 **Documentation:**
 

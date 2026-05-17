@@ -40,8 +40,9 @@ const isMacOS = navigator.userAgent.includes("Mac");
 export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: CustomTitlebarProps) {
   const navigate = useNavigate();
   const { setTheme } = useTheme();
-  const { connectionId } = useConnectionContext();
+  const { connectionId, connectionProfile } = useConnectionContext();
   const isConnected = !!connectionId;
+  const isRedis = connectionProfile?.driver === "Redis";
   const [isMaximized, setIsMaximized] = useState(false);
   const [showCreateTableDialog, setShowCreateTableDialog] = useState(false);
 
@@ -214,6 +215,14 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate({ to: "/activity" })}>
                     Activity Monitor
+                  </DropdownMenuItem>
+                  {isRedis && (
+                    <DropdownMenuItem onClick={() => navigate({ to: "/redis-keys" })}>
+                      Redis Key Browser
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => openAppModal("backup")}>
+                    Backup Manager
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                 </>
