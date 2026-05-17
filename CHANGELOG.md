@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-05-17
+
 ### Added (2026-05-17)
 
 - **Backup Manager UI**: New `<BackupManagerDialog>` driving the existing backup commands. Opened from the titlebar View menu ("Backup Manager") via the `useAppModal` store (modal key `"backup"`, rendered in `GlobalModals`). Header shows the backup directory with Open Folder (`open_backup_directory`) + Refresh. Create panel: Include Schema / Include Data checkboxes, optional note, slow-op loading state, disabled with hint when no active connection or nothing selected. Backups list: shadcn table (file, connection, driver badge, human-readable size, created date, status) with per-row Restore (destructive `AlertDialog` + "Drop & recreate database first" checkbox bound to `dropExisting`) and Delete (confirm → `delete_backup`). Operates on the active connection via `useConnectionContext`; errors surfaced through `sonner`.
