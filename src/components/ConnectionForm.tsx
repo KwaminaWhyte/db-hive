@@ -527,7 +527,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
               <div className="space-y-2">
                 <Label htmlFor="username" className="text-sm font-medium">
                   Username
-                  {driver === "MongoDb" ? (
+                  {driver === "MongoDb" || driver === "Redis" ? (
                     <span className="text-muted-foreground font-normal ml-1">(optional)</span>
                   ) : (
                     <span className="text-destructive ml-1">*</span>
@@ -539,8 +539,8 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
                   name="username"
                   value={formData.username || ""}
                   onChange={handleChange}
-                  placeholder={driver === "MongoDb" ? "root (optional)" : "postgres"}
-                  required={driver !== "MongoDb"}
+                  placeholder={driver === "MongoDb" || driver === "Redis" ? "(optional)" : "postgres"}
+                  required={driver !== "MongoDb" && driver !== "Redis"}
                   className="h-11"
                 />
               </div>
