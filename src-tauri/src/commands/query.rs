@@ -13,6 +13,14 @@ use crate::models::{DbError, QueryLog};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 
+/// Hard cap on the number of rows materialized from a single `execute_query`
+/// call. Raw user SQL (e.g. `SELECT * FROM huge_table`) has no inherent bound;
+/// without this cap the driver collects every row into a `Vec`, serializes the
+/// whole set across IPC, and the WebView re-allocates it again — enough to OOM
+/// the app on large tables. Results beyond this are dropped and `truncated` is
+/// set so the UI can warn the user to add a `LIMIT`.
+const MAX_RESULT_ROWS: usize = 50_000;
+
 /// Result of a query execution
 ///
 /// This structure contains the complete result of executing a SQL query,
@@ -42,6 +50,10 @@ pub struct QueryExecutionResult {
 
     /// The type of query derived from the first SQL keyword (e.g. "SELECT", "INSERT", "UPDATE")
     pub query_type: String,
+
+    /// `true` when the result set exceeded `MAX_RESULT_ROWS` and `rows` was
+    /// truncated. The UI should surface a "add a LIMIT clause" hint.
+    pub truncated: bool,
 }
 
 impl QueryExecutionResult {
@@ -60,12 +72,19 @@ impl QueryExecutionResult {
         execution_time_ms: u64,
         query_type: String,
     ) -> Self {
+        let mut rows = query_result.rows;
+        let truncated = rows.len() > MAX_RESULT_ROWS;
+        if truncated {
+            rows.truncate(MAX_RESULT_ROWS);
+        }
+
         Self {
             columns: query_result.columns,
-            rows: query_result.rows,
+            rows,
             rows_affected: query_result.rows_affected,
             execution_time: execution_time_ms,
             query_type,
+            truncated,
         }
     }
 }

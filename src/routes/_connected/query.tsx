@@ -5,6 +5,7 @@ import { RedisValuePanel } from "@/components/RedisValuePanel";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { useTabContext } from "@/contexts/TabContext";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
 import { QueryExecutionResult } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { X, Plus } from "lucide-react";
@@ -213,6 +214,11 @@ function QueryPanelRoute() {
         connectionId,
         sql,
       });
+      if (result.truncated) {
+        toast.warning(
+          `Result capped at ${result.rows.length.toLocaleString()} rows. Add a LIMIT clause to see the rest.`
+        );
+      }
       return result;
     } catch (error) {
       throw error;

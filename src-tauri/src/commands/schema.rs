@@ -259,19 +259,74 @@ pub async fn get_autocomplete_metadata(
     let databases = connection.get_databases().await?;
     let schemas = connection.get_schemas(&database).await?;
 
-    // Fetch tables and columns for all schemas
-    let mut all_tables = Vec::new();
-    let mut all_columns = std::collections::HashMap::new();
+    // Fetch tables and columns for all schemas.
+    //
+    // This used to be a fully sequential N*M await chain (per schema: list
+    // tables; per table: fetch its column schema), so a 200-table database
+    // meant 200+ serialized round-trips before autocomplete became usable.
+    // We now fan the per-table schema fetches out with bounded concurrency so
+    // the round-trips overlap instead of stacking.
+    use tokio::task::JoinSet;
 
+    // Cap on in-flight metadata requests. Keeps the wire/connection from being
+    // flooded while still collapsing the latency of hundreds of round-trips.
+    const MAX_INFLIGHT: usize = 16;
+
+    // List tables for every schema concurrently.
+    let mut tables_set: JoinSet<Result<(String, Vec<TableInfo>), DbError>> = JoinSet::new();
     for schema in &schemas {
-        let tables = connection.get_tables(&schema.name).await?;
-        all_tables.push((schema.name.clone(), tables.clone()));
+        let conn = connection.clone();
+        let schema_name = schema.name.clone();
+        tables_set.spawn(async move {
+            let tables = conn.get_tables(&schema_name).await?;
+            Ok((schema_name, tables))
+        });
+    }
 
-        // Fetch columns for each table
-        for table in tables {
-            let table_schema = connection.get_table_schema(&schema.name, &table.name).await?;
-            let key = format!("{}.{}", schema.name, table.name);
-            all_columns.insert(key, table_schema.columns);
+    let mut all_tables = Vec::new();
+    // (schema, table) pairs whose column schema still needs fetching.
+    let mut pending: Vec<(String, String)> = Vec::new();
+    while let Some(joined) = tables_set.join_next().await {
+        let (schema_name, tables) =
+            joined.map_err(|e| DbError::InternalError(format!("Metadata task failed: {}", e)))??;
+        for table in &tables {
+            pending.push((schema_name.clone(), table.name.clone()));
+        }
+        all_tables.push((schema_name, tables));
+    }
+
+    // Fetch each table's column schema with a bounded number of requests in
+    // flight at once.
+    let mut all_columns = std::collections::HashMap::new();
+    let mut cols_set: JoinSet<Result<(String, Vec<crate::models::ColumnInfo>), DbError>> =
+        JoinSet::new();
+    let mut pending = pending.into_iter();
+
+    let spawn_col = |set: &mut JoinSet<Result<(String, Vec<crate::models::ColumnInfo>), DbError>>,
+                     conn: std::sync::Arc<dyn crate::drivers::DatabaseDriver>,
+                     schema_name: String,
+                     table_name: String| {
+        set.spawn(async move {
+            let table_schema = conn.get_table_schema(&schema_name, &table_name).await?;
+            let key = format!("{}.{}", schema_name, table_name);
+            Ok((key, table_schema.columns))
+        });
+    };
+
+    for _ in 0..MAX_INFLIGHT {
+        if let Some((s, t)) = pending.next() {
+            spawn_col(&mut cols_set, connection.clone(), s, t);
+        } else {
+            break;
+        }
+    }
+
+    while let Some(joined) = cols_set.join_next().await {
+        let (key, columns) =
+            joined.map_err(|e| DbError::InternalError(format!("Metadata task failed: {}", e)))??;
+        all_columns.insert(key, columns);
+        if let Some((s, t)) = pending.next() {
+            spawn_col(&mut cols_set, connection.clone(), s, t);
         }
     }
 

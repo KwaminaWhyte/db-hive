@@ -252,6 +252,9 @@ export interface QueryExecutionResult {
 
   /** The type of query derived from the first SQL keyword (e.g. "SELECT", "INSERT", "UPDATE") */
   queryType?: string;
+
+  /** True when the result set was capped at the backend row limit (50k) and `rows` is partial */
+  truncated?: boolean;
 }
 
 /**

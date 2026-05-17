@@ -194,29 +194,61 @@ impl DatabaseDriver for SqliteDriver {
             })
             .map_err(|e| DbError::QueryError(format!("Failed to query tables: {}", e)))?;
 
-        let mut tables = Vec::new();
+        let raw: Vec<(String, String)> = table_iter
+            .collect::<Result<_, _>>()
+            .map_err(|e| DbError::QueryError(format!("Failed to read table row: {}", e)))?;
 
-        for table_result in table_iter {
-            let (name, table_type) = table_result
-                .map_err(|e| DbError::QueryError(format!("Failed to read table row: {}", e)))?;
+        // Row counts used to be one `SELECT COUNT(*)` per table inside this
+        // loop (N+1 prepares + scans). Collapse them into a single UNION ALL
+        // query so the whole schema is counted in one prepared statement.
+        let countable: Vec<&String> = raw
+            .iter()
+            .filter(|(_, t)| t.to_uppercase() == "TABLE")
+            .map(|(n, _)| n)
+            .collect();
 
-            // Get row count for tables (not views)
-            let row_count = if table_type.to_uppercase() == "TABLE" {
-                conn.query_row(&format!("SELECT COUNT(*) FROM \"{}\"", name), [], |row| {
-                    row.get::<_, i64>(0)
+        let mut counts: std::collections::HashMap<String, i64> =
+            std::collections::HashMap::new();
+        if !countable.is_empty() {
+            // `"x""y"` escapes a double quote inside an identifier;
+            // `'x''y'` escapes a single quote inside a string literal.
+            let union = countable
+                .iter()
+                .map(|name| {
+                    let ident = name.replace('"', "\"\"");
+                    let lit = name.replace('\'', "''");
+                    format!("SELECT '{}' AS n, (SELECT COUNT(*) FROM \"{}\") AS c", lit, ident)
                 })
-                .ok()
-            } else {
-                None
-            };
+                .collect::<Vec<_>>()
+                .join(" UNION ALL ");
 
-            tables.push(TableInfo {
-                name,
-                schema: schema.to_string(),
-                row_count: row_count.map(|c| c as u64),
-                table_type: table_type.to_uppercase(),
-            });
+            let mut count_stmt = conn
+                .prepare(&union)
+                .map_err(|e| DbError::QueryError(format!("Failed to prepare counts: {}", e)))?;
+            let count_rows = count_stmt
+                .query_map([], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })
+                .map_err(|e| DbError::QueryError(format!("Failed to count rows: {}", e)))?;
+            for r in count_rows {
+                let (n, c) =
+                    r.map_err(|e| DbError::QueryError(format!("Failed to read count: {}", e)))?;
+                counts.insert(n, c);
+            }
         }
+
+        let tables = raw
+            .into_iter()
+            .map(|(name, table_type)| {
+                let row_count = counts.get(&name).map(|c| *c as u64);
+                TableInfo {
+                    schema: schema.to_string(),
+                    table_type: table_type.to_uppercase(),
+                    row_count,
+                    name,
+                }
+            })
+            .collect();
 
         Ok(tables)
     }
@@ -326,79 +358,73 @@ impl DatabaseDriver for SqliteDriver {
             .lock()
             .map_err(|e| DbError::InternalError(format!("Failed to lock connection: {}", e)))?;
 
-        // Get all tables in the schema
+        // This used to be N+1: one `SELECT name FROM sqlite_master` followed
+        // by a `PRAGMA foreign_key_list("<table>")` prepared per table. The
+        // `pragma_foreign_key_list` table-valued function (SQLite >= 3.16,
+        // available in the bundled build) lets us join it against
+        // sqlite_master and pull every FK for the whole schema in one query.
+        // Rows are ordered so composite-key columns arrive contiguously and
+        // in `seq` order.
+        let query = r#"
+            SELECT m.name AS tbl, f.id AS id, f.seq AS seq,
+                   f."table" AS ref_table, f."from" AS from_col,
+                   f."to" AS to_col, f.on_update AS on_update,
+                   f.on_delete AS on_delete
+            FROM sqlite_master m
+            JOIN pragma_foreign_key_list(m.name) f
+            WHERE m.type = 'table'
+            ORDER BY m.name, f.id, f.seq
+        "#;
+
         let mut stmt = conn
-            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name")
-            .map_err(|e| DbError::QueryError(format!("Failed to query tables: {}", e)))?;
+            .prepare(query)
+            .map_err(|e| DbError::QueryError(format!("Failed to prepare foreign key query: {}", e)))?;
 
-        let table_names: Result<Vec<String>, _> = stmt
-            .query_map([], |row| row.get(0))
-            .map_err(|e| DbError::QueryError(format!("Failed to get tables: {}", e)))?
-            .collect();
+        let fk_iter = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?, // tbl (table owning the FK)
+                    row.get::<_, i64>(1)?,    // id (FK identifier, per-table)
+                    row.get::<_, i64>(2)?,    // seq (column position in composite FK)
+                    row.get::<_, String>(3)?, // ref_table (referenced table)
+                    row.get::<_, String>(4)?, // from_col (column in this table)
+                    row.get::<_, String>(5)?, // to_col (column in referenced table)
+                    row.get::<_, String>(6)?, // on_update
+                    row.get::<_, String>(7)?, // on_delete
+                ))
+            })
+            .map_err(|e| DbError::QueryError(format!("Failed to query foreign keys: {}", e)))?;
 
-        let table_names = table_names
-            .map_err(|e| DbError::QueryError(format!("Failed to read table names: {}", e)))?;
+        let mut foreign_keys: Vec<ForeignKeyInfo> = Vec::new();
+        // (table, id) of the FK currently being accumulated; rows are ordered
+        // so all columns of one FK are contiguous.
+        let mut current: Option<(String, i64)> = None;
 
-        let mut foreign_keys = Vec::new();
-
-        // For each table, get its foreign keys using PRAGMA foreign_key_list
-        for table_name in table_names {
-            let mut stmt = conn
-                .prepare(&format!("PRAGMA foreign_key_list(\"{}\")", table_name))
-                .map_err(|e| DbError::QueryError(format!("Failed to prepare foreign key query: {}", e)))?;
-
-            let fk_rows: Result<Vec<(i64, i64, String, String, String, String, String)>, _> = stmt
-                .query_map([], |row| {
-                    Ok((
-                        row.get::<_, i64>(0)?,  // id (identifies this foreign key)
-                        row.get::<_, i64>(1)?,  // seq (sequence number for multi-column FKs)
-                        row.get::<_, String>(2)?, // table (referenced table)
-                        row.get::<_, String>(3)?, // from (column in this table)
-                        row.get::<_, String>(4)?, // to (column in referenced table)
-                        row.get::<_, String>(5)?, // on_update
-                        row.get::<_, String>(6)?, // on_delete
-                    ))
-                })
-                .map_err(|e| DbError::QueryError(format!("Failed to query foreign keys: {}", e)))?
-                .collect();
-
-            let fk_rows = fk_rows
+        for row in fk_iter {
+            let (tbl, id, _seq, ref_table, from_col, to_col, on_update, on_delete) = row
                 .map_err(|e| DbError::QueryError(format!("Failed to read foreign key data: {}", e)))?;
 
-            // Group foreign keys by id (for composite foreign keys)
-            use std::collections::HashMap;
-            let mut fk_map: HashMap<i64, (String, Vec<String>, Vec<String>, String, String)> =
-                HashMap::new();
-
-            for (id, _seq, ref_table, from_col, to_col, on_update, on_delete) in fk_rows {
-                fk_map
-                    .entry(id)
-                    .and_modify(|(_, cols, ref_cols, _, _)| {
-                        cols.push(from_col.clone());
-                        ref_cols.push(to_col.clone());
-                    })
-                    .or_insert((
-                        ref_table,
-                        vec![from_col],
-                        vec![to_col],
-                        on_update,
-                        on_delete,
-                    ));
-            }
-
-            // Convert to ForeignKeyInfo structs
-            for (id, (ref_table, cols, ref_cols, on_update, on_delete)) in fk_map {
+            let key = (tbl.clone(), id);
+            if current.as_ref() == Some(&key) {
+                // Additional column of the composite FK in progress.
+                let fk = foreign_keys
+                    .last_mut()
+                    .expect("current is Some so a FK has been pushed");
+                fk.columns.push(from_col);
+                fk.referenced_columns.push(to_col);
+            } else {
                 foreign_keys.push(ForeignKeyInfo {
-                    name: format!("{}_{}_fkey", table_name, id),
-                    table: table_name.clone(),
+                    name: format!("{}_{}_fkey", tbl, id),
+                    table: tbl,
                     schema: schema.to_string(),
-                    columns: cols,
+                    columns: vec![from_col],
                     referenced_table: ref_table,
-                    referenced_schema: schema.to_string(), // SQLite doesn't have schemas like PostgreSQL
-                    referenced_columns: ref_cols,
+                    referenced_schema: schema.to_string(), // SQLite has no schemas like PostgreSQL
+                    referenced_columns: vec![to_col],
                     on_delete: Some(on_delete),
                     on_update: Some(on_update),
                 });
+                current = Some(key);
             }
         }
 
