@@ -671,7 +671,7 @@ export function SchemaExplorer({
       )}
 
       {/* Schema & Tables Tree View */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden min-h-0">
         {isRedis ? (
           <RedisSchemaTree
             connectionId={connectionId}

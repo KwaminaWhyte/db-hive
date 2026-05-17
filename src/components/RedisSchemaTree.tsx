@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   ChevronRight,
   ChevronDown,
@@ -217,7 +216,7 @@ export function RedisSchemaTree({
   }, [scanGroup]);
 
   return (
-    <div className="h-full flex flex-col">
+    <div className="h-full flex flex-col min-h-0">
       <div className="flex items-center justify-between px-3 py-1.5 border-b bg-muted/30 shrink-0">
         <span className="text-xs font-medium text-muted-foreground">
           Redis Keys
@@ -232,7 +231,7 @@ export function RedisSchemaTree({
           <RefreshCw className="h-3.5 w-3.5" />
         </Button>
       </div>
-      <ScrollArea className="flex-1">
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="py-1">
           {GROUPS.map((g) => {
             const state = groups[g.type];
@@ -305,7 +304,7 @@ export function RedisSchemaTree({
             );
           })}
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }
