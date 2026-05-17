@@ -576,18 +576,31 @@ impl DatabaseDriver for PostgresDriver {
             .map(|t| t.name.clone())
             .collect();
 
-        for table_name in &zero_count_tables {
-            // Use quoted identifier to handle special characters in table names
-            let count_sql = format!(
-                "SELECT COUNT(*) FROM {}.{}",
-                quote_ident(schema),
-                quote_ident(table_name)
-            );
+        // Collapse the per-table COUNT(*) into a single round-trip: one
+        // UNION ALL of `SELECT 'name', COUNT(*)` instead of N sequential
+        // query_one() calls. `'...'` escapes the name as a string literal;
+        // quote_ident() handles the FROM identifier.
+        if !zero_count_tables.is_empty() {
+            let union = zero_count_tables
+                .iter()
+                .map(|name| {
+                    format!(
+                        "SELECT '{}' AS n, COUNT(*) AS c FROM {}.{}",
+                        name.replace('\'', "''"),
+                        quote_ident(schema),
+                        quote_ident(name)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(" UNION ALL ");
 
-            if let Ok(row) = client.query_one(&count_sql, &[]).await {
-                let actual_count: i64 = row.get(0);
-                if let Some(table) = tables.iter_mut().find(|t| &t.name == table_name) {
-                    table.row_count = Some(actual_count as u64);
+            if let Ok(rows) = client.query(&union, &[]).await {
+                for row in &rows {
+                    let name: String = row.get(0);
+                    let actual_count: i64 = row.get(1);
+                    if let Some(table) = tables.iter_mut().find(|t| t.name == name) {
+                        table.row_count = Some(actual_count.max(0) as u64);
+                    }
                 }
             }
         }
