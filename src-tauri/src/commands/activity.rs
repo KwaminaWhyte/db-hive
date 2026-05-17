@@ -175,82 +175,93 @@ pub async fn export_query_logs(
     file_path: String,
     state: State<'_, Mutex<AppState>>,
 ) -> Result<String, DbError> {
-    let state_guard = state.lock().unwrap();
-    let logs = state_guard.activity_logger.get_all_logs(filter);
+    // Acquire the lock, fetch logs, build the serialized content, then drop the
+    // guard before doing any blocking disk I/O. The std::sync::MutexGuard must
+    // not be held across an await point.
+    let (content, error_kind) = {
+        let state_guard = state.lock().unwrap();
+        let logs = state_guard.activity_logger.get_all_logs(filter);
 
-    // Export based on format
-    match format {
-        ExportFormat::Json => {
-            let json = serde_json::to_string_pretty(&logs).map_err(|e| {
-                DbError::InternalError(format!("Failed to serialize logs to JSON: {}", e))
-            })?;
-            std::fs::write(&file_path, json).map_err(|e| {
-                DbError::InternalError(format!("Failed to write JSON file: {}", e))
-            })?;
-        }
-        ExportFormat::Csv => {
-            let mut csv = String::new();
-            csv.push_str("ID,Connection ID,Connection Name,Database,SQL,Query Type,Status,Started At,Completed At,Duration (ms),Row Count,Error\n");
-
-            for log in logs {
-                let line = format!(
-                    "{},{},{},{},{},{:?},{:?},{},{},{},{},{}\n",
-                    log.id,
-                    log.connection_id,
-                    log.connection_name,
-                    log.database.as_deref().unwrap_or(""),
-                    log.sql.replace(',', ";").replace('\n', " "),
-                    log.query_type,
-                    log.status,
-                    log.started_at.to_rfc3339(),
-                    log.completed_at
-                        .map(|dt| dt.to_rfc3339())
-                        .unwrap_or_default(),
-                    log.duration_ms.map(|d| d.to_string()).unwrap_or_default(),
-                    log.row_count.map(|r| r.to_string()).unwrap_or_default(),
-                    log.error.as_deref().unwrap_or("")
-                );
-                csv.push_str(&line);
+        // Build the serialized output in memory based on format.
+        match format {
+            ExportFormat::Json => {
+                let json = serde_json::to_string_pretty(&logs).map_err(|e| {
+                    DbError::InternalError(format!("Failed to serialize logs to JSON: {}", e))
+                })?;
+                (json, "JSON")
             }
+            ExportFormat::Csv => {
+                let mut csv = String::new();
+                csv.push_str("ID,Connection ID,Connection Name,Database,SQL,Query Type,Status,Started At,Completed At,Duration (ms),Row Count,Error\n");
 
-            std::fs::write(&file_path, csv).map_err(|e| {
-                DbError::InternalError(format!("Failed to write CSV file: {}", e))
-            })?;
-        }
-        ExportFormat::Txt => {
-            let mut txt = String::new();
-            txt.push_str("=== Query Logs Export ===\n\n");
+                for log in logs {
+                    let line = format!(
+                        "{},{},{},{},{},{:?},{:?},{},{},{},{},{}\n",
+                        log.id,
+                        log.connection_id,
+                        log.connection_name,
+                        log.database.as_deref().unwrap_or(""),
+                        log.sql.replace(',', ";").replace('\n', " "),
+                        log.query_type,
+                        log.status,
+                        log.started_at.to_rfc3339(),
+                        log.completed_at
+                            .map(|dt| dt.to_rfc3339())
+                            .unwrap_or_default(),
+                        log.duration_ms.map(|d| d.to_string()).unwrap_or_default(),
+                        log.row_count.map(|r| r.to_string()).unwrap_or_default(),
+                        log.error.as_deref().unwrap_or("")
+                    );
+                    csv.push_str(&line);
+                }
 
-            for log in logs {
-                txt.push_str(&format!("ID: {}\n", log.id));
-                txt.push_str(&format!("Connection: {}\n", log.connection_name));
-                if let Some(ref db) = log.database {
-                    txt.push_str(&format!("Database: {}\n", db));
-                }
-                txt.push_str(&format!("Query Type: {:?}\n", log.query_type));
-                txt.push_str(&format!("Status: {:?}\n", log.status));
-                txt.push_str(&format!("Started At: {}\n", log.started_at.to_rfc3339()));
-                if let Some(completed) = log.completed_at {
-                    txt.push_str(&format!("Completed At: {}\n", completed.to_rfc3339()));
-                }
-                if let Some(duration) = log.duration_ms {
-                    txt.push_str(&format!("Duration: {}ms\n", duration));
-                }
-                if let Some(rows) = log.row_count {
-                    txt.push_str(&format!("Row Count: {}\n", rows));
-                }
-                if let Some(ref error) = log.error {
-                    txt.push_str(&format!("Error: {}\n", error));
-                }
-                txt.push_str(&format!("SQL:\n{}\n", log.sql));
-                txt.push_str("\n---\n\n");
+                (csv, "CSV")
             }
+            ExportFormat::Txt => {
+                let mut txt = String::new();
+                txt.push_str("=== Query Logs Export ===\n\n");
 
-            std::fs::write(&file_path, txt).map_err(|e| {
-                DbError::InternalError(format!("Failed to write TXT file: {}", e))
-            })?;
+                for log in logs {
+                    txt.push_str(&format!("ID: {}\n", log.id));
+                    txt.push_str(&format!("Connection: {}\n", log.connection_name));
+                    if let Some(ref db) = log.database {
+                        txt.push_str(&format!("Database: {}\n", db));
+                    }
+                    txt.push_str(&format!("Query Type: {:?}\n", log.query_type));
+                    txt.push_str(&format!("Status: {:?}\n", log.status));
+                    txt.push_str(&format!("Started At: {}\n", log.started_at.to_rfc3339()));
+                    if let Some(completed) = log.completed_at {
+                        txt.push_str(&format!("Completed At: {}\n", completed.to_rfc3339()));
+                    }
+                    if let Some(duration) = log.duration_ms {
+                        txt.push_str(&format!("Duration: {}ms\n", duration));
+                    }
+                    if let Some(rows) = log.row_count {
+                        txt.push_str(&format!("Row Count: {}\n", rows));
+                    }
+                    if let Some(ref error) = log.error {
+                        txt.push_str(&format!("Error: {}\n", error));
+                    }
+                    txt.push_str(&format!("SQL:\n{}\n", log.sql));
+                    txt.push_str("\n---\n\n");
+                }
+
+                (txt, "TXT")
+            }
         }
-    }
+        // `state_guard` is dropped here, before any blocking I/O.
+    };
+
+    // Perform the blocking disk write off the async runtime so the Tokio
+    // worker thread is not blocked. The serialized content and file path are
+    // moved into the blocking closure.
+    let write_path = file_path.clone();
+    tokio::task::spawn_blocking(move || std::fs::write(&write_path, content))
+        .await
+        .map_err(|e| DbError::InternalError(format!("Export task failed to join: {}", e)))?
+        .map_err(|e| {
+            DbError::InternalError(format!("Failed to write {} file: {}", error_kind, e))
+        })?;
 
     Ok(file_path)
 }
