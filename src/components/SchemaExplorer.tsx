@@ -53,6 +53,7 @@ import {
   FunctionSquare,
 } from "lucide-react";
 import { ConnectionProfile, SchemaInfo, TableInfo } from "@/types";
+import { RedisSchemaTree } from "./RedisSchemaTree";
 import { SqlExportDialog } from "./SqlExportDialog";
 import { SqlImportDialog } from "./SqlImportDialog";
 import { TableCreationDialog } from "./TableCreationDialog";
@@ -81,6 +82,8 @@ interface SchemaExplorerProps {
   onDatabaseChange?: (database: string) => void;
   onExecuteQuery?: (sql: string) => void;
   onOpenERDiagram?: (schema: string) => void;
+  /** Open a Redis key's value in a main-area tab (Redis connections only) */
+  onRedisKeySelect?: (key: string) => void;
 }
 
 export function SchemaExplorer({
@@ -91,8 +94,11 @@ export function SchemaExplorer({
   onDatabaseChange,
   onExecuteQuery,
   onOpenERDiagram,
+  onRedisKeySelect,
 }: SchemaExplorerProps) {
   const navigate = useNavigate();
+  const isRedis = connectionProfile.driver === "Redis";
+  const [activeRedisKey, setActiveRedisKey] = useState<string | null>(null);
   const [schemas, setSchemas] = useState<SchemaInfo[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>("");
   // Store tables per schema to support lazy loading
@@ -666,7 +672,17 @@ export function SchemaExplorer({
 
       {/* Schema & Tables Tree View */}
       <div className="flex-1 overflow-hidden">
-        {loadingSchemas ? (
+        {isRedis ? (
+          <RedisSchemaTree
+            connectionId={connectionId}
+            searchQuery={searchQuery}
+            activeKey={activeRedisKey}
+            onSelectKey={(key) => {
+              setActiveRedisKey(key);
+              onRedisKeySelect?.(key);
+            }}
+          />
+        ) : loadingSchemas ? (
           <div className="p-4 space-y-2">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="flex items-center gap-2 px-3 py-2">

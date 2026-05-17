@@ -103,6 +103,30 @@ function ConnectedLayout() {
     });
   };
 
+  const handleRedisKeySelect = (key: string) => {
+    const tabId = `rediskey-${encodeURIComponent(key)}`;
+    navigate({
+      to: "/query",
+      search: (prev: { tabs?: string; active?: number }) => {
+        const currentTabIds = prev.tabs
+          ? prev.tabs.split(",")
+          : [`query-${Date.now()}`];
+        const existingIndex = currentTabIds.indexOf(tabId);
+        if (existingIndex >= 0) {
+          return {
+            tabs: prev.tabs || currentTabIds[0],
+            active: existingIndex,
+          };
+        }
+        const newTabIds = [...currentTabIds, tabId];
+        return {
+          tabs: newTabIds.join(","),
+          active: newTabIds.length - 1,
+        };
+      },
+    });
+  };
+
   const handleOpenERDiagram = (schema: string) => {
     navigate({
       to: "/er-diagram/$schema",
@@ -270,6 +294,7 @@ function ConnectedLayout() {
               onDatabaseChange={setCurrentDatabase}
               onOpenERDiagram={handleOpenERDiagram}
               onExecuteQuery={handleExecuteQuery}
+              onRedisKeySelect={handleRedisKeySelect}
             />
           </div>
         </div>

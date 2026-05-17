@@ -48,7 +48,7 @@ import { MigrationsDialog } from "@/components/MigrationsDialog";
 import { BackupManagerDialog } from "@/components/BackupManagerDialog";
 import { useAppModal, setAppModal } from "@/store/useAppModal";
 
-const APP_VERSION = "0.19.4-beta";
+const APP_VERSION = "0.19.5-beta";
 
 export function GlobalModals() {
   const modal = useAppModal();

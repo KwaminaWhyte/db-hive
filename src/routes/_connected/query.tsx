@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { QueryPanel } from "@/components/QueryPanel";
 import { TableInspector } from "@/components/TableInspector";
+import { RedisValuePanel } from "@/components/RedisValuePanel";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { useTabContext } from "@/contexts/TabContext";
 import { invoke } from "@tauri-apps/api/core";
@@ -163,6 +164,20 @@ function QueryPanelRoute() {
             schema,
             tableName,
             filter: JSON.stringify({ column, value }),
+          });
+        } else if (tabId.startsWith("rediskey-")) {
+          // rediskey-{encodeURIComponent(key)}
+          let redisKey = "";
+          try {
+            redisKey = decodeURIComponent(tabId.slice("rediskey-".length));
+          } catch {
+            redisKey = tabId.slice("rediskey-".length);
+          }
+          createTabState({
+            id: tabId,
+            type: "redis",
+            label: redisKey.length > 24 ? `${redisKey.slice(0, 24)}…` : redisKey,
+            redisKey,
           });
         } else if (tabId.startsWith("table-")) {
           const [schema, tableName] = tabId.replace("table-", "").split(".");
@@ -539,6 +554,12 @@ function QueryPanelRoute() {
                   currentDatabase={currentDatabase}
                   onExecuteQuery={handleExecuteQuery}
                   pendingQuery={tabState.sql || null}
+                />
+              ) : tabState.type === "redis" ? (
+                <RedisValuePanel
+                  connectionId={connectionId!}
+                  redisKey={tabState.redisKey!}
+                  onClose={() => handleCloseTab(index)}
                 />
               ) : (
                 <TableInspector
