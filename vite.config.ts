@@ -1,4 +1,5 @@
 import path from "path";
+import { readFileSync } from "fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -7,9 +8,20 @@ import { TanStackRouterVite } from "@tanstack/router-plugin/vite";
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+// Single source of truth for the app version: package.json. Injected at
+// build time as the `__APP_VERSION__` global so every UI surface stays in
+// sync — bump the version in package.json only.
+const appVersion = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf-8")
+).version as string;
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [TanStackRouterVite(), react(), tailwindcss()],
+
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
 
   resolve: {
     alias: {

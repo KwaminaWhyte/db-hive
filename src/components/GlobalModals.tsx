@@ -47,8 +47,7 @@ import { PluginMarketplace } from "@/components/PluginMarketplace";
 import { MigrationsDialog } from "@/components/MigrationsDialog";
 import { BackupManagerDialog } from "@/components/BackupManagerDialog";
 import { useAppModal, setAppModal } from "@/store/useAppModal";
-
-const APP_VERSION = "0.19.5-beta";
+import { APP_VERSION } from "@/version";
 
 export function GlobalModals() {
   const modal = useAppModal();

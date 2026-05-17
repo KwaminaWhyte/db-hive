@@ -5,6 +5,7 @@ import { ConnectionForm } from "@/components/ConnectionForm";
 import { DatabaseBrandIcon } from "@/components/DatabaseBrandIcon";
 import { HiveLogo } from "@/components/WelcomeScreen";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
+import { APP_VERSION } from "@/version";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
 import {
   ConnectionProfile,
@@ -617,7 +618,7 @@ function HomeRoute() {
         {/* Footer */}
         <footer className="border-t border-border px-6 py-3">
           <div className="flex items-center justify-center text-xs text-muted-foreground">
-            <span>Version 0.19.5-beta</span>
+            <span>Version {APP_VERSION}</span>
           </div>
           <div className="flex items-center justify-center gap-3 mt-1 text-xs text-muted-foreground">
             <a
