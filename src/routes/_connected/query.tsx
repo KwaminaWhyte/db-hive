@@ -141,6 +141,29 @@ function QueryPanelRoute() {
             label: "Query",
             sql: "",
           });
+        } else if (tabId.startsWith("tablefk-")) {
+          // tablefk-{schema}.{table}::{column}::{encodeURIComponent(value)}
+          const body = tabId.slice("tablefk-".length);
+          const [loc, column, ...rest] = body.split("::");
+          const dot = loc.indexOf(".");
+          const schema = dot >= 0 ? loc.slice(0, dot) : "";
+          const tableName = dot >= 0 ? loc.slice(dot + 1) : loc;
+          let value = "";
+          try {
+            value = decodeURIComponent(rest.join("::"));
+          } catch {
+            value = rest.join("::");
+          }
+          createTabState({
+            id: tabId,
+            type: "table",
+            label: `${tableName} · ${column}=${
+              value.length > 20 ? `${value.slice(0, 20)}…` : value
+            }`,
+            schema,
+            tableName,
+            filter: JSON.stringify({ column, value }),
+          });
         } else if (tabId.startsWith("table-")) {
           const [schema, tableName] = tabId.replace("table-", "").split(".");
           createTabState({
@@ -278,6 +301,48 @@ function QueryPanelRoute() {
       sql: "",
     });
 
+    const newTabIds = [...tabIds, newTabId];
+    navigate({
+      to: "/query",
+      search: {
+        tabs: newTabIds.join(","),
+        active: newTabIds.length - 1,
+      },
+    });
+  };
+
+  // Open the referenced record of a foreign key in a new, pre-filtered table tab
+  const handleOpenRelated = (target: {
+    schema: string;
+    tableName: string;
+    column: string;
+    value: string;
+  }) => {
+    // Encode everything in the id so the URL-sync recreation can rebuild this
+    // tab authoritatively (schema/table/column/value) even if it gets pruned
+    // before the URL catches up. Deterministic id => reuses tab on re-click.
+    const newTabId = `tablefk-${target.schema}.${target.tableName}::${target.column}::${encodeURIComponent(target.value)}`;
+
+    // Already open for this exact record → just focus it
+    const existingIndex = tabIds.indexOf(newTabId);
+    if (existingIndex >= 0) {
+      navigate({
+        to: "/query",
+        search: { tabs: tabsParam, active: existingIndex },
+      });
+      return;
+    }
+
+    const shortVal =
+      target.value.length > 20 ? `${target.value.slice(0, 20)}…` : target.value;
+    createTabState({
+      id: newTabId,
+      type: "table",
+      label: `${target.tableName} · ${target.column}=${shortVal}`,
+      schema: target.schema,
+      tableName: target.tableName,
+      filter: JSON.stringify({ column: target.column, value: target.value }),
+    });
     const newTabIds = [...tabIds, newTabId];
     navigate({
       to: "/query",
@@ -443,6 +508,21 @@ function QueryPanelRoute() {
 
           const isActive = index === activeIndex;
 
+          let initialFilter: { column: string; value: string } | undefined;
+          if (tabState.filter) {
+            try {
+              const parsed = JSON.parse(tabState.filter);
+              if (parsed && parsed.column) {
+                initialFilter = {
+                  column: parsed.column,
+                  value: String(parsed.value),
+                };
+              }
+            } catch {
+              // Non-JSON legacy filter string — ignore
+            }
+          }
+
           return (
             <div
               key={tabId}
@@ -467,6 +547,8 @@ function QueryPanelRoute() {
                   tableName={tabState.tableName!}
                   onClose={() => handleCloseTab(index)}
                   driverType={connectionProfile?.driver}
+                  initialFilter={initialFilter}
+                  onOpenRelated={handleOpenRelated}
                 />
               )}
             </div>

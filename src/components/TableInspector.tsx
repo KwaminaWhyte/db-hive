@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -56,8 +56,9 @@ import {
   Pencil,
   Ban,
   Filter,
+  ExternalLink,
 } from "lucide-react";
-import { TableSchema, QueryExecutionResult } from "@/types";
+import { TableSchema, QueryExecutionResult, ForeignKeyInfo } from "@/types";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { RowJsonViewer } from "./RowJsonViewer";
 import { EditableCell } from "./EditableCell";
@@ -145,6 +146,15 @@ interface TableInspectorProps {
   tableName: string;
   onClose: () => void;
   driverType?: string;
+  /** Pre-applied equality filter (used when opened from a foreign-key click) */
+  initialFilter?: { column: string; value: string };
+  /** Open the referenced record of a foreign key in a new filtered tab */
+  onOpenRelated?: (target: {
+    schema: string;
+    tableName: string;
+    column: string;
+    value: string;
+  }) => void;
 }
 
 export function TableInspector({
@@ -153,6 +163,8 @@ export function TableInspector({
   tableName,
   onClose,
   driverType = 'Postgres',
+  initialFilter,
+  onOpenRelated,
 }: TableInspectorProps) {
   const [tableSchema, setTableSchema] = useState<TableSchema | null>(null);
   const [sampleData, setSampleData] = useState<QueryExecutionResult | null>(
@@ -182,6 +194,41 @@ export function TableInspector({
   interface FilterRow { id: string; column: string; operator: FilterOperator; value: string; }
   const [filterRows, setFilterRows] = useState<FilterRow[]>([]);
   const [showFilters, setShowFilters] = useState(false);
+  const [foreignKeys, setForeignKeys] = useState<ForeignKeyInfo[]>([]);
+
+  // Map of FK column name -> referenced { schema, table, column }
+  const fkByColumn = useMemo(() => {
+    const m = new Map<string, { schema: string; table: string; column: string }>();
+    foreignKeys
+      .filter((fk) => fk.table === tableName)
+      .forEach((fk) => {
+        fk.columns.forEach((col, i) => {
+          m.set(col, {
+            schema: fk.referencedSchema,
+            table: fk.referencedTable,
+            column: fk.referencedColumns[i] ?? fk.referencedColumns[0],
+          });
+        });
+      });
+    return m;
+  }, [foreignKeys, tableName]);
+
+  // Seed the structured filter once when opened from a foreign-key click
+  const seededFilterRef = useRef(false);
+  useEffect(() => {
+    if (initialFilter && !seededFilterRef.current) {
+      seededFilterRef.current = true;
+      setFilterRows([
+        {
+          id: crypto.randomUUID(),
+          column: initialFilter.column,
+          operator: 'equals',
+          value: String(initialFilter.value),
+        },
+      ]);
+      setShowFilters(true);
+    }
+  }, [initialFilter]);
 
   const addFilterRow = () => {
     if (!tableSchema) return;
@@ -326,6 +373,17 @@ export function TableInspector({
         table: tableName,
       });
       setTableSchema(schemaData);
+
+      // Best-effort foreign-key fetch for clickable relation links
+      try {
+        const fks = await invoke<ForeignKeyInfo[]>("get_foreign_keys", {
+          connectionId,
+          schema,
+        });
+        setForeignKeys(fks);
+      } catch {
+        setForeignKeys([]);
+      }
     } catch (err) {
       const errorMessage =
         typeof err === "string" ? err : (err as any)?.message || String(err);
@@ -765,10 +823,24 @@ export function TableInspector({
                                editor.editingCell?.columnIndex === cellIndex;
               const isModified = editor.isCellModified(rowIndex, columnName);
 
+              const fk = fkByColumn.get(columnName);
+              const canOpenRelated =
+                !!fk && !!onOpenRelated && cell !== null && cell !== undefined && !isEditing;
+              const openRelated = () => {
+                if (fk && onOpenRelated && cell !== null && cell !== undefined) {
+                  onOpenRelated({
+                    schema: fk.schema,
+                    tableName: fk.table,
+                    column: fk.column,
+                    value: String(cell),
+                  });
+                }
+              };
+
               return (
                 <ContextMenu key={cellIndex}>
                   <ContextMenuTrigger asChild>
-                    <TableCell className="p-0">
+                    <TableCell className="p-0 relative group/fkcell">
                       <EditableCell
                         value={cell}
                         rowIndex={rowIndex}
@@ -783,9 +855,31 @@ export function TableInspector({
                         onChange={editor.applyChange}
                         onCancelEdit={editor.cancelEdit}
                       />
+                      {canOpenRelated && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openRelated();
+                          }}
+                          className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover/fkcell:opacity-100 transition-opacity bg-background/90 border border-border rounded p-0.5 hover:bg-accent hover:text-primary"
+                          title={`Open ${fk!.schema}.${fk!.table} where ${fk!.column} = ${String(cell)}`}
+                        >
+                          <ExternalLink className="h-3 w-3" />
+                        </button>
+                      )}
                     </TableCell>
                   </ContextMenuTrigger>
                   <ContextMenuContent>
+                    {canOpenRelated && (
+                      <>
+                        <ContextMenuItem onClick={openRelated}>
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          Open Referenced Record
+                        </ContextMenuItem>
+                        <ContextMenuSeparator />
+                      </>
+                    )}
                     <ContextMenuItem onClick={() => copyCellValue(cell)}>
                       <ClipboardCopy className="h-4 w-4 mr-2" />
                       Copy Cell

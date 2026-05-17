@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added (2026-05-17)
+
+- **Foreign-Key Drill-Down**: Hovering a foreign-key cell in the Table Inspector reveals an external-link button; a "Open Referenced Record" entry is also added to the cell context menu. Activating it opens a new tab on the referenced table pre-filtered to the related row. `TableInspector` now fetches `get_foreign_keys` on schema load and maps FK columns → referenced schema/table/column. New props `initialFilter` (seeds an `equals` filter row + auto-opens the filter bar) and `onOpenRelated`. Drill-down tabs use a deterministic `tablefk-{schema}.{table}::{column}::{encodeURIComponent(value)}` id so the URL-sync recreation can rebuild them authoritatively (schema/table/column/value + filter) even if pruned before the URL syncs; re-clicking the same FK focuses the existing tab instead of duplicating it. `ForeignKeyInfo` is now re-exported from `@/types`.
+
+### Fixed (2026-05-17)
+
+- **Foreign-key tab "db error"**: FK drill-down tabs were created with a `table-…-fk{ts}` id that the URL-sync recreation re-parsed via `replace("table-","").split(".")`, yielding a non-existent table name (e.g. `forms-fk1779022533436`) and dropping the filter — producing `Query execution failed: db error`. Switched to a self-describing `tablefk-` id with a dedicated recreation branch that decodes schema/table/column/value and restores the filter.
+
 ### Added (2026-05-15)
 
 - **Redis Driver**: New `DbDriver::Redis` variant. Uses `redis` crate 0.27 with `tokio-comp` + `connection-manager` features. `MultiplexedConnection` wrapped in `Arc<Mutex<...>>` for thread-safe async access. Default port 6379. `execute_query` interprets the SQL input as a raw Redis command string (e.g. `GET mykey`, `HGETALL myhash`). `get_databases` returns 16 logical DBs (0–15). `get_tables` samples key types via SCAN and maps them to pseudo-tables: `strings`, `hashes`, `lists`, `sets`, `zsets`. `get_table_schema` returns a conceptual column layout per type (e.g. `key/field/value` for hashes). Foreign keys not applicable; returns empty vec. Wired into `test_connection_command` and `connect_to_database` in `commands/connection.rs`.

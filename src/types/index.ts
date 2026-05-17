@@ -17,6 +17,7 @@ export type {
   TableInfo,
   ColumnInfo,
   IndexInfo,
+  ForeignKeyInfo,
   TableSchema,
   SqlExportOptions,
   SqlImportOptions,
