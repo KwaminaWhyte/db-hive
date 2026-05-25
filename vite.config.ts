@@ -30,70 +30,17 @@ export default defineConfig(async () => ({
   },
 
   build: {
-    // Monaco is inherently large; raise the warning threshold modestly so
-    // the build output stays readable while still flagging real regressions.
-    chunkSizeWarningLimit: 900,
-    rollupOptions: {
-      output: {
-        // Split heavy vendor deps into dedicated chunks so the initial
-        // bundle stays small and big editors/graph libs load on demand.
-        manualChunks(id) {
-          if (!id.includes("node_modules")) return undefined;
-
-          const inPkg = (...pkgs: string[]) =>
-            pkgs.some(
-              (p) =>
-                id.includes(`node_modules/${p}/`) ||
-                id.includes(`node_modules/${p}\\`)
-            );
-
-          // Monaco editor + its React wrapper (very large).
-          if (inPkg("monaco-editor", "@monaco-editor/react")) {
-            return "monaco";
-          }
-
-          // Graph layout engine.
-          if (inPkg("dagre", "@dagrejs/dagre")) {
-            return "dagre";
-          }
-
-          // React core + router.
-          if (
-            inPkg(
-              "react",
-              "react-dom",
-              "react-router",
-              "@tanstack/react-router",
-              "@tanstack/router-core"
-            )
-          ) {
-            return "react-vendor";
-          }
-
-          // All Radix UI primitives.
-          if (id.includes("node_modules/@radix-ui/")) {
-            return "radix";
-          }
-
-          // Icon libraries.
-          if (inPkg("react-icons", "lucide-react")) {
-            return "icons";
-          }
-
-          // Graph rendering (heavy, used only by the schema designer).
-          if (inPkg("reactflow", "@reactflow")) {
-            return "reactflow";
-          }
-
-          // Remaining TanStack libs (table/virtual/query) used across grids.
-          if (id.includes("node_modules/@tanstack/")) {
-            return "tanstack";
-          }
-
-          return undefined;
-        },
-      },
-    },
+    // No manual chunk splitting. This is a desktop app: assets are served
+    // from the local Tauri bundle, so initial-load chunk size is irrelevant
+    // and there is no network round-trip to optimize for. Hand-splitting the
+    // vendor graph here created circular chunk dependencies (React, TanStack,
+    // reactflow, dagre/graphlib all cross-reference) where a consumer chunk
+    // evaluated before the chunk holding its dependency — leaving the binding
+    // undefined at module-init time and producing a blank production window
+    // (e.g. "Cannot set properties of undefined (setting 'Activity')",
+    // "reading 'useLayoutEffect'", "reading 'Graph'"). A single bundle keeps
+    // init order correct. Raise the size warning so the build stays quiet.
+    chunkSizeWarningLimit: 4000,
   },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
