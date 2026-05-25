@@ -417,9 +417,19 @@ export function SchemaExplorer({
     return <Table2 className="h-4 w-4 text-green-500" />;
   };
 
+  // Quote a SQL identifier for the connected driver's dialect. MySQL uses
+  // backticks; Postgres/SQLite/SQL Server use double quotes. Without this,
+  // generated SQL fails on MySQL with a 1064 syntax error.
+  const quoteId = (identifier: string) =>
+    String(connectionProfile.driver) === "MySql"
+      ? `\`${identifier}\``
+      : `"${identifier}"`;
+  const qualified = (schemaName: string, tableName: string) =>
+    `${quoteId(schemaName)}.${quoteId(tableName)}`;
+
   // Generate SELECT query for a table
   const generateSelectQuery = (schemaName: string, tableName: string) => {
-    return `SELECT * FROM "${schemaName}"."${tableName}" LIMIT 100;`;
+    return `SELECT * FROM ${qualified(schemaName, tableName)} LIMIT 100;`;
   };
 
   // Generate INSERT template for a table with actual column names
@@ -439,10 +449,10 @@ export function SchemaExplorer({
       );
 
       if (columns.length === 0) {
-        return `INSERT INTO "${schemaName}"."${tableName}" (column1, column2, ...) \nVALUES (value1, value2, ...);`;
+        return `INSERT INTO ${qualified(schemaName, tableName)} (column1, column2, ...) \nVALUES (value1, value2, ...);`;
       }
 
-      const columnNames = columns.map((c) => `"${c.name}"`).join(", ");
+      const columnNames = columns.map((c) => quoteId(c.name)).join(", ");
       const valuePlaceholders = columns
         .map((c) => {
           // Provide type hints as placeholders
@@ -463,10 +473,10 @@ export function SchemaExplorer({
         })
         .join(", ");
 
-      return `INSERT INTO "${schemaName}"."${tableName}" (${columnNames})\nVALUES (${valuePlaceholders});`;
+      return `INSERT INTO ${qualified(schemaName, tableName)} (${columnNames})\nVALUES (${valuePlaceholders});`;
     } catch (err) {
       console.error("Failed to fetch columns for INSERT template:", err);
-      return `INSERT INTO "${schemaName}"."${tableName}" (column1, column2, ...) \nVALUES (value1, value2, ...);`;
+      return `INSERT INTO ${qualified(schemaName, tableName)} (column1, column2, ...) \nVALUES (value1, value2, ...);`;
     }
   };
 
@@ -876,7 +886,7 @@ export function SchemaExplorer({
                                           onDragStart={(e) => {
                                             e.dataTransfer.setData(
                                               "text/plain",
-                                              `"${schema.name}"."${table.name}"`,
+                                              qualified(schema.name, table.name),
                                             );
                                             e.dataTransfer.effectAllowed =
                                               "copy";

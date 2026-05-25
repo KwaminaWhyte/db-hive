@@ -29,6 +29,12 @@ impl MysqlDriver {
 
 #[async_trait]
 impl DatabaseDriver for MysqlDriver {
+    fn quote_identifier(&self, ident: &str) -> String {
+        // MySQL/MariaDB quote identifiers with backticks; an embedded backtick
+        // is escaped by doubling it.
+        format!("`{}`", ident.replace('`', "``"))
+    }
+
     async fn connect(opts: ConnectionOptions) -> Result<Self, DbError>
     where
         Self: Sized,

@@ -400,11 +400,20 @@ pub async fn get_table_data_keyset(
         })
         .filter(|s| !s.is_empty());
 
+    // Quote identifiers using the connection's dialect (Postgres/SQLite "…",
+    // MySQL `…`, SQL Server […]) so generated SQL is valid per engine.
+    let quoted_table = format!(
+        "{}.{}",
+        connection.quote_identifier(&schema),
+        connection.quote_identifier(&table)
+    );
+    let quoted_cursor_col = connection.quote_identifier(&cursor_column);
+
     // The cursor predicate only applies once we have a real anchor value.
     let cursor_predicate = cursor_value
         .as_ref()
         .and_then(cursor_sql_literal)
-        .map(|lit| format!(r#""{}" {} {}"#, cursor_column, cursor_op, lit));
+        .map(|lit| format!("{} {} {}", quoted_cursor_col, cursor_op, lit));
 
     // Compose the WHERE clause from (optional) UI filter + (optional) cursor.
     let mut conditions: Vec<String> = Vec::new();
@@ -423,11 +432,10 @@ pub async fn get_table_data_keyset(
     // We fetch page_size + 1 rows so we can determine whether more rows exist
     // without a separate COUNT query.
     let sql = format!(
-        r#"SELECT * FROM "{schema}"."{table}"{where_clause} ORDER BY "{cursor_column}" {order_dir} LIMIT {limit}"#,
-        schema = schema,
-        table = table,
+        "SELECT * FROM {table}{where_clause} ORDER BY {cursor_column} {order_dir} LIMIT {limit}",
+        table = quoted_table,
         where_clause = where_clause,
-        cursor_column = cursor_column,
+        cursor_column = quoted_cursor_col,
         order_dir = order_dir,
         limit = page_size + 1,
     );

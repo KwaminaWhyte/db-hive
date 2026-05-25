@@ -96,6 +96,12 @@ impl SqlServerDriver {
 
 #[async_trait]
 impl DatabaseDriver for SqlServerDriver {
+    fn quote_identifier(&self, ident: &str) -> String {
+        // SQL Server uses bracket-delimited identifiers; a closing bracket is
+        // escaped by doubling it.
+        format!("[{}]", ident.replace(']', "]]"))
+    }
+
     async fn connect(opts: ConnectionOptions) -> Result<Self, DbError>
     where
         Self: Sized,

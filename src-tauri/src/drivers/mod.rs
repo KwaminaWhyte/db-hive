@@ -224,4 +224,15 @@ pub trait DatabaseDriver: Send + Sync {
     ///
     /// Some drivers may not need explicit cleanup and can implement this as a no-op.
     async fn close(&self) -> Result<(), DbError>;
+
+    /// Quote a SQL identifier (schema/table/column) for this dialect.
+    ///
+    /// The default uses standard SQL double-quote quoting (Postgres, SQLite,
+    /// SQL Server with QUOTED_IDENTIFIER). MySQL overrides this with backticks
+    /// and SQL Server with brackets. Any embedded quote char is doubled/escaped
+    /// so the result is always a single safe identifier token. Used when the
+    /// app interpolates identifiers into generated SQL (e.g. keyset pagination).
+    fn quote_identifier(&self, ident: &str) -> String {
+        format!("\"{}\"", ident.replace('"', "\"\""))
+    }
 }
