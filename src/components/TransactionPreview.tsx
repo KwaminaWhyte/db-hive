@@ -356,13 +356,13 @@ export const TransactionPreview: FC<TransactionPreviewProps> = ({
                         {change.type === 'update' && change.details.map((detail, dIdx) => (
                           <div key={dIdx}>
                             {detail.oldValue !== undefined && (
-                              <div className="bg-red-500/10 text-red-600 dark:text-red-400 border-l-2 border-red-500 px-3 py-1.5 font-mono text-xs">
+                              <div className="bg-destructive/10 text-destructive border-l-2 border-destructive px-3 py-1.5 font-mono text-xs">
                                 <span className="select-none mr-2">-</span>
                                 {detail.oldValue}
                               </div>
                             )}
                             {detail.newValue !== undefined && (
-                              <div className="bg-green-500/10 text-green-600 dark:text-green-400 border-l-2 border-green-500 px-3 py-1.5 font-mono text-xs">
+                              <div className="bg-success/10 text-success border-l-2 border-success px-3 py-1.5 font-mono text-xs">
                                 <span className="select-none mr-2">+</span>
                                 {detail.newValue}
                               </div>
@@ -371,14 +371,14 @@ export const TransactionPreview: FC<TransactionPreviewProps> = ({
                         ))}
 
                         {change.type === 'insert' && change.details.map((detail, dIdx) => (
-                          <div key={dIdx} className="bg-green-500/10 text-green-600 dark:text-green-400 border-l-2 border-green-500 px-3 py-1.5 font-mono text-xs">
+                          <div key={dIdx} className="bg-success/10 text-success border-l-2 border-success px-3 py-1.5 font-mono text-xs">
                             <span className="select-none mr-2">+</span>
                             INSERT {detail.summary}
                           </div>
                         ))}
 
                         {change.type === 'delete' && change.details.map((_detail, dIdx) => (
-                          <div key={dIdx} className="bg-red-500/10 text-red-600 dark:text-red-400 border-l-2 border-red-500 px-3 py-1.5 font-mono text-xs">
+                          <div key={dIdx} className="bg-destructive/10 text-destructive border-l-2 border-destructive px-3 py-1.5 font-mono text-xs">
                             <span className="select-none mr-2">-</span>
                             DELETE row
                           </div>
@@ -403,10 +403,10 @@ export const TransactionPreview: FC<TransactionPreviewProps> = ({
                           <div
                             className={`px-3 py-1.5 font-mono text-xs border-l-2 ${
                               isDelete
-                                ? 'bg-red-500/10 text-red-600 dark:text-red-400 border-red-500'
+                                ? 'bg-destructive/10 text-destructive border-destructive'
                                 : isInsert
-                                ? 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500'
-                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500'
+                                ? 'bg-success/10 text-success border-success'
+                                : 'bg-warning/10 text-warning border-warning'
                             }`}
                           >
                             <span className="select-none mr-2">{isDelete ? '-' : isInsert ? '+' : '~'}</span>

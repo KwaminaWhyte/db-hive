@@ -1,4 +1,4 @@
-import { FC, useState, useEffect, useCallback, useRef } from 'react';
+import { FC, useState, useEffect, useRef } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { SQLEditor } from './SQLEditor';
 import { ResultsViewer } from './ResultsViewer';
@@ -13,21 +13,11 @@ import { createQueryHistory } from '@/types/history';
 import { QueryCancelledError } from '@/utils/queryErrors';
 import { invoke } from '@tauri-apps/api/core';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Button } from './ui/button';
-import { GripHorizontal, GripVertical, Plus, X, Sparkles } from 'lucide-react';
+import { GripHorizontal, GripVertical, Sparkles } from 'lucide-react';
 import { QueryStatusBar } from './QueryStatusBar';
 import { ConnectionLostError } from './ConnectionLostError';
 import { useNavigate } from '@tanstack/react-router';
 import { useSchemaContext } from '@/hooks/useSchemaContext';
-
-interface EditorTab {
-  id: string;
-  name: string;
-  sql: string;
-  loading: boolean;
-  results: QueryExecutionResult | null;
-  error: string | null;
-}
 
 interface QueryPanelProps {
   /** Active connection ID */
@@ -42,7 +32,7 @@ interface QueryPanelProps {
   /** Callback to execute query - returns a Promise with results */
   onExecuteQuery: (sql: string) => Promise<QueryExecutionResult>;
 
-  /** Pending query to load into active tab */
+  /** Pending query to load into the editor */
   pendingQuery?: string | null;
 
   /** Callback when pending query is loaded */
@@ -50,43 +40,95 @@ interface QueryPanelProps {
 
   /**
    * Stable identifier for this panel instance. When provided, the panel's
-   * inner editor tabs (SQL text, results, query plan) are snapshotted to an
-   * in-memory cache so they survive unmount/remount — required now that the
+   * editor state (SQL text, results, query plan) is snapshotted to an
+   * in-memory cache so it survives unmount/remount — required now that the
    * query route only mounts the active tab (PERF-02).
    */
   panelId?: string;
 
-  /** Called (debounced) with the active inner tab's SQL so the parent can
-   *  persist it (e.g. to TabContext / localStorage). */
+  /** Called (debounced) with the editor's SQL so the parent can persist it
+   *  (e.g. to TabContext / localStorage). */
   onPersistSql?: (sql: string) => void;
 }
-
-let tabIdCounter = 1;
 
 /**
  * In-memory snapshots of panel state, keyed by `panelId`. Lets a QueryPanel
  * be unmounted (inactive route tab) and restored later without losing SQL
- * text, results, or the inner-tab layout. Never serialized — results can be
- * large. Entries are cleared via `clearQueryPanelState` when a tab closes.
+ * text, results, or the plan view. Never serialized — results can be large.
+ * Entries are cleared via `clearQueryPanelState` when a tab closes.
+ *
+ * One snapshot per route-level tab: the QueryPanel manages a single editor
+ * (UX-02 — the former inner "Query 1 / +" tab system was removed; the
+ * route-level tab bar is the only tab model).
  */
 interface QueryPanelSnapshot {
-  tabs: EditorTab[];
+  sql: string;
+  results: QueryExecutionResult | null;
+  error: string | null;
+  queryPlan: QueryPlanResult | null;
+  showPlanView: boolean;
+}
+
+/** Pre-UX-02 snapshot shape: multiple inner editor tabs per panel. */
+interface LegacyQueryPanelSnapshot {
+  tabs: Array<{
+    id: string;
+    sql: string;
+    results: QueryExecutionResult | null;
+    error: string | null;
+  }>;
   activeTabId: string;
   queryPlan: QueryPlanResult | null;
   showPlanView: boolean;
 }
 
-const panelStateCache = new Map<string, QueryPanelSnapshot>();
+const panelStateCache = new Map<
+  string,
+  QueryPanelSnapshot | LegacyQueryPanelSnapshot
+>();
+
+function isLegacySnapshot(
+  snapshot: QueryPanelSnapshot | LegacyQueryPanelSnapshot
+): snapshot is LegacyQueryPanelSnapshot {
+  return Array.isArray((snapshot as LegacyQueryPanelSnapshot).tabs);
+}
+
+/**
+ * Read a snapshot, migrating the legacy multi-inner-tab shape by keeping the
+ * active inner tab's SQL/results (other inner tabs are dropped — they were
+ * never persisted anywhere).
+ */
+function readSnapshot(panelId?: string): QueryPanelSnapshot | undefined {
+  if (!panelId) return undefined;
+  const raw = panelStateCache.get(panelId);
+  if (!raw) return undefined;
+  if (isLegacySnapshot(raw)) {
+    const active =
+      raw.tabs.find((tab) => tab.id === raw.activeTabId) ?? raw.tabs[0];
+    return {
+      sql: active?.sql ?? '',
+      results: active?.results ?? null,
+      error: active?.error ?? null,
+      queryPlan: raw.queryPlan ?? null,
+      showPlanView: raw.showPlanView ?? false,
+    };
+  }
+  return raw;
+}
 
 /** Drop the cached snapshot for a closed panel (frees result memory). */
 export function clearQueryPanelState(panelId: string): void {
   panelStateCache.delete(panelId);
 }
 
-/** True if any inner editor tab of the panel has non-empty SQL. */
+/** True if the panel's editor has non-empty SQL. */
 export function queryPanelHasUnsavedSql(panelId: string): boolean {
   const snapshot = panelStateCache.get(panelId);
-  return !!snapshot?.tabs.some((tab) => tab.sql.trim().length > 0);
+  if (!snapshot) return false;
+  if (isLegacySnapshot(snapshot)) {
+    return snapshot.tabs.some((tab) => tab.sql.trim().length > 0);
+  }
+  return snapshot.sql.trim().length > 0;
 }
 
 export const QueryPanel: FC<QueryPanelProps> = ({
@@ -99,175 +141,100 @@ export const QueryPanel: FC<QueryPanelProps> = ({
   panelId,
   onPersistSql,
 }) => {
-  // Tab management — restored from the in-memory snapshot cache when this
+  // Editor state — restored from the in-memory snapshot cache when this
   // panel was previously mounted (route tab switched away and back).
-  const [tabs, setTabs] = useState<EditorTab[]>(() => {
-    const snapshot = panelId ? panelStateCache.get(panelId) : undefined;
-    if (snapshot) {
-      // An in-flight query at unmount time never resolves into this remount,
-      // so clear any stale loading flags.
-      return snapshot.tabs.map((tab) =>
-        tab.loading ? { ...tab, loading: false } : tab
-      );
-    }
-    return [
-      {
-        id: 'tab-1',
-        name: 'Query 1',
-        sql: '',
-        loading: false,
-        results: null,
-        error: null,
-      },
-    ];
-  });
-  const [activeTabId, setActiveTabId] = useState(() => {
-    const snapshot = panelId ? panelStateCache.get(panelId) : undefined;
-    return snapshot?.activeTabId ?? 'tab-1';
-  });
+  const [initialSnapshot] = useState(() => readSnapshot(panelId));
+  const [sql, setSql] = useState(initialSnapshot?.sql ?? '');
+  // An in-flight query at unmount time never resolves into a remount, so
+  // loading always starts false (never snapshotted).
+  const [loading, setLoading] = useState(false);
+  const [results, setResults] = useState<QueryExecutionResult | null>(
+    initialSnapshot?.results ?? null
+  );
+  const [error, setError] = useState<string | null>(
+    initialSnapshot?.error ?? null
+  );
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [connectionLost, setConnectionLost] = useState(false);
   const navigate = useNavigate();
 
   // Query Plan Visualizer state
-  const [queryPlan, setQueryPlan] = useState<QueryPlanResult | null>(() => {
-    const snapshot = panelId ? panelStateCache.get(panelId) : undefined;
-    return snapshot?.queryPlan ?? null;
-  });
-  const [showPlanView, setShowPlanView] = useState(() => {
-    const snapshot = panelId ? panelStateCache.get(panelId) : undefined;
-    return snapshot?.showPlanView ?? false;
-  });
+  const [queryPlan, setQueryPlan] = useState<QueryPlanResult | null>(
+    initialSnapshot?.queryPlan ?? null
+  );
+  const [showPlanView, setShowPlanView] = useState(
+    initialSnapshot?.showPlanView ?? false
+  );
 
   // Schema context for the AI assistant — single cached
   // get_autocomplete_metadata call shared across all panels on this
   // connection (PERF-01 / PERF-02).
   const schemaContext = useSchemaContext(connectionId, currentDatabase);
 
-  // Get the active tab
-  const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
-
   // Snapshot panel state so it survives unmount (inactive route tab).
   useEffect(() => {
     if (!panelId) return;
-    panelStateCache.set(panelId, { tabs, activeTabId, queryPlan, showPlanView });
-  }, [panelId, tabs, activeTabId, queryPlan, showPlanView]);
+    panelStateCache.set(panelId, {
+      sql,
+      results,
+      error,
+      queryPlan,
+      showPlanView,
+    });
+  }, [panelId, sql, results, error, queryPlan, showPlanView]);
 
-  // Persist the active inner tab's SQL to the parent (debounced) so it
-  // survives app restarts via TabContext/localStorage. Refs keep the effect
-  // off the parent's render identity (avoids re-arm/update loops).
+  // Persist the editor's SQL to the parent (debounced) so it survives app
+  // restarts via TabContext/localStorage. Refs keep the effect off the
+  // parent's render identity (avoids re-arm/update loops).
   const onPersistSqlRef = useRef(onPersistSql);
   onPersistSqlRef.current = onPersistSql;
-  const activeSqlRef = useRef(activeTab.sql);
-  activeSqlRef.current = activeTab.sql;
+  const sqlRef = useRef(sql);
+  sqlRef.current = sql;
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      onPersistSqlRef.current?.(activeSqlRef.current);
+      onPersistSqlRef.current?.(sqlRef.current);
     }, 500);
     return () => clearTimeout(timer);
-  }, [activeTab.sql]);
+  }, [sql]);
 
   // Flush the latest SQL on unmount so a quick tab switch loses nothing.
   useEffect(() => {
     return () => {
-      onPersistSqlRef.current?.(activeSqlRef.current);
+      onPersistSqlRef.current?.(sqlRef.current);
     };
   }, []);
 
   // Handle pending query from parent (skip echoes of our own persisted SQL)
   useEffect(() => {
-    if (pendingQuery && pendingQuery !== activeTab.sql) {
-      updateTab(activeTabId, { sql: pendingQuery });
+    if (pendingQuery && pendingQuery !== sqlRef.current) {
+      setSql(pendingQuery);
       onQueryLoaded?.();
     }
   }, [pendingQuery]);
 
-  // Update tab state - memoized to prevent unnecessary re-renders
-  const updateTab = useCallback((
-    tabId: string,
-    updates: Partial<Omit<EditorTab, 'id' | 'name'>>
-  ) => {
-    setTabs((prevTabs) =>
-      prevTabs.map((tab) =>
-        tab.id === tabId ? { ...tab, ...updates } : tab
-      )
-    );
-  }, []);
-
-  // Add new tab - memoized
-  const handleAddTab = useCallback(() => {
-    tabIdCounter++;
-    const newTab: EditorTab = {
-      id: `tab-${tabIdCounter}`,
-      name: `Query ${tabIdCounter}`,
-      sql: '',
-      loading: false,
-      results: null,
-      error: null,
-    };
-    setTabs((prevTabs) => [...prevTabs, newTab]);
-    setActiveTabId(newTab.id);
-  }, []);
-
-  // Close tab - memoized
-  const handleCloseTab = useCallback((tabId: string) => {
-    setTabs((prevTabs) => {
-      if (prevTabs.length === 1) {
-        // Don't close the last tab, just reset it
-        return [
-          {
-            id: tabId,
-            name: 'Query 1',
-            sql: '',
-            loading: false,
-            results: null,
-            error: null,
-          },
-        ];
-      }
-
-      const tabIndex = prevTabs.findIndex((t) => t.id === tabId);
-      const newTabs = prevTabs.filter((t) => t.id !== tabId);
-
-      // If closing active tab, switch to adjacent tab
-      setActiveTabId((currentActiveId) => {
-        if (tabId === currentActiveId) {
-          const newActiveIndex = Math.min(tabIndex, newTabs.length - 1);
-          return newTabs[newActiveIndex].id;
-        }
-        return currentActiveId;
-      });
-
-      return newTabs;
-    });
-  }, []);
-
   // Handle query execution
   const handleExecute = async (sqlToExecute: string) => {
     if (!connectionId) {
-      updateTab(activeTabId, { error: 'No active connection' });
+      setError('No active connection');
       return;
     }
 
-    // Snapshot current tab state so a user-cancelled execution (e.g.
-    // dismissing the destructive-query guard) can restore it untouched.
-    const previousTab = tabs.find((t) => t.id === activeTabId);
+    // Snapshot current state so a user-cancelled execution (e.g. dismissing
+    // the destructive-query guard) can restore it untouched.
+    const previousResults = results;
+    const previousError = error;
 
-    updateTab(activeTabId, {
-      loading: true,
-      error: null,
-      results: null,
-    });
+    setLoading(true);
+    setError(null);
+    setResults(null);
 
     const startTime = Date.now();
 
     try {
       const result = await onExecuteQuery(sqlToExecute);
-      updateTab(activeTabId, {
-        results: result,
-        loading: false,
-      });
+      setResults(result);
+      setLoading(false);
 
       // Check if this is an EXPLAIN query and try to parse the plan
       const trimmedSql = sqlToExecute.trim().toUpperCase();
@@ -321,13 +288,11 @@ export const QueryPanel: FC<QueryPanelProps> = ({
       }
     } catch (err: any) {
       // User cancelled the destructive-query guard — silent no-op: restore
-      // the tab as it was, no error banner, no history entry (UX-04).
+      // the panel as it was, no error banner, no history entry (UX-04).
       if (err instanceof QueryCancelledError) {
-        updateTab(activeTabId, {
-          loading: false,
-          error: previousTab?.error ?? null,
-          results: previousTab?.results ?? null,
-        });
+        setLoading(false);
+        setError(previousError);
+        setResults(previousResults);
         return;
       }
 
@@ -345,10 +310,8 @@ export const QueryPanel: FC<QueryPanelProps> = ({
         setConnectionLost(true);
       }
 
-      updateTab(activeTabId, {
-        error: errorMessage,
-        loading: false,
-      });
+      setError(errorMessage);
+      setLoading(false);
 
       const executionTime = Date.now() - startTime;
 
@@ -379,12 +342,12 @@ export const QueryPanel: FC<QueryPanelProps> = ({
 
   // Handle inserting snippet into editor
   const handleInsertSnippet = (query: string) => {
-    updateTab(activeTabId, { sql: query });
+    setSql(query);
   };
 
   // Handle executing query from history
   const handleExecuteFromHistory = (query: string) => {
-    updateTab(activeTabId, { sql: query });
+    setSql(query);
     handleExecute(query);
   };
 
@@ -398,8 +361,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
           message="The database connection was lost during query execution."
           onReconnect={() => {
             setConnectionLost(false);
-            // Clear all tab errors
-            setTabs(tabs.map(tab => ({ ...tab, error: null })));
+            setError(null);
           }}
           onGoToDashboard={() => {
             navigate({ to: '/connections' });
@@ -414,66 +376,17 @@ export const QueryPanel: FC<QueryPanelProps> = ({
       {/* Main Query Editor Area */}
       <Panel defaultSize={70} minSize={40}>
         <PanelGroup direction="vertical" className="h-full">
-          {/* SQL Editor Panel with Tabs */}
+          {/* SQL Editor Panel */}
           <Panel defaultSize={40} minSize={20} className="relative flex flex-col">
-            {/* Tab Bar */}
-            <div className="flex items-center gap-1 bg-muted/30 border-b px-2 py-1 overflow-x-auto">
-              {tabs.map((tab) => (
-                <div
-                  key={tab.id}
-                  className={`
-                    group flex items-center gap-2 px-3 py-1.5 rounded-t-md text-sm cursor-pointer transition-colors
-                    ${
-                      tab.id === activeTabId
-                        ? 'bg-background border-t border-x text-foreground'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                    }
-                  `}
-                  onClick={() => setActiveTabId(tab.id)}
-                >
-                  <span className="select-none">{tab.name}</span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCloseTab(tab.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 hover:bg-muted rounded p-0.5 transition-opacity"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              ))}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleAddTab}
-                className="h-7 px-2"
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
-            </div>
-
-            {/* Tab Editors — all mounted, CSS toggle prevents Monaco flicker on tab switch */}
-            <div className="flex-1 overflow-hidden relative">
-              {tabs.map((tab) => (
-                <div
-                  key={tab.id}
-                  className="absolute inset-0"
-                  style={{
-                    display: tab.id === activeTabId ? 'flex' : 'none',
-                    flexDirection: 'column',
-                  }}
-                >
-                  <SQLEditor
-                    connectionId={connectionId}
-                    database={currentDatabase || null}
-                    onExecuteQuery={handleExecute}
-                    value={tab.sql}
-                    onChange={(value) => updateTab(tab.id, { sql: value || '' })}
-                    loading={tab.loading}
-                  />
-                </div>
-              ))}
+            <div className="flex-1 overflow-hidden flex flex-col">
+              <SQLEditor
+                connectionId={connectionId}
+                database={currentDatabase || null}
+                onExecuteQuery={handleExecute}
+                value={sql}
+                onChange={(value) => setSql(value || '')}
+                loading={loading}
+              />
             </div>
           </Panel>
 
@@ -519,12 +432,12 @@ export const QueryPanel: FC<QueryPanelProps> = ({
                 </div>
               ) : (
                 <ResultsViewer
-                  columns={activeTab.results?.columns || []}
-                  rows={activeTab.results?.rows || []}
-                  rowsAffected={activeTab.results?.rowsAffected || null}
-                  loading={activeTab.loading}
-                  error={activeTab.error}
-                  executionTime={activeTab.results?.executionTime}
+                  columns={results?.columns || []}
+                  rows={results?.rows || []}
+                  rowsAffected={results?.rowsAffected || null}
+                  loading={loading}
+                  error={error}
+                  executionTime={results?.executionTime}
                 />
               )}
             </div>
@@ -532,11 +445,11 @@ export const QueryPanel: FC<QueryPanelProps> = ({
             <QueryStatusBar
               connectionName={connectionProfile?.name}
               databaseName={currentDatabase}
-              rowCount={activeTab.results?.rows.length ?? null}
-              rowsAffected={activeTab.results?.rowsAffected ?? null}
-              executionTime={activeTab.results?.executionTime}
-              queryType={(activeTab.results as any)?.queryType}
-              loading={activeTab.loading}
+              rowCount={results?.rows.length ?? null}
+              rowsAffected={results?.rowsAffected ?? null}
+              executionTime={results?.executionTime}
+              queryType={(results as any)?.queryType}
+              loading={loading}
             />
           </Panel>
         </PanelGroup>
@@ -583,10 +496,10 @@ export const QueryPanel: FC<QueryPanelProps> = ({
 
           <TabsContent value="ai" className="flex-1 m-0 overflow-hidden">
             <AiAssistant
-              currentSql={activeTab.sql}
+              currentSql={sql}
               schemaContext={schemaContext}
-              lastError={activeTab.error || undefined}
-              onSqlGenerated={(sql) => updateTab(activeTabId, { sql })}
+              lastError={error || undefined}
+              onSqlGenerated={(generated) => setSql(generated)}
             />
           </TabsContent>
         </Tabs>

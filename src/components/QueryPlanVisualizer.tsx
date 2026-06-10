@@ -89,30 +89,30 @@ export function QueryPlanVisualizer({
       {(planResult.planningTime || planResult.executionTime) && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {planResult.planningTime !== undefined && (
-            <Card className="p-4 bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-950 dark:to-blue-900 border-blue-200 dark:border-blue-800">
+            <Card className="p-4 bg-info/10 border-info/30">
               <div className="flex flex-col">
-                <span className="text-xs font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wider">Planning</span>
-                <span className="text-2xl font-mono font-bold text-blue-900 dark:text-blue-100 mt-1">
+                <span className="text-xs font-medium text-info uppercase tracking-wider">Planning</span>
+                <span className="text-2xl font-mono font-bold text-foreground mt-1">
                   {planResult.planningTime.toFixed(3)}ms
                 </span>
               </div>
             </Card>
           )}
           {planResult.executionTime !== undefined && (
-            <Card className="p-4 bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-950 dark:to-purple-900 border-purple-200 dark:border-purple-800">
+            <Card className="p-4 bg-primary/10 border-primary/30">
               <div className="flex flex-col">
-                <span className="text-xs font-medium text-purple-600 dark:text-purple-400 uppercase tracking-wider">Execution</span>
-                <span className="text-2xl font-mono font-bold text-purple-900 dark:text-purple-100 mt-1">
+                <span className="text-xs font-medium text-primary uppercase tracking-wider">Execution</span>
+                <span className="text-2xl font-mono font-bold text-foreground mt-1">
                   {planResult.executionTime.toFixed(3)}ms
                 </span>
               </div>
             </Card>
           )}
           {planResult.totalTime !== undefined && (
-            <Card className="p-4 bg-gradient-to-br from-green-50 to-green-100 dark:from-green-950 dark:to-green-900 border-green-200 dark:border-green-800">
+            <Card className="p-4 bg-success/10 border-success/30">
               <div className="flex flex-col">
-                <span className="text-xs font-medium text-green-600 dark:text-green-400 uppercase tracking-wider">Total Time</span>
-                <span className="text-2xl font-mono font-bold text-green-900 dark:text-green-100 mt-1">
+                <span className="text-xs font-medium text-success uppercase tracking-wider">Total Time</span>
+                <span className="text-2xl font-mono font-bold text-foreground mt-1">
                   {planResult.totalTime.toFixed(3)}ms
                 </span>
               </div>
@@ -155,15 +155,15 @@ export function QueryPlanVisualizer({
         <h4 className="text-xs font-medium mb-2 text-muted-foreground uppercase tracking-wider">Cost Legend</h4>
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            <div className="w-3 h-3 rounded-full bg-success"></div>
             <span>Low Cost (&lt; 10)</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+            <div className="w-3 h-3 rounded-full bg-warning"></div>
             <span>Medium Cost (10-100)</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+            <div className="w-3 h-3 rounded-full bg-destructive"></div>
             <span>High Cost (&gt; 100)</span>
           </div>
         </div>
@@ -199,15 +199,15 @@ function PlanNode({ node, depth, allExpanded }: PlanNodeProps) {
 
   const costLevel = getCostLevel(node.totalCost);
   const costColors = {
-    low: "text-green-600 dark:text-green-400",
-    medium: "text-yellow-600 dark:text-yellow-400",
-    high: "text-red-600 dark:text-red-400",
+    low: "text-success",
+    medium: "text-warning",
+    high: "text-destructive",
   };
 
   const borderColors = {
-    low: "border-l-green-500",
-    medium: "border-l-yellow-500",
-    high: "border-l-red-500",
+    low: "border-l-success",
+    medium: "border-l-warning",
+    high: "border-l-destructive",
   };
 
   return (

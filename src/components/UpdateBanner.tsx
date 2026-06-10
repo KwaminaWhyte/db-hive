@@ -41,13 +41,13 @@ export const UpdateBanner: FC<UpdateBannerProps> = ({
             </div>
           )}
           {status.state === "downloading" && (
-            <div className="h-9 w-9 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center">
-              <Download className="h-4 w-4 text-blue-400 animate-bounce" />
+            <div className="h-9 w-9 rounded-lg bg-info/15 border border-info/30 flex items-center justify-center">
+              <Download className="h-4 w-4 text-info animate-bounce" />
             </div>
           )}
           {status.state === "ready" && (
-            <div className="h-9 w-9 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-              <RefreshCw className="h-4 w-4 text-emerald-400" />
+            <div className="h-9 w-9 rounded-lg bg-success/15 border border-success/30 flex items-center justify-center">
+              <RefreshCw className="h-4 w-4 text-success" />
             </div>
           )}
           {status.state === "error" && (
@@ -72,7 +72,7 @@ export const UpdateBanner: FC<UpdateBannerProps> = ({
               <p className="text-sm font-medium">Downloading Update</p>
               <div className="mt-1.5 h-1.5 w-full rounded-full bg-muted overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-blue-500 transition-all duration-300 ease-out"
+                  className="h-full rounded-full bg-info transition-all duration-300 ease-out"
                   style={{ width: `${progressPercent}%` }}
                 />
               </div>

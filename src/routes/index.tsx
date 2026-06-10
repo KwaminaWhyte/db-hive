@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { openDatabaseWindow, takePendingWindowProfile } from "@/utils/multiWindow";
 import { ConnectionForm } from "@/components/ConnectionForm";
 import { DatabaseBrandIcon } from "@/components/DatabaseBrandIcon";
+import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { HiveLogo } from "@/components/WelcomeScreen";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { APP_VERSION } from "@/version";
@@ -573,15 +574,7 @@ function HomeRoute() {
                           {profile.name}
                         </span>
                         {profile.environment && (
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-medium shrink-0 ${
-                            profile.environment === 'Production'
-                              ? 'bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300'
-                              : profile.environment === 'Staging'
-                              ? 'bg-yellow-500/20 border-yellow-500/40 text-yellow-600 dark:text-yellow-300'
-                              : 'bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300'
-                          }`}>
-                            {profile.environment}
-                          </span>
+                          <EnvironmentBadge environment={profile.environment} />
                         )}
                         {isConnecting && (
                           <span className="text-xs text-primary animate-pulse">

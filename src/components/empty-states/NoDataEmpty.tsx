@@ -35,7 +35,7 @@ export const NoDataEmpty: FC<NoDataEmptyProps> = ({
       message={message}
       actions={actions}
       className={className}
-      iconClassName="bg-cyan-50 dark:bg-cyan-950/30 text-cyan-600 dark:text-cyan-400"
+      iconClassName="bg-primary/10 text-primary"
     />
   );
 };

@@ -34,11 +34,11 @@ export function ConnectionCard({
 
   const getEnvironmentColor = (env?: string) => {
     const colors: Record<string, string> = {
-      local: "bg-green-600",
-      staging: "bg-yellow-600",
-      production: "bg-red-600",
+      local: "bg-success",
+      staging: "bg-warning",
+      production: "bg-destructive",
     };
-    return colors[env?.toLowerCase() || ""] || "bg-gray-600";
+    return colors[env?.toLowerCase() || ""] || "bg-muted-foreground";
   };
 
   return (
@@ -58,7 +58,7 @@ export function ConnectionCard({
         }}
         className={`absolute top-3 right-3 z-10 p-1 rounded-full transition-all ${
           profile.isFavorite
-            ? "text-yellow-500 hover:text-yellow-600"
+            ? "text-warning hover:text-warning/80"
             : "text-muted-foreground hover:text-foreground"
         }`}
         title={profile.isFavorite ? "Remove from favorites" : "Add to favorites"}

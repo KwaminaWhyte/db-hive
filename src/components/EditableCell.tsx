@@ -191,7 +191,7 @@ export const EditableCell: FC<EditableCellProps> = ({
     <div
       className={cn(
         "truncate cursor-pointer p-2",
-        isModified && "bg-yellow-500/20 border-l-2 border-yellow-500"
+        isModified && "bg-warning/20 border-l-2 border-warning"
       )}
       onClick={onClick}
       onDoubleClick={handleDoubleClick}
@@ -202,15 +202,15 @@ export const EditableCell: FC<EditableCellProps> = ({
           NULL
         </span>
       ) : typeof value === "object" ? (
-        <code className="text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 px-1.5 py-0.5 rounded">
+        <code className="text-xs bg-info/10 text-info px-1.5 py-0.5 rounded">
           {displayValue}
         </code>
       ) : typeof value === "boolean" ? (
-        <span className={value ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}>
+        <span className={value ? "text-success" : "text-destructive"}>
           {String(value)}
         </span>
       ) : typeof value === "number" ? (
-        <span className="text-blue-600 dark:text-blue-400">
+        <span className="text-info">
           {value.toLocaleString()}
         </span>
       ) : value === "" ? (

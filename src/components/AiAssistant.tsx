@@ -315,7 +315,7 @@ export function AiAssistant({
           {isAvailable !== null && (
             <span
               className={`w-2 h-2 rounded-full ${
-                isAvailable && isConfigured ? "bg-green-500" : needsApiKey ? "bg-yellow-500" : "bg-red-500"
+                isAvailable && isConfigured ? "bg-success" : needsApiKey ? "bg-warning" : "bg-destructive"
               }`}
               title={
                 isAvailable && isConfigured
@@ -635,30 +635,36 @@ export function AiAssistant({
                 Query Actions
               </label>
               <div className="grid grid-cols-3 gap-2">
-                <button
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={handleExplain}
                   disabled={loading || !currentSql || !selectedModel}
-                  className="px-2 py-1.5 text-xs bg-blue-500/10 text-blue-600 dark:text-blue-400 rounded hover:bg-blue-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="text-xs bg-info/10 text-info hover:bg-info/20 hover:text-info"
                   title="Explain the current query"
                 >
                   {loading && activeAction === "explain" ? "..." : "Explain"}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={handleOptimize}
                   disabled={loading || !currentSql || !selectedModel}
-                  className="px-2 py-1.5 text-xs bg-green-500/10 text-green-600 dark:text-green-400 rounded hover:bg-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="text-xs bg-success/10 text-success hover:bg-success/20 hover:text-success"
                   title="Optimize the current query"
                 >
                   {loading && activeAction === "optimize" ? "..." : "Optimize"}
-                </button>
-                <button
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={handleFix}
                   disabled={loading || !currentSql || !lastError || !selectedModel}
-                  className="px-2 py-1.5 text-xs bg-red-500/10 text-red-600 dark:text-red-400 rounded hover:bg-red-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="text-xs bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
                   title="Fix errors in the current query"
                 >
                   {loading && activeAction === "fix" ? "..." : "Fix Error"}
-                </button>
+                </Button>
               </div>
             </div>
 

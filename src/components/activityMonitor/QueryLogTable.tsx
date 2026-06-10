@@ -56,34 +56,34 @@ const getQueryTypeStyle = (type: QueryType) => {
     case "SELECT":
       return {
         variant: "default" as const,
-        className: "bg-blue-500/10 text-blue-600 border-blue-500/20",
+        className: "bg-info/10 text-info border-info/20",
       };
     case "INSERT":
       return {
         variant: "default" as const,
-        className: "bg-green-500/10 text-green-600 border-green-500/20",
+        className: "bg-success/10 text-success border-success/20",
       };
     case "UPDATE":
       return {
         variant: "default" as const,
-        className: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+        className: "bg-warning/10 text-warning border-warning/20",
       };
     case "DELETE":
       return {
         variant: "default" as const,
-        className: "bg-red-500/10 text-red-600 border-red-500/20",
+        className: "bg-destructive/10 text-destructive border-destructive/20",
       };
     case "CREATE":
     case "ALTER":
     case "DROP":
       return {
         variant: "default" as const,
-        className: "bg-purple-500/10 text-purple-600 border-purple-500/20",
+        className: "bg-primary/10 text-primary border-primary/20",
       };
     case "TRANSACTION":
       return {
         variant: "default" as const,
-        className: "bg-indigo-500/10 text-indigo-600 border-indigo-500/20",
+        className: "bg-muted text-muted-foreground border-border",
       };
     default:
       return {
@@ -101,7 +101,7 @@ const getQueryStatusStyle = (status: QueryStatus) => {
     case "completed":
       return {
         variant: "default" as const,
-        className: "bg-green-500/10 text-green-600 border-green-500/20",
+        className: "bg-success/10 text-success border-success/20",
         icon: CheckCircle2,
       };
     case "failed":
@@ -113,7 +113,7 @@ const getQueryStatusStyle = (status: QueryStatus) => {
     case "running":
       return {
         variant: "default" as const,
-        className: "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
+        className: "bg-info/10 text-info border-info/20",
         icon: Clock,
       };
     case "cancelled":

@@ -96,17 +96,17 @@ function flattenResult(res: QueryExecutionResult): string[] {
 function typeBadgeClass(type: RedisType): string {
   switch (type) {
     case "string":
-      return "text-blue-500 bg-blue-500/10";
+      return "text-info bg-info/10";
     case "hash":
-      return "text-orange-500 bg-orange-500/10";
+      return "text-warning bg-warning/10";
     case "list":
-      return "text-green-500 bg-green-500/10";
+      return "text-success bg-success/10";
     case "set":
-      return "text-purple-500 bg-purple-500/10";
+      return "text-primary bg-primary/10";
     case "zset":
-      return "text-pink-500 bg-pink-500/10";
+      return "text-primary bg-primary/10";
     case "stream":
-      return "text-cyan-500 bg-cyan-500/10";
+      return "text-info bg-info/10";
     default:
       return "text-muted-foreground bg-muted";
   }

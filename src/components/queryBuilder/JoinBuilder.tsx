@@ -61,15 +61,15 @@ const JOIN_TYPES: JoinType[] = ['INNER', 'LEFT', 'RIGHT', 'FULL OUTER', 'CROSS']
 const getJoinTypeBadgeColor = (type: JoinType): string => {
   switch (type) {
     case 'INNER':
-      return 'bg-blue-500 text-white border-blue-600';
+      return 'bg-info text-info-foreground border-info';
     case 'LEFT':
-      return 'bg-green-500 text-white border-green-600';
+      return 'bg-success text-success-foreground border-success';
     case 'RIGHT':
-      return 'bg-orange-500 text-white border-orange-600';
+      return 'bg-warning text-warning-foreground border-warning';
     case 'FULL OUTER':
-      return 'bg-purple-500 text-white border-purple-600';
+      return 'bg-primary text-primary-foreground border-primary';
     case 'CROSS':
-      return 'bg-gray-500 text-white border-gray-600';
+      return 'bg-muted-foreground text-background border-muted-foreground';
     default:
       return '';
   }
@@ -425,7 +425,7 @@ export const JoinBuilder: FC<JoinBuilderProps> = ({
                       )}
 
                       {showCrossJoinWarning && (
-                        <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 p-2 rounded">
+                        <div className="text-xs text-warning bg-warning/10 border border-warning/30 p-2 rounded">
                           CROSS JOIN creates a Cartesian product (all possible combinations)
                         </div>
                       )}
@@ -615,7 +615,7 @@ export const JoinBuilder: FC<JoinBuilderProps> = ({
             )}
 
             {showCrossJoinWarning && (
-              <div className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/20 p-2 rounded">
+              <div className="text-xs text-warning bg-warning/10 border border-warning/30 p-2 rounded">
                 CROSS JOIN creates a Cartesian product (all possible combinations)
               </div>
             )}

@@ -35,7 +35,7 @@ export const NoResultsEmpty: FC<NoResultsEmptyProps> = ({
       message={message}
       actions={actions}
       className={className}
-      iconClassName="bg-slate-50 dark:bg-slate-950/30 text-slate-600 dark:text-slate-400"
+      iconClassName="bg-muted text-muted-foreground"
       size="sm"
     />
   );

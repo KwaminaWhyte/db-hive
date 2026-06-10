@@ -51,8 +51,8 @@ const TableNode = memo(({ data }: { data: TableNodeData }) => {
   return (
     <Card className={`w-[300px] shadow-lg relative transition-shadow hover:shadow-2xl ${
       isJunctionTable
-        ? 'border-2 border-blue-400 bg-blue-50/50'
-        : 'border-2 border-amber-300 bg-white'
+        ? 'border-2 border-info bg-info/5'
+        : 'border-2 border-primary/40 bg-card'
     }`}>
       {/* Connection handles for edges (top-to-bottom flow) */}
       <Handle
@@ -60,8 +60,8 @@ const TableNode = memo(({ data }: { data: TableNodeData }) => {
         position={Position.Top}
         className={`w-4 h-4 !border-2 ${
           isJunctionTable
-            ? '!bg-blue-500 !border-blue-300'
-            : '!bg-amber-500 !border-amber-300'
+            ? '!bg-info !border-info/50'
+            : '!bg-primary !border-primary/50'
         } hover:scale-125 transition-all`}
         id="top"
       />
@@ -70,17 +70,17 @@ const TableNode = memo(({ data }: { data: TableNodeData }) => {
         position={Position.Bottom}
         className={`w-4 h-4 !border-2 ${
           isJunctionTable
-            ? '!bg-blue-500 !border-blue-300'
-            : '!bg-amber-500 !border-amber-300'
+            ? '!bg-info !border-info/50'
+            : '!bg-primary !border-primary/50'
         } hover:scale-125 transition-all`}
         id="bottom"
       />
 
       {/* Table header */}
-      <div className={`text-white px-4 py-2.5 font-semibold rounded-t-md shadow-sm ${
+      <div className={`px-4 py-2.5 font-semibold rounded-t-md shadow-sm ${
         isJunctionTable
-          ? 'bg-gradient-to-r from-blue-500 to-blue-600'
-          : 'bg-gradient-to-r from-amber-500 to-amber-600'
+          ? 'bg-info text-info-foreground'
+          : 'bg-primary text-primary-foreground'
       }`}>
         <div className="flex items-center justify-between">
           <span className="truncate">{tableName}</span>
@@ -91,7 +91,7 @@ const TableNode = memo(({ data }: { data: TableNodeData }) => {
       </div>
 
       {/* Column list */}
-      <div className="divide-y divide-gray-200 max-h-[400px] overflow-y-auto">
+      <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
         {displayColumns.map((col, idx) => {
           const isPk = primaryKeys.includes(col.name);
           const isFk = foreignKeys.includes(col.name);
@@ -99,31 +99,31 @@ const TableNode = memo(({ data }: { data: TableNodeData }) => {
           return (
             <div
               key={idx}
-              className={`px-4 py-2 text-sm transition-colors hover:bg-gray-50 ${
-                isPk ? 'bg-amber-50 font-semibold' : ''
+              className={`px-4 py-2 text-sm transition-colors hover:bg-muted/50 ${
+                isPk ? 'bg-primary/10 font-semibold' : ''
               }`}
             >
               <div className="flex items-center gap-2">
                 {isPk && (
-                  <span className="text-amber-600 font-bold text-xs px-1.5 py-0.5 bg-amber-100 rounded">
+                  <span className="text-primary font-bold text-xs px-1.5 py-0.5 bg-primary/15 rounded">
                     PK
                   </span>
                 )}
                 {isFk && !isPk && (
-                  <span className="text-blue-600 font-bold text-xs px-1.5 py-0.5 bg-blue-100 rounded">
+                  <span className="text-info font-bold text-xs px-1.5 py-0.5 bg-info/15 rounded">
                     FK
                   </span>
                 )}
-                <span className={`truncate flex-1 ${isPk ? 'text-amber-900' : 'text-gray-700'}`}>
+                <span className={`truncate flex-1 ${isPk ? 'text-primary' : 'text-foreground'}`}>
                   {col.name}
                 </span>
               </div>
-              <div className="text-xs text-gray-500 ml-8 truncate">{col.dataType}</div>
+              <div className="text-xs text-muted-foreground ml-8 truncate">{col.dataType}</div>
             </div>
           );
         })}
         {hasMoreColumns && (
-          <div className="px-4 py-2 text-xs text-gray-500 italic text-center bg-gray-50">
+          <div className="px-4 py-2 text-xs text-muted-foreground italic text-center bg-muted/50">
             +{columns.length - maxColumns} more columns...
           </div>
         )}
@@ -558,10 +558,10 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
     return (
       <div className="flex items-center justify-center h-full">
         <Card className="p-6 max-w-md">
-          <h3 className="text-lg font-semibold text-red-600 mb-2">
+          <h3 className="text-lg font-semibold text-destructive mb-2">
             Error Loading ER Diagram
           </h3>
-          <p className="text-gray-600 mb-4">{error}</p>
+          <p className="text-muted-foreground mb-4">{error}</p>
           <Button onClick={fetchERData} variant="outline">
             <RefreshCw className="w-4 h-4 mr-2" />
             Retry
@@ -576,8 +576,8 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
       <div className="flex items-center justify-center h-full">
         <Card className="p-6">
           <div className="flex items-center gap-3">
-            <RefreshCw className="w-5 h-5 animate-spin text-amber-600" />
-            <span className="text-gray-700">Loading ER diagram...</span>
+            <RefreshCw className="w-5 h-5 animate-spin text-primary" />
+            <span className="text-foreground">Loading ER diagram...</span>
           </div>
         </Card>
       </div>
@@ -629,14 +629,14 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
         />
 
         {/* Enhanced Control Panel */}
-        <Panel position="top-right" className="bg-white/95 backdrop-blur-sm rounded-lg shadow-xl p-2 flex flex-col gap-2 border border-gray-200">
+        <Panel position="top-right" className="bg-card/95 backdrop-blur-sm rounded-lg shadow-xl p-2 flex flex-col gap-2 border border-border">
           <div className="flex gap-2">
             <Button
               onClick={handleAutoLayout}
               variant="outline"
               size="sm"
               title="Auto-layout diagram"
-              className="hover:bg-amber-50"
+              className="hover:bg-primary/10"
             >
               <LayoutGrid className="w-4 h-4" />
             </Button>
@@ -645,7 +645,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
               variant="outline"
               size="sm"
               title={showRelationships ? "Hide relationships" : "Show relationships"}
-              className="hover:bg-amber-50"
+              className="hover:bg-primary/10"
             >
               {showRelationships ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </Button>
@@ -656,7 +656,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
               variant={snapToGrid ? "default" : "outline"}
               size="sm"
               title={snapToGrid ? "Disable snap to grid" : "Enable snap to grid"}
-              className={snapToGrid ? "bg-amber-500 hover:bg-amber-600 text-white" : "hover:bg-amber-50"}
+              className={snapToGrid ? "bg-primary hover:bg-primary/90 text-primary-foreground" : "hover:bg-primary/10"}
             >
               <Grid3x3 className="w-4 h-4" />
             </Button>
@@ -665,7 +665,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
               variant="outline"
               size="sm"
               title="Refresh diagram"
-              className="hover:bg-amber-50"
+              className="hover:bg-primary/10"
             >
               <RefreshCw className="w-4 h-4" />
             </Button>
@@ -674,7 +674,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
               variant="outline"
               size="sm"
               title="Export as SVG"
-              className="hover:bg-amber-50"
+              className="hover:bg-primary/10"
             >
               <Download className="w-4 h-4" />
             </Button>

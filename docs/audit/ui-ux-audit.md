@@ -238,13 +238,13 @@ Both hand-rolled tab strips are clickable `div`s: no `role="tablist"`/`role="tab
 **P0 — broken or rule-violating**
 - [x] UX-01: Fix Shift handling so the `?` shortcut opens the shortcuts modal (`useKeyboardShortcuts.ts`).
 - [x] UX-04: Stop reporting destructive-guard cancellation as a failed query and stop writing it to history.
-- [ ] UX-06: Introduce semantic status tokens and remove hardcoded palette classes (ErrorState, UpdateBanner, AiAssistant, env badges, ResultsViewer hex colors, ActivityMonitor, JoinBuilder, empty-states, DataImportWizard).
-- [ ] UX-02: Collapse the nested QueryPanel tab system into the route-level tabs.
+- [x] UX-06: Introduce semantic status tokens and remove hardcoded palette classes (ErrorState, UpdateBanner, AiAssistant, env badges, ResultsViewer hex colors, ActivityMonitor, JoinBuilder, empty-states, DataImportWizard).
+- [x] UX-02: Collapse the nested QueryPanel tab system into the route-level tabs.
 
 **P1 — accessibility and data-loss**
 - [ ] UX-05: aria-label sweep over all icon-only buttons; pair hover-reveals with `focus-visible`.
 - [ ] UX-03: Keyboard-accessible connection rows with a visible Connect affordance.
-- [ ] UX-07: Unsaved-work protection (or undo) for single-tab close.
+- [x] UX-07: Unsaved-work protection (or undo) for single-tab close.
 - [ ] UX-16: Arrow-key navigation + tree roles in SchemaExplorer.
 - [ ] UX-08: `formatDbError` helper; include detail in test-connection failures.
 
@@ -264,5 +264,5 @@ Both hand-rolled tab strips are clickable `div`s: no `role="tablist"`/`role="tab
 - [ ] UX-20: Marketplace search debounce, installed state, skeleton loading.
 - [ ] UX-21: Replace single-click cell copy with context menu/double-click.
 - [ ] UX-22: `aria-live` on UpdateBanner.
-- [ ] UX-23: Tab semantics on the surviving tab bar.
+- [x] UX-23: Tab semantics on the surviving tab bar.
 - [ ] UX-24: Connection-string auto-navigation, disconnect confirmation, copy-details toast, nested Settings dialog Escape behavior.

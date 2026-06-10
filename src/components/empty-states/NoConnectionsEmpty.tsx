@@ -27,7 +27,7 @@ export const NoConnectionsEmpty: FC<NoConnectionsEmptyProps> = ({
       message="Get started by creating your first database connection. Connect to PostgreSQL, MySQL, SQLite, and more."
       actions={actions}
       className={className}
-      iconClassName="bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400"
+      iconClassName="bg-primary/10 text-primary"
     />
   );
 };

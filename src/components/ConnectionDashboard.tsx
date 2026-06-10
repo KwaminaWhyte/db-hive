@@ -278,25 +278,25 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
   const getDriverColor = (driver: DbDriver) => {
     const driverName = getDriverDisplayName(driver).toLowerCase();
     if (driverName.includes("postgresql")) {
-      return "bg-blue-500/20 border-blue-500/40 text-blue-600 dark:text-blue-300";
+      return "bg-primary/10 border-primary/30 text-primary";
     } else if (driverName.includes("mysql")) {
-      return "bg-orange-500/20 border-orange-500/40 text-orange-600 dark:text-orange-300";
+      return "bg-primary/10 border-primary/30 text-primary";
     } else if (driverName.includes("sqlite")) {
-      return "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300";
+      return "bg-success/20 border-success/40 text-success";
     } else if (driverName.includes("mongodb")) {
-      return "bg-emerald-500/20 border-emerald-500/40 text-emerald-600 dark:text-emerald-300";
+      return "bg-primary/10 border-primary/30 text-primary";
     } else if (driverName.includes("sql server")) {
-      return "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300";
+      return "bg-destructive/20 border-destructive/40 text-destructive";
     }
-    return "bg-amber-300/10 border-amber-300/30 text-amber-700 dark:text-amber-200";
+    return "bg-primary/10 border-primary/30 text-primary";
   };
 
   // Render list item
   const getEnvColor = (env: string) => {
     switch (env.toLowerCase()) {
-      case "local": return "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300";
-      case "staging": return "bg-yellow-500/20 border-yellow-500/40 text-yellow-600 dark:text-yellow-300";
-      case "production": return "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300";
+      case "local": return "bg-success/20 border-success/40 text-success";
+      case "staging": return "bg-warning/20 border-warning/40 text-warning";
+      case "production": return "bg-destructive/20 border-destructive/40 text-destructive";
       default: return "bg-muted border-border text-muted-foreground";
     }
   };
@@ -322,7 +322,7 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
                   {profile.isFavorite && (
-                    <Star className="h-4 w-4 text-yellow-500 fill-current" />
+                    <Star className="h-4 w-4 text-warning fill-current" />
                   )}
                   <span className="font-semibold text-base text-foreground truncate">
                     {profile.name}
@@ -363,7 +363,7 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
                 }}
               >
                 <Star
-                  className={`h-4 w-4 ${profile.isFavorite ? "text-yellow-500 fill-current" : ""}`}
+                  className={`h-4 w-4 ${profile.isFavorite ? "text-warning fill-current" : ""}`}
                   strokeWidth={1.5}
                 />
               </Button>

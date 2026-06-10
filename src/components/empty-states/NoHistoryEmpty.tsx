@@ -29,7 +29,7 @@ export const NoHistoryEmpty: FC<NoHistoryEmptyProps> = ({
       message="Your executed queries will appear here. Run a query to get started and build your history."
       actions={actions}
       className={className}
-      iconClassName="bg-violet-50 dark:bg-violet-950/30 text-violet-600 dark:text-violet-400"
+      iconClassName="bg-primary/10 text-primary"
     />
   );
 };

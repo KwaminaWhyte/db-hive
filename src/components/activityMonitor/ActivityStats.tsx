@@ -40,25 +40,21 @@ const formatDuration = (ms: number): string => {
 const getQueryTypeColor = (type: QueryType): string => {
   switch (type) {
     case "SELECT":
-      return "bg-blue-500";
+      return "bg-info";
     case "INSERT":
-      return "bg-green-500";
+      return "bg-success";
     case "UPDATE":
-      return "bg-yellow-500";
+      return "bg-warning";
     case "DELETE":
-      return "bg-red-500";
+      return "bg-destructive";
     case "CREATE":
-      return "bg-purple-500";
     case "ALTER":
-      return "bg-indigo-500";
     case "DROP":
-      return "bg-pink-500";
+      return "bg-primary";
     case "TRANSACTION":
-      return "bg-cyan-500";
     case "OTHER":
-      return "bg-gray-500";
     default:
-      return "bg-gray-500";
+      return "bg-muted-foreground";
   }
 };
 
@@ -68,15 +64,15 @@ const getQueryTypeColor = (type: QueryType): string => {
 const getStatusColor = (status: QueryStatus): string => {
   switch (status) {
     case "completed":
-      return "text-green-600 dark:text-green-400";
+      return "text-success";
     case "failed":
-      return "text-red-600 dark:text-red-400";
+      return "text-destructive";
     case "running":
-      return "text-blue-600 dark:text-blue-400";
+      return "text-info";
     case "cancelled":
-      return "text-yellow-600 dark:text-yellow-400";
+      return "text-warning";
     default:
-      return "text-gray-600 dark:text-gray-400";
+      return "text-muted-foreground";
   }
 };
 
@@ -107,10 +103,10 @@ const SummaryCard: FC<SummaryCardProps> = ({ icon, label, value, accent = "defau
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-card p-4 text-card-foreground">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <div className={accent === "red" ? "text-red-500" : ""}>{icon}</div>
+        <div className={accent === "red" ? "text-destructive" : ""}>{icon}</div>
         <span>{label}</span>
       </div>
-      <div className={`text-2xl font-bold ${accent === "red" ? "text-red-600 dark:text-red-400" : ""}`}>
+      <div className={`text-2xl font-bold ${accent === "red" ? "text-destructive" : ""}`}>
         {value}
       </div>
     </div>

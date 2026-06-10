@@ -337,23 +337,23 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
       escaped
         // Numbers (must come before strings to avoid matching inside classes)
         .replace(/:\s*(-?\d+\.?\d*)/g, (_match, p1) => {
-          return `: <span style="color: #fb923c">${p1}</span>`;
+          return `: <span style="color: var(--json-number)">${p1}</span>`;
         })
         // Property keys (followed by colon)
         .replace(/"([^"]+)"(\s*):/g, (_match, p1, p2) => {
-          return `<span style="color: #60a5fa">"${p1}"</span>${p2}:`;
+          return `<span style="color: var(--json-key)">"${p1}"</span>${p2}:`;
         })
         // String values
         .replace(/:\s*"([^"]*)"/g, (_match, p1) => {
-          return `: <span style="color: #4ade80">"${p1}"</span>`;
+          return `: <span style="color: var(--json-string)">"${p1}"</span>`;
         })
         // Booleans
         .replace(/:\s*(true|false)/g, (_match, p1) => {
-          return `: <span style="color: #c084fc">${p1}</span>`;
+          return `: <span style="color: var(--json-boolean)">${p1}</span>`;
         })
         // Null
         .replace(/:\s*(null)/g, (_match, p1) => {
-          return `: <span style="color: #f87171">${p1}</span>`;
+          return `: <span style="color: var(--json-null)">${p1}</span>`;
         })
     );
   }, [resultsAsJSON, viewMode]);
@@ -405,7 +405,7 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
       <Card className="h-full flex flex-col">
         <CardContent className="flex-1 p-6">
           <Alert>
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <CheckCircle2 className="h-4 w-4 text-success" />
             <AlertDescription className="ml-2">
               <div className="flex items-center justify-between">
                 <div>

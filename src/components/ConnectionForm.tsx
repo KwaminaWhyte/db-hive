@@ -417,19 +417,19 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
             </SelectItem>
             <SelectItem value="Local">
               <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500 inline-block" />
+                <span className="w-2 h-2 rounded-full bg-success inline-block" />
                 Local
               </span>
             </SelectItem>
             <SelectItem value="Staging">
               <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-yellow-500 inline-block" />
+                <span className="w-2 h-2 rounded-full bg-warning inline-block" />
                 Staging
               </span>
             </SelectItem>
             <SelectItem value="Production">
               <span className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-red-500 inline-block" />
+                <span className="w-2 h-2 rounded-full bg-destructive inline-block" />
                 Production
               </span>
             </SelectItem>
@@ -825,7 +825,7 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
       {/* Test Status Message */}
       {testStatus && (
         testStatus.kind === "success" ? (
-          <div className="rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-900 p-3 text-sm text-green-600 dark:text-green-400 flex items-center gap-2">
+          <div className="rounded-lg bg-success/10 border border-success/30 p-3 text-sm text-success flex items-center gap-2">
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>

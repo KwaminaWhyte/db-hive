@@ -87,21 +87,21 @@ function getColumnTypeIcon(dataType: string): React.ReactNode {
     type.includes("money")
   ) {
     return (
-      <span className="text-[10px] font-bold text-blue-500 bg-blue-500/10 px-1 rounded leading-none">
+      <span className="text-[10px] font-bold text-info bg-info/10 px-1 rounded leading-none">
         #
       </span>
     );
   }
   if (type.includes("bool")) {
     return (
-      <span className="text-[10px] font-bold text-purple-500 bg-purple-500/10 px-1 rounded leading-none">
+      <span className="text-[10px] font-bold text-primary bg-primary/10 px-1 rounded leading-none">
         B
       </span>
     );
   }
   if (type.includes("json")) {
     return (
-      <span className="text-[10px] font-bold text-orange-500 bg-orange-500/10 px-1 rounded leading-none">
+      <span className="text-[10px] font-bold text-warning bg-warning/10 px-1 rounded leading-none">
         {"{}"}
       </span>
     );
@@ -112,28 +112,28 @@ function getColumnTypeIcon(dataType: string): React.ReactNode {
     type.includes("timestamp")
   ) {
     return (
-      <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-1 rounded leading-none">
+      <span className="text-[10px] font-bold text-success bg-success/10 px-1 rounded leading-none">
         D
       </span>
     );
   }
   if (type.includes("uuid")) {
     return (
-      <span className="text-[10px] font-bold text-pink-500 bg-pink-500/10 px-1 rounded leading-none">
+      <span className="text-[10px] font-bold text-primary bg-primary/10 px-1 rounded leading-none">
         U
       </span>
     );
   }
   if (type.includes("bytea") || type.includes("blob") || type.includes("binary")) {
     return (
-      <span className="text-[10px] font-bold text-yellow-600 bg-yellow-500/10 px-1 rounded leading-none">
+      <span className="text-[10px] font-bold text-warning bg-warning/10 px-1 rounded leading-none">
         0x
       </span>
     );
   }
   if (type.includes("array") || type.includes("[]")) {
     return (
-      <span className="text-[10px] font-bold text-cyan-500 bg-cyan-500/10 px-1 rounded leading-none">
+      <span className="text-[10px] font-bold text-info bg-info/10 px-1 rounded leading-none">
         []
       </span>
     );
@@ -882,7 +882,7 @@ export function TableInspector({
           <TableHead key={columnInfo.name} className="whitespace-nowrap group">
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
-                {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-amber-500 shrink-0" />}
+                {columnInfo.isPrimaryKey && <Key className="h-3 w-3 text-primary shrink-0" />}
                 <span className="shrink-0">{getColumnTypeIcon(columnInfo.dataType)}</span>
                 <span className="font-medium text-foreground truncate">{columnInfo.name}</span>
               </div>
@@ -914,7 +914,7 @@ export function TableInspector({
         return (
           <TableRow
             key={`new-${newRowIndex}`}
-            className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''} bg-green-500/10 border-l-2 border-l-green-500`}
+            className={`hover:bg-muted/50 group ${isSelected ? 'bg-muted' : ''} bg-success/10 border-l-2 border-l-success`}
             title="New row (not yet committed)"
           >
             <TableCell className="w-12 text-center">
@@ -926,7 +926,7 @@ export function TableInspector({
             </TableCell>
             <TableCell className="w-12 text-center text-xs text-muted-foreground font-mono">
               <div className="flex items-center justify-center gap-1">
-                <Plus className="h-3 w-3 text-green-600" />
+                <Plus className="h-3 w-3 text-success" />
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1397,7 +1397,7 @@ export function TableInspector({
 
           {/* Deep-offset guard notice */}
           {deepOffsetBlocked && (
-            <div className="border-b bg-amber-500/10 text-amber-700 dark:text-amber-400 px-3 py-2 text-xs flex items-start gap-2 shrink-0">
+            <div className="border-b bg-warning/10 text-warning px-3 py-2 text-xs flex items-start gap-2 shrink-0">
               <Ban className="h-4 w-4 shrink-0 mt-0.5" />
               <div className="space-y-1">
                 <p className="font-medium">
@@ -1599,7 +1599,7 @@ export function TableInspector({
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         {column.isPrimaryKey && (
-                          <Key className="h-3 w-3 text-yellow-500" />
+                          <Key className="h-3 w-3 text-primary" />
                         )}
                         {column.name}
                       </div>
@@ -1770,7 +1770,7 @@ export function TableInspector({
                     <span className="text-muted-foreground">of {totalPages ?? "?"}</span>
                     {hasPagesBeyondCap && (
                       <span
-                        className="text-amber-600 dark:text-amber-500"
+                        className="text-warning"
                         title={`Paging is capped at page ${maxSafePage.toLocaleString()} to avoid slow deep-offset queries. Filter to reach later rows.`}
                       >
                         (capped at {maxSafePage.toLocaleString()})

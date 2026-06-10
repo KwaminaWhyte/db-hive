@@ -53,15 +53,15 @@ import {
 } from "@/api/plugins";
 
 const categoryColors: Record<string, string> = {
-  driver: "bg-blue-500/10 text-blue-500",
-  theme: "bg-purple-500/10 text-purple-500",
-  tool: "bg-green-500/10 text-green-500",
-  export: "bg-orange-500/10 text-orange-500",
-  import: "bg-cyan-500/10 text-cyan-500",
-  formatter: "bg-pink-500/10 text-pink-500",
-  analyzer: "bg-yellow-500/10 text-yellow-500",
-  visualizer: "bg-indigo-500/10 text-indigo-500",
-  extension: "bg-gray-500/10 text-gray-500",
+  driver: "bg-info/10 text-info",
+  theme: "bg-primary/10 text-primary",
+  tool: "bg-success/10 text-success",
+  export: "bg-warning/10 text-warning",
+  import: "bg-info/10 text-info",
+  formatter: "bg-primary/10 text-primary",
+  analyzer: "bg-warning/10 text-warning",
+  visualizer: "bg-info/10 text-info",
+  extension: "bg-muted text-muted-foreground",
 };
 
 export function InstalledPlugins() {

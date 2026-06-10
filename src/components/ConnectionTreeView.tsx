@@ -43,11 +43,11 @@ interface FolderGroup {
 const getEnvStyle = (env: string) => {
   switch (env.toLowerCase()) {
     case "local":
-      return "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300";
+      return "bg-success/20 border-success/40 text-success";
     case "staging":
-      return "bg-yellow-500/20 border-yellow-500/40 text-yellow-600 dark:text-yellow-300";
+      return "bg-warning/20 border-warning/40 text-warning";
     case "production":
-      return "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300";
+      return "bg-destructive/20 border-destructive/40 text-destructive";
     default:
       return "bg-muted border-border text-muted-foreground";
   }
@@ -57,25 +57,25 @@ const getEnvStyle = (env: string) => {
 const getDriverColor = (driver: DbDriver) => {
   switch (driver) {
     case "Postgres":
-      return "bg-blue-500/20 border-blue-500/40 text-blue-600 dark:text-blue-300";
+      return "bg-primary/10 border-primary/30 text-primary";
     case "MySql":
-      return "bg-orange-500/20 border-orange-500/40 text-orange-600 dark:text-orange-300";
+      return "bg-primary/10 border-primary/30 text-primary";
     case "Sqlite":
-      return "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300";
+      return "bg-success/20 border-success/40 text-success";
     case "MongoDb":
-      return "bg-emerald-500/20 border-emerald-500/40 text-emerald-600 dark:text-emerald-300";
+      return "bg-primary/10 border-primary/30 text-primary";
     case "SqlServer":
-      return "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300";
+      return "bg-destructive/20 border-destructive/40 text-destructive";
     case "Supabase":
-      return "bg-emerald-600/20 border-emerald-600/40 text-emerald-700 dark:text-emerald-300";
+      return "bg-primary/10 border-primary/30 text-primary";
     case "Neon":
       return "bg-teal-500/20 border-teal-500/40 text-teal-600 dark:text-teal-300";
     case "Turso":
-      return "bg-purple-500/20 border-purple-500/40 text-purple-600 dark:text-purple-300";
+      return "bg-primary/10 border-primary/30 text-primary";
     case "Redis":
-      return "bg-red-600/20 border-red-600/40 text-red-700 dark:text-red-300";
+      return "bg-primary/10 border-primary/30 text-primary";
     default:
-      return "bg-amber-300/10 border-amber-300/30 text-amber-700 dark:text-amber-200";
+      return "bg-primary/10 border-primary/30 text-primary";
   }
 };
 
@@ -164,7 +164,7 @@ export const ConnectionTreeView: FC<ConnectionTreeViewProps> = ({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             {profile.isFavorite && (
-              <Star className="h-3.5 w-3.5 text-yellow-500 fill-current flex-shrink-0" />
+              <Star className="h-3.5 w-3.5 text-warning fill-current flex-shrink-0" />
             )}
             <span className="font-medium text-sm text-foreground truncate">
               {profile.name}
@@ -220,7 +220,7 @@ export const ConnectionTreeView: FC<ConnectionTreeViewProps> = ({
             <DropdownMenuContent align="end">
               <DropdownMenuItem onClick={() => onToggleFavorite(profile.id)}>
                 <Star
-                  className={`h-4 w-4 mr-2 ${profile.isFavorite ? "text-yellow-500 fill-current" : ""}`}
+                  className={`h-4 w-4 mr-2 ${profile.isFavorite ? "text-warning fill-current" : ""}`}
                 />
                 {profile.isFavorite ? "Remove from Favorites" : "Add to Favorites"}
               </DropdownMenuItem>
@@ -266,14 +266,14 @@ export const ConnectionTreeView: FC<ConnectionTreeViewProps> = ({
           {isExpanded ? (
             <FolderOpen
               className={`h-5 w-5 flex-shrink-0 ${
-                isUnfiled ? "text-muted-foreground" : "text-amber-500"
+                isUnfiled ? "text-muted-foreground" : "text-primary"
               }`}
               strokeWidth={1.5}
             />
           ) : (
             <Folder
               className={`h-5 w-5 flex-shrink-0 ${
-                isUnfiled ? "text-muted-foreground" : "text-amber-500"
+                isUnfiled ? "text-muted-foreground" : "text-primary"
               }`}
               strokeWidth={1.5}
             />

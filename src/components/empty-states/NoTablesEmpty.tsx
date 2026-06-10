@@ -35,7 +35,7 @@ export const NoTablesEmpty: FC<NoTablesEmptyProps> = ({
       message={message}
       actions={actions}
       className={className}
-      iconClassName="bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400"
+      iconClassName="bg-primary/10 text-primary"
     />
   );
 };

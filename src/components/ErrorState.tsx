@@ -52,14 +52,14 @@ export const ErrorState: FC<ErrorStateProps> = ({
 }) => {
   const variantStyles = {
     error: "text-destructive",
-    warning: "text-orange-500 dark:text-orange-400",
-    info: "text-blue-500 dark:text-blue-400",
+    warning: "text-warning",
+    info: "text-info",
   };
 
   const iconBgStyles = {
     error: "bg-destructive/10 dark:bg-destructive/20",
-    warning: "bg-orange-500/10 dark:bg-orange-500/20",
-    info: "bg-blue-500/10 dark:bg-blue-500/20",
+    warning: "bg-warning/10 dark:bg-warning/20",
+    info: "bg-info/10 dark:bg-info/20",
   };
 
   return (

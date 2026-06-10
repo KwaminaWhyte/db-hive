@@ -20,21 +20,21 @@ import { NoConnectionsEmpty } from "@/components/empty-states";
 import { ConnectionLostError } from "@/components/ConnectionLostError";
 
 const ENV_COLORS: Record<string, string> = {
-  local: "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300",
-  staging: "bg-yellow-500/20 border-yellow-500/40 text-yellow-600 dark:text-yellow-300",
-  production: "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300",
+  local: "bg-success/20 border-success/40 text-success",
+  staging: "bg-warning/20 border-warning/40 text-warning",
+  production: "bg-destructive/20 border-destructive/40 text-destructive",
 };
 const getEnvColorClass = (env: string) => ENV_COLORS[env.toLowerCase()] || "bg-muted border-border text-muted-foreground";
 
 // Module-level constant for driver colors - prevents recreation on each render
 const DRIVER_COLORS: Record<string, string> = {
-  postgresql: "bg-blue-500/20 border-blue-500/40 text-blue-600 dark:text-blue-300",
-  mysql: "bg-orange-500/20 border-orange-500/40 text-orange-600 dark:text-orange-300",
-  mariadb: "bg-orange-500/20 border-orange-500/40 text-orange-600 dark:text-orange-300",
-  sqlite: "bg-green-500/20 border-green-500/40 text-green-600 dark:text-green-300",
-  mongodb: "bg-emerald-500/20 border-emerald-500/40 text-emerald-600 dark:text-emerald-300",
-  sqlserver: "bg-red-500/20 border-red-500/40 text-red-600 dark:text-red-300",
-  default: "bg-amber-300/10 border-amber-300/30 text-amber-700 dark:text-amber-200",
+  postgresql: "bg-primary/10 border-primary/30 text-primary",
+  mysql: "bg-primary/10 border-primary/30 text-primary",
+  mariadb: "bg-primary/10 border-primary/30 text-primary",
+  sqlite: "bg-success/20 border-success/40 text-success",
+  mongodb: "bg-primary/10 border-primary/30 text-primary",
+  sqlserver: "bg-destructive/20 border-destructive/40 text-destructive",
+  default: "bg-primary/10 border-primary/30 text-primary",
 };
 
 // Helper to get badge color for database driver (moved outside component)
@@ -265,7 +265,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
             variant="ghost"
             size="icon"
             onClick={loadProfiles}
-            className="h-8 w-8 rounded-lg border border-border bg-background/60 hover:bg-accent hover:border-amber-500/40 transition-colors"
+            className="h-8 w-8 rounded-lg border border-border bg-background/60 hover:bg-accent hover:border-primary/40 transition-colors"
           >
             <RefreshCw className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
           </Button>
@@ -273,7 +273,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
       </div>
 
       {error && (
-        <div className="mx-4 mt-4 rounded-xl bg-red-500/10 border border-red-500/30 p-3 text-sm text-red-900 dark:text-red-200">
+        <div className="mx-4 mt-4 rounded-xl bg-destructive/10 border border-destructive/30 p-3 text-sm text-destructive">
           {error}
         </div>
       )}
@@ -315,15 +315,15 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                 return (
                   <div
                     key={profile.id}
-                    className="group relative rounded-xl border border-border bg-card hover:bg-accent hover:border-amber-500/30 transition-all cursor-pointer"
+                    className="group relative rounded-xl border border-border bg-card hover:bg-accent hover:border-primary/30 transition-all cursor-pointer"
                     onDoubleClick={() => handleConnectClick(profile)}
                     title="Double-click to connect"
                   >
                     <div className="p-3">
                       <div className="flex items-start justify-between">
                         <div className="flex items-start gap-3 flex-1">
-                          <div className="mt-0.5 h-5 w-5 rounded-lg border border-amber-500/40 bg-amber-500/10 flex items-center justify-center">
-                            <Server className="h-3 w-3 text-amber-600 dark:text-amber-300" strokeWidth={1.5} />
+                          <div className="mt-0.5 h-5 w-5 rounded-lg border border-primary/40 bg-primary/10 flex items-center justify-center">
+                            <Server className="h-3 w-3 text-primary" strokeWidth={1.5} />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2 mb-1">
@@ -339,7 +339,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                                 </span>
                               )}
                               {isConnecting && (
-                                <span className="text-xs text-amber-600 dark:text-amber-300 animate-pulse">
+                                <span className="text-xs text-primary animate-pulse">
                                   Connecting...
                                 </span>
                               )}
@@ -361,7 +361,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 rounded-lg hover:bg-accent hover:text-amber-600 dark:hover:text-amber-300"
+                            className="h-7 w-7 rounded-lg hover:bg-accent hover:text-primary"
                             onClick={(e) => {
                               e.stopPropagation();
                               onEdit?.(profile);
@@ -373,7 +373,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 rounded-lg hover:bg-red-500/20 hover:text-red-600 dark:hover:text-red-300"
+                            className="h-7 w-7 rounded-lg hover:bg-destructive/20 hover:text-destructive"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteClick(profile);
@@ -410,9 +410,9 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                               <ChevronRight className="h-4 w-4 text-muted-foreground" />
                             )}
                             {isExpanded ? (
-                              <FolderOpen className="h-4 w-4 text-amber-600 dark:text-amber-300" />
+                              <FolderOpen className="h-4 w-4 text-primary" />
                             ) : (
-                              <Folder className="h-4 w-4 text-amber-600 dark:text-amber-300" />
+                              <Folder className="h-4 w-4 text-primary" />
                             )}
                             <span className="text-sm font-medium text-foreground">
                               {folderName}

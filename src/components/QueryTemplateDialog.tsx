@@ -337,7 +337,7 @@ export function QueryTemplateDialog({
                 className="p-3 border rounded-lg bg-muted/30 space-y-2"
               >
                 <div className="flex items-center justify-between">
-                  <code className="text-xs bg-zinc-800 px-2 py-0.5 rounded">
+                  <code className="text-xs bg-muted px-2 py-0.5 rounded">
                     {`{{${param.name}}}`}
                   </code>
                   <Button
@@ -537,8 +537,8 @@ export function QueryTemplateDialog({
           <Code className="h-4 w-4 text-muted-foreground" />
           SQL Preview
         </Label>
-        <div className="p-3 bg-zinc-900 rounded-lg border">
-          <pre className="text-xs font-mono text-zinc-300 whitespace-pre-wrap overflow-auto max-h-[120px]">
+        <div className="p-3 bg-muted/50 rounded-lg border">
+          <pre className="text-xs font-mono text-foreground whitespace-pre-wrap overflow-auto max-h-[120px]">
             {previewSql || template?.sql}
           </pre>
         </div>

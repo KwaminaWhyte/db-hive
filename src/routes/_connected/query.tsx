@@ -13,7 +13,13 @@ import { toast } from "sonner";
 import { QueryExecutionResult } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { X, Plus } from "lucide-react";
-import { useEffect, useRef, useState, useTransition } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { analyzeDestructive, DestructiveWarning } from "@/utils/sqlGuards";
 import { QueryCancelledError } from "@/utils/queryErrors";
@@ -74,7 +80,9 @@ function QueryPanelRoute() {
   const { connectionId, connectionProfile, currentDatabase } = useConnectionContext();
   const { getTabState, updateTabState, createTabState, removeTabState, getAllTabStates } = useTabContext();
   const [showCloseAllDialog, setShowCloseAllDialog] = useState(false);
+  const [pendingCloseIndex, setPendingCloseIndex] = useState<number | null>(null);
   const [, startTransition] = useTransition();
+  const tabRefs = useRef<(HTMLDivElement | null)[]>([]);
   const { settings } = useSettings();
   const [guardWarnings, setGuardWarnings] = useState<DestructiveWarning[]>([]);
   const guardResolverRef = useRef<((proceed: boolean) => void) | null>(null);
@@ -254,7 +262,27 @@ function QueryPanelRoute() {
     resolve?.(false);
   };
 
+  // True if a query tab has unsaved SQL — TabContext holds the persisted SQL;
+  // the QueryPanel snapshot cache has the latest keystrokes.
+  const tabHasUnsavedSql = (tabId: string) => {
+    const state = getTabState(tabId);
+    if (state?.type !== "query") return false;
+    if (state?.sql && state.sql.trim().length > 0) return true;
+    return queryPanelHasUnsavedSql(makePanelId(tabId));
+  };
+
+  // Close a tab, confirming first when it holds unsaved SQL (UX-07) — same
+  // protection "Close All" already had.
   const handleCloseTab = (index: number) => {
+    const tabId = tabIds[index];
+    if (tabId && tabHasUnsavedSql(tabId)) {
+      setPendingCloseIndex(index);
+      return;
+    }
+    confirmCloseTab(index);
+  };
+
+  const confirmCloseTab = (index: number) => {
     const tabId = tabIds[index];
     const newTabIds = tabIds.filter((_, i) => i !== index);
 
@@ -392,14 +420,8 @@ function QueryPanelRoute() {
   };
 
   const handleCloseAll = () => {
-    // Check if any query tabs have unsaved work (SQL content) — TabContext
-    // holds the persisted SQL; the snapshot cache has the latest keystrokes
-    const hasUnsavedWork = tabIds.some((tabId) => {
-      const state = getTabState(tabId);
-      if (state?.type !== "query") return false;
-      if (state?.sql && state.sql.trim().length > 0) return true;
-      return queryPanelHasUnsavedSql(makePanelId(tabId));
-    });
+    // Check if any query tabs have unsaved work (SQL content)
+    const hasUnsavedWork = tabIds.some(tabHasUnsavedSql);
 
     if (hasUnsavedWork) {
       setShowCloseAllDialog(true);
@@ -459,6 +481,28 @@ function QueryPanelRoute() {
     return state?.label || tabId;
   };
 
+  // Roving-tabindex arrow-key navigation for the tab strip (UX-23)
+  const handleTabKeyDown = (
+    event: ReactKeyboardEvent<HTMLDivElement>,
+    index: number
+  ) => {
+    let newIndex: number | null = null;
+    if (event.key === "ArrowRight") {
+      newIndex = (index + 1) % tabIds.length;
+    } else if (event.key === "ArrowLeft") {
+      newIndex = (index - 1 + tabIds.length) % tabIds.length;
+    } else if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      handleSwitchTab(index);
+      return;
+    }
+    if (newIndex !== null) {
+      event.preventDefault();
+      handleSwitchTab(newIndex);
+      tabRefs.current[newIndex]?.focus();
+    }
+  };
+
   // Keyboard shortcuts for query panel (sourced from user settings)
   const { settings: appSettings } = useSettings();
   const newTabKey = appSettings?.shortcuts?.newTab ?? "Ctrl+T";
@@ -480,11 +524,23 @@ function QueryPanelRoute() {
     <div className="h-full grid grid-rows-[auto_1fr] min-h-0">
       {/* Tab Bar */}
       <div className="border-b border-border bg-background overflow-hidden">
-        <div className="tab-bar-scroll flex items-center gap-1 px-2 py-1 overflow-x-auto flex-nowrap">
+        <div
+          role="tablist"
+          aria-label="Open tabs"
+          className="tab-bar-scroll flex items-center gap-1 px-2 py-1 overflow-x-auto flex-nowrap"
+        >
           {tabIds.map((tabId, index) => (
             <ContextMenu key={tabId}>
               <ContextMenuTrigger>
                 <div
+                  ref={(el) => {
+                    tabRefs.current[index] = el;
+                  }}
+                  role="tab"
+                  id={`query-route-tab-${tabId}`}
+                  aria-selected={index === activeIndex}
+                  aria-controls={`query-route-panel-${tabId}`}
+                  tabIndex={index === activeIndex ? 0 : -1}
                   className={`
                     group relative flex items-center gap-1.5 px-3 py-1.5 rounded-t-lg cursor-pointer
                     transition-colors flex-shrink-0 min-w-fit
@@ -495,6 +551,7 @@ function QueryPanelRoute() {
                     }
                   `}
                   onClick={() => handleSwitchTab(index)}
+                  onKeyDown={(e) => handleTabKeyDown(e, index)}
                 >
                   <span className="text-sm font-medium whitespace-nowrap">{getTabLabel(tabId)}</span>
                   {tabIds.length > 1 && (
@@ -503,8 +560,9 @@ function QueryPanelRoute() {
                         e.stopPropagation();
                         handleCloseTab(index);
                       }}
-                      className="opacity-0 group-hover:opacity-100 hover:bg-muted rounded p-0.5 transition-opacity"
+                      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-muted rounded p-0.5 transition-opacity"
                       title="Close tab"
+                      aria-label={`Close ${getTabLabel(tabId)} tab`}
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -529,6 +587,7 @@ function QueryPanelRoute() {
             onClick={handleAddQueryTab}
             className="h-7 px-2 flex-shrink-0"
             title="New query tab"
+            aria-label="New query tab"
           >
             <Plus className="h-4 w-4" />
           </Button>
@@ -562,7 +621,13 @@ function QueryPanelRoute() {
           }
 
           return (
-            <div key={makePanelId(tabId)} className="absolute inset-0">
+            <div
+              key={makePanelId(tabId)}
+              role="tabpanel"
+              id={`query-route-panel-${tabId}`}
+              aria-labelledby={`query-route-tab-${tabId}`}
+              className="absolute inset-0"
+            >
               {tabState.type === "query" ? (
                 <QueryPanel
                   panelId={makePanelId(tabId)}
@@ -607,6 +672,37 @@ function QueryPanelRoute() {
         onConfirm={handleGuardConfirm}
         onCancel={handleGuardCancel}
       />
+
+      {/* Single-Tab Close Confirmation Dialog (UX-07) */}
+      <AlertDialog
+        open={pendingCloseIndex !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingCloseIndex(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close Tab?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This tab has unsaved SQL. Closing it will discard the query.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingCloseIndex !== null) {
+                  confirmCloseTab(pendingCloseIndex);
+                }
+                setPendingCloseIndex(null);
+              }}
+            >
+              Close Tab
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Close All Confirmation Dialog */}
       <AlertDialog open={showCloseAllDialog} onOpenChange={setShowCloseAllDialog}>

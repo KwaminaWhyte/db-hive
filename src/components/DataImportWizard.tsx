@@ -302,17 +302,17 @@ export function DataImportWizard({
             <div
               className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
                 isActive
-                  ? "bg-blue-500 text-white"
+                  ? "bg-primary text-primary-foreground"
                   : isPast
-                    ? "bg-green-500/20 text-green-400"
-                    : "bg-zinc-800 text-zinc-500"
+                    ? "bg-success/20 text-success"
+                    : "bg-muted text-muted-foreground"
               }`}
             >
               {isPast ? <CheckCircle className="w-3 h-3" /> : step.icon}
               <span className="hidden sm:inline">{step.label}</span>
             </div>
             {idx < STEPS.length - 3 && (
-              <ChevronRight className="w-4 h-4 text-zinc-600 mx-1" />
+              <ChevronRight className="w-4 h-4 text-muted-foreground mx-1" />
             )}
           </div>
         );
@@ -324,31 +324,31 @@ export function DataImportWizard({
     <div className="flex-1 flex flex-col items-center justify-center p-8">
       <div
         onClick={handleSelectFile}
-        className="w-full max-w-md border-2 border-dashed border-zinc-700 rounded-lg p-12 text-center cursor-pointer hover:border-blue-500 hover:bg-blue-500/5 transition-colors"
+        className="w-full max-w-md border-2 border-dashed border-border rounded-lg p-12 text-center cursor-pointer hover:border-primary hover:bg-primary/5 transition-colors"
       >
-        <Upload className="w-12 h-12 mx-auto text-zinc-500 mb-4" />
-        <p className="text-lg font-medium text-zinc-300 mb-2">
+        <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
+        <p className="text-lg font-medium text-foreground mb-2">
           Click to select a file
         </p>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-foreground">
           Supports CSV, Excel (.xlsx, .xls)
         </p>
       </div>
 
       {filePath && (
-        <div className="mt-6 p-4 bg-zinc-800/50 rounded-lg flex items-center gap-3 w-full max-w-md">
-          <FileText className="w-5 h-5 text-blue-400" />
+        <div className="mt-6 p-4 bg-muted/50 rounded-lg flex items-center gap-3 w-full max-w-md">
+          <FileText className="w-5 h-5 text-info" />
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-zinc-200 truncate">
+            <p className="text-sm font-medium text-foreground truncate">
               {filePath.split("/").pop()}
             </p>
-            <p className="text-xs text-zinc-500 truncate">{filePath}</p>
+            <p className="text-xs text-muted-foreground truncate">{filePath}</p>
           </div>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setFilePath("")}
-            className="text-zinc-400 hover:text-zinc-200"
+            className="text-muted-foreground hover:text-foreground"
           >
             <X className="w-4 h-4" />
           </Button>
@@ -356,7 +356,7 @@ export function DataImportWizard({
       )}
 
       {error && (
-        <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm flex items-center gap-2">
+        <div className="mt-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive text-sm flex items-center gap-2">
           <AlertCircle className="w-4 h-4" />
           {error}
         </div>
@@ -368,9 +368,9 @@ export function DataImportWizard({
     <div className="flex-1 flex flex-col overflow-hidden p-4">
       <div className="flex items-center gap-4 mb-4">
         <div className="flex-1">
-          <Label className="text-zinc-400 text-xs mb-1 block">Target Table</Label>
+          <Label className="text-muted-foreground text-xs mb-1 block">Target Table</Label>
           <Select value={selectedTable} onValueChange={setSelectedTable}>
-            <SelectTrigger className="w-full bg-zinc-800 border-zinc-700">
+            <SelectTrigger className="w-full bg-muted border-border">
               <SelectValue placeholder="Select a table..." />
             </SelectTrigger>
             <SelectContent>
@@ -385,12 +385,12 @@ export function DataImportWizard({
 
         {preview?.sheet_names && preview.sheet_names.length > 0 && (
           <div className="flex-1">
-            <Label className="text-zinc-400 text-xs mb-1 block">Sheet</Label>
+            <Label className="text-muted-foreground text-xs mb-1 block">Sheet</Label>
             <Select
               value={options.sheet_name || preview.sheet_names[0]}
               onValueChange={(v) => setOptions((o) => ({ ...o, sheet_name: v }))}
             >
-              <SelectTrigger className="w-full bg-zinc-800 border-zinc-700">
+              <SelectTrigger className="w-full bg-muted border-border">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -405,32 +405,32 @@ export function DataImportWizard({
         )}
       </div>
 
-      <div className="flex items-center gap-4 mb-4 text-xs text-zinc-500">
+      <div className="flex items-center gap-4 mb-4 text-xs text-muted-foreground">
         <span>
-          File type: <strong className="text-zinc-300">{preview?.file_type}</strong>
+          File type: <strong className="text-foreground">{preview?.file_type}</strong>
         </span>
         <span>
-          Columns: <strong className="text-zinc-300">{preview?.columns.length}</strong>
+          Columns: <strong className="text-foreground">{preview?.columns.length}</strong>
         </span>
         <span>
           Total rows:{" "}
-          <strong className="text-zinc-300">
+          <strong className="text-foreground">
             {preview?.total_rows?.toLocaleString() || "Unknown"}
           </strong>
         </span>
       </div>
 
-      <div className="flex-1 overflow-auto border border-zinc-800 rounded-lg">
+      <div className="flex-1 overflow-auto border border-border rounded-lg">
         <table className="w-full text-sm">
-          <thead className="bg-zinc-800/50 sticky top-0">
+          <thead className="bg-muted/50 sticky top-0">
             <tr>
               {preview?.columns.map((col, idx) => (
                 <th
                   key={idx}
-                  className="px-3 py-2 text-left font-medium text-zinc-300 border-b border-zinc-700"
+                  className="px-3 py-2 text-left font-medium text-foreground border-b border-border"
                 >
                   <div>{col}</div>
-                  <div className="text-xs font-normal text-zinc-500">
+                  <div className="text-xs font-normal text-muted-foreground">
                     {preview?.detected_types[idx]}
                   </div>
                 </th>
@@ -439,13 +439,13 @@ export function DataImportWizard({
           </thead>
           <tbody>
             {preview?.rows.slice(0, 50).map((row, rowIdx) => (
-              <tr key={rowIdx} className="hover:bg-zinc-800/30">
+              <tr key={rowIdx} className="hover:bg-muted/30">
                 {row.map((cell, cellIdx) => (
                   <td
                     key={cellIdx}
-                    className="px-3 py-2 text-zinc-400 border-b border-zinc-800 max-w-[200px] truncate"
+                    className="px-3 py-2 text-muted-foreground border-b border-border max-w-[200px] truncate"
                   >
-                    {cell || <span className="text-zinc-600 italic">NULL</span>}
+                    {cell || <span className="text-muted-foreground italic">NULL</span>}
                   </td>
                 ))}
               </tr>
@@ -459,7 +459,7 @@ export function DataImportWizard({
   const renderColumnMapping = () => (
     <div className="flex-1 overflow-auto p-4">
       <div className="space-y-2">
-        <div className="grid grid-cols-12 gap-2 text-xs font-medium text-zinc-500 px-2 mb-2">
+        <div className="grid grid-cols-12 gap-2 text-xs font-medium text-muted-foreground px-2 mb-2">
           <div className="col-span-3">Source Column</div>
           <div className="col-span-1 text-center">
             <ArrowRight className="w-4 h-4 inline" />
@@ -474,18 +474,18 @@ export function DataImportWizard({
           <div
             key={idx}
             className={`grid grid-cols-12 gap-2 items-center p-2 rounded-lg ${
-              mapping.skip ? "opacity-50 bg-zinc-900" : "bg-zinc-800/30"
+              mapping.skip ? "opacity-50 bg-background" : "bg-muted/30"
             }`}
           >
             <div className="col-span-3">
-              <div className="text-sm text-zinc-200">{mapping.source_column}</div>
-              <div className="text-xs text-zinc-500">
+              <div className="text-sm text-foreground">{mapping.source_column}</div>
+              <div className="text-xs text-muted-foreground">
                 {preview?.detected_types[idx]}
               </div>
             </div>
 
             <div className="col-span-1 text-center">
-              <ArrowRight className="w-4 h-4 text-zinc-600" />
+              <ArrowRight className="w-4 h-4 text-muted-foreground" />
             </div>
 
             <div className="col-span-3">
@@ -498,17 +498,17 @@ export function DataImportWizard({
                 }
                 disabled={mapping.skip}
               >
-                <SelectTrigger className="w-full bg-zinc-800 border-zinc-700 h-8 text-sm">
+                <SelectTrigger className="w-full bg-muted border-border h-8 text-sm">
                   <SelectValue placeholder="Select column..." />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">
-                    <span className="text-zinc-500">-- Skip --</span>
+                    <span className="text-muted-foreground">-- Skip --</span>
                   </SelectItem>
                   {targetColumns.map((col) => (
                     <SelectItem key={col.name} value={col.name}>
                       {col.name}
-                      <span className="text-xs text-zinc-500 ml-2">
+                      <span className="text-xs text-muted-foreground ml-2">
                         ({col.data_type})
                       </span>
                     </SelectItem>
@@ -523,7 +523,7 @@ export function DataImportWizard({
                 onValueChange={(v) => updateMapping(idx, { target_type: v })}
                 disabled={mapping.skip}
               >
-                <SelectTrigger className="w-full bg-zinc-800 border-zinc-700 h-8 text-sm">
+                <SelectTrigger className="w-full bg-muted border-border h-8 text-sm">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -546,7 +546,7 @@ export function DataImportWizard({
                   })
                 }
                 disabled={mapping.skip}
-                className="h-8 bg-zinc-800 border-zinc-700 text-sm"
+                className="h-8 bg-muted border-border text-sm"
               />
             </div>
 
@@ -568,12 +568,12 @@ export function DataImportWizard({
     <div className="flex-1 p-6">
       <div className="max-w-lg mx-auto space-y-6">
         <div className="space-y-4">
-          <h3 className="text-sm font-medium text-zinc-300">Import Settings</h3>
+          <h3 className="text-sm font-medium text-foreground">Import Settings</h3>
 
           <div className="flex items-center justify-between">
             <div>
-              <Label className="text-zinc-300">First row is header</Label>
-              <p className="text-xs text-zinc-500">
+              <Label className="text-foreground">First row is header</Label>
+              <p className="text-xs text-muted-foreground">
                 Skip the first row as column names
               </p>
             </div>
@@ -587,8 +587,8 @@ export function DataImportWizard({
 
           <div className="flex items-center justify-between">
             <div>
-              <Label className="text-zinc-300">Truncate table before import</Label>
-              <p className="text-xs text-zinc-500">
+              <Label className="text-foreground">Truncate table before import</Label>
+              <p className="text-xs text-muted-foreground">
                 Delete all existing data before importing
               </p>
             </div>
@@ -601,28 +601,28 @@ export function DataImportWizard({
           </div>
 
           <div>
-            <Label className="text-zinc-300 mb-2 block">Batch size</Label>
+            <Label className="text-foreground mb-2 block">Batch size</Label>
             <Input
               type="number"
               value={options.batch_size}
               onChange={(e) =>
                 setOptions((o) => ({ ...o, batch_size: parseInt(e.target.value) || 1000 }))
               }
-              className="w-32 bg-zinc-800 border-zinc-700"
+              className="w-32 bg-muted border-border"
             />
-            <p className="text-xs text-zinc-500 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Number of rows per transaction
             </p>
           </div>
 
           {preview?.file_type === "csv" && (
             <div>
-              <Label className="text-zinc-300 mb-2 block">CSV Delimiter</Label>
+              <Label className="text-foreground mb-2 block">CSV Delimiter</Label>
               <Select
                 value={options.delimiter || ","}
                 onValueChange={(v) => setOptions((o) => ({ ...o, delimiter: v }))}
               >
-                <SelectTrigger className="w-32 bg-zinc-800 border-zinc-700">
+                <SelectTrigger className="w-32 bg-muted border-border">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -636,42 +636,42 @@ export function DataImportWizard({
           )}
 
           <div>
-            <Label className="text-zinc-300 mb-2 block">Skip rows</Label>
+            <Label className="text-foreground mb-2 block">Skip rows</Label>
             <Input
               type="number"
               value={options.skip_rows}
               onChange={(e) =>
                 setOptions((o) => ({ ...o, skip_rows: parseInt(e.target.value) || 0 }))
               }
-              className="w-32 bg-zinc-800 border-zinc-700"
+              className="w-32 bg-muted border-border"
             />
-            <p className="text-xs text-zinc-500 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               Skip this many rows from the beginning
             </p>
           </div>
         </div>
 
-        <div className="p-4 bg-zinc-800/50 rounded-lg">
-          <h4 className="text-sm font-medium text-zinc-300 mb-2">Import Summary</h4>
-          <div className="space-y-1 text-sm text-zinc-400">
+        <div className="p-4 bg-muted/50 rounded-lg">
+          <h4 className="text-sm font-medium text-foreground mb-2">Import Summary</h4>
+          <div className="space-y-1 text-sm text-muted-foreground">
             <p>
-              File: <span className="text-zinc-200">{filePath.split("/").pop()}</span>
+              File: <span className="text-foreground">{filePath.split("/").pop()}</span>
             </p>
             <p>
               Target table:{" "}
-              <span className="text-zinc-200">
+              <span className="text-foreground">
                 {schema}.{selectedTable}
               </span>
             </p>
             <p>
               Columns to import:{" "}
-              <span className="text-zinc-200">
+              <span className="text-foreground">
                 {columnMappings.filter((m) => !m.skip && m.target_column).length}
               </span>
             </p>
             <p>
               Estimated rows:{" "}
-              <span className="text-zinc-200">
+              <span className="text-foreground">
                 {preview?.total_rows?.toLocaleString() || "Unknown"}
               </span>
             </p>
@@ -683,9 +683,9 @@ export function DataImportWizard({
 
   const renderImporting = () => (
     <div className="flex-1 flex flex-col items-center justify-center p-8">
-      <Loader2 className="w-12 h-12 text-blue-500 animate-spin mb-4" />
-      <p className="text-lg font-medium text-zinc-300 mb-2">Importing data...</p>
-      <p className="text-sm text-zinc-500">
+      <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
+      <p className="text-lg font-medium text-foreground mb-2">Importing data...</p>
+      <p className="text-sm text-muted-foreground">
         Please wait while your data is being imported
       </p>
     </div>
@@ -695,18 +695,18 @@ export function DataImportWizard({
     <div className="flex-1 flex flex-col items-center justify-center p-8">
       {importResult?.success ? (
         <>
-          <CheckCircle className="w-16 h-16 text-green-500 mb-4" />
-          <p className="text-xl font-medium text-zinc-200 mb-2">Import Complete!</p>
-          <div className="text-center text-zinc-400 space-y-1">
+          <CheckCircle className="w-16 h-16 text-success mb-4" />
+          <p className="text-xl font-medium text-foreground mb-2">Import Complete!</p>
+          <div className="text-center text-muted-foreground space-y-1">
             <p>
-              <span className="text-green-400 font-medium">
+              <span className="text-success font-medium">
                 {importResult.rows_imported.toLocaleString()}
               </span>{" "}
               rows imported successfully
             </p>
             {importResult.rows_failed > 0 && (
               <p>
-                <span className="text-red-400 font-medium">
+                <span className="text-destructive font-medium">
                   {importResult.rows_failed.toLocaleString()}
                 </span>{" "}
                 rows failed
@@ -714,9 +714,9 @@ export function DataImportWizard({
             )}
           </div>
           {importResult.errors.length > 0 && (
-            <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-lg max-w-md max-h-40 overflow-auto">
-              <p className="text-sm font-medium text-red-400 mb-2">Errors:</p>
-              <ul className="text-xs text-red-300 space-y-1">
+            <div className="mt-4 p-4 bg-destructive/10 border border-destructive/20 rounded-lg max-w-md max-h-40 overflow-auto">
+              <p className="text-sm font-medium text-destructive mb-2">Errors:</p>
+              <ul className="text-xs text-destructive/80 space-y-1">
                 {importResult.errors.slice(0, 10).map((err, idx) => (
                   <li key={idx}>{err}</li>
                 ))}
@@ -729,9 +729,9 @@ export function DataImportWizard({
         </>
       ) : (
         <>
-          <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-          <p className="text-xl font-medium text-zinc-200 mb-2">Import Failed</p>
-          <p className="text-zinc-400">{error || "An unknown error occurred"}</p>
+          <AlertCircle className="w-16 h-16 text-destructive mb-4" />
+          <p className="text-xl font-medium text-foreground mb-2">Import Failed</p>
+          <p className="text-muted-foreground">{error || "An unknown error occurred"}</p>
         </>
       )}
     </div>
@@ -756,15 +756,15 @@ export function DataImportWizard({
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl w-[900px] h-[700px] flex flex-col">
+      <div className="bg-card border border-border rounded-lg shadow-xl w-[900px] h-[700px] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-zinc-800">
-          <h2 className="text-lg font-semibold text-zinc-200">Import Data</h2>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <h2 className="text-lg font-semibold text-foreground">Import Data</h2>
           <Button
             variant="ghost"
             size="sm"
             onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-200"
+            className="text-muted-foreground hover:text-foreground"
           >
             <X className="w-5 h-5" />
           </Button>
@@ -772,7 +772,7 @@ export function DataImportWizard({
 
         {/* Step indicator */}
         {currentStep !== "importing" && currentStep !== "complete" && (
-          <div className="py-4 border-b border-zinc-800">{renderStepIndicator()}</div>
+          <div className="py-4 border-b border-border">{renderStepIndicator()}</div>
         )}
 
         {/* Content */}
@@ -780,13 +780,13 @@ export function DataImportWizard({
 
         {/* Footer */}
         {currentStep !== "importing" && (
-          <div className="flex items-center justify-between px-6 py-4 border-t border-zinc-800">
+          <div className="flex items-center justify-between px-6 py-4 border-t border-border">
             <div>
               {currentStep !== "select-file" && currentStep !== "complete" && (
                 <Button
                   variant="outline"
                   onClick={goBack}
-                  className="border-zinc-700"
+                  className="border-border"
                 >
                   <ChevronLeft className="w-4 h-4 mr-2" />
                   Back
@@ -799,7 +799,7 @@ export function DataImportWizard({
                 <Button onClick={onClose}>Close</Button>
               ) : (
                 <>
-                  <Button variant="outline" onClick={onClose} className="border-zinc-700">
+                  <Button variant="outline" onClick={onClose} className="border-border">
                     Cancel
                   </Button>
                   {currentStep === "select-file" ? (
