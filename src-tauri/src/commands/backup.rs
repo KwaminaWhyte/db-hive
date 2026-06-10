@@ -180,10 +180,12 @@ pub async fn create_backup(
         DbDriver::MySql => {
             let database = profile.database.as_deref().unwrap_or("");
             let mut cmd = SysCommand::new("mysqldump");
-            cmd.arg("-h").arg(&profile.host)
+            // Password goes through the environment, not argv, where it
+            // would be visible to every local process via `ps`
+            cmd.env("MYSQL_PWD", &password)
+                .arg("-h").arg(&profile.host)
                 .arg("-P").arg(profile.port.to_string())
                 .arg("-u").arg(&profile.username)
-                .arg(format!("-p{}", password))
                 .arg(database);
 
             if !options.include_data {
@@ -223,14 +225,39 @@ pub async fn create_backup(
             cmd.arg("--host").arg(&profile.host)
                 .arg("--port").arg(profile.port.to_string())
                 .arg("--username").arg(&profile.username)
-                .arg("--password").arg(&password)
                 .arg("--out").arg(&out_dir_str);
             if let Some(db) = &profile.database {
                 cmd.arg("--db").arg(db);
             }
 
+            // Pass the password via a 0600 temp config file rather than
+            // argv, where it would be visible to every local process
+            let config_path = if password.is_empty() {
+                None
+            } else {
+                let path = std::env::temp_dir().join(format!("db-hive-mongodump-{}.yaml", ts));
+                let yaml = format!(
+                    "password: \"{}\"\n",
+                    password.replace('\\', "\\\\").replace('"', "\\\"")
+                );
+                std::fs::write(&path, yaml)
+                    .map_err(|e| DbError::InternalError(format!("Temp config write failed: {}", e)))?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))
+                        .map_err(|e| DbError::InternalError(format!("Temp config chmod failed: {}", e)))?;
+                }
+                cmd.arg("--config").arg(&path);
+                Some(path)
+            };
+
             let out = cmd.output()
-                .map_err(|e| DbError::InternalError(format!("mongodump not found: {}", e)))?;
+                .map_err(|e| DbError::InternalError(format!("mongodump not found: {}", e)));
+            if let Some(path) = config_path {
+                let _ = std::fs::remove_file(path);
+            }
+            let out = out?;
             if !out.status.success() {
                 return Err(DbError::QueryError(
                     String::from_utf8_lossy(&out.stderr).to_string(),
@@ -312,10 +339,11 @@ pub async fn restore_backup(
                 .map_err(|e| DbError::InternalError(format!("Read file failed: {}", e)))?;
 
             let mut child = SysCommand::new("mysql")
+                // Password via env, not argv (argv is world-readable)
+                .env("MYSQL_PWD", &password)
                 .arg("-h").arg(&profile.host)
                 .arg("-P").arg(profile.port.to_string())
                 .arg("-u").arg(&profile.username)
-                .arg(format!("-p{}", password))
                 .arg(database)
                 .stdin(std::process::Stdio::piped())
                 .stdout(std::process::Stdio::null())

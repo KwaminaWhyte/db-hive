@@ -249,10 +249,10 @@ Information disclosure that aids reconnaissance; low direct risk but useful to a
 - [x] SEC-02: Implement SSH host-key verification (known_hosts / TOFU pinning); never accept all keys.
 
 **High:**
-- [ ] SEC-03: Stop passing MySQL/MongoDB passwords on the command line; use defaults-file/env.
+- [x] SEC-03: Stop passing MySQL/MongoDB passwords on the command line; use defaults-file/env.
 - [x] SEC-04: Parameterize import inserts and quote/validate identifiers; fix backslash escaping.
-- [ ] SEC-05: Define a strict Content Security Policy in `tauri.conf.json`.
-- [ ] SEC-06: Verify plugin checksum/signature before install; enforce permissions with user consent; restrict plugin `httpRequest` egress.
+- [x] SEC-05: Define a strict Content Security Policy in `tauri.conf.json`.
+- [x] SEC-06: Verify plugin checksum/signature before install; enforce permissions with user consent; restrict plugin `httpRequest` egress.
 
 **Medium:**
 - [ ] SEC-07: Move AI API keys to the keyring; redact them from `get_ai_config`; disclose schema sent to AI providers.

@@ -12,7 +12,7 @@ use mongodb::{
 };
 use serde_json::Value as JsonValue;
 
-use super::{ConnectionOptions, DatabaseDriver, QueryResult};
+use super::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
 use crate::models::{ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema};
 
 /// MongoDB database driver
@@ -181,9 +181,15 @@ impl DatabaseDriver for MongoDbDriver {
                         .map_err(|e| DbError::QueryError(format!("Invalid filter: {}", e)))?
                 };
 
-                // Execute find query
+                // Execute find query. A server-side limit of
+                // MAX_RESULT_ROWS + 1 bounds both network transfer and
+                // memory: without it an unbounded find() on a huge
+                // collection would buffer every document (PERF-03). The
+                // extra document past the cap lets the caller flag
+                // truncation.
                 let mut cursor = collection
                     .find(filter)
+                    .limit(MAX_RESULT_ROWS as i64 + 1)
                     .await
                     .map_err(|e| DbError::QueryError(format!("Find failed: {}", e)))?;
 
@@ -203,6 +209,11 @@ impl DatabaseDriver for MongoDbDriver {
                     }
 
                     rows.push(Self::json_to_row(&json));
+
+                    // Belt-and-braces cap in case the limit above changes.
+                    if rows.len() > MAX_RESULT_ROWS {
+                        break;
+                    }
                 }
 
                 Ok(QueryResult::with_data(columns, rows))

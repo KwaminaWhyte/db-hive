@@ -234,9 +234,9 @@ Manual vendor chunking was deliberately removed (vite.config.ts comment) after i
 **Do first (High):**
 - [ ] PERF-01 — Replace QueryPanel's sequential per-table schema fetch with the cached `get_autocomplete_metadata` command.
 - [ ] PERF-02 — Stop mounting every query tab (and its Monaco editors) simultaneously; mount active tab only.
-- [ ] PERF-03 — Enforce the 50k row cap inside each driver instead of after full materialization.
+- [x] PERF-03 — Enforce the 50k row cap inside each driver instead of after full materialization.
 - [ ] PERF-04 — Compute JSON/Raw/highlighted result strings lazily per view mode; virtualize or cap JSON/Raw views.
-- [ ] PERF-05 — Cap query history length and move full-file persistence off the per-query hot path.
+- [x] PERF-05 — Cap query history length and move full-file persistence off the per-query hot path.
 - [ ] PERF-06 — Bundle Monaco locally via `loader.config` to eliminate the runtime CDN fetch.
 
 **Next (Medium):**

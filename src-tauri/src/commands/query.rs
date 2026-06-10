@@ -9,17 +9,10 @@ use std::time::Instant;
 use tauri::State;
 use uuid::Uuid;
 
+use crate::drivers::MAX_RESULT_ROWS;
 use crate::models::{DbError, QueryLog};
 use crate::state::AppState;
 use serde::{Deserialize, Serialize};
-
-/// Hard cap on the number of rows materialized from a single `execute_query`
-/// call. Raw user SQL (e.g. `SELECT * FROM huge_table`) has no inherent bound;
-/// without this cap the driver collects every row into a `Vec`, serializes the
-/// whole set across IPC, and the WebView re-allocates it again — enough to OOM
-/// the app on large tables. Results beyond this are dropped and `truncated` is
-/// set so the UI can warn the user to add a `LIMIT`.
-const MAX_RESULT_ROWS: usize = 50_000;
 
 /// Result of a query execution
 ///
@@ -72,6 +65,9 @@ impl QueryExecutionResult {
         execution_time_ms: u64,
         query_type: String,
     ) -> Self {
+        // Drivers enforce the cap in their fetch loops and return at most
+        // MAX_RESULT_ROWS + 1 rows; the extra sentinel row tells us the
+        // result set overflowed so we can set `truncated` for the UI.
         let mut rows = query_result.rows;
         let truncated = rows.len() > MAX_RESULT_ROWS;
         if truncated {

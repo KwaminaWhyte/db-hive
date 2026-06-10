@@ -20,11 +20,11 @@ Each report contains per-finding `file:line` references and an actionable checkb
 
 ### Phase 2 — High-impact stability and correctness
 
-- [ ] **PERF-03**: Enforce the 50k-row cap inside each driver while streaming, not after buffering the full result set (`postgres.rs:387`, `mysql.rs:82`, `sqlserver.rs:170`, `sqlite.rs:114`, `commands/query.rs:76`).
-- [ ] **PERF-05**: Stop re-serializing and fsync'ing the entire query history on every execution while holding the global state lock (`state/mod.rs:531-546`, `models/history.rs:49-63`). Cap history size and write asynchronously/debounced.
-- [ ] **UX-04**: Cancelling the destructive-query guard must not surface as a query error or pollute history (`routes/_connected/query.tsx:207`, `QueryPanel.tsx:297-341`). Treat cancellation as a no-op.
-- [ ] **UX-01**: Fix the `?` keyboard-shortcuts hotkey — `matchesShortcut` rejects Shift, but `?` requires it (`hooks/useKeyboardShortcuts.ts:84-95`).
-- [ ] Remaining Security High findings (SEC-03, SEC-05, SEC-06) per [security-audit.md](./security-audit.md).
+- [x] **PERF-03**: Enforce the 50k-row cap inside each driver while streaming, not after buffering the full result set (`postgres.rs:387`, `mysql.rs:82`, `sqlserver.rs:170`, `sqlite.rs:114`, `commands/query.rs:76`).
+- [x] **PERF-05**: Stop re-serializing and fsync'ing the entire query history on every execution while holding the global state lock (`state/mod.rs:531-546`, `models/history.rs:49-63`). Cap history size and write asynchronously/debounced.
+- [x] **UX-04**: Cancelling the destructive-query guard must not surface as a query error or pollute history (`routes/_connected/query.tsx:207`, `QueryPanel.tsx:297-341`). Treat cancellation as a no-op.
+- [x] **UX-01**: Fix the `?` keyboard-shortcuts hotkey — `matchesShortcut` rejects Shift, but `?` requires it (`hooks/useKeyboardShortcuts.ts:84-95`).
+- [x] Remaining Security High findings (SEC-03, SEC-05, SEC-06) per [security-audit.md](./security-audit.md).
 
 ### Phase 3 — Performance polish
 

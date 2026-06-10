@@ -10,6 +10,7 @@ use boa_engine::{
 };
 use serde_json::Value as JsonValue;
 use std::collections::{HashMap, HashSet};
+use std::net::{IpAddr, Ipv4Addr, ToSocketAddrs};
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
 
@@ -29,6 +30,84 @@ fn permission_to_string(p: &PluginPermission) -> String {
         PluginPermission::AccessClipboard => "AccessClipboard".to_string(),
         PluginPermission::AccessOtherPlugins => "AccessOtherPlugins".to_string(),
     }
+}
+
+/// Enforce a manifest-declared permission at an API call site.
+/// `granted` is derived from the plugin's manifest permissions at runtime setup.
+fn require_permission(granted: bool, permission: &str) -> boa_engine::JsResult<()> {
+    if granted {
+        Ok(())
+    } else {
+        Err(JsNativeError::error()
+            .with_message(format!("Permission denied: {}", permission))
+            .into())
+    }
+}
+
+fn is_blocked_ipv4(ip: &Ipv4Addr) -> bool {
+    ip.is_loopback()
+        || ip.is_private()
+        || ip.is_link_local()
+        || ip.is_unspecified()
+        || ip.is_broadcast()
+}
+
+/// Loopback, link-local, RFC1918 private, unspecified, and broadcast addresses
+/// are off-limits for plugin HTTP requests (SSRF guard).
+fn is_blocked_ip(ip: &IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => is_blocked_ipv4(v4),
+        IpAddr::V6(v6) => {
+            if let Some(mapped) = v6.to_ipv4_mapped() {
+                return is_blocked_ipv4(&mapped);
+            }
+            let segments = v6.segments();
+            v6.is_loopback()
+                || v6.is_unspecified()
+                || (segments[0] & 0xfe00) == 0xfc00 // unique local fc00::/7
+                || (segments[0] & 0xffc0) == 0xfe80 // link-local fe80::/10
+        }
+    }
+}
+
+/// Validate that a plugin-supplied URL is http(s) and does not target a
+/// loopback, link-local, or private network host (literal IP or via DNS).
+fn validate_outbound_url(url: &str) -> Result<(), String> {
+    let parsed = reqwest::Url::parse(url).map_err(|e| format!("invalid URL: {}", e))?;
+
+    match parsed.scheme() {
+        "http" | "https" => {}
+        scheme => return Err(format!("scheme '{}' not allowed (http/https only)", scheme)),
+    }
+
+    let host = parsed
+        .host_str()
+        .ok_or_else(|| "URL has no host".to_string())?;
+    // Strip brackets from IPv6 literals so address parsing works
+    let host = host
+        .trim_matches(|c| c == '[' || c == ']')
+        .to_ascii_lowercase();
+
+    if host == "localhost" || host.ends_with(".localhost") {
+        return Err("requests to localhost are not allowed".to_string());
+    }
+
+    let port = parsed.port_or_known_default().unwrap_or(443);
+    let addrs = (host.as_str(), port)
+        .to_socket_addrs()
+        .map_err(|e| format!("failed to resolve host '{}': {}", host, e))?;
+
+    for addr in addrs {
+        if is_blocked_ip(&addr.ip()) {
+            return Err(format!(
+                "host '{}' resolves to blocked address {} (loopback/link-local/private)",
+                host,
+                addr.ip()
+            ));
+        }
+    }
+
+    Ok(())
 }
 
 /// Synchronous JavaScript runtime for plugin execution
@@ -179,6 +258,9 @@ impl PluginRuntimeSync {
         let can_read = self.permissions.contains("ReadFiles");
         let can_clipboard = self.permissions.contains("AccessClipboard");
         let can_other_plugins = self.permissions.contains("AccessOtherPlugins");
+        let can_notify = self.permissions.contains("ShowNotification");
+        let can_modify_ui = self.permissions.contains("ModifyUI");
+        let can_create_tab = self.permissions.contains("CreateTab");
 
         // Config as string
         let config_str = self.config_str.clone();
@@ -187,27 +269,32 @@ impl PluginRuntimeSync {
         let internal = ObjectInitializer::new(&mut self.context)
             // showNotification - simplified synchronous version
             .function(
-                NativeFunction::from_copy_closure(move |_this, args, ctx| {
-                    let title = args
-                        .get_or_undefined(0)
-                        .to_string(ctx)?
-                        .to_std_string_escaped();
-                    let message = args
-                        .get_or_undefined(1)
-                        .to_string(ctx)?
-                        .to_std_string_escaped();
-                    let notif_type = args
-                        .get_or_undefined(2)
-                        .to_string(ctx)?
-                        .to_std_string_escaped();
+                NativeFunction::from_copy_closure_with_captures(
+                    move |_this, args, has_perm, ctx| {
+                        require_permission(*has_perm, "ShowNotification")?;
 
-                    println!(
-                        "[Plugin Notification] {}: {} (type: {})",
-                        title, message, notif_type
-                    );
+                        let title = args
+                            .get_or_undefined(0)
+                            .to_string(ctx)?
+                            .to_std_string_escaped();
+                        let message = args
+                            .get_or_undefined(1)
+                            .to_string(ctx)?
+                            .to_std_string_escaped();
+                        let notif_type = args
+                            .get_or_undefined(2)
+                            .to_string(ctx)?
+                            .to_std_string_escaped();
 
-                    Ok(JsValue::Boolean(true))
-                }),
+                        println!(
+                            "[Plugin Notification] {}: {} (type: {})",
+                            title, message, notif_type
+                        );
+
+                        Ok(JsValue::Boolean(true))
+                    },
+                    can_notify,
+                ),
                 js_string!("showNotification"),
                 3,
             )
@@ -215,11 +302,7 @@ impl PluginRuntimeSync {
             .function(
                 NativeFunction::from_copy_closure_with_captures(
                     move |_this, args, (data_dir_str, has_perm), ctx| {
-                        if !has_perm {
-                            return Err(JsNativeError::error()
-                                .with_message("Permission denied: WriteFiles")
-                                .into());
-                        }
+                        require_permission(*has_perm, "WriteFiles")?;
 
                         let path = args
                             .get_or_undefined(0)
@@ -267,11 +350,7 @@ impl PluginRuntimeSync {
             .function(
                 NativeFunction::from_copy_closure_with_captures(
                     move |_this, args, (data_dir_str, has_perm), ctx| {
-                        if !has_perm {
-                            return Err(JsNativeError::error()
-                                .with_message("Permission denied: ReadFiles")
-                                .into());
-                        }
+                        require_permission(*has_perm, "ReadFiles")?;
 
                         let path = args
                             .get_or_undefined(0)
@@ -387,21 +466,28 @@ impl PluginRuntimeSync {
             )
             // registerUiComponent - stub
             .function(
-                NativeFunction::from_copy_closure(move |_this, args, ctx| {
-                    let component = args
-                        .get_or_undefined(0)
-                        .to_string(ctx)?
-                        .to_std_string_escaped();
-                    println!("[Plugin] Registered UI component: {}", component);
-                    Ok(JsValue::Boolean(true))
-                }),
+                NativeFunction::from_copy_closure_with_captures(
+                    move |_this, args, has_perm, ctx| {
+                        require_permission(*has_perm, "ModifyUI")?;
+
+                        let component = args
+                            .get_or_undefined(0)
+                            .to_string(ctx)?
+                            .to_std_string_escaped();
+                        println!("[Plugin] Registered UI component: {}", component);
+                        Ok(JsValue::Boolean(true))
+                    },
+                    can_modify_ui,
+                ),
                 js_string!("registerUiComponent"),
                 1,
             )
             // createTab - stub
             .function(
                 NativeFunction::from_copy_closure_with_captures(
-                    move |_this, args, plugin_id, ctx| {
+                    move |_this, args, (plugin_id, has_perm), ctx| {
+                        require_permission(*has_perm, "CreateTab")?;
+
                         let config = args
                             .get_or_undefined(0)
                             .to_string(ctx)?
@@ -410,7 +496,7 @@ impl PluginRuntimeSync {
                         println!("[Plugin] Created tab: {} with config: {}", tab_id, config);
                         Ok(JsValue::String(js_string!(tab_id)))
                     },
-                    plugin_id.clone(),
+                    (plugin_id.clone(), can_create_tab),
                 ),
                 js_string!("createTab"),
                 1,
@@ -419,11 +505,7 @@ impl PluginRuntimeSync {
             .function(
                 NativeFunction::from_copy_closure_with_captures(
                     move |_this, _args, has_perm, _ctx| {
-                        if !has_perm {
-                            return Err(JsNativeError::error()
-                                .with_message("Permission denied: AccessClipboard")
-                                .into());
-                        }
+                        require_permission(*has_perm, "AccessClipboard")?;
 
                         match arboard::Clipboard::new() {
                             Ok(mut clipboard) => match clipboard.get_text() {
@@ -446,11 +528,7 @@ impl PluginRuntimeSync {
             .function(
                 NativeFunction::from_copy_closure_with_captures(
                     move |_this, args, has_perm, ctx| {
-                        if !has_perm {
-                            return Err(JsNativeError::error()
-                                .with_message("Permission denied: AccessClipboard")
-                                .into());
-                        }
+                        require_permission(*has_perm, "AccessClipboard")?;
 
                         let content = args
                             .get_or_undefined(0)
@@ -478,11 +556,7 @@ impl PluginRuntimeSync {
             .function(
                 NativeFunction::from_copy_closure_with_captures(
                     move |_this, args, (plugin_id, has_perm), ctx| {
-                        if !has_perm {
-                            return Err(JsNativeError::error()
-                                .with_message("Permission denied: AccessOtherPlugins")
-                                .into());
-                        }
+                        require_permission(*has_perm, "AccessOtherPlugins")?;
 
                         let target_id = args
                             .get_or_undefined(0)
@@ -518,16 +592,19 @@ impl PluginRuntimeSync {
             .function(
                 NativeFunction::from_copy_closure_with_captures(
                     move |_this, args, has_network_perm, ctx| {
-                        if !has_network_perm {
-                            return Err(JsNativeError::error()
-                                .with_message("Permission denied: NetworkAccess")
-                                .into());
-                        }
+                        require_permission(*has_network_perm, "NetworkAccess")?;
 
                         let url = args
                             .get_or_undefined(0)
                             .to_string(ctx)?
                             .to_std_string_escaped();
+
+                        if let Err(e) = validate_outbound_url(&url) {
+                            return Err(JsNativeError::error()
+                                .with_message(format!("HTTP request blocked: {}", e))
+                                .into());
+                        }
+
                         let method = args
                             .get_or_undefined(1)
                             .to_string(ctx)?
@@ -725,5 +802,44 @@ impl PluginRuntimeSync {
             }
             Err(e) => Err(PluginError::ExecutionError(e.to_string())),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_blocks_private_and_loopback_urls() {
+        let blocked = [
+            "http://localhost/x",
+            "http://LOCALHOST:3000/",
+            "http://app.localhost/",
+            "http://127.0.0.1:8080/",
+            "http://[::1]/",
+            "http://0.0.0.0/",
+            "http://10.0.0.5/",
+            "http://172.16.0.1/",
+            "http://172.31.255.255/",
+            "http://192.168.1.1/",
+            "http://169.254.169.254/latest/meta-data",
+            "file:///etc/passwd",
+            "ftp://example.com/",
+        ];
+        for url in blocked {
+            assert!(
+                validate_outbound_url(url).is_err(),
+                "{} should be blocked",
+                url
+            );
+        }
+    }
+
+    #[test]
+    fn test_allows_public_addresses() {
+        assert!(validate_outbound_url("https://1.1.1.1/").is_ok());
+        assert!(validate_outbound_url("http://93.184.216.34/").is_ok());
+        // 172.32.x.x is outside the 172.16.0.0/12 private range
+        assert!(validate_outbound_url("http://172.32.0.1/").is_ok());
     }
 }

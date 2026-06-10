@@ -7,7 +7,7 @@
 use async_trait::async_trait;
 use libsql::{Builder, Connection, Value};
 
-use super::{ConnectionOptions, DatabaseDriver, QueryResult};
+use super::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
 use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
@@ -131,6 +131,14 @@ impl DatabaseDriver for TursoDriver {
                     json_row.push(Self::value_to_json(v));
                 }
                 data.push(json_row);
+
+                // Enforce the row cap inside the fetch loop so an unbounded
+                // SELECT never materializes the full result set (PERF-03).
+                // One extra row past the cap lets the caller flag truncation;
+                // dropping `rows` discards the remainder.
+                if data.len() > MAX_RESULT_ROWS {
+                    break;
+                }
             }
 
             Ok(QueryResult::with_data(columns, data))

@@ -85,11 +85,20 @@ export function matchesShortcut(
     (shortcutKey === "⏎" && eventKey === "enter") ||
     (shortcutKey === "?" && eventKey === "?");
 
+  // Printable punctuation keys (e.g. "?") often require Shift to type, and
+  // event.key already reflects the shifted character. Requiring
+  // event.shiftKey === false would make such shortcuts impossible to trigger,
+  // so ignore the Shift modifier for single non-alphanumeric character keys.
+  const isShiftedCharKey =
+    shortcutKey.length === 1 && !/[a-z0-9]/.test(shortcutKey);
+  const shiftMatches =
+    isShiftedCharKey || event.shiftKey === shortcut.shift;
+
   return (
     keyMatches &&
     event.ctrlKey === shortcut.ctrl &&
     event.altKey === shortcut.alt &&
-    event.shiftKey === shortcut.shift &&
+    shiftMatches &&
     event.metaKey === shortcut.meta
   );
 }

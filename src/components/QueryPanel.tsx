@@ -10,6 +10,7 @@ import { TemplatesPanel } from './TemplatesPanel';
 import { AiAssistant } from './AiAssistant';
 import { QueryExecutionResult, ConnectionProfile } from '@/types/database';
 import { createQueryHistory } from '@/types/history';
+import { QueryCancelledError } from '@/utils/queryErrors';
 import { invoke } from '@tauri-apps/api/core';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { Button } from './ui/button';
@@ -229,6 +230,10 @@ export const QueryPanel: FC<QueryPanelProps> = ({
       return;
     }
 
+    // Snapshot current tab state so a user-cancelled execution (e.g.
+    // dismissing the destructive-query guard) can restore it untouched.
+    const previousTab = tabs.find((t) => t.id === activeTabId);
+
     updateTab(activeTabId, {
       loading: true,
       error: null,
@@ -295,6 +300,17 @@ export const QueryPanel: FC<QueryPanelProps> = ({
           });
       }
     } catch (err: any) {
+      // User cancelled the destructive-query guard — silent no-op: restore
+      // the tab as it was, no error banner, no history entry (UX-04).
+      if (err instanceof QueryCancelledError) {
+        updateTab(activeTabId, {
+          loading: false,
+          error: previousTab?.error ?? null,
+          results: previousTab?.results ?? null,
+        });
+        return;
+      }
+
       // Handle error - could be a DbError from Tauri
       const errorMessage = err?.message || String(err);
 

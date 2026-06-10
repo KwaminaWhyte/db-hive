@@ -4,13 +4,14 @@
 //! using tiberius for async database operations with Microsoft SQL Server.
 
 use async_trait::async_trait;
+use futures_util::TryStreamExt;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-use tiberius::{AuthMethod, Client, Config, EncryptionLevel};
+use tiberius::{AuthMethod, Client, Config, EncryptionLevel, QueryItem};
 use tokio::net::TcpStream;
 use tokio_util::compat::TokioAsyncWriteCompatExt;
 
-use super::{ConnectionOptions, DatabaseDriver, QueryResult};
+use super::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
 use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo,
     TableSchema,
@@ -166,15 +167,30 @@ impl DatabaseDriver for SqlServerDriver {
             .map(|col| col.name().to_string())
             .collect();
 
-        // Collect rows
-        let row_stream = stream
-            .into_first_result()
+        // Stream rows from the first result set instead of materializing the
+        // entire response via `into_first_result()` (PERF-03). Conversion
+        // stops at MAX_RESULT_ROWS + 1 (the extra row lets the caller flag
+        // truncation), but the stream is still drained to completion because
+        // tiberius requires the result stream to be fully consumed before the
+        // connection can execute another query. Drained rows are dropped
+        // without JSON conversion, so memory stays bounded.
+        let mut rows: Vec<Vec<serde_json::Value>> = Vec::new();
+        let mut capped = false;
+        while let Some(item) = stream
+            .try_next()
             .await
-            .map_err(|e| DbError::QueryError(format!("Failed to read query results: {}", e)))?;
-
-        let mut rows = Vec::new();
-        for row in row_stream {
-            rows.push(Self::row_to_json_vec(&row));
+            .map_err(|e| DbError::QueryError(format!("Failed to read query results: {}", e)))?
+        {
+            if let QueryItem::Row(row) = item {
+                // Match the previous `into_first_result()` behavior: only
+                // rows from the first result set are returned.
+                if row.result_index() == 0 && !capped {
+                    rows.push(Self::row_to_json_vec(&row));
+                    if rows.len() > MAX_RESULT_ROWS {
+                        capped = true;
+                    }
+                }
+            }
         }
 
         // For DML statements, get rows affected

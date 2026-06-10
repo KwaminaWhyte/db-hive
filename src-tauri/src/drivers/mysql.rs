@@ -9,7 +9,7 @@ use mysql_async::{Conn, OptsBuilder, Pool};
 use std::sync::Arc;
 use tokio::sync::Mutex as TokioMutex;
 
-use crate::drivers::{ConnectionOptions, DatabaseDriver, QueryResult};
+use crate::drivers::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
 use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo,
     TableSchema,
@@ -92,6 +92,14 @@ impl DatabaseDriver for MysqlDriver {
                     values.push(Self::mysql_value_to_json(value));
                 }
                 rows_data.push(values);
+
+                // Enforce the row cap inside the fetch loop so an unbounded
+                // SELECT never materializes the full result set (PERF-03).
+                // One extra row past the cap lets the caller flag truncation;
+                // drop_result() below skips the remaining rows on the wire.
+                if rows_data.len() > MAX_RESULT_ROWS {
+                    break;
+                }
             }
 
             // REQUIRED: release the connection back to a clean protocol state.

@@ -5,9 +5,10 @@
 
 use async_trait::async_trait;
 use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
+use futures_util::TryStreamExt;
 use tokio_postgres::NoTls;
 
-use super::{ConnectionOptions, DatabaseDriver, QueryResult};
+use super::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
 use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
@@ -383,9 +384,32 @@ impl DatabaseDriver for PostgresDriver {
             return Ok(QueryResult::empty());
         }
 
-        // Try to execute as a query first (for SELECT statements)
-        match client.query(sql, &[]).await {
-            Ok(rows) => {
+        // Try to execute as a query first (for SELECT statements).
+        //
+        // `query_raw` returns a `RowStream` instead of a fully materialized
+        // `Vec<Row>`, which lets us stop pulling rows at MAX_RESULT_ROWS — an
+        // unbounded `SELECT *` on a huge table would otherwise buffer every
+        // row in memory before any cap could apply (PERF-03). We fetch one
+        // extra row past the cap so the caller can detect truncation.
+        let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = Vec::new();
+        match client.query_raw(sql, params).await {
+            Ok(stream) => {
+                futures_util::pin_mut!(stream);
+
+                let mut rows: Vec<tokio_postgres::Row> = Vec::new();
+                while let Some(row) = stream
+                    .try_next()
+                    .await
+                    .map_err(|e| DbError::QueryError(format!("{}", e)))?
+                {
+                    rows.push(row);
+                    if rows.len() > MAX_RESULT_ROWS {
+                        // Cap reached: stop fetching. Dropping the stream
+                        // discards the remainder of the result set.
+                        break;
+                    }
+                }
+
                 // Extract column names from the statement, even if there are no rows
                 let columns: Vec<String> = if rows.is_empty() {
                     // For empty result sets, we need to execute the query to get column metadata

@@ -236,8 +236,8 @@ Both hand-rolled tab strips are clickable `div`s: no `role="tablist"`/`role="tab
 ## Prioritized Task Checklist
 
 **P0 — broken or rule-violating**
-- [ ] UX-01: Fix Shift handling so the `?` shortcut opens the shortcuts modal (`useKeyboardShortcuts.ts`).
-- [ ] UX-04: Stop reporting destructive-guard cancellation as a failed query and stop writing it to history.
+- [x] UX-01: Fix Shift handling so the `?` shortcut opens the shortcuts modal (`useKeyboardShortcuts.ts`).
+- [x] UX-04: Stop reporting destructive-guard cancellation as a failed query and stop writing it to history.
 - [ ] UX-06: Introduce semantic status tokens and remove hardcoded palette classes (ErrorState, UpdateBanner, AiAssistant, env badges, ResultsViewer hex colors, ActivityMonitor, JoinBuilder, empty-states, DataImportWizard).
 - [ ] UX-02: Collapse the nested QueryPanel tab system into the route-level tabs.
 

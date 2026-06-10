@@ -2,6 +2,7 @@ use super::{
     MarketplacePlugin, Plugin, PluginContext, PluginError, PluginEvent, PluginManifest,
     PluginPermission, PluginResult, PluginStats,
 };
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -169,24 +170,32 @@ impl PluginManager {
                 marketplace_plugin.manifest.id
             );
         } else {
+            // TODO: Implement actual download from marketplace_plugin.download_url
+            // For now, create a placeholder that indicates the plugin needs real code.
+            // Any artifact installed via this path (downloaded or placeholder) must
+            // pass the SHA-256 integrity check against marketplace_plugin.hash
+            // before it is persisted.
+            let artifact = format!(
+                "// Plugin '{}' - placeholder\n// Real implementation should be downloaded from: {}\n\n__plugin_exports__ = {{\n  onLoad: function() {{\n    console.log('Plugin {} loaded (placeholder)');\n    return {{ success: true, message: 'Placeholder plugin' }};\n  }},\n  onUnload: function() {{\n    return {{ success: true }};\n  }}\n}};\n",
+                marketplace_plugin.manifest.name,
+                marketplace_plugin.download_url,
+                marketplace_plugin.manifest.name
+            );
+
+            if let Err(e) =
+                Self::verify_artifact_hash(artifact.as_bytes(), &marketplace_plugin.hash)
+            {
+                let _ = fs::remove_dir_all(&plugin_dir).await;
+                return Err(e);
+            }
+
             // Create manifest file
             let manifest_path = plugin_dir.join("manifest.json");
             let manifest_content = serde_json::to_string_pretty(&marketplace_plugin.manifest)?;
             fs::write(&manifest_path, manifest_content).await?;
 
-            // TODO: Implement actual download from marketplace_plugin.download_url
-            // For now, create a placeholder that indicates the plugin needs real code
             let main_path = plugin_dir.join(&marketplace_plugin.manifest.main);
-            fs::write(
-                &main_path,
-                format!(
-                    "// Plugin '{}' - placeholder\n// Real implementation should be downloaded from: {}\n\n__plugin_exports__ = {{\n  onLoad: function() {{\n    console.log('Plugin {} loaded (placeholder)');\n    return {{ success: true, message: 'Placeholder plugin' }};\n  }},\n  onUnload: function() {{\n    return {{ success: true }};\n  }}\n}};\n",
-                    marketplace_plugin.manifest.name,
-                    marketplace_plugin.download_url,
-                    marketplace_plugin.manifest.name
-                ),
-            )
-            .await?;
+            fs::write(&main_path, artifact).await?;
             println!(
                 "[PluginManager] Installed plugin {} with placeholder (no bundled source found)",
                 marketplace_plugin.manifest.id
@@ -388,14 +397,52 @@ impl PluginManager {
         Ok(())
     }
 
-    /// Check if user has permission for a plugin action
-    pub fn check_permission(
+    /// Check that a plugin is enabled and has declared a permission in its manifest
+    pub async fn check_permission(
         &self,
-        _plugin_id: &str,
-        _permission: &PluginPermission,
+        plugin_id: &str,
+        permission: &PluginPermission,
     ) -> PluginResult<()> {
-        // TODO: Implement permission checking based on user settings
-        // For now, we'll allow all permissions
+        let plugins = self.plugins.read().await;
+        let plugin = plugins
+            .get(plugin_id)
+            .ok_or_else(|| PluginError::NotFound(plugin_id.to_string()))?;
+
+        if !plugin.enabled || !plugin.manifest.permissions.contains(permission) {
+            return Err(PluginError::PermissionDenied(permission.clone()));
+        }
+
+        Ok(())
+    }
+
+    /// Verify a plugin artifact's SHA-256 against the marketplace-provided hash.
+    /// An empty hash means there is nothing to verify; a present hash must be a
+    /// valid SHA-256 hex digest and must match the artifact exactly.
+    fn verify_artifact_hash(artifact: &[u8], expected_hash: &str) -> PluginResult<()> {
+        let expected = expected_hash
+            .trim()
+            .trim_start_matches("sha256:")
+            .to_ascii_lowercase();
+
+        if expected.is_empty() {
+            return Ok(());
+        }
+
+        if expected.len() != 64 || !expected.bytes().all(|b| b.is_ascii_hexdigit()) {
+            return Err(PluginError::IntegrityCheckFailed(format!(
+                "marketplace hash is not a valid SHA-256 hex digest: {}",
+                expected_hash
+            )));
+        }
+
+        let actual = hex::encode(Sha256::digest(artifact));
+        if actual != expected {
+            return Err(PluginError::IntegrityCheckFailed(format!(
+                "SHA-256 mismatch: expected {}, got {}",
+                expected, actual
+            )));
+        }
+
         Ok(())
     }
 
@@ -425,5 +472,29 @@ impl PluginManager {
             permissions: plugin.manifest.permissions.clone(),
             config: plugin.config.clone(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_verify_artifact_hash() {
+        let data = b"plugin artifact bytes";
+        let good = hex::encode(Sha256::digest(data));
+
+        assert!(PluginManager::verify_artifact_hash(data, &good).is_ok());
+        assert!(PluginManager::verify_artifact_hash(data, &format!("sha256:{}", good)).is_ok());
+        assert!(PluginManager::verify_artifact_hash(data, &good.to_uppercase()).is_ok());
+
+        // Empty hash means nothing to verify
+        assert!(PluginManager::verify_artifact_hash(data, "").is_ok());
+
+        // Malformed hash refused
+        assert!(PluginManager::verify_artifact_hash(data, "abc123def456").is_err());
+
+        // Tampered artifact refused
+        assert!(PluginManager::verify_artifact_hash(b"tampered", &good).is_err());
     }
 }

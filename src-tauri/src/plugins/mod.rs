@@ -204,6 +204,9 @@ pub enum PluginError {
     #[error("Permission denied: {0:?}")]
     PermissionDenied(PluginPermission),
 
+    #[error("Integrity check failed: {0}")]
+    IntegrityCheckFailed(String),
+
     #[error("Plugin execution error: {0}")]
     ExecutionError(String),
 

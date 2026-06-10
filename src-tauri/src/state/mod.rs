@@ -22,6 +22,12 @@ use crate::ssh::SshTunnelManager;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
+/// Maximum number of query history entries kept in memory and on disk.
+///
+/// Older entries are evicted FIFO when the cap is exceeded, both when adding
+/// new entries and when loading a larger history file from a previous version.
+pub const MAX_HISTORY_ENTRIES: usize = 1000;
+
 /// Metadata cache entry for a database connection
 ///
 /// Caches schema metadata to improve autocomplete performance
@@ -461,8 +467,15 @@ impl AppState {
     // ========================================================================
 
     /// Add a query history entry
+    ///
+    /// History is capped at [`MAX_HISTORY_ENTRIES`]; the oldest entries are
+    /// evicted (FIFO) when the cap is exceeded.
     pub fn add_history(&mut self, history: QueryHistory) {
         self.query_history.push(history);
+        if self.query_history.len() > MAX_HISTORY_ENTRIES {
+            let excess = self.query_history.len() - MAX_HISTORY_ENTRIES;
+            self.query_history.drain(..excess);
+        }
     }
 
     /// Get all query history
@@ -501,10 +514,17 @@ impl AppState {
             .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
 
         if let Some(history_value) = store.get("history") {
-            let history: Vec<QueryHistory> =
+            let mut history: Vec<QueryHistory> =
                 serde_json::from_value(history_value.clone()).map_err(|e| {
                     DbError::InternalError(format!("Failed to deserialize history: {}", e))
                 })?;
+
+            // Truncate oversized files from older versions, keeping the most
+            // recent entries (history is stored oldest-first)
+            if history.len() > MAX_HISTORY_ENTRIES {
+                let excess = history.len() - MAX_HISTORY_ENTRIES;
+                history.drain(..excess);
+            }
 
             let count = history.len();
             self.query_history = history;
@@ -514,13 +534,18 @@ impl AppState {
         }
     }
 
-    /// Save query history to persistent storage
-    pub fn save_history_to_store(&self, app: &AppHandle) -> Result<(), DbError> {
+    /// Save a query history snapshot to persistent storage
+    ///
+    /// This is an associated function (not `&self`) so callers can clone the
+    /// history vector inside the `AppState` lock and perform the serialization
+    /// and disk write *after* releasing the lock, keeping the per-query hot
+    /// path off the global mutex.
+    pub fn save_history_to_store(app: &AppHandle, history: &[QueryHistory]) -> Result<(), DbError> {
         let store = app
             .store("history.json")
             .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
 
-        let history_value = serde_json::to_value(&self.query_history)
+        let history_value = serde_json::to_value(history)
             .map_err(|e| DbError::InternalError(format!("Failed to serialize history: {}", e)))?;
 
         store.set("history", history_value);

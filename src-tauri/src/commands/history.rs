@@ -53,14 +53,15 @@ pub fn save_to_history(
 ) -> Result<String, DbError> {
     let history_id = history.id.clone();
 
-    {
+    // Add the entry and snapshot the history inside the lock, then persist
+    // outside the lock so the disk write never blocks other state access
+    let snapshot = {
         let mut state = state.lock().unwrap();
         state.add_history(history);
-    }
+        state.query_history.clone()
+    };
 
-    // Save to persistent storage (drop lock before async call)
-    let state = state.lock().unwrap();
-    state.save_history_to_store(&app)?;
+    AppState::save_history_to_store(&app, &snapshot)?;
 
     Ok(history_id)
 }
@@ -154,20 +155,18 @@ pub fn clear_history(
     state: State<'_, Mutex<AppState>>,
     app: AppHandle,
 ) -> Result<usize, DbError> {
-    let count;
-
-    {
+    // Clear and snapshot inside the lock, then persist outside the lock
+    let (count, snapshot) = {
         let mut state = state.lock().unwrap();
-        count = if let Some(conn_id) = connection_id {
+        let count = if let Some(conn_id) = connection_id {
             state.clear_history_by_connection(&conn_id)
         } else {
             state.clear_all_history()
         };
-    }
+        (count, state.query_history.clone())
+    };
 
-    // Save to persistent storage
-    let state = state.lock().unwrap();
-    state.save_history_to_store(&app)?;
+    AppState::save_history_to_store(&app, &snapshot)?;
 
     Ok(count)
 }

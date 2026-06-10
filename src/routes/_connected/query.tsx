@@ -12,6 +12,7 @@ import { X, Plus } from "lucide-react";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
 import { analyzeDestructive, DestructiveWarning } from "@/utils/sqlGuards";
+import { QueryCancelledError } from "@/utils/queryErrors";
 import { DestructiveQueryGuard } from "@/components/DestructiveQueryGuard";
 import { useSettings } from "@/hooks/useSettings";
 import {
@@ -204,7 +205,9 @@ function QueryPanelRoute() {
           setGuardWarnings(warnings);
         });
         if (!proceed) {
-          throw new Error("Query cancelled by user");
+          // Sentinel: QueryPanel treats this as a silent no-op (no error
+          // state, no history entry) — see UX-04.
+          throw new QueryCancelledError();
         }
       }
     }

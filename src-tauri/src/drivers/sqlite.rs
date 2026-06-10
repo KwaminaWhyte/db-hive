@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use rusqlite::{Connection, OpenFlags, Row};
 use std::sync::{Arc, Mutex as StdMutex};
 
-use super::{ConnectionOptions, DatabaseDriver, QueryResult};
+use super::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
 use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
@@ -125,6 +125,14 @@ impl DatabaseDriver for SqliteDriver {
                 let row_values = Self::row_to_json_vec(row, column_count)
                     .map_err(|e| DbError::QueryError(format!("Failed to convert row: {}", e)))?;
                 rows_data.push(row_values);
+
+                // Enforce the row cap inside the step loop so an unbounded
+                // SELECT never materializes the full result set (PERF-03).
+                // One extra row past the cap lets the caller flag truncation;
+                // dropping `query_rows` resets the statement.
+                if rows_data.len() > MAX_RESULT_ROWS {
+                    break;
+                }
             }
 
             Ok(QueryResult::with_data(column_names, rows_data))
