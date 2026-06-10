@@ -272,13 +272,13 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
         }
 
         const tooltipText = isTruncated
-          ? `${cellString}\n\nClick to copy cell value`
-          : "Click to copy cell value";
+          ? `${cellString}\n\nDouble-click to copy cell value`
+          : "Double-click to copy cell value";
 
         return (
           <div
-            className="cursor-pointer hover:bg-muted/50 -mx-4 -my-2 px-4 py-2 transition-colors"
-            onClick={() => {
+            className="hover:bg-muted/50 -mx-4 -my-2 px-4 py-2 transition-colors"
+            onDoubleClick={() => {
               copyCellValue(value);
             }}
             title={tooltipText}

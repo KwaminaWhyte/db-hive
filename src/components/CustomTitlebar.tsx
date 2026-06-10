@@ -15,6 +15,7 @@ import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { openDatabaseWindow } from "@/utils/multiWindow";
 import { Minus, Square, X, ChevronDown, Search } from "lucide-react";
+import { HiveLogo } from "./HiveLogo";
 import { PluginToolbar } from "./PluginToolbar";
 import { TableCreationDialog } from "./TableCreationDialog";
 import { notifyMetadataChanged } from "@/hooks/useMetadataCache";
@@ -120,21 +121,7 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
       {/* Left: Logo and Menu — extra left padding on macOS for native traffic lights */}
       <div className={`flex items-center gap-2 px-3 ${isMacOS ? "pl-[78px]" : ""}`}>
         {/* App Logo - Small version */}
-        <div
-          className="relative h-6 w-6 rounded border border-amber-300/40 bg-gradient-to-br from-amber-300/40 via-amber-400/25 to-amber-500/30"
-        >
-          <div className="absolute inset-[15%] rounded bg-slate-950/90 dark:bg-slate-950/90 border border-amber-200/30 flex items-center justify-center">
-            <div className="relative h-full w-full flex items-center justify-center">
-              <div className="absolute h-[70%] w-[70%] border border-amber-300/40 rounded rotate-6"></div>
-              <div className="absolute h-[70%] w-[70%] border border-amber-200/50 rounded -rotate-6"></div>
-              <div className="relative h-[55%] w-[55%] rounded bg-gradient-to-br from-amber-300 via-amber-400 to-amber-500 flex flex-col justify-center items-center gap-[1px]">
-                <div className="w-[70%] h-[1.5px] rounded-full bg-slate-950/85"></div>
-                <div className="w-[60%] h-[1.5px] rounded-full bg-slate-950/85"></div>
-                <div className="w-[50%] h-[1.5px] rounded-full bg-slate-950/85"></div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <HiveLogo size="sm" />
 
         {/* App Name */}
         <span className="text-sm font-medium text-foreground">

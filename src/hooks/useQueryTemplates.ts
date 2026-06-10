@@ -1,7 +1,25 @@
 import { useState, useEffect, useCallback } from "react";
 import { QueryTemplate } from "../types/templates";
 
-const STORAGE_KEY = "dbhive_query_templates";
+const STORAGE_KEY = "db-hive-query-templates";
+const LEGACY_STORAGE_KEY = "dbhive_query_templates";
+
+/**
+ * One-time migration: move templates stored under the legacy
+ * `dbhive_query_templates` key to the standardized `db-hive-*` key.
+ */
+function readTemplatesWithMigration(): string | null {
+  const stored = localStorage.getItem(STORAGE_KEY);
+  if (stored !== null) {
+    return stored;
+  }
+  const legacy = localStorage.getItem(LEGACY_STORAGE_KEY);
+  if (legacy !== null) {
+    localStorage.setItem(STORAGE_KEY, legacy);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
+  }
+  return legacy;
+}
 
 /**
  * Hook for managing query templates with localStorage persistence
@@ -13,7 +31,7 @@ export function useQueryTemplates() {
   // Load templates from localStorage on mount
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = readTemplatesWithMigration();
       if (stored) {
         const parsed = JSON.parse(stored);
         setTemplates(parsed);

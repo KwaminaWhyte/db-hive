@@ -13,6 +13,16 @@ import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { useTabContext } from "@/contexts/TabContext";
 import { Button } from "@/components/ui/button";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Tooltip,
   TooltipTrigger,
   TooltipContent,
@@ -72,6 +82,7 @@ function ConnectedLayout() {
   } = useConnectionContext();
   const { getTabState, updateTabState, createTabState } = useTabContext();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [disconnectPromptOpen, setDisconnectPromptOpen] = useState(false);
   const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
   const [layoutId] = useState(sidebarLayoutId);
 
@@ -310,7 +321,7 @@ function ConnectedLayout() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={handleDisconnect}
+            onClick={() => setDisconnectPromptOpen(true)}
             className="h-6 px-2 text-xs"
             title="Disconnect"
           >
@@ -367,6 +378,29 @@ function ConnectedLayout() {
           </Panel>
         </PanelGroup>
       </div>
+
+      {/* Disconnect Confirmation */}
+      <AlertDialog
+        open={disconnectPromptOpen}
+        onOpenChange={setDisconnectPromptOpen}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Disconnect from {connectionProfile.name}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Any unsaved query results in this window will be lost.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDisconnect}>
+              Disconnect
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

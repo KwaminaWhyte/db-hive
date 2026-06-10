@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Search,
   Download,
@@ -23,9 +23,10 @@ import { Badge } from "./ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
 import { ScrollArea } from "./ui/scroll-area";
+import { Skeleton } from "./ui/skeleton";
 import { toast } from "sonner";
 import type { MarketplacePlugin, PluginCategory, PluginSortOption, PluginFilters } from "@/types/plugins";
-import { getMarketplacePlugins, installPlugin } from "@/api/plugins";
+import { getMarketplacePlugins, getInstalledPlugins, installPlugin } from "@/api/plugins";
 
 const categoryIcons: Record<PluginCategory, React.ReactNode> = {
   driver: <Package className="size-4" />,
@@ -55,15 +56,49 @@ export function PluginMarketplace() {
   const [plugins, setPlugins] = useState<MarketplacePlugin[]>([]);
   const [loading, setLoading] = useState(true);
   const [installingPlugins, setInstallingPlugins] = useState<Set<string>>(new Set());
+  const [installedPluginIds, setInstalledPluginIds] = useState<Set<string>>(new Set());
   const [filters, setFilters] = useState<PluginFilters>({
     sort: "popular",
     verified: undefined,
   });
   const [searchQuery, setSearchQuery] = useState("");
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipInitialSearchEffect = useRef(true);
 
   useEffect(() => {
     loadPlugins();
   }, [filters.category]);
+
+  // Track which plugins are already installed
+  useEffect(() => {
+    loadInstalledPluginIds();
+  }, []);
+
+  // Debounced search-on-change (Enter/button still triggers immediately)
+  useEffect(() => {
+    if (skipInitialSearchEffect.current) {
+      skipInitialSearchEffect.current = false;
+      return;
+    }
+    searchDebounceRef.current = setTimeout(() => {
+      loadPlugins();
+    }, 300);
+    return () => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchQuery]);
+
+  const loadInstalledPluginIds = async () => {
+    try {
+      const installed = await getInstalledPlugins();
+      setInstalledPluginIds(new Set(installed.map((p) => p.manifest.id)));
+    } catch (error) {
+      console.error("Failed to load installed plugins:", error);
+    }
+  };
 
   const loadPlugins = async () => {
     try {
@@ -112,6 +147,8 @@ export function PluginMarketplace() {
       setInstallingPlugins(prev => new Set(prev).add(plugin.manifest.id));
       await installPlugin(plugin);
       toast.success(`${plugin.manifest.name} installed successfully`);
+      setInstalledPluginIds(prev => new Set(prev).add(plugin.manifest.id));
+      loadInstalledPluginIds();
     } catch (error: any) {
       console.error("Failed to install plugin:", error);
       toast.error(`Failed to install plugin: ${error.message || error}`);
@@ -125,6 +162,9 @@ export function PluginMarketplace() {
   };
 
   const handleSearch = () => {
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
     loadPlugins();
   };
 
@@ -166,7 +206,7 @@ export function PluginMarketplace() {
               placeholder="Search plugins..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleSearch()}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               className="max-w-md"
             />
             <Button onClick={handleSearch} size="sm" aria-label="Search plugins">
@@ -216,9 +256,9 @@ export function PluginMarketplace() {
               variant="ghost"
               size="sm"
               onClick={() => {
+                // Resetting searchQuery/filters re-triggers the debounced load
                 setSearchQuery("");
                 setFilters({ sort: "popular", verified: undefined });
-                loadPlugins();
               }}
             >
               <X className="size-4 mr-1" />
@@ -251,8 +291,25 @@ export function PluginMarketplace() {
         <TabsContent value={filters.category || "all"} className="flex-1 px-6 py-4">
           <ScrollArea className="h-full">
             {loading ? (
-              <div className="flex items-center justify-center h-64">
-                <Loader2 className="size-8 animate-spin text-muted-foreground" />
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Card key={i} className="flex flex-col">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center gap-3">
+                        <Skeleton className="size-9 rounded-lg" />
+                        <div className="space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-24" />
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="flex-1 flex flex-col gap-3">
+                      <Skeleton className="h-4 w-full" />
+                      <Skeleton className="h-4 w-3/4" />
+                      <Skeleton className="h-8 w-full mt-auto" />
+                    </CardContent>
+                  </Card>
+                ))}
               </div>
             ) : plugins.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
@@ -328,13 +385,26 @@ export function PluginMarketplace() {
                         <Button
                           size="sm"
                           className="flex-1"
+                          variant={
+                            installedPluginIds.has(plugin.manifest.id)
+                              ? "outline"
+                              : "default"
+                          }
                           onClick={() => handleInstall(plugin)}
-                          disabled={installingPlugins.has(plugin.manifest.id)}
+                          disabled={
+                            installingPlugins.has(plugin.manifest.id) ||
+                            installedPluginIds.has(plugin.manifest.id)
+                          }
                         >
                           {installingPlugins.has(plugin.manifest.id) ? (
                             <>
                               <Loader2 className="size-4 mr-2 animate-spin" />
                               Installing...
+                            </>
+                          ) : installedPluginIds.has(plugin.manifest.id) ? (
+                            <>
+                              <Check className="size-4 mr-2" />
+                              Installed
                             </>
                           ) : (
                             <>

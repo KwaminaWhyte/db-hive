@@ -7,7 +7,7 @@ import { openDatabaseWindow, takePendingWindowProfile } from "@/utils/multiWindo
 import { ConnectionForm } from "@/components/ConnectionForm";
 import { DatabaseBrandIcon } from "@/components/DatabaseBrandIcon";
 import { EnvironmentBadge } from "@/components/EnvironmentBadge";
-import { HiveLogo } from "@/components/WelcomeScreen";
+import { AnimatedHiveLogo } from "@/components/WelcomeScreen";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
 import { APP_VERSION } from "@/version";
 import { useRouteShortcuts } from "@/hooks/useKeyboardShortcuts";
@@ -289,6 +289,7 @@ function HomeRoute() {
   const handleCopyDetails = (profile: ConnectionProfile) => {
     const details = `${getDriverDisplayName(profile.driver)} - ${profile.host}:${profile.port}${profile.database ? `/${profile.database}` : ""}`;
     navigator.clipboard.writeText(details);
+    toast.success("Connection details copied");
   };
 
   // Form success
@@ -314,6 +315,14 @@ function HomeRoute() {
     return null;
   };
 
+  // Continue from the connection-string field (Enter or button)
+  const handleConnectionStringContinue = () => {
+    const detected = detectDriverFromConnectionString(connectionString);
+    if (detected) {
+      setViewState({ view: "connection-form", driver: detected });
+    }
+  };
+
   // ── New Connection View ──
   if (viewState.view === "new-connection") {
     return (
@@ -336,18 +345,34 @@ function HomeRoute() {
             {/* Connection String */}
             <div className="space-y-2">
               <Label className="text-sm font-medium">Connection String</Label>
-              <Input
-                value={connectionString}
-                onChange={(e) => {
-                  setConnectionString(e.target.value);
-                  const detected = detectDriverFromConnectionString(e.target.value);
-                  if (detected) {
-                    setViewState({ view: "connection-form", driver: detected });
-                  }
-                }}
-                placeholder="protocol://user:password@host:port/database"
-                className="h-11"
-              />
+              <div className="flex items-center gap-2">
+                <Input
+                  value={connectionString}
+                  onChange={(e) => setConnectionString(e.target.value)}
+                  onPaste={(e) => {
+                    const pasted = e.clipboardData.getData("text");
+                    const detected = detectDriverFromConnectionString(pasted);
+                    if (detected) {
+                      setConnectionString(pasted);
+                      setViewState({ view: "connection-form", driver: detected });
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleConnectionStringContinue();
+                    }
+                  }}
+                  placeholder="protocol://user:password@host:port/database"
+                  className="h-11"
+                />
+                <Button
+                  className="h-11"
+                  disabled={!detectDriverFromConnectionString(connectionString)}
+                  onClick={handleConnectionStringContinue}
+                >
+                  Continue
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground">
                 Paste your connection string to auto-detect database type
               </p>
@@ -434,7 +459,7 @@ function HomeRoute() {
     <div className="flex-1 flex h-full relative">
       {/* Left Panel: Branding (hidden on narrow windows) */}
       <div className="hidden md:flex w-1/2 bg-muted/30 flex-col items-center justify-center border-r border-border">
-        <HiveLogo />
+        <AnimatedHiveLogo />
         <div className="mt-8 text-center">
           <div className="flex items-center justify-center gap-2">
             <span className="text-3xl font-semibold tracking-tight">DB</span>
@@ -596,7 +621,7 @@ function HomeRoute() {
                         )}
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        {getDriverDisplayName(profile.driver).toLowerCase()} &bull; {profile.host}
+                        {getDriverDisplayName(profile.driver)} &bull; {profile.host}
                       </span>
                     </div>
                     <Button
@@ -688,7 +713,7 @@ function HomeRoute() {
               GitHub
             </a>
             <span>&bull;</span>
-            <span>DB Hive.app</span>
+            <span>DB Hive</span>
           </div>
         </footer>
       </div>

@@ -34,7 +34,7 @@ Each report contains per-finding `file:line` references and an actionable checkb
 ### Phase 4 — UX coherence
 
 - [x] **UX-02**: Unify the two nested tab systems in the query workspace (route-level URL tabs vs QueryPanel's inner unpersisted tabs) so SQL is never silently lost (`query.tsx:461-515`, `QueryPanel.tsx:384-418`).
-- [ ] Remaining UX High findings (UX-03, UX-05, UX-06), then Medium, per [ui-ux-audit.md](./ui-ux-audit.md).
+- [x] Remaining UX High findings (UX-03, UX-05, UX-06), then Medium, per [ui-ux-audit.md](./ui-ux-audit.md).
 
 ### Phase 5 — Hygiene
 

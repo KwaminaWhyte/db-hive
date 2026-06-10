@@ -259,10 +259,10 @@ Both hand-rolled tab strips are clickable `div`s: no `role="tablist"`/`role="tab
 - [x] UX-15: Remove or revive the four dead connection-list components.
 
 **P3 — polish**
-- [ ] UX-18: Copy fixes (footer, driver casing, tagline, storage-key prefix).
-- [ ] UX-19: Deduplicate About content and the CSS logo; derive credit versions from package.json.
-- [ ] UX-20: Marketplace search debounce, installed state, skeleton loading.
-- [ ] UX-21: Replace single-click cell copy with context menu/double-click.
+- [x] UX-18: Copy fixes (footer, driver casing, tagline, storage-key prefix).
+- [x] UX-19: Deduplicate About content and the CSS logo; derive credit versions from package.json.
+- [x] UX-20: Marketplace search debounce, installed state, skeleton loading.
+- [x] UX-21: Replace single-click cell copy with context menu/double-click.
 - [x] UX-22: `aria-live` on UpdateBanner.
 - [x] UX-23: Tab semantics on the surviving tab bar.
-- [ ] UX-24: Connection-string auto-navigation, disconnect confirmation, copy-details toast, nested Settings dialog Escape behavior.
+- [x] UX-24: Connection-string auto-navigation, disconnect confirmation, copy-details toast, nested Settings dialog Escape behavior.
