@@ -1,4 +1,4 @@
-//! Error types for DB-Hive
+//! Error types for DB Hive
 //!
 //! This module defines the custom error types used throughout the application.
 //! The `DbError` enum represents all possible errors that can occur during
@@ -9,7 +9,7 @@ use thiserror::Error;
 
 /// Main error type for all database operations
 ///
-/// This enum covers all possible error scenarios in DB-Hive, from connection
+/// This enum covers all possible error scenarios in DB Hive, from connection
 /// failures to query execution errors. It implements `Serialize` to enable
 /// transmission to the frontend via Tauri's IPC mechanism.
 #[derive(Debug, Error)]

@@ -1,8 +1,8 @@
-# Competitive Analysis: DB-Hive vs DB Pro (dbpro.app)
+# Competitive Analysis: DB Hive vs DB Pro (dbpro.app)
 
 **Source:** https://www.dbpro.app/ — captured 2026-04-21.
 
-This document enumerates features DB Pro ships that DB-Hive does not, to inform roadmap prioritization. Each gap is tagged with effort estimate and strategic value.
+This document enumerates features DB Pro ships that DB Hive does not, to inform roadmap prioritization. Each gap is tagged with effort estimate and strategic value.
 
 ---
 
@@ -10,7 +10,7 @@ This document enumerates features DB Pro ships that DB-Hive does not, to inform 
 
 DB Pro has a substantially broader AI footprint than our current AI Assistant (Milestone 3.14).
 
-| Feature | DB-Hive status | Gap |
+| Feature | DB Hive status | Gap |
 |---|---|---|
 | Natural language → SQL | ✅ ship | Parity |
 | Query explanation | ✅ ship | Parity |
@@ -29,7 +29,7 @@ DB Pro has a substantially broader AI footprint than our current AI Assistant (M
 
 We have single-query charts (Milestone 3.7 data-viz) but no persistent dashboards.
 
-| Feature | DB-Hive status | Gap |
+| Feature | DB Hive status | Gap |
 |---|---|---|
 | Ad-hoc chart on query result (bar / line / pie / scatter / area) | ✅ ship | Parity |
 | **Saved dashboards** (multi-widget layout) | ❌ missing | Large — new storage model + layout editor |
@@ -43,7 +43,7 @@ We have single-query charts (Milestone 3.7 data-viz) but no persistent dashboard
 
 ## 3. Query Management
 
-| Feature | DB-Hive status | Gap |
+| Feature | DB Hive status | Gap |
 |---|---|---|
 | Query history auto-save | ✅ ship | Parity |
 | Snippets | ✅ ship | Parity |
@@ -57,9 +57,9 @@ We have single-query charts (Milestone 3.7 data-viz) but no persistent dashboard
 
 ## 4. Collaboration & Cloud
 
-This is the largest gap-by-category. DB-Hive is desktop-only; DB Pro's paid tiers target teams.
+This is the largest gap-by-category. DB Hive is desktop-only; DB Pro's paid tiers target teams.
 
-| Feature | DB-Hive status | Gap |
+| Feature | DB Hive status | Gap |
 |---|---|---|
 | Team creation | ❌ missing | Cloud service required |
 | Shared connections / queries / dashboards | ❌ missing | Cloud service required |
@@ -73,7 +73,7 @@ This is the largest gap-by-category. DB-Hive is desktop-only; DB Pro's paid tier
 
 ## 5. Enterprise / Security
 
-| Feature | DB-Hive status | Gap |
+| Feature | DB Hive status | Gap |
 |---|---|---|
 | SSH tunnel | ✅ ship | Parity |
 | Local credential storage (OS keyring) | ✅ ship | Parity (better than DB Pro's file-based "local storage") |
@@ -89,7 +89,7 @@ This is the largest gap-by-category. DB-Hive is desktop-only; DB Pro's paid tier
 
 ## 6. Productivity / UI
 
-| Feature | DB-Hive status | Gap |
+| Feature | DB Hive status | Gap |
 |---|---|---|
 | Multi-tab workflow | ✅ ship | Parity |
 | Unlimited tabs | ✅ ship | Parity |
@@ -101,7 +101,7 @@ This is the largest gap-by-category. DB-Hive is desktop-only; DB Pro's paid tier
 
 ## 7. Supported Databases
 
-| DB | DB Pro | DB-Hive |
+| DB | DB Pro | DB Hive |
 |---|---|---|
 | PostgreSQL | ✅ | ✅ |
 | MySQL / MariaDB | ✅ | ✅ |
@@ -119,7 +119,7 @@ This is the largest gap-by-category. DB-Hive is desktop-only; DB Pro's paid tier
 
 ## 8. Platforms
 
-| Platform | DB Pro | DB-Hive |
+| Platform | DB Pro | DB Hive |
 |---|---|---|
 | macOS | ✅ | ✅ |
 | Windows | ✅ | ✅ |
@@ -130,7 +130,7 @@ This is the largest gap-by-category. DB-Hive is desktop-only; DB Pro's paid tier
 
 ## 9. Import / Export
 
-| Feature | DB-Hive status | Gap |
+| Feature | DB Hive status | Gap |
 |---|---|---|
 | CSV / JSON import | ✅ ship | Parity |
 | CSV / JSON export | ✅ ship | Parity |
@@ -160,4 +160,4 @@ Ordered by effort × strategic value. Pick from the top.
 
 ## Notes on DB Pro's Pricing Model
 
-DB Pro lists a one-time $49 license, $9.99/month subscription, $14/editor/month cloud tier, and custom enterprise. Strategically, DB-Hive positioning has to decide between: (a) free/open-source forever, (b) paid desktop + free tier, (c) paid cloud + free desktop. Out of scope for this document — flagged for product-level decision.
+DB Pro lists a one-time $49 license, $9.99/month subscription, $14/editor/month cloud tier, and custom enterprise. Strategically, DB Hive positioning has to decide between: (a) free/open-source forever, (b) paid desktop + free tier, (c) paid cloud + free desktop. Out of scope for this document — flagged for product-level decision.

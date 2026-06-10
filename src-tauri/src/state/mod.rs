@@ -1,6 +1,6 @@
 //! Application state management
 //!
-//! This module provides centralized state management for DB-Hive, including
+//! This module provides centralized state management for DB Hive, including
 //! active database connections, saved connection profiles, and query history.
 //! All state is managed through a thread-safe `Mutex<AppState>` that is shared
 //! across the Tauri application.

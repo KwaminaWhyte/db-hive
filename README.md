@@ -1,4 +1,4 @@
-# DB-Hive
+# DB Hive
 
 > A modern, cross-platform database client built with Tauri 2.0 and React 19
 
@@ -7,7 +7,7 @@
 
 ## Overview
 
-DB-Hive is a professional database client designed to compete with tools like Beekeeper Studio and DbGate. Built with security, performance, and developer experience in mind — fast, native, and lightweight.
+DB Hive is a professional database client designed to compete with tools like Beekeeper Studio and DbGate. Built with security, performance, and developer experience in mind — fast, native, and lightweight.
 
 ## Features
 

@@ -81,7 +81,7 @@ export function useAutoUpdater(options: UseAutoUpdaterOptions) {
 
       setStatus({ state: 'ready', version: update.version });
 
-      await notify('Update Ready', 'DB-Hive has been updated. Restart to apply changes.');
+      await notify('Update Ready', 'DB Hive has been updated. Restart to apply changes.');
 
       if (autoInstall) {
         setTimeout(async () => {
@@ -114,7 +114,7 @@ export function useAutoUpdater(options: UseAutoUpdaterOptions) {
 
         await notify(
           'Update Available',
-          `DB-Hive ${update.version} is available. ${autoDownload ? 'Downloading...' : 'Open app to update.'}`
+          `DB Hive ${update.version} is available. ${autoDownload ? 'Downloading...' : 'Open app to update.'}`
         );
 
         if (autoDownload) {

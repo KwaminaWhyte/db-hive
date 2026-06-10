@@ -122,7 +122,7 @@ function AboutRoute() {
         }
       } else {
         toast.success("You're up to date!", {
-          description: `DB-Hive ${version} is the latest version.`,
+          description: `DB Hive ${version} is the latest version.`,
         });
         setIsChecking(false);
       }
@@ -194,7 +194,7 @@ function AboutRoute() {
             </div>
 
             {/* App Name & Tagline */}
-            <h1 className="text-4xl font-bold mb-2">DB-Hive</h1>
+            <h1 className="text-4xl font-bold mb-2">DB Hive</h1>
             <p className="text-xl text-muted-foreground mb-4">
               A Professional Cross-Platform Database Client
             </p>
@@ -231,18 +231,18 @@ function AboutRoute() {
           {/* Description Card */}
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle>About DB-Hive</CardTitle>
+              <CardTitle>About DB Hive</CardTitle>
               <CardDescription>
                 A modern, powerful, and user-friendly database client
               </CardDescription>
             </CardHeader>
             <CardContent>
               <p className="text-muted-foreground leading-relaxed">
-                DB-Hive is a cross-platform database management tool built with
+                DB Hive is a cross-platform database management tool built with
                 modern technologies. It provides a seamless experience for
                 developers and database administrators to connect, query, and
                 manage multiple database systems from a single, intuitive
-                interface. Built with Tauri and React, DB-Hive combines native
+                interface. Built with Tauri and React, DB Hive combines native
                 performance with a beautiful web-based UI.
               </p>
             </CardContent>
@@ -401,12 +401,12 @@ function AboutRoute() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                DB-Hive is released under the{" "}
+                DB Hive is released under the{" "}
                 <span className="font-medium text-foreground">MIT License</span>
                 .
               </p>
               <p className="text-sm text-muted-foreground mt-2">
-                Copyright © {new Date().getFullYear()} DB-Hive Contributors. All
+                Copyright © {new Date().getFullYear()} DB Hive Contributors. All
                 rights reserved.
               </p>
             </CardContent>

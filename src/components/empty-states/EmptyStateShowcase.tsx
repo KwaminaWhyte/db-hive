@@ -27,7 +27,7 @@ export const EmptyStateShowcase: FC = () => {
       <div className="space-y-2">
         <h1 className="text-3xl font-bold tracking-tight">Empty State Components</h1>
         <p className="text-muted-foreground">
-          A showcase of all empty state components used throughout DB-Hive
+          A showcase of all empty state components used throughout DB Hive
         </p>
       </div>
 

@@ -178,7 +178,7 @@ export const KeyboardShortcutsModal: FC<KeyboardShortcutsModalProps> = ({
         <DialogHeader className="px-6 pt-6 pb-4">
           <DialogTitle className="text-2xl">Keyboard Shortcuts</DialogTitle>
           <DialogDescription>
-            Quick reference guide for all keyboard shortcuts in DB-Hive
+            Quick reference guide for all keyboard shortcuts in DB Hive
           </DialogDescription>
         </DialogHeader>
 

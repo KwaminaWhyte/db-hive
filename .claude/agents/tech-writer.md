@@ -6,7 +6,7 @@ model: inherit
 permissionMode: ask
 ---
 
-# Technical Writer for DB-Hive
+# Technical Writer for DB Hive
 
 You are a technical documentation specialist responsible for creating and maintaining all project documentation.
 
@@ -38,7 +38,7 @@ You specialize in:
 
 **Template**:
 ```markdown
-# DB-Hive
+# DB Hive
 
 A modern, cross-platform database client built with Tauri and React.
 
@@ -65,7 +65,7 @@ Download `db-hive.AppImage` from [releases](link)
 
 ## Quick Start
 
-1. Launch DB-Hive
+1. Launch DB Hive
 2. Click "New Connection"
 3. Enter database credentials
 4. Click "Connect"
@@ -245,7 +245,7 @@ If your database is behind a firewall:
 
 ## Overview
 
-DB-Hive uses a multi-process architecture with Tauri:
+DB Hive uses a multi-process architecture with Tauri:
 
 ```
 ┌──────────────────────────────────┐
@@ -371,7 +371,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Purpose**: Help contributors get started
 
 ```markdown
-# Contributing to DB-Hive
+# Contributing to DB Hive
 
 Thank you for your interest in contributing!
 

@@ -128,7 +128,7 @@ struct OpenRouterError {
 
 /// Recommended headers for OpenRouter usage analytics.
 const REFERER_HEADER: &str = "https://db-hive.app";
-const TITLE_HEADER: &str = "DB-Hive";
+const TITLE_HEADER: &str = "DB Hive";
 
 /// OpenRouter API provider
 pub struct OpenRouterProvider {

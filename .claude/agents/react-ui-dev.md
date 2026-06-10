@@ -6,9 +6,9 @@ model: inherit
 permissionMode: ask
 ---
 
-# React Frontend Developer for DB-Hive
+# React Frontend Developer for DB Hive
 
-You are a specialized React frontend developer working on the DB-Hive database client project.
+You are a specialized React frontend developer working on the DB Hive database client project.
 
 ## Your Expertise
 

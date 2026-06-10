@@ -79,7 +79,7 @@ export function GlobalModals() {
         <DialogContent className="sm:max-w-5xl max-w-[calc(100%-2rem)] p-0 gap-0 overflow-hidden">
           <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle>Plugin Manager</DialogTitle>
-            <DialogDescription>Extend DB-Hive with plugins</DialogDescription>
+            <DialogDescription>Extend DB Hive with plugins</DialogDescription>
           </DialogHeader>
           <PluginsModalBody />
         </DialogContent>
@@ -101,7 +101,7 @@ export function GlobalModals() {
       <Dialog open={modal === "about"} onOpenChange={handleOpenChange}>
         <DialogContent className="sm:max-w-3xl max-w-[calc(100%-2rem)] p-0 gap-0 overflow-hidden">
           <DialogHeader className="sr-only">
-            <DialogTitle>About DB-Hive</DialogTitle>
+            <DialogTitle>About DB Hive</DialogTitle>
             <DialogDescription>Application information</DialogDescription>
           </DialogHeader>
           <div className="max-h-[85vh] overflow-y-auto">
@@ -186,7 +186,7 @@ function AboutModalBody() {
         }
       } else {
         toast.success("You're up to date!", {
-          description: `DB-Hive ${APP_VERSION} is the latest version.`,
+          description: `DB Hive ${APP_VERSION} is the latest version.`,
         });
         setIsChecking(false);
       }
@@ -245,7 +245,7 @@ function AboutModalBody() {
           </div>
         </div>
 
-        <h1 className="text-3xl font-bold mb-2">DB-Hive</h1>
+        <h1 className="text-3xl font-bold mb-2">DB Hive</h1>
         <p className="text-base text-muted-foreground mb-4">
           A Professional Cross-Platform Database Client
         </p>
@@ -281,14 +281,14 @@ function AboutModalBody() {
 
       <Card className="mb-4">
         <CardHeader>
-          <CardTitle>About DB-Hive</CardTitle>
+          <CardTitle>About DB Hive</CardTitle>
           <CardDescription>
             A modern, powerful, and user-friendly database client
           </CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground leading-relaxed text-sm">
-            DB-Hive is a cross-platform database management tool built with
+            DB Hive is a cross-platform database management tool built with
             modern technologies. It provides a seamless experience for
             developers and database administrators to connect, query, and
             manage multiple database systems from a single, intuitive
@@ -429,11 +429,11 @@ function AboutModalBody() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            DB-Hive is released under the{" "}
+            DB Hive is released under the{" "}
             <span className="font-medium text-foreground">MIT License</span>.
           </p>
           <p className="text-sm text-muted-foreground mt-2">
-            Copyright © {new Date().getFullYear()} DB-Hive Contributors.
+            Copyright © {new Date().getFullYear()} DB Hive Contributors.
           </p>
         </CardContent>
       </Card>

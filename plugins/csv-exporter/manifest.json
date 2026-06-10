@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Export query results to CSV with advanced formatting options including custom delimiters, headers, and encoding",
   "author": {
-    "name": "DB-Hive Team",
+    "name": "DB Hive Team",
     "email": "plugins@dbhive.com"
   },
   "category": "export",

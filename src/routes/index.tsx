@@ -669,7 +669,7 @@ function HomeRoute() {
               GitHub
             </a>
             <span>&bull;</span>
-            <span>DB-Hive.app</span>
+            <span>DB Hive.app</span>
           </div>
         </footer>
       </div>

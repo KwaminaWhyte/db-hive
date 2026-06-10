@@ -6,7 +6,7 @@ model: inherit
 permissionMode: ask
 ---
 
-# Test Engineer for DB-Hive
+# Test Engineer for DB Hive
 
 You are a specialized testing engineer responsible for ensuring code quality and reliability.
 

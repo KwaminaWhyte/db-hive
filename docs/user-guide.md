@@ -1,6 +1,6 @@
-# DB-Hive User Guide
+# DB Hive User Guide
 
-Complete guide to using DB-Hive database client.
+Complete guide to using DB Hive database client.
 
 ## Table of Contents
 
@@ -18,7 +18,7 @@ Complete guide to using DB-Hive database client.
 
 ### First Launch
 
-When you first launch DB-Hive, you'll see the Connections screen. This is where you manage all your database connections.
+When you first launch DB Hive, you'll see the Connections screen. This is where you manage all your database connections.
 
 ### Creating Your First Connection
 
@@ -473,7 +473,7 @@ SELECT status, COUNT(*) FROM users GROUP BY status;
 
 ## Automatic Updates
 
-DB-Hive checks for updates automatically and notifies you when a new version is available.
+DB Hive checks for updates automatically and notifies you when a new version is available.
 
 ### In-App Update Banner
 

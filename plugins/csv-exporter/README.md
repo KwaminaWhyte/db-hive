@@ -14,7 +14,7 @@ Export your database query results to CSV format with advanced formatting option
 
 ## Installation
 
-1. Open DB-Hive
+1. Open DB Hive
 2. Navigate to View → Plugin Manager
 3. Search for "CSV Exporter"
 4. Click Install

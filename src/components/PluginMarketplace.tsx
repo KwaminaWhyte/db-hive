@@ -152,7 +152,7 @@ export function PluginMarketplace() {
       <div className="border-b px-6 py-4">
         <h1 className="text-2xl font-semibold">Plugin Marketplace</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Discover and install plugins to extend DB-Hive
+          Discover and install plugins to extend DB Hive
         </p>
       </div>
 

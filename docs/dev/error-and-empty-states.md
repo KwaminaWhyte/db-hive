@@ -1,6 +1,6 @@
 # Error & Empty State Components
 
-This document provides comprehensive documentation for DB-Hive's error and empty state components (Milestone 3.9).
+This document provides comprehensive documentation for DB Hive's error and empty state components (Milestone 3.9).
 
 ## Overview
 

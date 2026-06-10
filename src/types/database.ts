@@ -1,5 +1,5 @@
 /**
- * Database types for DB-Hive
+ * Database types for DB Hive
  *
  * These types match the Rust backend models defined in src-tauri/src/models/
  * Note: Rust uses snake_case, TypeScript uses camelCase for field names

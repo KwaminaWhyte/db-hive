@@ -1,5 +1,5 @@
 /**
- * Advanced CSV Exporter Plugin for DB-Hive
+ * Advanced CSV Exporter Plugin for DB Hive
  *
  * This plugin adds advanced CSV export functionality with:
  * - Custom delimiters

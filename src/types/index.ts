@@ -1,5 +1,5 @@
 /**
- * Type exports for DB-Hive
+ * Type exports for DB Hive
  */
 
 export type {

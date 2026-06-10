@@ -61,7 +61,7 @@ export const QueryPanelExample: FC = () => {
     <div className="h-screen w-full">
       {/* Connection selector (simplified for example) */}
       <div className="h-12 border-b px-4 flex items-center gap-4 bg-background">
-        <h1 className="font-semibold">DB-Hive Query Editor</h1>
+        <h1 className="font-semibold">DB Hive Query Editor</h1>
         <div className="text-sm text-muted-foreground">
           {activeConnectionId
             ? `Connected to: ${activeConnectionId}`

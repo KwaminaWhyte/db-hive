@@ -1,4 +1,4 @@
-# DB-Hive: Actionable Implementation Roadmap
+# DB Hive: Actionable Implementation Roadmap
 
 **A Professional Database Client Built with Tauri + React**
 
@@ -634,7 +634,7 @@ For detailed architecture patterns, see `CLAUDE.md`.
 **Application Information**
 
 - [x] Create About page (`/about` route):
-  - [x] DB-Hive logo matching titlebar branding (centered)
+  - [x] DB Hive logo matching titlebar branding (centered)
   - [x] Version number (0.7.0-beta) with badge styling
   - [x] App tagline: "A Professional Cross-Platform Database Client"
   - [x] Contributors & Core Team section with "Built with Claude Code" badge

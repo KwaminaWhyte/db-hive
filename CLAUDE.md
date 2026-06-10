@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DB-Hive is a cross-platform database client built with Tauri 2.0 + React 19. The project is in **early development phase** with planning and architecture complete. The goal is to build a professional database client competing with Beekeeper Studio and DbGate, supporting PostgreSQL, MySQL, SQLite, MongoDB, and SQL Server.
+DB Hive is a cross-platform database client built with Tauri 2.0 + React 19. The project is in **early development phase** with planning and architecture complete. The goal is to build a professional database client competing with Beekeeper Studio and DbGate, supporting PostgreSQL, MySQL, SQLite, MongoDB, and SQL Server.
 
 ## Commands
 
@@ -42,7 +42,7 @@ npm run tauri icon       # Generate app icons
 
 ### Multi-Process Model
 
-DB-Hive follows Tauri's multi-process architecture:
+DB Hive follows Tauri's multi-process architecture:
 
 1. **Core Process (Rust)**: `src-tauri/src/`
    - Entry point: `lib.rs` exports `run()` function
@@ -60,7 +60,7 @@ DB-Hive follows Tauri's multi-process architecture:
 
 ### Multi-Window Model
 
-DB-Hive is **multi-window**: any number of OS windows, each an independent
+DB Hive is **multi-window**: any number of OS windows, each an independent
 WebView with its own connection context, backed by the single shared Rust
 core.
 

@@ -1,6 +1,6 @@
 # Empty State Components
 
-A collection of reusable empty state components for DB-Hive, designed to provide a friendly and encouraging user experience when there's no data to display.
+A collection of reusable empty state components for DB Hive, designed to provide a friendly and encouraging user experience when there's no data to display.
 
 ## Components
 
@@ -326,7 +326,7 @@ Example with custom illustration:
 
 ```tsx
 <EmptyState
-  title="Welcome to DB-Hive"
+  title="Welcome to DB Hive"
   message="Your database management journey starts here."
   illustration={
     <img src="/welcome.svg" alt="" className="w-32 h-32" />

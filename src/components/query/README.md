@@ -1,6 +1,6 @@
 # Query Components
 
-SQL Editor and Results Viewer components for DB-Hive database client.
+SQL Editor and Results Viewer components for DB Hive database client.
 
 ## Components
 

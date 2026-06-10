@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 /// Supported database drivers
 ///
-/// Represents the different types of databases that DB-Hive can connect to.
+/// Represents the different types of databases that DB Hive can connect to.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum DbDriver {
     /// PostgreSQL database

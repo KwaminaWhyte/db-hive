@@ -108,7 +108,7 @@ pub async fn get_marketplace_plugins(
                 version: "1.0.0".to_string(),
                 description: "Export query results to CSV with advanced formatting options".to_string(),
                 author: PluginAuthor {
-                    name: "DB-Hive Team".to_string(),
+                    name: "DB Hive Team".to_string(),
                     email: Some("plugins@dbhive.com".to_string()),
                     url: None,
                 },

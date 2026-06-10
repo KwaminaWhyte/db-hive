@@ -4,7 +4,7 @@ use serde_json::Value;
 use std::collections::HashMap;
 use tauri::{Emitter, Manager};
 
-/// API exposed to plugins for interacting with DB-Hive
+/// API exposed to plugins for interacting with DB Hive
 pub struct PluginApi {
     context: PluginContext,
 }

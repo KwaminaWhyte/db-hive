@@ -1,6 +1,6 @@
 # Error & Empty States - Quick Reference
 
-Quick reference guide for using error and empty state components in DB-Hive.
+Quick reference guide for using error and empty state components in DB Hive.
 
 ---
 

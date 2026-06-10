@@ -1,4 +1,4 @@
-# TanStack Router Implementation Plan for DB-Hive
+# TanStack Router Implementation Plan for DB Hive
 
 **Document Version:** 1.3
 **Date:** 2025-11-21
@@ -48,7 +48,7 @@
 
 ## Executive Summary
 
-This plan outlines the complete migration of DB-Hive from manual state-based navigation to **TanStack Router** with file-based routing.
+This plan outlines the complete migration of DB Hive from manual state-based navigation to **TanStack Router** with file-based routing.
 
 ### 🎯 Migration Goals
 
@@ -1558,7 +1558,7 @@ Add JSDoc comments to all route files:
 ```bash
 #!/bin/bash
 
-# DB-Hive TanStack Router Migration Script
+# DB Hive TanStack Router Migration Script
 
 set -e
 
@@ -1698,7 +1698,7 @@ function RouteComponent() {
 
 ## Conclusion
 
-This comprehensive plan provides a complete roadmap for migrating DB-Hive from manual state-based navigation to TanStack Router. The migration will significantly improve code quality, maintainability, and user experience while setting a foundation for future features like deep linking and query sharing.
+This comprehensive plan provides a complete roadmap for migrating DB Hive from manual state-based navigation to TanStack Router. The migration will significantly improve code quality, maintainability, and user experience while setting a foundation for future features like deep linking and query sharing.
 
 **Recommendation:** Proceed with **Option C** (feature branch approach) to minimize risk and allow thorough testing before merging to main.
 

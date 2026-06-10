@@ -1,4 +1,4 @@
-# DB-Hive Documentation
+# DB Hive Documentation
 
 Index of documentation files.
 

@@ -44,10 +44,10 @@ pub struct PluginManifest {
     /// Required permissions for the plugin
     pub permissions: Vec<PluginPermission>,
 
-    /// Minimum DB-Hive version required
+    /// Minimum DB Hive version required
     pub min_version: String,
 
-    /// Maximum DB-Hive version supported (optional)
+    /// Maximum DB Hive version supported (optional)
     pub max_version: Option<String>,
 
     /// Plugin icon URL or path

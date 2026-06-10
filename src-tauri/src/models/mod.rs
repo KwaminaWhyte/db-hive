@@ -1,4 +1,4 @@
-//! Data models for DB-Hive
+//! Data models for DB Hive
 //!
 //! This module contains all the core data structures used throughout the application,
 //! including connection profiles, metadata types, and error definitions.

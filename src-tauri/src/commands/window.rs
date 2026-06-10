@@ -1,6 +1,6 @@
 //! Multi-window management
 //!
-//! DB-Hive supports opening multiple independent OS windows, each able to
+//! DB Hive supports opening multiple independent OS windows, each able to
 //! connect to a different database. The Rust core stays a single process with
 //! one shared [`crate::state::AppState`]: active connections are keyed by
 //! connection ID, so two windows talking to different databases never collide.

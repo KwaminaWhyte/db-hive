@@ -1,6 +1,6 @@
 # Code Signing Guide
 
-This document explains how to set up code signing for DB-Hive across different platforms.
+This document explains how to set up code signing for DB Hive across different platforms.
 
 ## Linux - AppImage Signing with GPG
 
@@ -29,7 +29,7 @@ Follow the prompts:
 - Choose **RSA and RSA** (default)
 - Key size: **4096** bits (recommended for signing)
 - Expiration: Choose based on your needs (e.g., 2 years)
-- Real name: **DB-Hive Release** (or your organization name)
+- Real name: **DB Hive Release** (or your organization name)
 - Email: Use your official email
 - Comment: **Code Signing Key** (optional)
 
@@ -45,7 +45,7 @@ Output example:
 ------------------------------------
 sec   rsa4096/ABCD1234EFGH5678 2025-11-19 [SC]
       1234567890ABCDEF1234567890ABCDEF12345678
-uid                 [ultimate] DB-Hive Release <release@example.com>
+uid                 [ultimate] DB Hive Release <release@example.com>
 ssb   rsa4096/WXYZ9876STUV4321 2025-11-19 [E]
 ```
 

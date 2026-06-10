@@ -1,4 +1,4 @@
-//! Backup and restore data models for DB-Hive
+//! Backup and restore data models for DB Hive
 //!
 //! This module defines the types used for database backup/restore operations,
 //! including backup entries, options, and progress reporting.

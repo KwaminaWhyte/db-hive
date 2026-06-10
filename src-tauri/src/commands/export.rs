@@ -322,7 +322,7 @@ pub async fn export_to_sql(
         .map_err(|e| DbError::InternalError(format!("Failed to create SQL file: {}", e)))?;
 
     // Write header comment
-    writeln!(file, "-- DB-Hive SQL Dump")
+    writeln!(file, "-- DB Hive SQL Dump")
         .map_err(|e| DbError::InternalError(format!("Failed to write SQL header: {}", e)))?;
     writeln!(file, "-- Database: {:?}", driver)
         .map_err(|e| DbError::InternalError(format!("Failed to write SQL header: {}", e)))?;
@@ -857,7 +857,7 @@ fn write_import_log(
     errors: &[String],
 ) -> std::io::Result<()> {
     let mut f = File::create(log_path)?;
-    writeln!(f, "DB-Hive SQL Import Error Log")?;
+    writeln!(f, "DB Hive SQL Import Error Log")?;
     writeln!(f, "Source file : {}", sql_path)?;
     writeln!(f, "Timestamp   : {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"))?;
     writeln!(f, "Executed    : {}", executed)?;

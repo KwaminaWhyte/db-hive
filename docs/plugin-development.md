@@ -1,8 +1,8 @@
-# DB-Hive Plugin Development Guide
+# DB Hive Plugin Development Guide
 
 ## Overview
 
-DB-Hive supports extending its functionality through plugins. Plugins can add new features, integrate with external services, modify the UI, and much more.
+DB Hive supports extending its functionality through plugins. Plugins can add new features, integrate with external services, modify the UI, and much more.
 
 ## Table of Contents
 
@@ -19,12 +19,12 @@ DB-Hive supports extending its functionality through plugins. Plugins can add ne
 ### Prerequisites
 
 - Basic knowledge of JavaScript or WebAssembly
-- Understanding of DB-Hive's architecture
+- Understanding of DB Hive's architecture
 - Node.js (for JavaScript plugins) or Rust (for WASM plugins)
 
 ### Plugin Types
 
-DB-Hive supports two types of plugins:
+DB Hive supports two types of plugins:
 
 1. **JavaScript Plugins**: Written in JavaScript/TypeScript, run in a sandboxed environment
 2. **WebAssembly Plugins**: Compiled from languages like Rust, C++, or Go
@@ -132,7 +132,7 @@ Create `manifest.json`:
   "id": "com.example.awesome",
   "name": "Awesome Plugin",
   "version": "1.0.0",
-  "description": "My awesome DB-Hive plugin",
+  "description": "My awesome DB Hive plugin",
   "author": {
     "name": "Your Name"
   },
@@ -191,7 +191,7 @@ __plugin_exports__ = {
 
 ### Global Object: `DBHive`
 
-The `DBHive` object is available globally in your plugin and provides access to DB-Hive's functionality.
+The `DBHive` object is available globally in your plugin and provides access to DB Hive's functionality.
 
 ### Database API
 
@@ -394,7 +394,7 @@ async function myFunction() {
 
 ### 5. Compatibility
 
-- Test with different DB-Hive versions
+- Test with different DB Hive versions
 - Handle missing features gracefully
 - Specify accurate version requirements
 
@@ -402,9 +402,9 @@ async function myFunction() {
 
 ### Local Development
 
-1. Create a `plugins` directory in your DB-Hive installation
+1. Create a `plugins` directory in your DB Hive installation
 2. Copy your plugin folder to the plugins directory
-3. Restart DB-Hive
+3. Restart DB Hive
 4. Your plugin should appear in the Plugin Manager
 
 ### Testing Checklist
@@ -448,7 +448,7 @@ zip -r my-plugin-1.0.0.zip my-plugin/
 
 ### 3. Submit to Marketplace
 
-1. Fork the [DB-Hive Plugins Repository](https://github.com/dbhive/plugins)
+1. Fork the [DB Hive Plugins Repository](https://github.com/dbhive/plugins)
 2. Add your plugin to the `plugins` directory
 3. Update the `marketplace.json` file
 4. Create a pull request

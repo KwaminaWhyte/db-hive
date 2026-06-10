@@ -74,9 +74,9 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "DB-Hive ${{ github.ref_name }}"
+          releaseName: "DB Hive ${{ github.ref_name }}"
           releaseBody: |
-            ## DB-Hive ${{ github.ref_name }}
+            ## DB Hive ${{ github.ref_name }}
 
             See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
 
@@ -86,7 +86,7 @@ jobs:
             - Download the `.dmg` file for your architecture:
               - `aarch64.dmg` for Apple Silicon (M1/M2/M3)
               - `x64.dmg` for Intel Macs
-            - Open the DMG and drag DB-Hive to Applications
+            - Open the DMG and drag DB Hive to Applications
             - On first launch, right-click → Open to bypass Gatekeeper
 
             **Windows:**

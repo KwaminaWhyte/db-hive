@@ -34,7 +34,7 @@ function PluginsRoute() {
           <div>
             <h1 className="text-2xl font-semibold">Plugin Manager</h1>
             <p className="text-sm text-muted-foreground">
-              Extend DB-Hive with plugins
+              Extend DB Hive with plugins
             </p>
           </div>
         </div>

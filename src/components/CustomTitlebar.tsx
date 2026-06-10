@@ -302,7 +302,7 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleOpenAbout}>
-                About DB-Hive
+                About DB Hive
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

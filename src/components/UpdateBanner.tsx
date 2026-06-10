@@ -63,7 +63,7 @@ export const UpdateBanner: FC<UpdateBannerProps> = ({
             <>
               <p className="text-sm font-medium">Update Available</p>
               <p className="text-xs text-muted-foreground truncate">
-                DB-Hive {status.version} is ready to download
+                DB Hive {status.version} is ready to download
               </p>
             </>
           )}

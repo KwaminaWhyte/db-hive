@@ -1,5 +1,5 @@
 /**
- * Component exports for DB-Hive
+ * Component exports for DB Hive
  */
 
 export { ConnectionForm } from './ConnectionForm';

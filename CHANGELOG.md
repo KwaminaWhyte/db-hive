@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to DB-Hive will be documented in this file.
+All notable changes to DB Hive will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added (2026-05-17)
 
-- **Multi-window support**: DB-Hive can now open multiple independent OS windows, each with its own connection. The Rust core stays a single process with one shared `AppState`; active connections are keyed by connection ID, so two windows talking to different databases never collide, and the OS keyring/credential layer remains shared and safe. New windows are created on the Rust side via `open_database_window` (`commands/window.rs`) with a unique `win-{uuid}` label; window chrome mirrors `main` (macOS overlay title bar / non-macOS decorations off). Affordances: per-connection **"Open in New Window"** in the home-screen profile menu (auto-connects the new window to that profile via a one-shot `PendingWindowProfiles` map consumed by `take_pending_window_profile` on boot), **File → New Window** in the custom titlebar, a **New Window** tray menu item, and a global **⌘⇧N / Ctrl+⇧N** shortcut. The Tauri capability now matches `win-*` windows; per-window geometry persistence (`windowState.ts`) is keyed by window label so windows no longer clobber each other's position/size (the `main` window keeps its legacy key).
+- **Multi-window support**: DB Hive can now open multiple independent OS windows, each with its own connection. The Rust core stays a single process with one shared `AppState`; active connections are keyed by connection ID, so two windows talking to different databases never collide, and the OS keyring/credential layer remains shared and safe. New windows are created on the Rust side via `open_database_window` (`commands/window.rs`) with a unique `win-{uuid}` label; window chrome mirrors `main` (macOS overlay title bar / non-macOS decorations off). Affordances: per-connection **"Open in New Window"** in the home-screen profile menu (auto-connects the new window to that profile via a one-shot `PendingWindowProfiles` map consumed by `take_pending_window_profile` on boot), **File → New Window** in the custom titlebar, a **New Window** tray menu item, and a global **⌘⇧N / Ctrl+⇧N** shortcut. The Tauri capability now matches `win-*` windows; per-window geometry persistence (`windowState.ts`) is keyed by window label so windows no longer clobber each other's position/size (the `main` window keeps its legacy key).
 
 ## [0.20.0] - 2026-05-17
 
@@ -410,7 +410,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **About Page (Milestone 3.10)**: Professional About page accessible via Help menu
   - **Core Features**:
     - Full-page About route (`/about`) with clean, centered layout
-    - Large DB-Hive logo matching the titlebar branding
+    - Large DB Hive logo matching the titlebar branding
     - App version display (0.7.0-beta) with "Check for Updates" button
     - Back button with smart navigation to previous route
   - **Content Sections**:
@@ -1567,7 +1567,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Loading states with skeleton components
 - Error boundary for graceful error handling
 - Responsive layout with resizable panels
-- Welcome screen with DB-Hive logo
+- Welcome screen with DB Hive logo
 - Connection form with validation
 
 ### Fixed

@@ -1,4 +1,4 @@
-//! Backup and restore commands for DB-Hive
+//! Backup and restore commands for DB Hive
 //!
 //! Provides database backup/restore via native CLI tools (pg_dump, mysqldump,
 //! sqlite file copy). Backups are stored in the app data directory.

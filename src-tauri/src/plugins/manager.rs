@@ -20,7 +20,7 @@ pub struct PluginManager {
     /// Map of plugin ID to plugin instance
     plugins: Arc<RwLock<HashMap<String, Plugin>>>,
 
-    /// Current DB-Hive version for compatibility checks
+    /// Current DB Hive version for compatibility checks
     app_version: String,
 }
 
