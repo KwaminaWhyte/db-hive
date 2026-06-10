@@ -38,5 +38,5 @@ Each report contains per-finding `file:line` references and an actionable checkb
 
 ### Phase 5 — Hygiene
 
-- [ ] Run `cargo audit` and `bun audit`; address the 29 open Dependabot alerts on GitHub.
+- [x] Run `bun audit`; updated deps + overrides cut 28 npm vulnerabilities to 3 (all build-time-only: picomatch ReDoS and jsdiff DoS via vite/router-plugin — fixes pending upstream releases). `cargo audit` not installed locally; run `cargo install cargo-audit && cargo audit` in src-tauri and re-check the GitHub Dependabot alerts.
 - [ ] Security/Performance/UX Low findings as time permits.
