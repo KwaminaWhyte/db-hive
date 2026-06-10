@@ -12,6 +12,7 @@ import {
   getDefaultPort,
   getDriverDisplayName,
 } from "../types/database";
+import { formatDbError } from "@/utils/formatDbError";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,7 +54,11 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [testStatus, setTestStatus] = useState<{ kind: "success" | "failure"; message: string } | null>(null);
+  const [testStatus, setTestStatus] = useState<{
+    kind: "success" | "failure";
+    message: string;
+    detail?: string;
+  } | null>(null);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -300,11 +305,22 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
           }
         }
       } else {
-        setTestStatus({ kind: "failure", message: "Connection failed" });
+        // ConnectionStatus is 'Disconnected' or { Error: string } here —
+        // surface the underlying reason instead of a bare "Connection failed"
+        const reason =
+          typeof status === "object" && "Error" in status
+            ? status.Error
+            : undefined;
+        const formatted = reason ? formatDbError(reason) : null;
+        setTestStatus({
+          kind: "failure",
+          message: formatted?.headline ?? "Connection failed",
+          detail: formatted?.detail,
+        });
       }
     } catch (err) {
-      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
-      setError(`Connection test failed: ${errorMessage}`);
+      const { headline, detail } = formatDbError(err);
+      setTestStatus({ kind: "failure", message: headline, detail });
     } finally {
       setLoading(false);
       setTesting(false);
@@ -354,8 +370,8 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
 
       onSuccess?.(profileId);
     } catch (err) {
-      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
-      setError(`Failed to save profile: ${errorMessage}`);
+      const { headline, detail } = formatDbError(err);
+      setError(detail ? `${headline} — ${detail}` : headline);
     } finally {
       setLoading(false);
       setSaving(false);
@@ -835,7 +851,12 @@ export const ConnectionForm: FC<ConnectionFormProps> = ({
           </div>
         ) : (
           <div className="rounded-lg bg-destructive/10 border border-destructive/20 p-3 text-sm text-destructive">
-            {testStatus.message}
+            <p>{testStatus.message}</p>
+            {testStatus.detail && (
+              <p className="mt-1 font-mono text-xs text-destructive/80 break-words">
+                {testStatus.detail}
+              </p>
+            )}
           </div>
         )
       )}

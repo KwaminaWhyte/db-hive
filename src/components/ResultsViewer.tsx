@@ -22,10 +22,12 @@ import {
   FileCode,
   Copy,
   BarChart3,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { invoke } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import { QueryErrorState } from "./QueryErrorState";
 import { NoResultsEmpty } from "./empty-states";
@@ -47,11 +49,25 @@ interface ResultsViewerProps {
   /** Loading state */
   loading: boolean;
 
-  /** Error message */
+  /** Error message (human-friendly headline; see formatDbError) */
   error: string | null;
+
+  /** Raw backend/driver error message for diagnostics */
+  errorDetail?: string;
+
+  /** Structured DbError kind (e.g. "query", "connection") */
+  errorKind?: string;
 
   /** Execution time in milliseconds */
   executionTime?: number;
+
+  /**
+   * Abandon waiting on the in-flight query (UX-12). When provided, the
+   * loading state shows a Cancel button. The owner marks the execution
+   * stale so a late result is ignored; the query may still complete on
+   * the server.
+   */
+  onCancelWait?: () => void;
 }
 
 const ResultsViewerComponent: FC<ResultsViewerProps> = ({
@@ -60,7 +76,10 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
   rowsAffected,
   loading,
   error,
+  errorDetail,
+  errorKind,
   executionTime,
+  onCancelWait,
 }) => {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [exporting, setExporting] = useState(false);
@@ -111,6 +130,28 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
     [rows, columns, copyToClipboard]
   );
 
+  // Success toast with a "Reveal" action that opens the containing folder
+  const notifyExportSuccess = useCallback(
+    (filePath: string) => {
+      const fileName = filePath.split(/[/\\]/).pop() || filePath;
+      toast.success(
+        `Exported ${rows.length} row${rows.length !== 1 ? "s" : ""} to ${fileName}`,
+        {
+          action: {
+            label: "Reveal",
+            onClick: () => {
+              revealItemInDir(filePath).catch((err) => {
+                console.error("Failed to reveal exported file:", err);
+                toast.error("Failed to open containing folder");
+              });
+            },
+          },
+        }
+      );
+    },
+    [rows.length]
+  );
+
   // Handle CSV export
   const handleExportCSV = async () => {
     try {
@@ -131,6 +172,7 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
           columns,
           rows,
         });
+        notifyExportSuccess(filePath);
       }
     } catch (err) {
       console.error("Failed to export CSV:", err);
@@ -160,6 +202,7 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
           columns,
           rows,
         });
+        notifyExportSuccess(filePath);
       }
     } catch (err) {
       console.error("Failed to export JSON:", err);
@@ -367,6 +410,17 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
           <div className="flex flex-col items-center gap-3 text-muted-foreground">
             <Loader2 className="h-8 w-8 animate-spin" />
             <p>Executing query...</p>
+            {onCancelWait && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onCancelWait}
+                className="gap-1"
+              >
+                <X className="h-4 w-4" />
+                Cancel
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -380,6 +434,8 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
         <CardContent className="flex-1 flex items-center justify-center p-6">
           <QueryErrorState
             message={error}
+            detail={errorDetail}
+            errorCode={errorKind}
           />
         </CardContent>
       </Card>

@@ -1,5 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createFileRoute, Outlet, useNavigate } from "@tanstack/react-router";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  Panel,
+  PanelGroup,
+  PanelResizeHandle,
+  type ImperativePanelHandle,
+} from "react-resizable-panels";
 import { SchemaExplorer } from "@/components/SchemaExplorer";
 import { EnvironmentBadge } from "@/components/EnvironmentBadge";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
@@ -10,7 +17,29 @@ import {
   TooltipTrigger,
   TooltipContent,
 } from "@/components/ui/tooltip";
-import { LogOut, Database, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  LogOut,
+  Database,
+  PanelLeftClose,
+  PanelLeftOpen,
+  GripVertical,
+} from "lucide-react";
+
+const isMacOS = navigator.userAgent.includes("Mac");
+
+// Sidebar layout is scoped per OS window so multiple open windows
+// (multi-window mode) don't clobber each other's panel sizes. The `main`
+// window keeps the un-suffixed key for backward compatibility.
+function sidebarLayoutId(): string {
+  try {
+    const label = getCurrentWindow().label;
+    return label === "main"
+      ? "db-hive-connected-layout"
+      : `db-hive-connected-layout-${label}`;
+  } catch {
+    return "db-hive-connected-layout";
+  }
+}
 
 /**
  * Connected Layout Route
@@ -43,9 +72,17 @@ function ConnectedLayout() {
   } = useConnectionContext();
   const { getTabState, updateTabState, createTabState } = useTabContext();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const sidebarPanelRef = useRef<ImperativePanelHandle>(null);
+  const [layoutId] = useState(sidebarLayoutId);
 
   const toggleSidebar = useCallback(() => {
-    setSidebarCollapsed((prev) => !prev);
+    const panel = sidebarPanelRef.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) {
+      panel.expand();
+    } else {
+      panel.collapse();
+    }
   }, []);
 
   // Keyboard shortcut: Cmd+B / Ctrl+B to toggle sidebar
@@ -60,9 +97,17 @@ function ConnectedLayout() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [toggleSidebar]);
 
-  // Guard: If not connected, redirect to home page
+  // Guard: If not connected, redirect to home page.
+  // The redirect lives in an effect (not the render body) because connection
+  // state lives in React context, which beforeLoad can't reach.
+  const isConnected = Boolean(connectionId && connectionProfile);
+  useEffect(() => {
+    if (!isConnected) {
+      navigate({ to: "/" });
+    }
+  }, [isConnected, navigate]);
+
   if (!connectionId || !connectionProfile) {
-    navigate({ to: "/" });
     return null;
   }
 
@@ -237,7 +282,8 @@ function ConnectedLayout() {
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="bottom">
-                {sidebarCollapsed ? "Show sidebar" : "Hide sidebar"} (Cmd+B)
+                {sidebarCollapsed ? "Show sidebar" : "Hide sidebar"} (
+                {isMacOS ? "Cmd" : "Ctrl"}+B)
               </TooltipContent>
             </Tooltip>
             <Database className="size-3.5 text-muted-foreground" />
@@ -275,31 +321,51 @@ function ConnectedLayout() {
       </div>
 
       {/* Main Content Area (with top padding for titlebar + connection bar) */}
-      <div className="flex-1 flex pt-8">
-        {/* Left Sidebar - Schema Explorer */}
-        <div
-          className={`border-r overflow-hidden transition-[width] duration-200 ease-in-out ${
-            sidebarCollapsed ? "w-0 border-r-0" : "w-80"
-          }`}
+      <div className="flex-1 pt-8 overflow-hidden">
+        <PanelGroup
+          direction="horizontal"
+          autoSaveId={layoutId}
+          className="h-full"
         >
-          <div className="w-80 h-full overflow-y-auto">
-            <SchemaExplorer
-              connectionId={connectionId}
-              connectionProfile={connectionProfile}
-              onDisconnect={handleDisconnect}
-              onTableSelect={handleTableSelect}
-              onDatabaseChange={setCurrentDatabase}
-              onOpenERDiagram={handleOpenERDiagram}
-              onExecuteQuery={handleExecuteQuery}
-              onRedisKeySelect={handleRedisKeySelect}
-            />
-          </div>
-        </div>
+          {/* Left Sidebar - Schema Explorer */}
+          <Panel
+            ref={sidebarPanelRef}
+            collapsible
+            collapsedSize={0}
+            defaultSize={22}
+            minSize={15}
+            maxSize={40}
+            onCollapse={() => setSidebarCollapsed(true)}
+            onExpand={() => setSidebarCollapsed(false)}
+          >
+            <div className="h-full overflow-y-auto">
+              <SchemaExplorer
+                connectionId={connectionId}
+                connectionProfile={connectionProfile}
+                onDisconnect={handleDisconnect}
+                onTableSelect={handleTableSelect}
+                onDatabaseChange={setCurrentDatabase}
+                onOpenERDiagram={handleOpenERDiagram}
+                onExecuteQuery={handleExecuteQuery}
+                onRedisKeySelect={handleRedisKeySelect}
+              />
+            </div>
+          </Panel>
 
-        {/* Main Content - Child Routes */}
-        <div className="flex-1 overflow-hidden">
-          <Outlet />
-        </div>
+          {/* Sidebar Resize Handle */}
+          <PanelResizeHandle className="group relative w-1 bg-border hover:bg-primary/50 transition-colors">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity" />
+            </div>
+          </PanelResizeHandle>
+
+          {/* Main Content - Child Routes */}
+          <Panel defaultSize={78} minSize={50}>
+            <div className="h-full overflow-hidden">
+              <Outlet />
+            </div>
+          </Panel>
+        </PanelGroup>
       </div>
     </div>
   );

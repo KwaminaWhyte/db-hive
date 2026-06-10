@@ -10,6 +10,12 @@ export interface QueryErrorStateProps {
   message: string;
 
   /**
+   * Raw backend/driver error output (preserved by formatDbError); shown
+   * beneath the message for diagnostics
+   */
+  detail?: string;
+
+  /**
    * Optional SQL query that caused the error
    */
   query?: string;
@@ -65,6 +71,7 @@ export interface QueryErrorStateProps {
  */
 export const QueryErrorState: FC<QueryErrorStateProps> = ({
   message,
+  detail,
   query,
   onRetry,
   onViewDocs,
@@ -105,6 +112,7 @@ export const QueryErrorState: FC<QueryErrorStateProps> = ({
     const errorDetails = [
       errorCode ? `Error Code: ${errorCode}` : "",
       `Message: ${message}`,
+      detail ? `Detail: ${detail}` : "",
       query ? `\nQuery:\n${query}` : "",
     ]
       .filter(Boolean)
@@ -165,6 +173,11 @@ export const QueryErrorState: FC<QueryErrorStateProps> = ({
           <p className="text-sm text-foreground font-mono leading-relaxed break-words">
             {message}
           </p>
+          {detail && (
+            <p className="mt-2 text-xs text-muted-foreground font-mono leading-relaxed break-words">
+              {detail}
+            </p>
+          )}
         </div>
 
         {/* Query Details (collapsible) */}

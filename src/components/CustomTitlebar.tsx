@@ -4,7 +4,7 @@
  * Replaces native window decorations with a custom titlebar that includes:
  * - Drag region for window movement
  * - App branding
- * - Window menu system (File, View, Window, Help)
+ * - Window menu system (File, View, Help)
  * - Window controls (minimize, maximize, close)
  */
 
@@ -30,6 +30,8 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { useTheme } from "./theme-provider";
+import { useSettings } from "@/hooks/useSettings";
+import { formatShortcutKeys } from "@/lib/shortcutRegistry";
 
 interface CustomTitlebarProps {
   onShowShortcuts?: () => void;
@@ -99,6 +101,10 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
     }
   };
 
+  // Live settings shortcut binding (user-rebindable) for the menu hint
+  const { settings } = useSettings();
+  const openSettingsKey = settings?.shortcuts?.openSettings ?? "Ctrl+,";
+
   // Open overlay modals instead of navigating to full-page routes so the
   // underlying route (e.g. SQL query editor) keeps its in-progress state.
   const handleOpenSettings = () => openAppModal("settings");
@@ -156,12 +162,19 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
               <DropdownMenuItem onClick={() => openDatabaseWindow()}>
                 New Window
                 <span className="ml-auto pl-4 text-xs text-muted-foreground">
-                  {isMacOS ? "⌘⇧N" : "Ctrl+⇧N"}
+                  {formatShortcutKeys("Ctrl+Shift+N")}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleOpenSettings}>
+                Settings
+                <span className="ml-auto pl-4 text-xs text-muted-foreground">
+                  {formatShortcutKeys(openSettingsKey)}
                 </span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleClose}>
-                Exit
+                Close Window
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -246,25 +259,6 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
                   </DropdownMenuItem>
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Window Menu */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs hover:bg-accent"
-              >
-                Window
-                <ChevronDown className="ml-1 h-3 w-3" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={handleOpenSettings}>
-                Settings
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 

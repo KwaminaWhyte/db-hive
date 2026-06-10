@@ -246,17 +246,17 @@ Both hand-rolled tab strips are clickable `div`s: no `role="tablist"`/`role="tab
 - [x] UX-03: Keyboard-accessible connection rows with a visible Connect affordance.
 - [x] UX-07: Unsaved-work protection (or undo) for single-tab close.
 - [x] UX-16: Arrow-key navigation + tree roles in SchemaExplorer.
-- [ ] UX-08: `formatDbError` helper; include detail in test-connection failures.
+- [x] UX-08: `formatDbError` helper; include detail in test-connection failures.
 
 **P2 — correctness and consistency**
-- [ ] UX-09: Generate the shortcuts modal from the live shortcut registry; remove fictional entries.
-- [ ] UX-10: Move the connected-layout redirect out of render.
-- [ ] UX-11: Resizable schema sidebar via PanelGroup.
-- [ ] UX-12: Export success toasts; cancellable query loading state.
+- [x] UX-09: Generate the shortcuts modal from the live shortcut registry; remove fictional entries.
+- [x] UX-10: Move the connected-layout redirect out of render.
+- [x] UX-11: Resizable schema sidebar via PanelGroup.
+- [x] UX-12: Export success toasts; cancellable query loading state.
 - [x] UX-13: Lazy AI schema context (via PERF-01 cached metadata) using the metadata cache.
-- [ ] UX-17: Platform-aware shortcut copy; rename "Exit"; relocate Settings menu item.
-- [ ] UX-14: Fix or delete the `db-hive-previous-route` back logic.
-- [ ] UX-15: Remove or revive the four dead connection-list components.
+- [x] UX-17: Platform-aware shortcut copy; rename "Exit"; relocate Settings menu item.
+- [x] UX-14: Fix or delete the `db-hive-previous-route` back logic.
+- [x] UX-15: Remove or revive the four dead connection-list components.
 
 **P3 — polish**
 - [ ] UX-18: Copy fixes (footer, driver casing, tagline, storage-key prefix).

@@ -1,4 +1,4 @@
-import { FC, useState, useEffect, useRef } from 'react';
+import { FC, useState, useEffect, useRef, useCallback } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { SQLEditor } from './SQLEditor';
 import { ResultsViewer } from './ResultsViewer';
@@ -11,7 +11,9 @@ import { AiAssistant } from './AiAssistant';
 import { QueryExecutionResult, ConnectionProfile } from '@/types/database';
 import { createQueryHistory } from '@/types/history';
 import { QueryCancelledError } from '@/utils/queryErrors';
+import { formatDbError, FormattedDbError } from '@/utils/formatDbError';
 import { invoke } from '@tauri-apps/api/core';
+import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { GripHorizontal, GripVertical, Sparkles } from 'lucide-react';
 import { QueryStatusBar } from './QueryStatusBar';
@@ -64,7 +66,7 @@ interface QueryPanelProps {
 interface QueryPanelSnapshot {
   sql: string;
   results: QueryExecutionResult | null;
-  error: string | null;
+  error: FormattedDbError | null;
   queryPlan: QueryPlanResult | null;
   showPlanView: boolean;
 }
@@ -108,7 +110,7 @@ function readSnapshot(panelId?: string): QueryPanelSnapshot | undefined {
     return {
       sql: active?.sql ?? '',
       results: active?.results ?? null,
-      error: active?.error ?? null,
+      error: active?.error ? { headline: active.error } : null,
       queryPlan: raw.queryPlan ?? null,
       showPlanView: raw.showPlanView ?? false,
     };
@@ -151,7 +153,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
   const [results, setResults] = useState<QueryExecutionResult | null>(
     initialSnapshot?.results ?? null
   );
-  const [error, setError] = useState<string | null>(
+  const [error, setError] = useState<FormattedDbError | null>(
     initialSnapshot?.error ?? null
   );
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
@@ -165,6 +167,18 @@ export const QueryPanel: FC<QueryPanelProps> = ({
   const [showPlanView, setShowPlanView] = useState(
     initialSnapshot?.showPlanView ?? false
   );
+
+  // Generation counter for in-flight executions (UX-12). There is no backend
+  // cancel_query command, so "Cancel" abandons the wait: bumping the counter
+  // marks the current execution stale and its late result/error is ignored
+  // (the query may still complete on the server).
+  const executionGenerationRef = useRef(0);
+  // Panel state captured at execute start so cancelling the wait can restore
+  // the panel untouched.
+  const preExecuteStateRef = useRef<{
+    results: QueryExecutionResult | null;
+    error: FormattedDbError | null;
+  }>({ results: null, error: null });
 
   // Schema context for the AI assistant — single cached
   // get_autocomplete_metadata call shared across all panels on this
@@ -216,14 +230,20 @@ export const QueryPanel: FC<QueryPanelProps> = ({
   // Handle query execution
   const handleExecute = async (sqlToExecute: string) => {
     if (!connectionId) {
-      setError('No active connection');
+      setError({ headline: 'No active connection' });
       return;
     }
 
     // Snapshot current state so a user-cancelled execution (e.g. dismissing
-    // the destructive-query guard) can restore it untouched.
+    // the destructive-query guard or abandoning the wait) can restore it
+    // untouched.
     const previousResults = results;
     const previousError = error;
+    preExecuteStateRef.current = {
+      results: previousResults,
+      error: previousError,
+    };
+    const generation = ++executionGenerationRef.current;
 
     setLoading(true);
     setError(null);
@@ -233,6 +253,11 @@ export const QueryPanel: FC<QueryPanelProps> = ({
 
     try {
       const result = await onExecuteQuery(sqlToExecute);
+
+      // Stale execution — the user cancelled the wait (or a newer execution
+      // started); drop this late result silently (UX-12).
+      if (generation !== executionGenerationRef.current) return;
+
       setResults(result);
       setLoading(false);
 
@@ -287,6 +312,10 @@ export const QueryPanel: FC<QueryPanelProps> = ({
           });
       }
     } catch (err: any) {
+      // Stale execution — the user cancelled the wait (or a newer execution
+      // started); drop this late error silently (UX-12).
+      if (generation !== executionGenerationRef.current) return;
+
       // User cancelled the destructive-query guard — silent no-op: restore
       // the panel as it was, no error banner, no history entry (UX-04).
       if (err instanceof QueryCancelledError) {
@@ -296,11 +325,13 @@ export const QueryPanel: FC<QueryPanelProps> = ({
         return;
       }
 
-      // Handle error - could be a DbError from Tauri
-      const errorMessage = err?.message || String(err);
+      // Handle error - could be a DbError { kind, message } from Tauri or a
+      // plain string/Error (UX-08: human headline + raw detail).
+      const formatted = formatDbError(err);
+      const errorMessage = formatted.detail ?? formatted.headline;
 
       // Check if this is a connection error
-      const isConnectionError = err?.kind === "connection" ||
+      const isConnectionError = formatted.kind === "connection" ||
                                errorMessage.toLowerCase().includes("connection lost") ||
                                errorMessage.toLowerCase().includes("server has gone away") ||
                                errorMessage.toLowerCase().includes("connection refused") ||
@@ -310,7 +341,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
         setConnectionLost(true);
       }
 
-      setError(errorMessage);
+      setError(formatted);
       setLoading(false);
 
       const executionTime = Date.now() - startTime;
@@ -339,6 +370,17 @@ export const QueryPanel: FC<QueryPanelProps> = ({
       }
     }
   };
+
+  // Abandon waiting on the in-flight query (UX-12). There is no backend
+  // cancel, so the execution is marked stale (its late result is ignored)
+  // and the panel is restored to its pre-execute state.
+  const handleCancelWait = useCallback(() => {
+    executionGenerationRef.current += 1;
+    setLoading(false);
+    setResults(preExecuteStateRef.current.results);
+    setError(preExecuteStateRef.current.error);
+    toast.info('Stopped waiting — the query may still complete on the server.');
+  }, []);
 
   // Handle inserting snippet into editor
   const handleInsertSnippet = (query: string) => {
@@ -436,8 +478,11 @@ export const QueryPanel: FC<QueryPanelProps> = ({
                   rows={results?.rows || []}
                   rowsAffected={results?.rowsAffected || null}
                   loading={loading}
-                  error={error}
+                  error={error?.headline ?? null}
+                  errorDetail={error?.detail}
+                  errorKind={error?.kind}
                   executionTime={results?.executionTime}
+                  onCancelWait={handleCancelWait}
                 />
               )}
             </div>
@@ -498,7 +543,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
             <AiAssistant
               currentSql={sql}
               schemaContext={schemaContext}
-              lastError={error || undefined}
+              lastError={error ? (error.detail ?? error.headline) : undefined}
               onSqlGenerated={(generated) => setSql(generated)}
             />
           </TabsContent>

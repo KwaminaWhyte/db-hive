@@ -173,7 +173,10 @@ export interface DbError {
     | 'timeout'
     | 'invalid_input'
     | 'not_found'
-    | 'internal';
+    | 'internal'
+    | 'credential'
+    | 'import'
+    | 'ai';
   message: string;
 }
 

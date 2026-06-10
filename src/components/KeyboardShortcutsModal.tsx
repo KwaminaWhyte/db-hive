@@ -5,7 +5,9 @@
  * Features:
  * - Search/filter functionality
  * - Platform-specific shortcuts (Cmd vs Ctrl)
- * - Organized by category (Editor, Navigation, Query, Tables)
+ * - Rendered from the shortcut registry (src/lib/shortcutRegistry.ts) so the
+ *   list always matches the real bindings, including user-rebound shortcuts
+ *   from Settings
  * - Triggered by "?" hotkey
  */
 
@@ -21,22 +23,30 @@ import { Input } from "@/components/ui/input";
 import { Search, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-export interface ShortcutDefinition {
-  label: string;
-  windows: string;
-  mac: string;
-  description?: string;
-}
-
-export interface ShortcutCategory {
-  category: string;
-  shortcuts: ShortcutDefinition[];
-}
+import { useSettings } from "@/hooks/useSettings";
+import {
+  formatShortcutKeys,
+  isMacOS,
+  resolveShortcutKeys,
+  shortcutRegistry,
+} from "@/lib/shortcutRegistry";
 
 interface KeyboardShortcutsModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+}
+
+interface DisplayShortcut {
+  id: string;
+  label: string;
+  description?: string;
+  /** Platform-formatted binding, with user rebinds applied */
+  keys: string;
+}
+
+interface DisplayCategory {
+  category: string;
+  shortcuts: DisplayShortcut[];
 }
 
 export const KeyboardShortcutsModal: FC<KeyboardShortcutsModalProps> = ({
@@ -44,112 +54,30 @@ export const KeyboardShortcutsModal: FC<KeyboardShortcutsModalProps> = ({
   onOpenChange,
 }) => {
   const [searchQuery, setSearchQuery] = useState("");
+  const { settings } = useSettings();
 
-  // Detect platform
-  const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
-
-  // Define all shortcuts organized by category
-  const allShortcuts: ShortcutCategory[] = [
-    {
-      category: "Editor",
-      shortcuts: [
-        {
-          label: "Execute Query",
-          windows: "Ctrl+Enter",
-          mac: "⌘+Enter",
-          description: "Run the current SQL query",
-        },
-        {
-          label: "Clear Editor",
-          windows: "Ctrl+K",
-          mac: "⌘+K",
-          description: "Clear all text from the editor",
-        },
-        {
-          label: "Format SQL",
-          windows: "Ctrl+Shift+F",
-          mac: "⌘+Shift+F",
-          description: "Auto-format SQL query",
-        },
-        {
-          label: "Save Snippet",
-          windows: "Ctrl+S",
-          mac: "⌘+S",
-          description: "Save current query as a snippet",
-        },
-      ],
-    },
-    {
-      category: "Navigation",
-      shortcuts: [
-        {
-          label: "New Tab",
-          windows: "Ctrl+T",
-          mac: "⌘+T",
-          description: "Open a new query tab",
-        },
-        {
-          label: "Close Tab",
-          windows: "Ctrl+W",
-          mac: "⌘+W",
-          description: "Close the current tab",
-        },
-        {
-          label: "Toggle Sidebar",
-          windows: "Ctrl+B",
-          mac: "⌘+B",
-          description: "Show/hide the schema explorer",
-        },
-        {
-          label: "Search",
-          windows: "Ctrl+F",
-          mac: "⌘+F",
-          description: "Search within the current view",
-        },
-        {
-          label: "Open Settings",
-          windows: "Ctrl+,",
-          mac: "⌘+,",
-          description: "Open application settings",
-        },
-        {
-          label: "Show Shortcuts",
-          windows: "?",
-          mac: "?",
-          description: "Show this keyboard shortcuts guide",
-        },
-      ],
-    },
-    {
-      category: "Welcome Screen",
-      shortcuts: [
-        {
-          label: "New Connection",
-          windows: "Ctrl+K",
-          mac: "⌘+K",
-          description: "Create a new database connection",
-        },
-        {
-          label: "Recent Connections",
-          windows: "Ctrl+R",
-          mac: "⌘+R",
-          description: "View recent connections",
-        },
-        {
-          label: "View Sample",
-          windows: "Ctrl+O",
-          mac: "⌘+O",
-          description: "Open sample workspace",
-        },
-        {
-          label: "Documentation",
-          windows: "?",
-          mac: "?",
-          description: "Open documentation",
-        },
-      ],
-    },
-  ];
+  // Build display data from the registry, substituting user-rebound keys
+  // and formatting modifiers for the current platform (⌘ vs Ctrl).
+  const allShortcuts = useMemo<DisplayCategory[]>(() => {
+    const categories: DisplayCategory[] = [];
+    for (const entry of shortcutRegistry) {
+      const keys = formatShortcutKeys(
+        resolveShortcutKeys(entry, settings?.shortcuts)
+      );
+      let category = categories.find((c) => c.category === entry.category);
+      if (!category) {
+        category = { category: entry.category, shortcuts: [] };
+        categories.push(category);
+      }
+      category.shortcuts.push({
+        id: entry.id,
+        label: entry.label,
+        description: entry.description,
+        keys,
+      });
+    }
+    return categories;
+  }, [settings?.shortcuts]);
 
   // Filter shortcuts based on search query
   const filteredShortcuts = useMemo(() => {
@@ -164,8 +92,7 @@ export const KeyboardShortcutsModal: FC<KeyboardShortcutsModalProps> = ({
         shortcuts: category.shortcuts.filter(
           (shortcut) =>
             shortcut.label.toLowerCase().includes(query) ||
-            shortcut.windows.toLowerCase().includes(query) ||
-            shortcut.mac.toLowerCase().includes(query) ||
+            shortcut.keys.toLowerCase().includes(query) ||
             shortcut.description?.toLowerCase().includes(query)
         ),
       }))
@@ -221,9 +148,9 @@ export const KeyboardShortcutsModal: FC<KeyboardShortcutsModalProps> = ({
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-3">
-                      {category.shortcuts.map((shortcut, index) => (
+                      {category.shortcuts.map((shortcut) => (
                         <div
-                          key={index}
+                          key={shortcut.id}
                           className="flex items-start justify-between py-2 border-b border-border last:border-0"
                         >
                           <div className="flex-1">
@@ -237,7 +164,7 @@ export const KeyboardShortcutsModal: FC<KeyboardShortcutsModalProps> = ({
                             )}
                           </div>
                           <kbd className="bg-muted border-border rounded border px-2.5 py-1.5 text-xs font-mono whitespace-nowrap ml-4">
-                            {isMac ? shortcut.mac : shortcut.windows}
+                            {shortcut.keys}
                           </kbd>
                         </div>
                       ))}
@@ -254,7 +181,7 @@ export const KeyboardShortcutsModal: FC<KeyboardShortcutsModalProps> = ({
           <p className="text-xs text-muted-foreground text-center">
             Showing shortcuts for{" "}
             <span className="font-medium text-foreground">
-              {isMac ? "macOS" : "Windows/Linux"}
+              {isMacOS ? "macOS" : "Windows/Linux"}
             </span>
           </p>
         </div>

@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { toast } from "sonner";
+import { formatDbError } from "@/utils/formatDbError";
 import { openDatabaseWindow, takePendingWindowProfile } from "@/utils/multiWindow";
 import { ConnectionForm } from "@/components/ConnectionForm";
 import { DatabaseBrandIcon } from "@/components/DatabaseBrandIcon";
@@ -148,8 +150,8 @@ function HomeRoute() {
       const result = await invoke<ConnectionProfile[]>("list_connection_profiles");
       setProfiles(result);
     } catch (err) {
-      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
-      setError(`Failed to load profiles: ${errorMessage}`);
+      const { headline, detail } = formatDbError(err);
+      setError(detail ? `${headline} — ${detail}` : headline);
     } finally {
       setLoading(false);
     }
@@ -176,17 +178,18 @@ function HomeRoute() {
 
   // Handle connection error
   const handleConnectionError = (err: unknown, profile: ConnectionProfile) => {
-    const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
+    const { headline, detail, kind } = formatDbError(err);
     const isConnectionError =
-      (err as any)?.kind === "connection" || errorMessage.toLowerCase().includes("connection");
+      kind === "connection" ||
+      (detail ?? headline).toLowerCase().includes("connection");
     if (isConnectionError) {
       setConnectionError({
         profileId: profile.id,
         profileName: profile.name,
-        message: errorMessage,
+        message: detail ?? headline,
       });
     } else {
-      setError(`Failed to connect: ${errorMessage}`);
+      toast.error(headline, { description: detail });
     }
   };
 
@@ -259,8 +262,8 @@ function HomeRoute() {
       await loadProfiles();
       setDeletePrompt(null);
     } catch (err) {
-      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
-      setError(`Failed to delete: ${errorMessage}`);
+      const { headline, detail } = formatDbError(err);
+      toast.error(headline, { description: detail });
     }
   };
 
@@ -277,8 +280,8 @@ function HomeRoute() {
       await invoke<string>("create_connection_profile", { profile: duplicated });
       await loadProfiles();
     } catch (err) {
-      const errorMessage = typeof err === "string" ? err : (err as any)?.message || String(err);
-      setError(`Failed to duplicate: ${errorMessage}`);
+      const { headline, detail } = formatDbError(err);
+      toast.error(headline, { description: detail });
     }
   };
 
