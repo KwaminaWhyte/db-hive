@@ -35,6 +35,12 @@ impl DatabaseDriver for MysqlDriver {
         format!("`{}`", ident.replace('`', "``"))
     }
 
+    fn escape_string_literal(&self, value: &str) -> String {
+        // MySQL treats backslash as an escape character inside string
+        // literals, so escape it in addition to doubling single quotes.
+        value.replace('\\', "\\\\").replace('\'', "''")
+    }
+
     async fn connect(opts: ConnectionOptions) -> Result<Self, DbError>
     where
         Self: Sized,

@@ -14,9 +14,9 @@ Each report contains per-finding `file:line` references and an actionable checkb
 
 ### Phase 1 — Critical security (do first, before next release)
 
-- [ ] **SEC-01**: Stop writing database passwords in plaintext to `passwords.json` (`state/mod.rs:452`, `commands/connection.rs:588`). Route all password persistence through the OS keyring that already exists; migrate and delete any existing `passwords.json` on upgrade.
-- [ ] **SEC-02**: Implement SSH host-key verification (`ssh/mod.rs:31`). Persist known hosts on first connect (TOFU) and prompt the user on key change instead of accepting all keys.
-- [ ] **SEC-04**: Fix SQL injection in CSV/Excel import (`commands/data_import.rs:457`). Use parameterized inserts per driver; validate/quote table and column identifiers with the dialect-aware quoting added in c724c01.
+- [x] **SEC-01**: Stop writing database passwords in plaintext to `passwords.json` (`state/mod.rs:452`, `commands/connection.rs:588`). Route all password persistence through the OS keyring that already exists; migrate and delete any existing `passwords.json` on upgrade.
+- [x] **SEC-02**: Implement SSH host-key verification (`ssh/mod.rs:31`). Persist known hosts on first connect (TOFU) and prompt the user on key change instead of accepting all keys.
+- [x] **SEC-04**: Fix SQL injection in CSV/Excel import (`commands/data_import.rs:457`). Use parameterized inserts per driver; validate/quote table and column identifiers with the dialect-aware quoting added in c724c01.
 
 ### Phase 2 — High-impact stability and correctness
 

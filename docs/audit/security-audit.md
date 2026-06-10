@@ -245,12 +245,12 @@ Information disclosure that aids reconnaissance; low direct risk but useful to a
 ## Prioritized task checklist
 
 **Critical (do first):**
-- [ ] SEC-01: Stop writing DB passwords to `passwords.json`; use the OS keyring exclusively and purge any existing plaintext store.
-- [ ] SEC-02: Implement SSH host-key verification (known_hosts / TOFU pinning); never accept all keys.
+- [x] SEC-01: Stop writing DB passwords to `passwords.json`; use the OS keyring exclusively and purge any existing plaintext store.
+- [x] SEC-02: Implement SSH host-key verification (known_hosts / TOFU pinning); never accept all keys.
 
 **High:**
 - [ ] SEC-03: Stop passing MySQL/MongoDB passwords on the command line; use defaults-file/env.
-- [ ] SEC-04: Parameterize import inserts and quote/validate identifiers; fix backslash escaping.
+- [x] SEC-04: Parameterize import inserts and quote/validate identifiers; fix backslash escaping.
 - [ ] SEC-05: Define a strict Content Security Policy in `tauri.conf.json`.
 - [ ] SEC-06: Verify plugin checksum/signature before install; enforce permissions with user consent; restrict plugin `httpRequest` egress.
 

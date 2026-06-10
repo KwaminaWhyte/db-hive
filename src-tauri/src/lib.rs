@@ -101,15 +101,15 @@ pub fn run() {
                 }
             }
 
-            // Load saved passwords from persistent storage
-            match state.load_passwords_from_store(&app.handle()) {
+            // Migrate any plaintext passwords from older versions to the OS keyring
+            match state.migrate_passwords_to_keyring(&app.handle()) {
                 Ok(count) => {
                     if count > 0 {
-                        println!("Loaded {} saved password(s) from storage", count);
+                        println!("Migrated {} saved password(s) to the OS keyring", count);
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to load passwords from storage: {}", e);
+                    eprintln!("Failed to migrate passwords to keyring: {}", e);
                 }
             }
 

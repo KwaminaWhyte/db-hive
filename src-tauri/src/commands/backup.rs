@@ -120,12 +120,17 @@ pub async fn create_backup(
             .get(&connection_id)
             .cloned()
             .ok_or_else(|| DbError::NotFound(format!("Connection {} not found", connection_id)))?;
-        let password = st
-            .connection_passwords
-            .get(&connection_id)
-            .cloned()
-            .unwrap_or_default();
+        let password = st.connection_passwords.get(&connection_id).cloned();
         (profile, password)
+    };
+
+    // Fall back to the OS keyring if the session cache has no entry
+    let password = match password {
+        Some(p) => p,
+        None => crate::credentials::CredentialManager::get_password(&connection_id)
+            .ok()
+            .flatten()
+            .unwrap_or_default(),
     };
 
     let out_dir = match &options.output_dir {
@@ -269,12 +274,17 @@ pub async fn restore_backup(
             .get(&connection_id)
             .cloned()
             .ok_or_else(|| DbError::NotFound(format!("Connection {} not found", connection_id)))?;
-        let password = st
-            .connection_passwords
-            .get(&connection_id)
-            .cloned()
-            .unwrap_or_default();
+        let password = st.connection_passwords.get(&connection_id).cloned();
         (profile, password)
+    };
+
+    // Fall back to the OS keyring if the session cache has no entry
+    let password = match password {
+        Some(p) => p,
+        None => crate::credentials::CredentialManager::get_password(&connection_id)
+            .ok()
+            .flatten()
+            .unwrap_or_default(),
     };
 
     match profile.driver {

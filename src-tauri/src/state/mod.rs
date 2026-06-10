@@ -396,7 +396,13 @@ impl AppState {
         Ok(())
     }
 
-    /// Load saved passwords from persistent storage
+    /// Migrate passwords persisted by older versions to the OS keyring
+    ///
+    /// Versions prior to 0.22 persisted connection passwords in plaintext in
+    /// `passwords.json`. This moves every entry into the OS keyring, loads
+    /// them into the in-memory session cache, and then removes the plaintext
+    /// copies from disk. If any keyring write fails the file is left in
+    /// place so migration can be retried on the next launch.
     ///
     /// # Arguments
     ///
@@ -404,69 +410,50 @@ impl AppState {
     ///
     /// # Returns
     ///
-    /// Number of passwords loaded
-    ///
-    /// # Security Note
-    ///
-    /// This is a temporary solution. Passwords are stored in plaintext
-    /// in the store file. In the future, this should be replaced with
-    /// OS keyring storage for better security.
-    pub fn load_passwords_from_store(&mut self, app: &AppHandle) -> Result<usize, DbError> {
+    /// Number of passwords migrated into the keyring
+    pub fn migrate_passwords_to_keyring(&mut self, app: &AppHandle) -> Result<usize, DbError> {
         let store = app
             .store("passwords.json")
             .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
 
-        // Get passwords from store
-        if let Some(passwords_value) = store.get("passwords") {
-            // Deserialize passwords map
-            let passwords: HashMap<String, String> =
-                serde_json::from_value(passwords_value.clone()).map_err(|e| {
-                    DbError::InternalError(format!("Failed to deserialize passwords: {}", e))
-                })?;
+        let Some(passwords_value) = store.get("passwords") else {
+            // Nothing to migrate
+            return Ok(0);
+        };
 
-            let count = passwords.len();
-            self.connection_passwords = passwords;
+        let passwords: HashMap<String, String> = serde_json::from_value(passwords_value.clone())
+            .map_err(|e| {
+                DbError::InternalError(format!("Failed to deserialize passwords: {}", e))
+            })?;
 
-            Ok(count)
-        } else {
-            // No passwords in store yet
-            Ok(0)
+        let mut migrated = 0;
+        for (profile_id, password) in &passwords {
+            if password.is_empty() {
+                continue;
+            }
+
+            // Don't overwrite a password the user already saved to the keyring
+            let in_keyring = crate::credentials::CredentialManager::get_password(profile_id)
+                .ok()
+                .flatten()
+                .is_some();
+            if !in_keyring {
+                crate::credentials::CredentialManager::save_password(profile_id, password)?;
+                migrated += 1;
+            }
+
+            // Keep the session cache warm so connecting works immediately
+            self.connection_passwords
+                .insert(profile_id.clone(), password.clone());
         }
-    }
 
-    /// Save connection passwords to persistent storage
-    ///
-    /// # Arguments
-    ///
-    /// * `app` - Tauri application handle
-    ///
-    /// # Returns
-    ///
-    /// Ok(()) if successful
-    ///
-    /// # Security Note
-    ///
-    /// This is a temporary solution. Passwords are stored in plaintext
-    /// in the store file. In the future, this should be replaced with
-    /// OS keyring storage for better security.
-    pub fn save_passwords_to_store(&self, app: &AppHandle) -> Result<(), DbError> {
-        let store = app
-            .store("passwords.json")
-            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
-
-        // Serialize and save passwords
-        let passwords_value = serde_json::to_value(&self.connection_passwords)
-            .map_err(|e| DbError::InternalError(format!("Failed to serialize passwords: {}", e)))?;
-
-        // Set passwords in store
-        store.set("passwords", passwords_value);
-
-        // Save the store to disk
+        // Every password is in the keyring now; remove the plaintext copies
+        store.delete("passwords");
         store
             .save()
             .map_err(|e| DbError::InternalError(format!("Failed to persist store: {}", e)))?;
 
-        Ok(())
+        Ok(migrated)
     }
 
     // ========================================================================

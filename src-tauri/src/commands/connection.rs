@@ -283,9 +283,8 @@ pub async fn delete_connection_profile(
         state_guard.remove_profile(&profile_id);
         state_guard.connection_passwords.remove(&profile_id);
 
-        // Save profiles and passwords to persistent storage
+        // Save profiles to persistent storage
         state_guard.save_profiles_to_store(&app)?;
-        state_guard.save_passwords_to_store(&app)?;
     }
 
     Ok(())
@@ -328,8 +327,8 @@ pub fn list_connection_profiles(
 ///
 /// # Security Note
 ///
-/// Passwords are currently stored in plaintext in the persistent store.
-/// This is a temporary solution and should be replaced with OS keyring storage.
+/// Passwords are read from the OS keyring, with the in-memory session
+/// cache as a fallback. They are never persisted to disk in plaintext.
 #[tauri::command]
 pub fn get_saved_password(
     profile_id: String,
@@ -363,16 +362,17 @@ pub fn get_saved_password(
 ///
 /// # Security Note
 ///
-/// Passwords are now stored securely in the OS keyring:
+/// Passwords are stored securely in the OS keyring:
 /// - macOS: Keychain
 /// - Windows: Credential Manager
 /// - Linux: Secret Service API (libsecret)
+///
+/// They are never written to disk in plaintext.
 #[tauri::command]
 pub fn save_password(
     profile_id: String,
     password: String,
     state: State<'_, Mutex<AppState>>,
-    app: AppHandle,
 ) -> Result<(), DbError> {
     // Save to OS keyring
     crate::credentials::CredentialManager::save_password(&profile_id, &password)?;
@@ -380,10 +380,9 @@ pub fn save_password(
     // Keep password in in-memory store as a session cache so connecting
     // works immediately without requiring a second keyring read
     let mut state = state.lock().unwrap();
-    state.connection_passwords.insert(profile_id.clone(), password.clone());
-
-    // Persist to store as a backup in case keyring retrieval fails later
-    state.save_passwords_to_store(&app)?;
+    state
+        .connection_passwords
+        .insert(profile_id.clone(), password);
 
     Ok(())
 }
@@ -581,14 +580,13 @@ pub async fn connect_to_database(
         }
     };
 
-    // Store connection and password in state
+    // Store connection and cache password in memory for this session
     {
         let mut state = state.lock().unwrap();
         state.add_connection(profile_id.clone(), connection);
-        state.connection_passwords.insert(profile_id.clone(), password.clone());
-
-        // Save password to persistent storage
-        state.save_passwords_to_store(&app)?;
+        state
+            .connection_passwords
+            .insert(profile_id.clone(), password.clone());
     }
 
     // Also save password to OS keyring for next time

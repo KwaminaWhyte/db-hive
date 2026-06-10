@@ -406,11 +406,19 @@ pub async fn import_data_to_table(
             .clone()
     };
 
-    // Build table name with schema
+    // Build table name with schema, quoting identifiers per dialect to
+    // prevent SQL injection through table/schema names
+    if options.table_name.trim().is_empty() {
+        return Err("Table name cannot be empty".to_string());
+    }
     let full_table_name = if let Some(schema) = &options.schema {
-        format!("{}.{}", schema, options.table_name)
+        format!(
+            "{}.{}",
+            connection.quote_identifier(schema),
+            connection.quote_identifier(&options.table_name)
+        )
     } else {
-        options.table_name.clone()
+        connection.quote_identifier(&options.table_name)
     };
 
     // Truncate if requested
@@ -422,16 +430,21 @@ pub async fn import_data_to_table(
             .map_err(|e| format!("Failed to truncate table: {}", e))?;
     }
 
-    // Build INSERT statement
+    // Build INSERT column list, quoting identifiers per dialect
     let target_columns: Vec<String> = options
         .column_mappings
         .iter()
         .filter(|m| !m.skip)
-        .map(|m| m.target_column.clone())
+        .map(|m| connection.quote_identifier(&m.target_column))
         .collect();
+    if target_columns.is_empty() {
+        return Err("No columns mapped for import".to_string());
+    }
 
     // Note: Using string formatting for VALUES instead of prepared statements
-    // for cross-database compatibility (placeholder syntax differs)
+    // for cross-database compatibility (placeholder syntax differs). Values
+    // are escaped per dialect via escape_string_literal to prevent SQL
+    // injection from untrusted file contents.
 
     let mut rows_imported = 0;
     let mut rows_failed = 0;
@@ -454,7 +467,7 @@ pub async fn import_data_to_table(
             values.push(if value.is_empty() {
                 "NULL".to_string()
             } else {
-                format!("'{}'", value.replace('\'', "''"))
+                format!("'{}'", connection.escape_string_literal(&value))
             });
         }
 

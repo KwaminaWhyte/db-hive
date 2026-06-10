@@ -5,11 +5,15 @@
 
 use crate::models::connection::{SshAuthMethod, SshConfig};
 use crate::models::DbError;
+use async_trait::async_trait;
 use russh::client;
 use russh_keys::key;
+use russh_keys::key::PublicKey;
 use std::collections::HashMap;
 use std::net::TcpListener;
+use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
@@ -26,17 +30,84 @@ struct TunnelInfo {
 }
 
 /// SSH client handler
-struct SshClientHandler;
+///
+/// Verifies the server's host key on a trust-on-first-use basis: the key
+/// fingerprint is recorded the first time we connect to a host, and any
+/// later connection presenting a different key is rejected.
+struct SshClientHandler {
+    /// "host:port" of the SSH server being connected to
+    server_addr: String,
+    /// Set to a human-readable reason when the host key is rejected,
+    /// so `create_tunnel` can surface a useful error to the user
+    rejection_reason: Arc<StdMutex<Option<String>>>,
+}
 
+#[async_trait]
 impl client::Handler for SshClientHandler {
     type Error = russh::Error;
 
-    // FIXME: Lifetime mismatch with trait - needs investigation of russh API
-    // async fn check_server_key(&mut self, _server_public_key: &key::PublicKey) -> Result<bool, Self::Error> {
-    //     // TODO: In production, verify host keys against known_hosts
-    //     // For now, accept all keys (useful for development)
-    //     Ok(true)
-    // }
+    async fn check_server_key(
+        &mut self,
+        server_public_key: &key::PublicKey,
+    ) -> Result<bool, Self::Error> {
+        match verify_host_key(&self.server_addr, server_public_key) {
+            Ok(()) => Ok(true),
+            Err(reason) => {
+                eprintln!("SSH host key verification failed: {}", reason);
+                *self.rejection_reason.lock().unwrap() = Some(reason);
+                Ok(false)
+            }
+        }
+    }
+}
+
+/// Path to the JSON file mapping "host:port" to trusted key fingerprints
+fn known_hosts_path() -> Option<PathBuf> {
+    dirs::data_dir().map(|d| d.join("db-hive").join("ssh_known_hosts.json"))
+}
+
+/// Verify a server host key against the stored fingerprint (TOFU)
+///
+/// Returns `Ok(())` if the key matches the stored fingerprint, or if this
+/// is the first connection to the host (in which case the fingerprint is
+/// recorded). Returns `Err(reason)` on mismatch or storage failure.
+fn verify_host_key(server_addr: &str, key: &PublicKey) -> Result<(), String> {
+    let fingerprint = key.fingerprint();
+    let path = known_hosts_path()
+        .ok_or_else(|| "Cannot locate application data directory".to_string())?;
+
+    let mut hosts: HashMap<String, String> = match std::fs::read_to_string(&path) {
+        Ok(contents) => serde_json::from_str(&contents)
+            .map_err(|e| format!("Corrupt SSH known hosts file at {}: {}", path.display(), e))?,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => HashMap::new(),
+        Err(e) => return Err(format!("Cannot read SSH known hosts file: {}", e)),
+    };
+
+    match hosts.get(server_addr) {
+        Some(stored) if *stored == fingerprint => Ok(()),
+        Some(stored) => Err(format!(
+            "Host key for {} has CHANGED (stored fingerprint {}, server presented {}). \
+             This may indicate a man-in-the-middle attack. If the server's key was \
+             legitimately rotated, remove the entry for this host from {} and reconnect.",
+            server_addr,
+            stored,
+            fingerprint,
+            path.display()
+        )),
+        None => {
+            // First connection to this host: trust and record the key
+            hosts.insert(server_addr.to_string(), fingerprint);
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("Cannot create data directory: {}", e))?;
+            }
+            let json = serde_json::to_string_pretty(&hosts)
+                .map_err(|e| format!("Cannot serialize SSH known hosts: {}", e))?;
+            std::fs::write(&path, json)
+                .map_err(|e| format!("Cannot write SSH known hosts file: {}", e))?;
+            Ok(())
+        }
+    }
 }
 
 /// SSH Tunnel Manager
@@ -98,13 +169,25 @@ impl SshTunnelManager {
 
         // Create SSH client configuration
         let ssh_config = Arc::new(client::Config::default());
-        let sh = SshClientHandler;
-
-        // Connect to SSH server
         let ssh_addr = format!("{}:{}", config.host, config.port);
-        let mut session = client::connect(ssh_config, &ssh_addr, sh)
-            .await
-            .map_err(|e| DbError::ConnectionError(format!("SSH connection failed: {}", e)))?;
+        let rejection_reason: Arc<StdMutex<Option<String>>> = Arc::new(StdMutex::new(None));
+        let sh = SshClientHandler {
+            server_addr: ssh_addr.clone(),
+            rejection_reason: rejection_reason.clone(),
+        };
+
+        // Connect to SSH server (host key is verified by the handler)
+        let mut session = match client::connect(ssh_config, &ssh_addr, sh).await {
+            Ok(session) => session,
+            Err(e) => {
+                // Prefer the host key rejection reason over russh's generic error
+                let reason = rejection_reason.lock().unwrap().take();
+                return Err(DbError::ConnectionError(match reason {
+                    Some(r) => r,
+                    None => format!("SSH connection failed: {}", e),
+                }));
+            }
+        };
 
         // Authenticate
         match &config.auth_method {

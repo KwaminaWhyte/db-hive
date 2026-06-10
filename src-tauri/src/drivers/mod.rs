@@ -235,4 +235,16 @@ pub trait DatabaseDriver: Send + Sync {
     fn quote_identifier(&self, ident: &str) -> String {
         format!("\"{}\"", ident.replace('"', "\"\""))
     }
+
+    /// Escape a string value for safe inclusion inside a single-quoted SQL
+    /// string literal in this dialect.
+    ///
+    /// The default doubles single quotes (standard SQL, used by Postgres,
+    /// SQLite and SQL Server). MySQL additionally treats backslash as an
+    /// escape character inside string literals, so its driver overrides
+    /// this to escape backslashes as well. Used when the app interpolates
+    /// values into generated SQL (e.g. data import).
+    fn escape_string_literal(&self, value: &str) -> String {
+        value.replace('\'', "''")
+    }
 }
