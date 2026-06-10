@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useCallback, useEffect, useMemo } from "react";
+import { createContext, useContext, useState, useRef, ReactNode, useCallback, useEffect, useMemo } from "react";
 
 /**
  * Tab State Interface
@@ -55,8 +55,34 @@ interface TabProviderProps {
   currentDatabase: string | null;
 }
 
+/**
+ * Strip non-persistable fields (e.g. query results) before serializing tab
+ * states to localStorage. `results` can hold megabytes of rows — persisting it
+ * would synchronously stringify all of it on every tab mutation (PERF-15).
+ */
+function toPersistableStates(states: Record<string, TabState>): Record<string, TabState> {
+  const persistable: Record<string, TabState> = {};
+  for (const [id, state] of Object.entries(states)) {
+    const { results: _results, ...rest } = state;
+    persistable[id] = rest;
+  }
+  return persistable;
+}
+
 export function TabProvider({ children, connectionId, currentDatabase }: TabProviderProps) {
   const [tabStates, setTabStates] = useState<Record<string, TabState>>({});
+
+  // Ref mirror of tabStates — the source of truth for getters so that
+  // `getTabState`/`getAllTabStates` are identity-stable ([] deps) and don't
+  // re-trigger consumer effects/callbacks on every tab mutation (PERF-15).
+  // All mutators update the ref synchronously before scheduling the state
+  // update, so getters always see fresh values within the same tick.
+  const tabStatesRef = useRef<Record<string, TabState>>(tabStates);
+
+  const applyTabStates = useCallback((next: Record<string, TabState>) => {
+    tabStatesRef.current = next;
+    setTabStates(next);
+  }, []);
 
   // Load tab states from localStorage when connection OR database changes
   useEffect(() => {
@@ -67,69 +93,73 @@ export function TabProvider({ children, connectionId, currentDatabase }: TabProv
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          setTabStates(parsed.states || {});
+          applyTabStates(parsed.states || {});
         } catch (error) {
           console.error("Failed to parse saved tab states:", error);
         }
       } else {
         // No saved tabs for this database, clear current tabs
-        setTabStates({});
+        applyTabStates({});
       }
     } else {
       // No connection or database, clear tabs
-      setTabStates({});
+      applyTabStates({});
     }
-  }, [connectionId, currentDatabase]);
+  }, [connectionId, currentDatabase, applyTabStates]);
 
   // Save tab states to localStorage whenever they change
   useEffect(() => {
     if (connectionId && currentDatabase && Object.keys(tabStates).length > 0) {
       const storageKey = `db-hive-tabs-${connectionId}-${currentDatabase}`;
       localStorage.setItem(storageKey, JSON.stringify({
-        states: tabStates,
+        states: toPersistableStates(tabStates),
         timestamp: Date.now(),
       }));
     }
   }, [tabStates, connectionId, currentDatabase]);
 
   const getTabState = useCallback((tabId: string) => {
-    return tabStates[tabId];
-  }, [tabStates]);
+    return tabStatesRef.current[tabId];
+  }, []);
 
   const updateTabState = useCallback((tabId: string, updates: Partial<TabState>) => {
-    setTabStates((prev) => ({
+    const prev = tabStatesRef.current;
+    applyTabStates({
       ...prev,
       [tabId]: {
         ...prev[tabId],
         ...updates,
       } as TabState,
-    }));
-  }, []);
+    });
+  }, [applyTabStates]);
 
   const createTabState = useCallback((state: TabState) => {
-    setTabStates((prev) => ({
-      ...prev,
+    applyTabStates({
+      ...tabStatesRef.current,
       [state.id]: state,
-    }));
-  }, []);
+    });
+  }, [applyTabStates]);
 
   const removeTabState = useCallback((tabId: string) => {
-    setTabStates((prev) => {
-      const newStates = { ...prev };
-      delete newStates[tabId];
-      return newStates;
-    });
-  }, []);
+    const newStates = { ...tabStatesRef.current };
+    delete newStates[tabId];
+    applyTabStates(newStates);
+  }, [applyTabStates]);
 
   const getAllTabStates = useCallback(() => {
-    return tabStates;
-  }, [tabStates]);
-
-  const restoreTabStates = useCallback((states: Record<string, TabState>) => {
-    setTabStates(states);
+    return tabStatesRef.current;
   }, []);
 
-  // Memoize context value to prevent unnecessary re-renders of consumers
+  const restoreTabStates = useCallback((states: Record<string, TabState>) => {
+    applyTabStates(states);
+  }, [applyTabStates]);
+
+  // All callbacks above are identity-stable, but the context value must still
+  // change identity when tabStates changes: consumers (e.g. the query route)
+  // read tab state during render via `getTabState` and rely on the context
+  // update for re-render. Keeping `tabStates` in the dep list preserves that
+  // reactivity while the stable getters keep consumer effects/memos from
+  // re-firing on every mutation.
   const contextValue = useMemo(() => ({
     getTabState,
     updateTabState,
@@ -137,7 +167,8 @@ export function TabProvider({ children, connectionId, currentDatabase }: TabProv
     removeTabState,
     getAllTabStates,
     restoreTabStates,
-  }), [getTabState, updateTabState, createTabState, removeTabState, getAllTabStates, restoreTabStates]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [tabStates, getTabState, updateTabState, createTabState, removeTabState, getAllTabStates, restoreTabStates]);
 
   return (
     <TabContext.Provider value={contextValue}>

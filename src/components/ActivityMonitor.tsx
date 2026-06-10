@@ -5,7 +5,7 @@
  * performance metrics, and activity statistics.
  */
 
-import { FC, useState, useEffect, useCallback, useMemo } from 'react';
+import { FC, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   RefreshCw,
@@ -135,8 +135,14 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
   // Search text
   const [searchText, setSearchText] = useState<string>('');
 
+  // In-flight guards so auto-refresh ticks never overlap a pending fetch
+  const logsInFlightRef = useRef(false);
+  const statsInFlightRef = useRef(false);
+
   // Fetch query logs
   const fetchLogs = useCallback(async () => {
+    if (logsInFlightRef.current) return;
+    logsInFlightRef.current = true;
     setLoading(true);
     try {
       const response = await invoke<QueryLogResponse>('get_query_logs', {
@@ -151,12 +157,15 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
       console.error('Failed to fetch query logs:', error);
       // In a real app, show error toast
     } finally {
+      logsInFlightRef.current = false;
       setLoading(false);
     }
   }, [filters, sort, page, pageSize]);
 
   // Fetch activity stats
   const fetchStats = useCallback(async () => {
+    if (statsInFlightRef.current) return;
+    statsInFlightRef.current = true;
     setStatsLoading(true);
     try {
       const statsData = await invoke<ActivityStats>('get_activity_stats', {
@@ -166,6 +175,7 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
     } catch (error) {
       console.error('Failed to fetch activity stats:', error);
     } finally {
+      statsInFlightRef.current = false;
       setStatsLoading(false);
     }
   }, [filters]);
@@ -217,6 +227,8 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
   useEffect(() => {
     if (autoRefreshEnabled && refreshInterval > 0) {
       const timer = setInterval(() => {
+        // Pause polling while the window/tab is hidden.
+        if (document.visibilityState !== 'visible') return;
         fetchLogs();
         fetchStats();
       }, refreshInterval);

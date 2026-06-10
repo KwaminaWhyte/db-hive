@@ -232,25 +232,25 @@ Manual vendor chunking was deliberately removed (vite.config.ts comment) after i
 ## Prioritized Task Checklist
 
 **Do first (High):**
-- [ ] PERF-01 — Replace QueryPanel's sequential per-table schema fetch with the cached `get_autocomplete_metadata` command.
-- [ ] PERF-02 — Stop mounting every query tab (and its Monaco editors) simultaneously; mount active tab only.
+- [x] PERF-01 — Replace QueryPanel's sequential per-table schema fetch with the cached `get_autocomplete_metadata` command.
+- [x] PERF-02 — Stop mounting every query tab (and its Monaco editors) simultaneously; mount active tab only.
 - [x] PERF-03 — Enforce the 50k row cap inside each driver instead of after full materialization.
-- [ ] PERF-04 — Compute JSON/Raw/highlighted result strings lazily per view mode; virtualize or cap JSON/Raw views.
+- [x] PERF-04 — Compute JSON/Raw/highlighted result strings lazily per view mode; virtualize or cap JSON/Raw views.
 - [x] PERF-05 — Cap query history length and move full-file persistence off the per-query hot path.
-- [ ] PERF-06 — Bundle Monaco locally via `loader.config` to eliminate the runtime CDN fetch.
+- [x] PERF-06 — Bundle Monaco locally via `loader.config` to eliminate the runtime CDN fetch.
 
 **Next (Medium):**
-- [ ] PERF-07 — Use the MySQL pool per query; un-serialize SQL Server access.
-- [ ] PERF-08 — Move SQLite work onto `spawn_blocking`.
-- [ ] PERF-09 — Pipeline Redis TYPE probes in `sample_key_types`.
-- [ ] PERF-10 — Default-limit MongoDB `find` and add skip/limit pagination.
-- [ ] PERF-11 — Prepare-once Postgres execution; remove retry-on-error double execution.
+- [x] PERF-07 — Use the MySQL pool per query; un-serialize SQL Server access.
+- [x] PERF-08 — Move SQLite work onto `spawn_blocking`.
+- [x] PERF-09 — Pipeline Redis TYPE probes in `sample_key_types`.
+- [x] PERF-10 — Default-limit MongoDB `find` and add skip/limit pagination.
+- [x] PERF-11 — Prepare-once Postgres execution; remove retry-on-error double execution.
 - [ ] PERF-12 — Stream query results over Tauri Channels in row batches.
-- [ ] PERF-13 — Fix the ERDiagram layout-save debounce; save on drag end.
-- [ ] PERF-14 — Replace ERDiagram's N-per-table invokes with one cached metadata command.
-- [ ] PERF-15 — Make TabContext getters identity-stable; exclude results from serialization.
-- [ ] PERF-16 — Register one global SQL completion provider fed by a metadata ref.
-- [ ] PERF-17 — Guard and pause activity-monitor polling loops.
+- [x] PERF-13 — Fix the ERDiagram layout-save debounce; save on drag end.
+- [x] PERF-14 — Replace ERDiagram (bounded 8-way concurrency; autocomplete metadata lacks PK flags)'s N-per-table invokes with one cached metadata command.
+- [x] PERF-15 — Make TabContext getters identity-stable; exclude results from serialization.
+- [x] PERF-16 — Register one global SQL completion provider fed by a metadata ref.
+- [x] PERF-17 — Guard and pause activity-monitor polling loops.
 
 **Later (Low):**
 - [ ] PERF-18 — Stabilize ResultsViewer empty props and columnDef dependencies.

@@ -31,6 +31,9 @@ import { QueryErrorState } from "./QueryErrorState";
 import { NoResultsEmpty } from "./empty-states";
 import { ResultsChart } from "./ResultsChart";
 
+/** Maximum number of rows rendered in the JSON/Raw text views */
+const MAX_TEXT_VIEW_ROWS = 2000;
+
 interface ResultsViewerProps {
   /** Column names */
   columns: string[];
@@ -265,11 +268,19 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
     overscan: 10, // Number of rows to render above/below visible area
   });
 
-  // Convert results to JSON format
+  // Cap JSON/Raw text views to keep string building and DOM size bounded
+  const isTextViewTruncated = rows.length > MAX_TEXT_VIEW_ROWS;
+
+  // Convert results to JSON format (lazy — only built when the JSON tab is active)
   const resultsAsJSON = useMemo(() => {
+    if (viewMode !== "json") return "[]";
     if (!columns.length || !rows.length) return "[]";
 
-    const jsonRows = rows.map((row) => {
+    const cappedRows = isTextViewTruncated
+      ? rows.slice(0, MAX_TEXT_VIEW_ROWS)
+      : rows;
+
+    const jsonRows = cappedRows.map((row) => {
       const obj: Record<string, any> = {};
       columns.forEach((col, idx) => {
         obj[col] = row[idx];
@@ -278,17 +289,22 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
     });
 
     return JSON.stringify(jsonRows, null, 2);
-  }, [columns, rows]);
+  }, [columns, rows, viewMode, isTextViewTruncated]);
 
-  // Convert results to raw text format
+  // Convert results to raw text format (lazy — only built when the Raw tab is active)
   const resultsAsRaw = useMemo(() => {
+    if (viewMode !== "raw") return "";
     if (!columns.length) return "";
 
     // Create header row
     const header = columns.join("\t");
 
+    const cappedRows = isTextViewTruncated
+      ? rows.slice(0, MAX_TEXT_VIEW_ROWS)
+      : rows;
+
     // Create data rows
-    const dataRows = rows.map((row) =>
+    const dataRows = cappedRows.map((row) =>
       row
         .map((cell) => {
           if (cell === null) return "NULL";
@@ -300,10 +316,12 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
     );
 
     return [header, ...dataRows].join("\n");
-  }, [columns, rows]);
+  }, [columns, rows, viewMode, isTextViewTruncated]);
 
-  // Memoized syntax highlighted JSON for better performance
+  // Memoized syntax highlighted JSON for better performance (lazy — JSON tab only)
   const highlightedJSON = useMemo(() => {
+    if (viewMode !== "json") return "";
+
     // First escape HTML to prevent XSS
     const escapeHtml = (str: string) => {
       return str
@@ -338,7 +356,7 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
           return `: <span style="color: #f87171">${p1}</span>`;
         })
     );
-  }, [resultsAsJSON]);
+  }, [resultsAsJSON, viewMode]);
 
   // Render loading state
   if (loading) {
@@ -601,6 +619,13 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
 
           {/* JSON View */}
           <TabsContent value="json" className="flex-1 m-0 overflow-auto">
+            {isTextViewTruncated && (
+              <div className="px-4 pt-3 text-xs text-muted-foreground">
+                Showing first {MAX_TEXT_VIEW_ROWS.toLocaleString()} of{" "}
+                {rows.length.toLocaleString()} rows — use Export for the full
+                set
+              </div>
+            )}
             <pre className="p-4 text-xs font-mono">
               <code
                 dangerouslySetInnerHTML={{
@@ -612,6 +637,13 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
 
           {/* Raw View */}
           <TabsContent value="raw" className="flex-1 m-0 overflow-auto">
+            {isTextViewTruncated && (
+              <div className="px-4 pt-3 text-xs text-muted-foreground">
+                Showing first {MAX_TEXT_VIEW_ROWS.toLocaleString()} of{" "}
+                {rows.length.toLocaleString()} rows — use Export for the full
+                set
+              </div>
+            )}
             <pre className="p-4 text-xs font-mono whitespace-pre">
               <code>{resultsAsRaw}</code>
             </pre>

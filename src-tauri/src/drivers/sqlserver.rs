@@ -5,6 +5,7 @@
 
 use async_trait::async_trait;
 use futures_util::TryStreamExt;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tiberius::{AuthMethod, Client, Config, EncryptionLevel, QueryItem};
@@ -17,16 +18,67 @@ use crate::models::{
     TableSchema,
 };
 
+/// A tiberius client over a compat-wrapped Tokio TCP stream.
+type SqlServerClient = Client<tokio_util::compat::Compat<TcpStream>>;
+
+/// Number of connections in the round-robin pool (PERF-07).
+///
+/// tiberius has no built-in connection pool, so the driver keeps a small
+/// fixed set of clients and hands them out round-robin. Each client is still
+/// guarded by its own mutex (the tiberius protocol is strictly
+/// request/response per connection), but a long-running user query now only
+/// blocks 1 of N connections instead of serializing every metadata call and
+/// activity poll behind it.
+const POOL_SIZE: usize = 4;
+
 /// SQL Server database driver
 ///
 /// Manages connections to Microsoft SQL Server databases and provides query execution
 /// and metadata retrieval capabilities.
 pub struct SqlServerDriver {
-    /// The active SQL Server client connection wrapped in a Mutex for safe concurrent access
-    client: Arc<Mutex<Client<tokio_util::compat::Compat<TcpStream>>>>,
+    /// Fixed round-robin pool of client connections (see `POOL_SIZE`).
+    clients: Vec<Arc<Mutex<SqlServerClient>>>,
+
+    /// Round-robin cursor into `clients`.
+    next: AtomicUsize,
 }
 
 impl SqlServerDriver {
+    /// Pick the next client in round-robin order.
+    ///
+    /// Returns the `Arc` (rather than a guard) so callers can hold the lock
+    /// across their query without borrowing `self.clients`.
+    fn client(&self) -> Arc<Mutex<SqlServerClient>> {
+        let idx = self.next.fetch_add(1, Ordering::Relaxed) % self.clients.len();
+        Arc::clone(&self.clients[idx])
+    }
+
+    /// Establish a single client connection from connection options.
+    async fn connect_client(opts: &ConnectionOptions) -> Result<SqlServerClient, DbError> {
+        let config = Self::build_config(opts)?;
+
+        // Create TCP connection
+        let tcp = TcpStream::connect(config.get_addr())
+            .await
+            .map_err(|e| {
+                DbError::ConnectionError(format!("Failed to connect to SQL Server: {}", e))
+            })?;
+
+        // Wrap in compat for tiberius
+        tcp.set_nodelay(true).map_err(|e| {
+            DbError::ConnectionError(format!("Failed to set TCP nodelay: {}", e))
+        })?;
+
+        let tcp_compat = tcp.compat_write();
+
+        // Connect to SQL Server
+        Client::connect(config, tcp_compat)
+            .await
+            .map_err(|e| {
+                DbError::ConnectionError(format!("SQL Server connection failed: {}", e))
+            })
+    }
+
     /// Build SQL Server config from connection options
     fn build_config(opts: &ConnectionOptions) -> Result<Config, DbError> {
         let mut config = Config::new();
@@ -107,37 +159,24 @@ impl DatabaseDriver for SqlServerDriver {
     where
         Self: Sized,
     {
-        let config = Self::build_config(&opts)?;
-
-        // Create TCP connection
-        let tcp = TcpStream::connect(config.get_addr())
-            .await
-            .map_err(|e| {
-                DbError::ConnectionError(format!("Failed to connect to SQL Server: {}", e))
-            })?;
-
-        // Wrap in compat for tiberius
-        tcp.set_nodelay(true).map_err(|e| {
-            DbError::ConnectionError(format!("Failed to set TCP nodelay: {}", e))
-        })?;
-
-        let tcp_compat = tcp.compat_write();
-
-        // Connect to SQL Server
-        let client = Client::connect(config, tcp_compat)
-            .await
-            .map_err(|e| {
-                DbError::ConnectionError(format!("SQL Server connection failed: {}", e))
-            })?;
+        // Build the round-robin pool (PERF-07). All connections are opened up
+        // front so `connect()` still fails fast on bad credentials.
+        let mut clients = Vec::with_capacity(POOL_SIZE);
+        for _ in 0..POOL_SIZE {
+            let client = Self::connect_client(&opts).await?;
+            clients.push(Arc::new(Mutex::new(client)));
+        }
 
         Ok(Self {
-            client: Arc::new(Mutex::new(client)),
+            clients,
+            next: AtomicUsize::new(0),
         })
     }
 
     async fn test_connection(&self) -> Result<(), DbError> {
         // SQL Server uses SELECT 1 for connection testing
-        let mut client = self.client.lock().await;
+        let client = self.client();
+        let mut client = client.lock().await;
         let _ = client
             .query("SELECT 1", &[])
             .await
@@ -147,7 +186,8 @@ impl DatabaseDriver for SqlServerDriver {
     }
 
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, DbError> {
-        let mut client = self.client.lock().await;
+        let client = self.client();
+        let mut client = client.lock().await;
 
         // Execute query
         let mut stream = client
@@ -210,7 +250,8 @@ impl DatabaseDriver for SqlServerDriver {
     async fn get_databases(&self) -> Result<Vec<DatabaseInfo>, DbError> {
         let sql = "SELECT name FROM sys.databases WHERE name NOT IN ('master', 'tempdb', 'model', 'msdb') ORDER BY name";
 
-        let mut client = self.client.lock().await;
+        let client = self.client();
+        let mut client = client.lock().await;
 
         let stream = client
             .query(sql, &[])
@@ -243,7 +284,8 @@ impl DatabaseDriver for SqlServerDriver {
         // SQL Server stores schemas in sys.schemas
         let sql = "SELECT name FROM sys.schemas WHERE name NOT IN ('sys', 'INFORMATION_SCHEMA', 'guest', 'db_owner', 'db_accessadmin', 'db_securityadmin', 'db_ddladmin', 'db_backupoperator', 'db_datareader', 'db_datawriter', 'db_denydatareader', 'db_denydatawriter') ORDER BY name";
 
-        let mut client = self.client.lock().await;
+        let client = self.client();
+        let mut client = client.lock().await;
 
         let stream = client
             .query(sql, &[])
@@ -281,7 +323,8 @@ impl DatabaseDriver for SqlServerDriver {
             schema
         );
 
-        let mut client = self.client.lock().await;
+        let client = self.client();
+        let mut client = client.lock().await;
 
         let stream = client
             .query(&sql, &[])
@@ -340,7 +383,8 @@ impl DatabaseDriver for SqlServerDriver {
             schema, table
         );
 
-        let mut client = self.client.lock().await;
+        let client = self.client();
+        let mut client = client.lock().await;
 
         let stream = client
             .query(&columns_sql, &[])
@@ -476,7 +520,8 @@ impl DatabaseDriver for SqlServerDriver {
             schema
         );
 
-        let mut client = self.client.lock().await;
+        let client = self.client();
+        let mut client = client.lock().await;
 
         let stream = client
             .query(&sql, &[])

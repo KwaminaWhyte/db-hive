@@ -1,5 +1,9 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { QueryPanel } from "@/components/QueryPanel";
+import {
+  QueryPanel,
+  clearQueryPanelState,
+  queryPanelHasUnsavedSql,
+} from "@/components/QueryPanel";
 import { TableInspector } from "@/components/TableInspector";
 import { RedisValuePanel } from "@/components/RedisValuePanel";
 import { useConnectionContext } from "@/contexts/ConnectionContext";
@@ -48,7 +52,8 @@ import {
  * - Mix of query editors and table inspectors
  * - Per-tab state preservation (SQL content, filters, etc.)
  * - LocalStorage persistence per connection
- * - All tabs stay mounted (no content loss on switch)
+ * - Only the active tab is mounted (PERF-02); query tab state survives
+ *   switches via QueryPanel's in-memory snapshot cache + TabContext SQL sync
  */
 export const Route = createFileRoute("/_connected/query")({
   validateSearch: (search: Record<string, unknown>): {
@@ -67,7 +72,7 @@ function QueryPanelRoute() {
   const navigate = useNavigate();
   const { tabs: tabsParam, active: activeIndex } = Route.useSearch();
   const { connectionId, connectionProfile, currentDatabase } = useConnectionContext();
-  const { getTabState, createTabState, removeTabState, getAllTabStates } = useTabContext();
+  const { getTabState, updateTabState, createTabState, removeTabState, getAllTabStates } = useTabContext();
   const [showCloseAllDialog, setShowCloseAllDialog] = useState(false);
   const [, startTransition] = useTransition();
   const { settings } = useSettings();
@@ -76,6 +81,12 @@ function QueryPanelRoute() {
 
   // Parse tab IDs from URL
   const tabIds = tabsParam.split(",").filter(Boolean);
+
+  // Snapshot-cache key for a query tab's QueryPanel. Scoped by connection +
+  // database so the shared default tab id ("query-0") can never leak state
+  // across connections.
+  const makePanelId = (tabId: string) =>
+    `${connectionId ?? "none"}:${currentDatabase ?? "none"}:${tabId}`;
 
   // Restore tabs when database changes
   useEffect(() => {
@@ -129,6 +140,7 @@ function QueryPanelRoute() {
     allTabIds.forEach((tabId) => {
       if (!tabIds.includes(tabId)) {
         removeTabState(tabId);
+        clearQueryPanelState(makePanelId(tabId));
       }
     });
 
@@ -282,8 +294,10 @@ function QueryPanelRoute() {
       return;
     }
 
-    // Remove tab state (TabContext will auto-save to localStorage)
+    // Remove tab state (TabContext will auto-save to localStorage) and free
+    // the in-memory QueryPanel snapshot (SQL/results)
     removeTabState(tabId);
+    clearQueryPanelState(makePanelId(tabId));
 
     // Adjust active index if needed
     let newActive = activeIndex;
@@ -378,10 +392,13 @@ function QueryPanelRoute() {
   };
 
   const handleCloseAll = () => {
-    // Check if any query tabs have unsaved work (SQL content)
+    // Check if any query tabs have unsaved work (SQL content) — TabContext
+    // holds the persisted SQL; the snapshot cache has the latest keystrokes
     const hasUnsavedWork = tabIds.some((tabId) => {
       const state = getTabState(tabId);
-      return state?.type === "query" && state?.sql && state.sql.trim().length > 0;
+      if (state?.type !== "query") return false;
+      if (state?.sql && state.sql.trim().length > 0) return true;
+      return queryPanelHasUnsavedSql(makePanelId(tabId));
     });
 
     if (hasUnsavedWork) {
@@ -395,9 +412,10 @@ function QueryPanelRoute() {
     // Close all tabs and create a new empty query tab
     const newTabId = `query-${Date.now()}`;
 
-    // Remove all existing tab states
+    // Remove all existing tab states and their QueryPanel snapshots
     tabIds.forEach((tabId) => {
       removeTabState(tabId);
+      clearQueryPanelState(makePanelId(tabId));
     });
 
     // Create a fresh query tab
@@ -517,13 +535,16 @@ function QueryPanelRoute() {
         </div>
       </div>
 
-      {/* Tab Content - Render ALL tabs but hide inactive ones */}
+      {/* Tab Content - Only the active tab is mounted (PERF-02). Query tab
+          state survives switches via QueryPanel's snapshot cache. */}
       <div className="overflow-hidden relative min-h-0">
-        {tabIds.map((tabId, index) => {
+        {(() => {
+          const safeIndex = Math.min(Math.max(activeIndex, 0), tabIds.length - 1);
+          const tabId = tabIds[safeIndex];
+          if (!tabId) return null;
+
           const tabState = getTabState(tabId);
           if (!tabState) return null;
-
-          const isActive = index === activeIndex;
 
           let initialFilter: { column: string; value: string } | undefined;
           if (tabState.filter) {
@@ -541,34 +562,34 @@ function QueryPanelRoute() {
           }
 
           return (
-            <div
-              key={tabId}
-              className="absolute inset-0"
-              style={{
-                visibility: isActive ? "visible" : "hidden",
-                pointerEvents: isActive ? "auto" : "none",
-              }}
-            >
+            <div key={makePanelId(tabId)} className="absolute inset-0">
               {tabState.type === "query" ? (
                 <QueryPanel
+                  panelId={makePanelId(tabId)}
                   connectionId={connectionId}
                   connectionProfile={connectionProfile}
                   currentDatabase={currentDatabase}
                   onExecuteQuery={handleExecuteQuery}
                   pendingQuery={tabState.sql || null}
+                  onPersistSql={(sql) => {
+                    const existing = getTabState(tabId);
+                    if (existing && existing.sql !== sql) {
+                      updateTabState(tabId, { sql });
+                    }
+                  }}
                 />
               ) : tabState.type === "redis" ? (
                 <RedisValuePanel
                   connectionId={connectionId!}
                   redisKey={tabState.redisKey!}
-                  onClose={() => handleCloseTab(index)}
+                  onClose={() => handleCloseTab(safeIndex)}
                 />
               ) : (
                 <TableInspector
                   connectionId={connectionId!}
                   schema={tabState.schema!}
                   tableName={tabState.tableName!}
-                  onClose={() => handleCloseTab(index)}
+                  onClose={() => handleCloseTab(safeIndex)}
                   driverType={connectionProfile?.driver}
                   initialFilter={initialFilter}
                   onOpenRelated={handleOpenRelated}
@@ -576,7 +597,7 @@ function QueryPanelRoute() {
               )}
             </div>
           );
-        })}
+        })()}
       </div>
 
       {/* Destructive Query Guard Dialog */}

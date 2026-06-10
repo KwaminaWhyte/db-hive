@@ -1,10 +1,12 @@
 /**
  * ServerMetricsChart Component
  *
- * Polls `get_server_stats` every 2 seconds while mounted and renders a
+ * Polls `get_server_stats` every 5 seconds while mounted and renders a
  * rolling 60-sample line chart of connections and transactions/second.
- * Transactions/sec is computed by diffing the cumulative counter between
- * successive samples, which is why the first sample is skipped.
+ * Polling skips ticks while a previous fetch is still in flight and while
+ * the document is hidden. Transactions/sec is computed by diffing the
+ * cumulative counter between successive samples, which is why the first
+ * sample is skipped.
  */
 
 import { FC, useCallback, useEffect, useRef, useState } from "react";
@@ -34,7 +36,7 @@ interface DbErrorShape {
 
 export const ServerMetricsChart: FC<ServerMetricsChartProps> = ({
   connectionId,
-  pollInterval = 2000,
+  pollInterval = 5000,
   maxSamples = 60,
 }) => {
   const [samples, setSamples] = useState<MetricsSample[]>([]);
@@ -44,9 +46,11 @@ export const ServerMetricsChart: FC<ServerMetricsChartProps> = ({
 
   const prevCounterRef = useRef<{ t: number; xact: number } | null>(null);
   const mountedRef = useRef(true);
+  const inFlightRef = useRef(false);
 
   const fetchStats = useCallback(async () => {
-    if (!connectionId) return;
+    if (!connectionId || inFlightRef.current) return;
+    inFlightRef.current = true;
     try {
       const stats = await invoke<ServerStats>("get_server_stats", {
         connectionId,
@@ -87,6 +91,8 @@ export const ServerMetricsChart: FC<ServerMetricsChartProps> = ({
       } else {
         setError(err?.message ?? String(e));
       }
+    } finally {
+      inFlightRef.current = false;
     }
   }, [connectionId, maxSamples]);
 
@@ -97,7 +103,11 @@ export const ServerMetricsChart: FC<ServerMetricsChartProps> = ({
     prevCounterRef.current = null;
     fetchStats();
     if (!connectionId || pollInterval <= 0) return;
-    const id = window.setInterval(fetchStats, pollInterval);
+    const id = window.setInterval(() => {
+      // Pause polling while the window/tab is hidden.
+      if (document.visibilityState !== "visible") return;
+      fetchStats();
+    }, pollInterval);
     return () => {
       mountedRef.current = false;
       window.clearInterval(id);

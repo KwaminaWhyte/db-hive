@@ -2,6 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import "./lib/monacoLoader";
 import { ThemeProvider } from "./components/theme-provider";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PluginProvider } from "./contexts/PluginContext";

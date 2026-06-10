@@ -7,7 +7,6 @@ use async_trait::async_trait;
 use mysql_async::prelude::*;
 use mysql_async::{Conn, OptsBuilder, Pool};
 use std::sync::Arc;
-use tokio::sync::Mutex as TokioMutex;
 
 use crate::drivers::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
 use crate::models::{
@@ -16,14 +15,30 @@ use crate::models::{
 };
 
 pub struct MysqlDriver {
+    /// Connection pool backing all queries (PERF-07).
+    ///
+    /// Every call checks a connection out of the pool instead of serializing
+    /// on a single shared `Conn`, so a long-running user query no longer
+    /// blocks metadata work (autocomplete, schema browsing, activity
+    /// polling). The pool is built with `db_name`, so every pooled connection
+    /// starts in the profile's database; `current_database` is the
+    /// connect-time database used by parameterized metadata queries and does
+    /// not depend on per-connection session state.
     pool: Arc<Pool>,
-    conn: Arc<TokioMutex<Conn>>,
     current_database: String,
 }
 
 impl MysqlDriver {
     fn map_mysql_error(err: mysql_async::Error) -> DbError {
         DbError::QueryError(err.to_string())
+    }
+
+    /// Check a connection out of the pool for one call (PERF-07).
+    async fn get_conn(&self) -> Result<Conn, DbError> {
+        self.pool
+            .get_conn()
+            .await
+            .map_err(|e| DbError::ConnectionError(format!("Failed to get connection: {}", e)))
     }
 }
 
@@ -60,17 +75,20 @@ impl DatabaseDriver for MysqlDriver {
             .max_allowed_packet(Some(1073741824)); // 1GB — needed for large mysqldump imports
 
         let pool = Pool::new(opts_builder.clone());
-        let conn = pool.get_conn().await.map_err(Self::map_mysql_error)?;
+
+        // Validate that we can actually establish a connection now, so
+        // `connect()` still fails fast on bad credentials. The connection is
+        // returned to the pool on drop.
+        let _ = pool.get_conn().await.map_err(Self::map_mysql_error)?;
 
         Ok(Self {
             pool: Arc::new(pool),
-            conn: Arc::new(TokioMutex::new(conn)),
             current_database: database.to_string(),
         })
     }
 
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, DbError> {
-        let mut conn = self.conn.lock().await;
+        let mut conn = self.get_conn().await?;
 
         let mut result = conn.query_iter(sql).await.map_err(Self::map_mysql_error)?;
 
@@ -120,7 +138,7 @@ impl DatabaseDriver for MysqlDriver {
     }
 
     async fn get_databases(&self) -> Result<Vec<DatabaseInfo>, DbError> {
-        let mut conn = self.conn.lock().await;
+        let mut conn = self.get_conn().await?;
 
         let databases: Vec<String> = conn
             .query("SHOW DATABASES")
@@ -148,7 +166,7 @@ impl DatabaseDriver for MysqlDriver {
     }
 
     async fn get_tables(&self, _schema: &str) -> Result<Vec<TableInfo>, DbError> {
-        let mut conn = self.conn.lock().await;
+        let mut conn = self.get_conn().await?;
 
         // Use parameterized query to prevent SQL injection
         let query = r#"
@@ -175,7 +193,7 @@ impl DatabaseDriver for MysqlDriver {
     }
 
     async fn test_connection(&self) -> Result<(), DbError> {
-        let mut conn = self.conn.lock().await;
+        let mut conn = self.get_conn().await?;
         conn.ping().await.map_err(Self::map_mysql_error)?;
         Ok(())
     }
@@ -185,7 +203,7 @@ impl DatabaseDriver for MysqlDriver {
         _schema: &str,
         table_name: &str,
     ) -> Result<TableSchema, DbError> {
-        let mut conn = self.conn.lock().await;
+        let mut conn = self.get_conn().await?;
 
         // Get column information using parameterized query
         let column_query = r#"
@@ -299,10 +317,7 @@ impl DatabaseDriver for MysqlDriver {
             ORDER BY kcu.TABLE_NAME, kcu.CONSTRAINT_NAME, kcu.ORDINAL_POSITION
         "#;
 
-        let mut conn =
-            self.pool.get_conn().await.map_err(|e| {
-                DbError::ConnectionError(format!("Failed to get connection: {}", e))
-            })?;
+        let mut conn = self.get_conn().await?;
 
         let rows: Vec<(
             String,

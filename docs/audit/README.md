@@ -28,8 +28,8 @@ Each report contains per-finding `file:line` references and an actionable checkb
 
 ### Phase 3 — Performance polish
 
-- [ ] **PERF-01/02**: Replace QueryPanel's sequential per-table schema fetch with the backend's cached `get_autocomplete_metadata` (`QueryPanel.tsx:93-163`), and lazily mount query tabs instead of mounting every tab and Monaco instance at once (`query.tsx:517-576`).
-- [ ] Remaining Performance High findings, then Medium, per [performance-audit.md](./performance-audit.md).
+- [x] **PERF-01/02**: Replace QueryPanel's sequential per-table schema fetch with the backend's cached `get_autocomplete_metadata` (`QueryPanel.tsx:93-163`), and lazily mount query tabs instead of mounting every tab and Monaco instance at once (`query.tsx:517-576`).
+- [x] Remaining Performance High findings (PERF-12 channel streaming deferred — architectural change), then Medium, per [performance-audit.md](./performance-audit.md).
 
 ### Phase 4 — UX coherence
 

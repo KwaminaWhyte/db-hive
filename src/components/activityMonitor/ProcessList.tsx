@@ -1,10 +1,11 @@
 /**
  * ProcessList Component
  *
- * Polls `get_active_queries` every 2 seconds while mounted and renders a table
- * of active database sessions. Supports cancelling/killing a session via
- * `kill_query`. Renders a graceful fallback message when the driver does not
- * support session introspection.
+ * Polls `get_active_queries` every 5 seconds while mounted and renders a table
+ * of active database sessions. Polling skips ticks while a previous fetch is
+ * still in flight and while the document is hidden. Supports cancelling/killing
+ * a session via `kill_query`. Renders a graceful fallback message when the
+ * driver does not support session introspection.
  */
 
 import { FC, useCallback, useEffect, useRef, useState } from "react";
@@ -24,7 +25,7 @@ import type { ActiveQuery } from "@/types/monitoring";
 
 interface ProcessListProps {
   connectionId?: string;
-  /** Poll interval in milliseconds. Defaults to 2000. */
+  /** Poll interval in milliseconds. Defaults to 5000. */
   pollInterval?: number;
 }
 
@@ -35,7 +36,7 @@ interface DbErrorShape {
 
 export const ProcessList: FC<ProcessListProps> = ({
   connectionId,
-  pollInterval = 2000,
+  pollInterval = 5000,
 }) => {
   const [rows, setRows] = useState<ActiveQuery[]>([]);
   const [unsupported, setUnsupported] = useState<string | null>(null);
@@ -43,9 +44,11 @@ export const ProcessList: FC<ProcessListProps> = ({
   const [loading, setLoading] = useState(false);
   const [killing, setKilling] = useState<Set<number>>(new Set());
   const mountedRef = useRef(true);
+  const inFlightRef = useRef(false);
 
   const fetchActive = useCallback(async () => {
-    if (!connectionId) return;
+    if (!connectionId || inFlightRef.current) return;
+    inFlightRef.current = true;
     setLoading(true);
     try {
       const data = await invoke<ActiveQuery[]>("get_active_queries", {
@@ -65,6 +68,7 @@ export const ProcessList: FC<ProcessListProps> = ({
         setError(err?.message ?? String(e));
       }
     } finally {
+      inFlightRef.current = false;
       if (mountedRef.current) setLoading(false);
     }
   }, [connectionId]);
@@ -73,7 +77,11 @@ export const ProcessList: FC<ProcessListProps> = ({
     mountedRef.current = true;
     fetchActive();
     if (!connectionId || pollInterval <= 0) return;
-    const id = window.setInterval(fetchActive, pollInterval);
+    const id = window.setInterval(() => {
+      // Pause polling while the window/tab is hidden.
+      if (document.visibilityState !== "visible") return;
+      fetchActive();
+    }, pollInterval);
     return () => {
       mountedRef.current = false;
       window.clearInterval(id);

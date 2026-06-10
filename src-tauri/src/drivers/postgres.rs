@@ -19,6 +19,132 @@ fn quote_ident(ident: &str) -> String {
     format!("\"{}\"", ident.replace('"', "\"\""))
 }
 
+/// Count the top-level SQL statements in `sql` (PERF-11).
+///
+/// The previous heuristic was `sql.matches(';').count() > 1`, which misrouted
+/// a single statement containing semicolons inside string literals (or
+/// comments, or dollar-quoted bodies) to `batch_execute` — silently returning
+/// no rows. This scanner ignores semicolons inside:
+///
+/// - single-quoted string literals (`'it''s'` — doubled-quote escape)
+/// - double-quoted identifiers (`"weird;name"`)
+/// - dollar-quoted strings (`$$ ... $$`, `$tag$ ... $tag$`)
+/// - line comments (`-- ...`) and nested block comments (`/* ... */`)
+///
+/// A statement is only counted if it contains non-whitespace content, so a
+/// trailing semicolon (`SELECT 1;`) still counts as one statement.
+fn count_statements(sql: &str) -> usize {
+    let bytes = sql.as_bytes();
+    let mut i = 0;
+    let mut statements = 0;
+    // Whether the current segment (since the last top-level ';') has content.
+    let mut has_content = false;
+
+    while i < bytes.len() {
+        match bytes[i] {
+            b';' => {
+                if has_content {
+                    statements += 1;
+                    has_content = false;
+                }
+                i += 1;
+            }
+            // Line comment: skip to end of line.
+            b'-' if bytes.get(i + 1) == Some(&b'-') => {
+                while i < bytes.len() && bytes[i] != b'\n' {
+                    i += 1;
+                }
+            }
+            // Block comment: skip to matching close, honoring nesting
+            // (PostgreSQL block comments nest).
+            b'/' if bytes.get(i + 1) == Some(&b'*') => {
+                i += 2;
+                let mut depth = 1;
+                while i < bytes.len() && depth > 0 {
+                    if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') {
+                        depth += 1;
+                        i += 2;
+                    } else if bytes[i] == b'*' && bytes.get(i + 1) == Some(&b'/') {
+                        depth -= 1;
+                        i += 2;
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            // Single-quoted string literal; '' is an escaped quote.
+            b'\'' => {
+                has_content = true;
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == b'\'' {
+                        if bytes.get(i + 1) == Some(&b'\'') {
+                            i += 2; // escaped quote, stay in string
+                        } else {
+                            i += 1; // closing quote
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            // Double-quoted identifier; "" is an escaped quote.
+            b'"' => {
+                has_content = true;
+                i += 1;
+                while i < bytes.len() {
+                    if bytes[i] == b'"' {
+                        if bytes.get(i + 1) == Some(&b'"') {
+                            i += 2;
+                        } else {
+                            i += 1;
+                            break;
+                        }
+                    } else {
+                        i += 1;
+                    }
+                }
+            }
+            // Possible dollar-quote opener: `$tag$` where tag is empty or
+            // alphanumeric/underscore. If it doesn't parse as a delimiter
+            // (e.g. `$1` positional parameter), treat the `$` as plain text.
+            b'$' => {
+                let tag_start = i + 1;
+                let mut j = tag_start;
+                while j < bytes.len() && (bytes[j].is_ascii_alphanumeric() || bytes[j] == b'_') {
+                    j += 1;
+                }
+                if j < bytes.len() && bytes[j] == b'$' {
+                    has_content = true;
+                    let delim = &sql[i..=j];
+                    // Scan for the matching closing delimiter.
+                    let body_start = j + 1;
+                    match sql[body_start..].find(delim) {
+                        Some(pos) => i = body_start + pos + delim.len(),
+                        None => i = bytes.len(), // unterminated: consume the rest
+                    }
+                } else {
+                    has_content = true;
+                    i += 1;
+                }
+            }
+            c => {
+                if !c.is_ascii_whitespace() {
+                    has_content = true;
+                }
+                i += 1;
+            }
+        }
+    }
+
+    if has_content {
+        statements += 1;
+    }
+
+    statements
+}
+
 /// PostgreSQL database driver
 ///
 /// Manages connections to PostgreSQL databases and provides query execution
@@ -367,14 +493,14 @@ impl DatabaseDriver for PostgresDriver {
     }
 
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, DbError> {
-        // Check if SQL contains multiple statements (for transactions)
-        // Simple heuristic: contains semicolons not in quotes
-        let has_multiple_statements = sql.matches(';').count() > 1;
-
         let client = self.client().await?;
 
-        if has_multiple_statements {
-            // Use batch_execute for multi-statement SQL (transactions)
+        // Multi-statement SQL (transactions, scripts) must go through
+        // batch_execute — the extended protocol only accepts one statement.
+        // count_statements() ignores semicolons inside string literals,
+        // dollar-quoted strings, and comments (PERF-11), so a single query
+        // like `SELECT 'a;b'` is no longer misrouted here.
+        if count_statements(sql) > 1 {
             client
                 .batch_execute(sql)
                 .await
@@ -384,7 +510,36 @@ impl DatabaseDriver for PostgresDriver {
             return Ok(QueryResult::empty());
         }
 
-        // Try to execute as a query first (for SELECT statements).
+        // Prepare the statement once (PERF-11). The prepared statement gives
+        // us the result-column metadata up front, so:
+        // - empty result sets no longer need a second prepare round-trip to
+        //   recover column names, and
+        // - SELECT vs DML is decided from the statement metadata instead of
+        //   the old retry-on-error pattern that re-executed failing SQL via
+        //   client.execute (a failed query must never run twice).
+        let statement = client
+            .prepare(sql)
+            .await
+            .map_err(|e| DbError::QueryError(format!("{}", e)))?;
+
+        let columns: Vec<String> = statement
+            .columns()
+            .iter()
+            .map(|col| col.name().to_string())
+            .collect();
+
+        if columns.is_empty() {
+            // No result columns: DML/DDL (INSERT/UPDATE/DELETE/CREATE/...).
+            // Execute the prepared handle to get the affected-row count.
+            let rows_affected = client
+                .execute(&statement, &[])
+                .await
+                .map_err(|e| DbError::QueryError(format!("{}", e)))?;
+
+            return Ok(QueryResult::with_affected(rows_affected));
+        }
+
+        // Data-returning statement (SELECT, or DML with RETURNING).
         //
         // `query_raw` returns a `RowStream` instead of a fully materialized
         // `Vec<Row>`, which lets us stop pulling rows at MAX_RESULT_ROWS — an
@@ -392,60 +547,31 @@ impl DatabaseDriver for PostgresDriver {
         // row in memory before any cap could apply (PERF-03). We fetch one
         // extra row past the cap so the caller can detect truncation.
         let params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = Vec::new();
-        match client.query_raw(sql, params).await {
-            Ok(stream) => {
-                futures_util::pin_mut!(stream);
+        let stream = client
+            .query_raw(&statement, params)
+            .await
+            .map_err(|e| DbError::QueryError(format!("{}", e)))?;
+        futures_util::pin_mut!(stream);
 
-                let mut rows: Vec<tokio_postgres::Row> = Vec::new();
-                while let Some(row) = stream
-                    .try_next()
-                    .await
-                    .map_err(|e| DbError::QueryError(format!("{}", e)))?
-                {
-                    rows.push(row);
-                    if rows.len() > MAX_RESULT_ROWS {
-                        // Cap reached: stop fetching. Dropping the stream
-                        // discards the remainder of the result set.
-                        break;
-                    }
-                }
-
-                // Extract column names from the statement, even if there are no rows
-                let columns: Vec<String> = if rows.is_empty() {
-                    // For empty result sets, we need to execute the query to get column metadata
-                    match client.prepare(sql).await {
-                        Ok(statement) => statement
-                            .columns()
-                            .iter()
-                            .map(|col| col.name().to_string())
-                            .collect(),
-                        Err(_) => vec![], // If preparation fails, return empty columns
-                    }
-                } else {
-                    rows[0]
-                        .columns()
-                        .iter()
-                        .map(|col| col.name().to_string())
-                        .collect()
-                };
-
-                // Convert rows to JSON
-                let data: Vec<Vec<serde_json::Value>> =
-                    rows.iter().map(|row| Self::row_to_json_vec(row)).collect();
-
-                Ok(QueryResult::with_data(columns, data))
-            }
-            Err(query_err) => {
-                // If query failed, try as an execute (for INSERT/UPDATE/DELETE)
-                match client.execute(sql, &[]).await {
-                    Ok(rows_affected) => Ok(QueryResult::with_affected(rows_affected)),
-                    Err(_execute_err) => {
-                        // Both query and execute failed, return the query error with full details
-                        Err(DbError::QueryError(format!("{}", query_err)))
-                    }
-                }
+        let mut rows: Vec<tokio_postgres::Row> = Vec::new();
+        while let Some(row) = stream
+            .try_next()
+            .await
+            .map_err(|e| DbError::QueryError(format!("{}", e)))?
+        {
+            rows.push(row);
+            if rows.len() > MAX_RESULT_ROWS {
+                // Cap reached: stop fetching. Dropping the stream
+                // discards the remainder of the result set.
+                break;
             }
         }
+
+        // Convert rows to JSON
+        let data: Vec<Vec<serde_json::Value>> =
+            rows.iter().map(|row| Self::row_to_json_vec(row)).collect();
+
+        Ok(QueryResult::with_data(columns, data))
     }
 
     async fn get_databases(&self) -> Result<Vec<DatabaseInfo>, DbError> {
@@ -907,5 +1033,59 @@ mod tests {
         assert!(!conn_str.contains("password="));
         assert!(!conn_str.contains("dbname="));
         assert!(!conn_str.contains("connect_timeout="));
+    }
+
+    #[test]
+    fn test_count_statements_single() {
+        assert_eq!(count_statements("SELECT 1"), 1);
+        assert_eq!(count_statements("SELECT 1;"), 1);
+        assert_eq!(count_statements("  SELECT 1 ;  "), 1);
+        assert_eq!(count_statements(""), 0);
+        assert_eq!(count_statements("   ;  ; "), 0);
+    }
+
+    #[test]
+    fn test_count_statements_multiple() {
+        assert_eq!(count_statements("SELECT 1; SELECT 2"), 2);
+        assert_eq!(count_statements("SELECT 1; SELECT 2;"), 2);
+        assert_eq!(
+            count_statements("BEGIN; UPDATE t SET x = 1; COMMIT;"),
+            3
+        );
+    }
+
+    #[test]
+    fn test_count_statements_semicolon_in_string_literal() {
+        // The old `matches(';').count() > 1` heuristic misrouted these.
+        assert_eq!(count_statements("SELECT 'a;b'"), 1);
+        assert_eq!(count_statements("SELECT 'a;b;c';"), 1);
+        assert_eq!(count_statements("SELECT 'it''s; fine';"), 1);
+        assert_eq!(count_statements("SELECT \"weird;column\" FROM t;"), 1);
+    }
+
+    #[test]
+    fn test_count_statements_dollar_quoted() {
+        assert_eq!(
+            count_statements("CREATE FUNCTION f() RETURNS int AS $$ SELECT 1; $$ LANGUAGE sql;"),
+            1
+        );
+        assert_eq!(
+            count_statements(
+                "CREATE FUNCTION f() RETURNS int AS $body$ BEGIN RETURN 1; END; $body$ LANGUAGE plpgsql;"
+            ),
+            1
+        );
+        // Positional parameters are not dollar-quote openers.
+        assert_eq!(count_statements("SELECT $1; SELECT $2"), 2);
+    }
+
+    #[test]
+    fn test_count_statements_comments() {
+        assert_eq!(count_statements("SELECT 1 -- trailing; comment"), 1);
+        assert_eq!(count_statements("-- comment; with semicolon\nSELECT 1;"), 1);
+        assert_eq!(count_statements("SELECT 1 /* block; comment */;"), 1);
+        // Nested block comments (PostgreSQL nests them).
+        assert_eq!(count_statements("SELECT 1 /* a /* b; */ c; */;"), 1);
+        assert_eq!(count_statements("/* only a comment; */"), 0);
     }
 }

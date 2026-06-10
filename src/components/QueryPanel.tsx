@@ -1,4 +1,4 @@
-import { FC, useState, useEffect, useCallback } from 'react';
+import { FC, useState, useEffect, useCallback, useRef } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { SQLEditor } from './SQLEditor';
 import { ResultsViewer } from './ResultsViewer';
@@ -18,6 +18,7 @@ import { GripHorizontal, GripVertical, Plus, X, Sparkles } from 'lucide-react';
 import { QueryStatusBar } from './QueryStatusBar';
 import { ConnectionLostError } from './ConnectionLostError';
 import { useNavigate } from '@tanstack/react-router';
+import { useSchemaContext } from '@/hooks/useSchemaContext';
 
 interface EditorTab {
   id: string;
@@ -46,9 +47,47 @@ interface QueryPanelProps {
 
   /** Callback when pending query is loaded */
   onQueryLoaded?: () => void;
+
+  /**
+   * Stable identifier for this panel instance. When provided, the panel's
+   * inner editor tabs (SQL text, results, query plan) are snapshotted to an
+   * in-memory cache so they survive unmount/remount — required now that the
+   * query route only mounts the active tab (PERF-02).
+   */
+  panelId?: string;
+
+  /** Called (debounced) with the active inner tab's SQL so the parent can
+   *  persist it (e.g. to TabContext / localStorage). */
+  onPersistSql?: (sql: string) => void;
 }
 
 let tabIdCounter = 1;
+
+/**
+ * In-memory snapshots of panel state, keyed by `panelId`. Lets a QueryPanel
+ * be unmounted (inactive route tab) and restored later without losing SQL
+ * text, results, or the inner-tab layout. Never serialized — results can be
+ * large. Entries are cleared via `clearQueryPanelState` when a tab closes.
+ */
+interface QueryPanelSnapshot {
+  tabs: EditorTab[];
+  activeTabId: string;
+  queryPlan: QueryPlanResult | null;
+  showPlanView: boolean;
+}
+
+const panelStateCache = new Map<string, QueryPanelSnapshot>();
+
+/** Drop the cached snapshot for a closed panel (frees result memory). */
+export function clearQueryPanelState(panelId: string): void {
+  panelStateCache.delete(panelId);
+}
+
+/** True if any inner editor tab of the panel has non-empty SQL. */
+export function queryPanelHasUnsavedSql(panelId: string): boolean {
+  const snapshot = panelStateCache.get(panelId);
+  return !!snapshot?.tabs.some((tab) => tab.sql.trim().length > 0);
+}
 
 export const QueryPanel: FC<QueryPanelProps> = ({
   connectionId,
@@ -57,111 +96,92 @@ export const QueryPanel: FC<QueryPanelProps> = ({
   onExecuteQuery,
   pendingQuery,
   onQueryLoaded,
+  panelId,
+  onPersistSql,
 }) => {
-  // Tab management
-  const [tabs, setTabs] = useState<EditorTab[]>([
-    {
-      id: 'tab-1',
-      name: 'Query 1',
-      sql: '',
-      loading: false,
-      results: null,
-      error: null,
-    },
-  ]);
-  const [activeTabId, setActiveTabId] = useState('tab-1');
+  // Tab management — restored from the in-memory snapshot cache when this
+  // panel was previously mounted (route tab switched away and back).
+  const [tabs, setTabs] = useState<EditorTab[]>(() => {
+    const snapshot = panelId ? panelStateCache.get(panelId) : undefined;
+    if (snapshot) {
+      // An in-flight query at unmount time never resolves into this remount,
+      // so clear any stale loading flags.
+      return snapshot.tabs.map((tab) =>
+        tab.loading ? { ...tab, loading: false } : tab
+      );
+    }
+    return [
+      {
+        id: 'tab-1',
+        name: 'Query 1',
+        sql: '',
+        loading: false,
+        results: null,
+        error: null,
+      },
+    ];
+  });
+  const [activeTabId, setActiveTabId] = useState(() => {
+    const snapshot = panelId ? panelStateCache.get(panelId) : undefined;
+    return snapshot?.activeTabId ?? 'tab-1';
+  });
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [connectionLost, setConnectionLost] = useState(false);
-  const [schemaContext, setSchemaContext] = useState('');
   const navigate = useNavigate();
 
   // Query Plan Visualizer state
-  const [queryPlan, setQueryPlan] = useState<QueryPlanResult | null>(null);
-  const [showPlanView, setShowPlanView] = useState(false);
+  const [queryPlan, setQueryPlan] = useState<QueryPlanResult | null>(() => {
+    const snapshot = panelId ? panelStateCache.get(panelId) : undefined;
+    return snapshot?.queryPlan ?? null;
+  });
+  const [showPlanView, setShowPlanView] = useState(() => {
+    const snapshot = panelId ? panelStateCache.get(panelId) : undefined;
+    return snapshot?.showPlanView ?? false;
+  });
+
+  // Schema context for the AI assistant — single cached
+  // get_autocomplete_metadata call shared across all panels on this
+  // connection (PERF-01 / PERF-02).
+  const schemaContext = useSchemaContext(connectionId, currentDatabase);
 
   // Get the active tab
   const activeTab = tabs.find((t) => t.id === activeTabId) || tabs[0];
 
-  // Handle pending query from parent
+  // Snapshot panel state so it survives unmount (inactive route tab).
   useEffect(() => {
-    if (pendingQuery) {
+    if (!panelId) return;
+    panelStateCache.set(panelId, { tabs, activeTabId, queryPlan, showPlanView });
+  }, [panelId, tabs, activeTabId, queryPlan, showPlanView]);
+
+  // Persist the active inner tab's SQL to the parent (debounced) so it
+  // survives app restarts via TabContext/localStorage. Refs keep the effect
+  // off the parent's render identity (avoids re-arm/update loops).
+  const onPersistSqlRef = useRef(onPersistSql);
+  onPersistSqlRef.current = onPersistSql;
+  const activeSqlRef = useRef(activeTab.sql);
+  activeSqlRef.current = activeTab.sql;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onPersistSqlRef.current?.(activeSqlRef.current);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [activeTab.sql]);
+
+  // Flush the latest SQL on unmount so a quick tab switch loses nothing.
+  useEffect(() => {
+    return () => {
+      onPersistSqlRef.current?.(activeSqlRef.current);
+    };
+  }, []);
+
+  // Handle pending query from parent (skip echoes of our own persisted SQL)
+  useEffect(() => {
+    if (pendingQuery && pendingQuery !== activeTab.sql) {
       updateTab(activeTabId, { sql: pendingQuery });
       onQueryLoaded?.();
     }
   }, [pendingQuery]);
-
-  // Load schema context for AI assistant
-  useEffect(() => {
-    const loadSchemaContext = async () => {
-      if (!connectionId) {
-        setSchemaContext('');
-        return;
-      }
-
-      try {
-        // First get schemas
-        const schemas = await invoke<Array<{ name: string }>>('get_schemas', {
-          connectionId,
-          database: currentDatabase || '',
-        });
-
-        let context = `Database: ${currentDatabase || 'unknown'}\n\nTables:\n`;
-        let totalTables = 0;
-
-        // Get tables from each schema (prioritize 'public' for PostgreSQL, skip system schemas)
-        const schemaOrder = schemas
-          .map(s => s.name)
-          .filter(name => !['information_schema', 'pg_catalog', 'mysql', 'performance_schema', 'sys'].includes(name))
-          .sort((a, b) => {
-            if (a === 'public') return -1;
-            if (b === 'public') return 1;
-            return a.localeCompare(b);
-          });
-
-        for (const schemaName of schemaOrder) {
-          try {
-            const tables = await invoke<Array<{ name: string; schema: string; table_type: string }>>('get_tables', {
-              connectionId,
-              schema: schemaName,
-            });
-
-            for (const table of tables) {
-              try {
-                const tableSchema = await invoke<{ columns: Array<{ name: string; dataType: string; nullable: boolean; isPrimaryKey: boolean }> }>('get_table_schema', {
-                  connectionId,
-                  table: table.name,
-                  schema: schemaName,
-                });
-
-                context += `\n${schemaName}.${table.name}:\n`;
-                for (const col of tableSchema.columns) {
-                  context += `  - ${col.name}: ${col.dataType}${col.isPrimaryKey ? ' (PK)' : ''}${col.nullable ? '' : ' NOT NULL'}\n`;
-                }
-                totalTables++;
-              } catch (err) {
-                console.warn(`Failed to get schema for ${schemaName}.${table.name}:`, err);
-              }
-            }
-          } catch (err) {
-            console.warn(`Failed to get tables for schema ${schemaName}:`, err);
-          }
-        }
-
-        if (totalTables === 0) {
-          setSchemaContext(`Database: ${currentDatabase || 'unknown'}\n\nNo tables found.`);
-          return;
-        }
-
-        console.log('Schema context loaded:', context.substring(0, 200) + '...');
-        setSchemaContext(context);
-      } catch (err) {
-        console.error('Failed to load schema context:', err);
-        setSchemaContext('');
-      }
-    };
-
-    loadSchemaContext();
-  }, [connectionId, currentDatabase]);
 
   // Update tab state - memoized to prevent unnecessary re-renders
   const updateTab = useCallback((

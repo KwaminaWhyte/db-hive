@@ -343,22 +343,31 @@ impl RedisDriver {
 
         let mut seen_types: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-        for key in &keys {
-            let type_str: String = redis::cmd("TYPE")
-                .arg(key)
+        // Issue all TYPE probes as a single pipeline (one network round-trip)
+        // instead of one awaited TYPE command per key — up to 100 sequential
+        // round-trips on every schema load (PERF-09).
+        if !keys.is_empty() {
+            let mut pipe = redis::pipe();
+            for key in &keys {
+                pipe.cmd("TYPE").arg(key);
+            }
+
+            let types: Vec<String> = pipe
                 .query_async(&mut *conn)
                 .await
-                .unwrap_or_else(|_| "none".to_string());
+                .map_err(|e| DbError::QueryError(format!("TYPE pipeline failed: {}", e)))?;
 
-            let group = match type_str.as_str() {
-                "string" => "strings",
-                "hash" => "hashes",
-                "list" => "lists",
-                "set" => "sets",
-                "zset" => "zsets",
-                _ => continue,
-            };
-            seen_types.insert(group.to_string());
+            for type_str in &types {
+                let group = match type_str.as_str() {
+                    "string" => "strings",
+                    "hash" => "hashes",
+                    "list" => "lists",
+                    "set" => "sets",
+                    "zset" => "zsets",
+                    _ => continue,
+                };
+                seen_types.insert(group.to_string());
+            }
         }
 
         // Return in a stable, consistent order

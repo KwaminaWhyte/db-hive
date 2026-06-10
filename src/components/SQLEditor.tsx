@@ -1,13 +1,12 @@
 import { FC, useRef, useEffect } from 'react';
 import Editor, { Monaco } from '@monaco-editor/react';
-import type * as monaco from 'monaco-editor';
 import { useTheme } from './theme-provider';
 import { Card, CardContent, CardHeader } from './ui/card';
 import { Button } from './ui/button';
 import { Play, Trash2, CircleDot, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAutocompleteMetadata } from '@/hooks/useAutocompleteMetadata';
-import { registerSqlAutocomplete } from '@/lib/sqlAutocomplete';
+import { registerSqlAutocomplete, setAutocompleteMetadata } from '@/lib/sqlAutocomplete';
 
 interface SQLEditorProps {
   /** Active connection ID */
@@ -39,7 +38,6 @@ export const SQLEditor: FC<SQLEditorProps> = ({
 }) => {
   const { theme } = useTheme();
   const editorRef = useRef<any>(null);
-  const autocompleteDisposableRef = useRef<monaco.IDisposable | null>(null);
 
   // Fetch autocomplete metadata
   const { metadata, loading: metadataLoading, refresh } = useAutocompleteMetadata({
@@ -60,6 +58,10 @@ export const SQLEditor: FC<SQLEditorProps> = ({
   // Handle editor mount
   const handleEditorDidMount = (editor: any, monaco: Monaco) => {
     editorRef.current = editor;
+
+    // Register the global SQL completion provider (idempotent — registered
+    // once app-wide, no matter how many editors mount; see PERF-16)
+    registerSqlAutocomplete(monaco);
 
     // Add Ctrl+Enter keyboard shortcut
     editor.addAction({
@@ -98,25 +100,11 @@ export const SQLEditor: FC<SQLEditorProps> = ({
     }
   }, [theme]);
 
-  // Register autocomplete provider when metadata changes
+  // Feed current metadata to the global autocomplete provider. The provider
+  // itself is registered once (in handleEditorDidMount) — only the metadata
+  // it reads from is swapped here, so no per-editor disposal is needed.
   useEffect(() => {
-    const monacoInstance = (window as any).monaco;
-    if (!monacoInstance) return;
-
-    // Dispose previous provider
-    if (autocompleteDisposableRef.current) {
-      autocompleteDisposableRef.current.dispose();
-    }
-
-    // Register new provider with current metadata
-    autocompleteDisposableRef.current = registerSqlAutocomplete(monacoInstance, metadata);
-
-    // Cleanup on unmount
-    return () => {
-      if (autocompleteDisposableRef.current) {
-        autocompleteDisposableRef.current.dispose();
-      }
-    };
+    setAutocompleteMetadata(metadata);
   }, [metadata]);
 
   return (

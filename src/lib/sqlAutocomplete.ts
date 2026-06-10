@@ -23,22 +23,56 @@ const SQL_FUNCTIONS = [
   'JSON_EXTRACT', 'ARRAY_AGG', 'STRING_AGG', 'IF', 'IFNULL',
 ];
 
+// Monaco completion providers are global per language, not per editor — so the
+// provider is registered exactly once (PERF-16) and reads the current metadata
+// from this module-level slot. Editors push fresh metadata via
+// `setAutocompleteMetadata` instead of re-registering.
+let currentMetadata: AutocompleteMetadata | null = null;
+let registeredThisModule = false;
+
+// Hot-reload guard: stash the disposable on globalThis so a re-evaluated
+// module instance can dispose the provider registered by its predecessor
+// instead of stacking a duplicate.
+const HMR_DISPOSABLE_KEY = '__dbHiveSqlCompletionDisposable';
+
 /**
- * Register SQL autocomplete provider for Monaco Editor
+ * Update the metadata the global SQL completion provider suggests from.
+ * Call whenever the active connection/database metadata changes.
+ */
+export function setAutocompleteMetadata(metadata: AutocompleteMetadata | null): void {
+  currentMetadata = metadata;
+}
+
+/**
+ * Register the SQL autocomplete provider for Monaco Editor (idempotent).
  *
- * This provider suggests:
+ * The provider is global per language, so this registers it once per module
+ * instance and is a no-op on subsequent calls. No per-editor disposal is
+ * needed — feed new metadata via `setAutocompleteMetadata` instead.
+ *
+ * The provider suggests:
  * - SQL keywords and functions
  * - Database names
  * - Schema names
  * - Table names (with schema context)
  * - Column names (with table and schema context)
  */
-export function registerSqlAutocomplete(
-  monacoInstance: typeof monaco,
-  metadata: AutocompleteMetadata | null
-): monaco.IDisposable {
-  return monacoInstance.languages.registerCompletionItemProvider('sql', {
+export function registerSqlAutocomplete(monacoInstance: typeof monaco): void {
+  if (registeredThisModule) return;
+  registeredThisModule = true;
+
+  // Dispose any provider left over from a previous module instance (hot reload)
+  const globalSlot = globalThis as Record<string, unknown> & {
+    [HMR_DISPOSABLE_KEY]?: monaco.IDisposable;
+  };
+  globalSlot[HMR_DISPOSABLE_KEY]?.dispose();
+
+  globalSlot[HMR_DISPOSABLE_KEY] = monacoInstance.languages.registerCompletionItemProvider('sql', {
     provideCompletionItems: (model, position) => {
+      // Read metadata at completion time so the single global provider always
+      // reflects the most recently mounted editor's connection/database.
+      const metadata = currentMetadata;
+
       const word = model.getWordUntilPosition(position);
       const range: monaco.IRange = {
         startLineNumber: position.lineNumber,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, memo, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, memo, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Store } from '@tauri-apps/plugin-store';
 import ReactFlow, {
@@ -225,12 +225,24 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
   const [error, setError] = useState<string | null>(null);
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [showRelationships, setShowRelationships] = useState(true);
-  const { fitView } = useReactFlow();
+  const { fitView, getNodes } = useReactFlow();
   const [store, setStore] = useState<Store | null>(null);
+
+  // Debounce timer for layout saves (PERF-13)
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Initialize store for persisting layouts
   useEffect(() => {
     Store.load('erd-layouts.json').then(setStore);
+  }, []);
+
+  // Clear any pending layout save on unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) {
+        clearTimeout(saveTimerRef.current);
+      }
+    };
   }, []);
 
   // Memoize snapGrid array to prevent re-creation on every render
@@ -279,6 +291,20 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
   }, [connectionId, schema, store]);
 
   /**
+   * Debounced layout save: clears any pending timer before re-arming so only
+   * one write happens after position changes settle (PERF-13)
+   */
+  const scheduleSaveLayout = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+    }
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null;
+      saveLayout(getNodes());
+    }, 500);
+  }, [saveLayout, getNodes]);
+
+  /**
    * Custom node change handler with snap-to-grid and position persistence
    */
   const handleNodesChange: OnNodesChange = useCallback((changes: NodeChange[]) => {
@@ -305,18 +331,23 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
 
     onNodesChange(processedChanges);
 
-    // Save layout after position changes (debounced)
+    // Save layout after position changes settle (covers non-drag moves,
+    // e.g. keyboard nudges); drags are flushed by handleNodeDragStop
     if (positionChanged) {
-      const timeoutId = setTimeout(() => {
-        setNodes((currentNodes) => {
-          saveLayout(currentNodes);
-          return currentNodes;
-        });
-      }, 500);
-
-      return () => clearTimeout(timeoutId);
+      scheduleSaveLayout();
     }
-  }, [onNodesChange, snapToGrid, saveLayout, setNodes]);
+  }, [onNodesChange, snapToGrid, scheduleSaveLayout]);
+
+  /**
+   * Save layout exactly once when a drag gesture ends
+   */
+  const handleNodeDragStop = useCallback(() => {
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = null;
+    }
+    saveLayout(getNodes());
+  }, [saveLayout, getNodes]);
 
   /**
    * Apply auto-layout using dagre
@@ -349,16 +380,26 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
         return;
       }
 
-      // 2. Fetch table schemas (columns) for each table
-      const tableSchemas = await Promise.all(
-        tables.map((table) =>
-          invoke<TableSchema>('get_table_schema', {
-            connectionId,
-            schema,
-            table: table.name,
-          })
-        )
-      );
+      // 2. Fetch table schemas (columns) for each table with bounded
+      // concurrency (PERF-14). The autocomplete metadata command lacks
+      // primary-key flags needed for PK badges and M:N detection, so we keep
+      // per-table fetches but cap in-flight IPC calls instead of firing one
+      // per table simultaneously.
+      const CONCURRENCY = 8;
+      const tableSchemas: TableSchema[] = [];
+      for (let i = 0; i < tables.length; i += CONCURRENCY) {
+        const chunk = tables.slice(i, i + CONCURRENCY);
+        const chunkSchemas = await Promise.all(
+          chunk.map((table) =>
+            invoke<TableSchema>('get_table_schema', {
+              connectionId,
+              schema,
+              table: table.name,
+            })
+          )
+        );
+        tableSchemas.push(...chunkSchemas);
+      }
 
       // 3. Fetch foreign keys for the schema
       const foreignKeys = await invoke<ForeignKeyInfo[]>('get_foreign_keys', {
@@ -549,6 +590,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
         nodes={nodes}
         edges={showRelationships ? edges : []}
         onNodesChange={handleNodesChange}
+        onNodeDragStop={handleNodeDragStop}
         onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         fitView
