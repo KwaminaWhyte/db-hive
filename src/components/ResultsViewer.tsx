@@ -182,12 +182,13 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
           <Button
             variant="ghost"
             size="sm"
-            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
             onClick={(e) => {
               e.stopPropagation();
               copyColumnValues(index);
             }}
             title={`Copy column "${colName}"`}
+            aria-label={`Copy column "${colName}"`}
           >
             <Copy className="h-3 w-3" />
           </Button>
@@ -587,11 +588,12 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                                 onClick={() => {
                                   copyRowValues(rowIndex);
                                 }}
                                 title={`Copy row ${rowIndex + 1}`}
+                                aria-label={`Copy row ${rowIndex + 1}`}
                               >
                                 <Copy className="h-3 w-3" />
                               </Button>

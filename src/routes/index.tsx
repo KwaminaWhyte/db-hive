@@ -561,8 +561,18 @@ function HomeRoute() {
                 return (
                   <div
                     key={profile.id}
-                    className="group flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-accent/50 transition-colors cursor-pointer"
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Connect to ${profile.name}`}
+                    className="group flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-accent/50 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                     onDoubleClick={() => handleConnectClick(profile)}
+                    onKeyDown={(e) => {
+                      if (e.target !== e.currentTarget) return;
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleConnectClick(profile);
+                      }
+                    }}
                     title="Double-click to connect"
                   >
                     <div className="w-9 h-9 rounded-lg bg-muted/60 flex items-center justify-center shrink-0">
@@ -586,12 +596,25 @@ function HomeRoute() {
                         {getDriverDisplayName(profile.driver).toLowerCase()} &bull; {profile.host}
                       </span>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-8 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity"
+                      disabled={isConnecting}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleConnectClick(profile);
+                      }}
+                    >
+                      Connect
+                    </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-label={`Actions for ${profile.name}`}
+                          className="h-8 w-8 shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 transition-opacity"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <MoreVertical className="h-4 w-4" />

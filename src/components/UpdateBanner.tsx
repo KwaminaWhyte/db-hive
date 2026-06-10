@@ -31,7 +31,11 @@ export const UpdateBanner: FC<UpdateBannerProps> = ({
       : 0;
 
   return (
-    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300">
+    <div
+      role="status"
+      aria-live="polite"
+      className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 animate-in slide-in-from-bottom-4 fade-in duration-300"
+    >
       <div className="flex items-center gap-3 rounded-xl border border-border bg-card/95 backdrop-blur-md shadow-[0_8px_32px_rgba(0,0,0,0.4)] px-4 py-3 min-w-[380px] max-w-[480px]">
         {/* Icon */}
         <div className="shrink-0">
@@ -139,6 +143,7 @@ export const UpdateBanner: FC<UpdateBannerProps> = ({
           {status.state !== "downloading" && (
             <button
               onClick={onDismiss}
+              aria-label="Dismiss update notification"
               className="h-6 w-6 rounded-md flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
             >
               <X className="h-3.5 w-3.5" />

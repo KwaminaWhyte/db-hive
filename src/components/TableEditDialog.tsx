@@ -387,6 +387,7 @@ export const TableEditDialog: FC<TableEditDialogProps> = ({
                                   variant="ghost"
                                   className="h-9 w-9 mt-5"
                                   title="Restore column"
+                                  aria-label="Restore column"
                                 >
                                   <RotateCcw className="h-4 w-4" />
                                 </Button>
@@ -402,6 +403,7 @@ export const TableEditDialog: FC<TableEditDialogProps> = ({
                                       ? "Cannot drop primary key column"
                                       : "Drop column"
                                   }
+                                  aria-label="Drop column"
                                 >
                                   <Trash2 className="h-4 w-4" />
                                 </Button>
@@ -476,6 +478,7 @@ export const TableEditDialog: FC<TableEditDialogProps> = ({
                                 size="icon"
                                 variant="ghost"
                                 className="h-9 w-9 mt-5"
+                                aria-label="Remove column"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>

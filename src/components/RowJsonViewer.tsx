@@ -69,6 +69,7 @@ export const RowJsonViewer: FC<RowJsonViewerProps> = ({
           variant="ghost"
           size="sm"
           onClick={onClose}
+          aria-label="Close JSON row viewer"
           className="h-7 w-7 p-0"
         >
           <X className="h-4 w-4" />

@@ -187,6 +187,7 @@ export function TemplatesPanel({ onExecuteQuery }: TemplatesPanelProps) {
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
+              aria-label="Clear search"
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground"
             >
               <X className="h-4 w-4" />
@@ -202,7 +203,7 @@ export function TemplatesPanel({ onExecuteQuery }: TemplatesPanelProps) {
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
+              <Button variant="outline" size="sm" aria-label="Template list actions">
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
@@ -292,7 +293,8 @@ export function TemplatesPanel({ onExecuteQuery }: TemplatesPanelProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+                        aria-label="Template actions"
+                        className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                       >
                         <MoreVertical className="h-4 w-4" />
                       </Button>

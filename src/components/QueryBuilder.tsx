@@ -540,6 +540,7 @@ export const QueryBuilder: FC<QueryBuilderProps> = ({
                       variant="ghost"
                       size="icon-sm"
                       onClick={handleCopySql}
+                      aria-label="Copy SQL to clipboard"
                       className="h-7 w-7"
                     >
                       {copied ? (

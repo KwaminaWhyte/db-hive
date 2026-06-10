@@ -224,6 +224,8 @@ export const QueryLogTable: FC<QueryLogTableProps> = ({
               size="sm"
               className="h-6 w-6 p-0"
               onClick={() => toggleRowExpansion(row.original.id)}
+              aria-label={isExpanded ? "Collapse query details" : "Expand query details"}
+              aria-expanded={isExpanded}
             >
               {isExpanded ? (
                 <ChevronUp className="h-4 w-4" />

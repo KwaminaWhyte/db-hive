@@ -344,6 +344,7 @@ export function QueryTemplateDialog({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleRemoveParameter(index)}
+                    aria-label={`Remove parameter ${param.name}`}
                     className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 className="h-3 w-3" />

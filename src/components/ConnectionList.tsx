@@ -265,6 +265,7 @@ export const ConnectionList: FC<ConnectionListProps> = ({
             variant="ghost"
             size="icon"
             onClick={loadProfiles}
+            aria-label="Refresh connections"
             className="h-8 w-8 rounded-lg border border-border bg-background/60 hover:bg-accent hover:border-primary/40 transition-colors"
           >
             <RefreshCw className="h-4 w-4 text-muted-foreground" strokeWidth={1.5} />
@@ -357,28 +358,30 @@ export const ConnectionList: FC<ConnectionListProps> = ({
                             </div>
                           </div>
                         </div>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 rounded-lg hover:bg-accent hover:text-primary"
+                            className="h-7 w-7 rounded-lg hover:bg-accent hover:text-primary focus-visible:opacity-100"
                             onClick={(e) => {
                               e.stopPropagation();
                               onEdit?.(profile);
                             }}
                             title="Edit"
+                            aria-label="Edit connection"
                           >
                             <Pencil className="h-3.5 w-3.5" strokeWidth={1.5} />
                           </Button>
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-7 w-7 rounded-lg hover:bg-destructive/20 hover:text-destructive"
+                            className="h-7 w-7 rounded-lg hover:bg-destructive/20 hover:text-destructive focus-visible:opacity-100"
                             onClick={(e) => {
                               e.stopPropagation();
                               handleDeleteClick(profile);
                             }}
                             title="Delete"
+                            aria-label="Delete connection"
                           >
                             <Trash className="h-3.5 w-3.5" strokeWidth={1.5} />
                           </Button>

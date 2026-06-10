@@ -275,40 +275,43 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-7 w-7 focus-visible:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleToggleFavorite(profile.id);
                 }}
                 title={profile.isFavorite ? "Remove from favorites" : "Add to favorites"}
+                aria-label={profile.isFavorite ? "Remove from favorites" : "Add to favorites"}
               >
                 <Star className={`h-3 w-3 ${profile.isFavorite ? "text-warning fill-current" : ""}`} strokeWidth={1.5} />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-7 w-7 focus-visible:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation();
                   onEdit?.(profile);
                 }}
                 title="Edit connection"
+                aria-label="Edit connection"
               >
                 <Pencil className="h-3 w-3" strokeWidth={1.5} />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 text-destructive hover:text-destructive"
+                className="h-7 w-7 text-destructive hover:text-destructive focus-visible:opacity-100"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDeleteClick(profile.id);
                 }}
                 title="Delete connection"
+                aria-label="Delete connection"
               >
                 <Trash className="h-3 w-3" strokeWidth={1.5} />
               </Button>
@@ -353,6 +356,7 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
             variant="outline"
             size="sm"
             onClick={loadProfiles}
+            aria-label="Refresh connections"
             className="px-3"
           >
             <RefreshCw className="h-4 w-4" strokeWidth={1.5} />
@@ -408,6 +412,7 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
               className="h-6 w-6"
               onClick={() => setViewMode("list")}
               title="List view"
+              aria-label="List view"
             >
               <List className="h-3 w-3" />
             </Button>
@@ -417,6 +422,7 @@ export const EnhancedConnectionList: FC<EnhancedConnectionListProps> = ({
               className="h-6 w-6"
               onClick={() => setViewMode("grid")}
               title="Grid view"
+              aria-label="Grid view"
             >
               <Grid3x3 className="h-3 w-3" />
             </Button>

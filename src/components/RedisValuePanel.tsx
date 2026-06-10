@@ -293,6 +293,7 @@ export function RedisValuePanel({
             onClick={load}
             disabled={loading}
             title="Refresh"
+            aria-label="Refresh value"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
@@ -311,6 +312,7 @@ export function RedisValuePanel({
             className="h-8"
             onClick={onClose}
             title="Close tab"
+            aria-label="Close tab"
           >
             <X className="h-4 w-4" />
           </Button>

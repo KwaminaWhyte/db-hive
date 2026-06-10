@@ -265,6 +265,7 @@ const ConditionRow: FC<ConditionRowProps> = ({
         variant="ghost"
         size="icon-sm"
         onClick={onRemove}
+        aria-label="Remove filter condition"
         className="shrink-0"
       >
         <X className="size-4" />

@@ -222,6 +222,8 @@ function PlanNode({ node, depth, allExpanded }: PlanNodeProps) {
         {hasChildren && (
           <button
             onClick={() => setExpanded(!expanded)}
+            aria-label={expanded ? "Collapse plan node" : "Expand plan node"}
+            aria-expanded={expanded}
             className="mt-0.5 hover:bg-accent rounded p-0.5"
           >
             {expanded ? (

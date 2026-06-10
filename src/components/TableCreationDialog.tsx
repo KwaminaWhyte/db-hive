@@ -518,6 +518,7 @@ export const TableCreationDialog: FC<TableCreationDialogProps> = ({
                           variant="ghost"
                           className="h-9 w-9 mt-5"
                           disabled={columns.length === 1}
+                          aria-label="Remove column"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -609,6 +610,7 @@ export const TableCreationDialog: FC<TableCreationDialogProps> = ({
                               size="icon"
                               variant="ghost"
                               className="h-9 w-9 mt-5"
+                              aria-label="Remove unique constraint"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -712,6 +714,7 @@ export const TableCreationDialog: FC<TableCreationDialogProps> = ({
                                 size="icon"
                                 variant="ghost"
                                 className="h-9 w-9 mt-5"
+                                aria-label="Remove foreign key"
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>

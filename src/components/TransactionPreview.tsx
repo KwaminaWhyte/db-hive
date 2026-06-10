@@ -291,6 +291,7 @@ export const TransactionPreview: FC<TransactionPreviewProps> = ({
           variant="ghost"
           size="sm"
           onClick={onClose}
+          aria-label="Close pending changes panel"
           className="h-7 w-7 p-0"
         >
           <X className="h-4 w-4" />

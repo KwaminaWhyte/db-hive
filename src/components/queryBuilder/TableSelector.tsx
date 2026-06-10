@@ -274,6 +274,7 @@ export function TableSelector({
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
+              aria-label="Clear search"
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
             >
               <X className="h-4 w-4" />
@@ -379,10 +380,11 @@ export function TableSelector({
                                     <Button
                                       variant="ghost"
                                       size="sm"
-                                      className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                                      className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                                       onClick={() => handleAddTable(schema.name, table.name)}
                                       disabled={isLoading}
                                       title="Add table to query"
+                                      aria-label={`Add table ${table.name} to query`}
                                     >
                                       {isLoading ? (
                                         <RefreshCw className="h-3 w-3 animate-spin" />
@@ -451,6 +453,7 @@ export function TableSelector({
                     className="h-6 w-6 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
                     onClick={() => handleRemoveTable(table.alias)}
                     title="Remove table from query"
+                    aria-label={`Remove table ${table.alias} from query`}
                   >
                     <Trash2 className="h-3 w-3" />
                   </Button>

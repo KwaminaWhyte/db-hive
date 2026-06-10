@@ -242,10 +242,10 @@ Both hand-rolled tab strips are clickable `div`s: no `role="tablist"`/`role="tab
 - [x] UX-02: Collapse the nested QueryPanel tab system into the route-level tabs.
 
 **P1 — accessibility and data-loss**
-- [ ] UX-05: aria-label sweep over all icon-only buttons; pair hover-reveals with `focus-visible`.
-- [ ] UX-03: Keyboard-accessible connection rows with a visible Connect affordance.
+- [x] UX-05: aria-label sweep over all icon-only buttons; pair hover-reveals with `focus-visible`.
+- [x] UX-03: Keyboard-accessible connection rows with a visible Connect affordance.
 - [x] UX-07: Unsaved-work protection (or undo) for single-tab close.
-- [ ] UX-16: Arrow-key navigation + tree roles in SchemaExplorer.
+- [x] UX-16: Arrow-key navigation + tree roles in SchemaExplorer.
 - [ ] UX-08: `formatDbError` helper; include detail in test-connection failures.
 
 **P2 — correctness and consistency**
@@ -253,7 +253,7 @@ Both hand-rolled tab strips are clickable `div`s: no `role="tablist"`/`role="tab
 - [ ] UX-10: Move the connected-layout redirect out of render.
 - [ ] UX-11: Resizable schema sidebar via PanelGroup.
 - [ ] UX-12: Export success toasts; cancellable query loading state.
-- [ ] UX-13: Lazy AI schema context using the metadata cache.
+- [x] UX-13: Lazy AI schema context (via PERF-01 cached metadata) using the metadata cache.
 - [ ] UX-17: Platform-aware shortcut copy; rename "Exit"; relocate Settings menu item.
 - [ ] UX-14: Fix or delete the `db-hive-previous-route` back logic.
 - [ ] UX-15: Remove or revive the four dead connection-list components.
@@ -263,6 +263,6 @@ Both hand-rolled tab strips are clickable `div`s: no `role="tablist"`/`role="tab
 - [ ] UX-19: Deduplicate About content and the CSS logo; derive credit versions from package.json.
 - [ ] UX-20: Marketplace search debounce, installed state, skeleton loading.
 - [ ] UX-21: Replace single-click cell copy with context menu/double-click.
-- [ ] UX-22: `aria-live` on UpdateBanner.
+- [x] UX-22: `aria-live` on UpdateBanner.
 - [x] UX-23: Tab semantics on the surviving tab bar.
 - [ ] UX-24: Connection-string auto-navigation, disconnect confirmation, copy-details toast, nested Settings dialog Escape behavior.

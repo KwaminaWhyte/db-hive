@@ -340,6 +340,7 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
             onClick={handleMinimize}
             className="h-10 px-4 hover:bg-accent transition-colors"
             title="Minimize"
+            aria-label="Minimize window"
           >
             <Minus className="h-4 w-4" />
           </button>
@@ -347,6 +348,7 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
             onClick={handleMaximize}
             className="h-10 px-4 hover:bg-accent transition-colors"
             title={isMaximized ? "Restore" : "Maximize"}
+            aria-label={isMaximized ? "Restore window" : "Maximize window"}
           >
             <Square className="h-3.5 w-3.5" />
           </button>
@@ -354,6 +356,7 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
             onClick={handleClose}
             className="h-10 px-4 hover:bg-destructive hover:text-destructive-foreground transition-colors"
             title="Close"
+            aria-label="Close window"
           >
             <X className="h-4 w-4" />
           </button>

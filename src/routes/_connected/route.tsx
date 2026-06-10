@@ -226,6 +226,7 @@ function ConnectedLayout() {
                   variant="ghost"
                   size="icon"
                   onClick={toggleSidebar}
+                  aria-label={sidebarCollapsed ? "Show sidebar" : "Hide sidebar"}
                   className="h-6 w-6 rounded-sm"
                 >
                   {sidebarCollapsed ? (

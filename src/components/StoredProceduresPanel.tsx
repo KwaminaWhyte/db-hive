@@ -253,6 +253,7 @@ export function StoredProceduresPanel({
               size="icon"
               onClick={fetchProcedures}
               title="Refresh"
+              aria-label="Refresh procedures and functions"
             >
               <RefreshCw className="h-4 w-4" />
             </Button>

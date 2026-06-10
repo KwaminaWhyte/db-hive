@@ -71,6 +71,8 @@ export const SnippetFolderPicker: FC<SnippetFolderPickerProps> = ({
               e.stopPropagation();
               setExpanded((prev) => ({ ...prev, [folder.id]: !isExpanded }));
             }}
+            aria-label={isExpanded ? `Collapse folder ${folder.name}` : `Expand folder ${folder.name}`}
+            aria-expanded={isExpanded}
             className="shrink-0"
           >
             {children.length > 0 ? (

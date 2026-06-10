@@ -62,6 +62,7 @@ export function ConnectionCard({
             : "text-muted-foreground hover:text-foreground"
         }`}
         title={profile.isFavorite ? "Remove from favorites" : "Add to favorites"}
+        aria-label={profile.isFavorite ? "Remove from favorites" : "Add to favorites"}
       >
         <Star className={`size-4 ${profile.isFavorite ? "fill-current" : ""}`} />
       </button>
@@ -126,7 +127,7 @@ export function ConnectionCard({
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button size="sm" variant="outline">
+              <Button size="sm" variant="outline" aria-label={`Actions for ${profile.name}`}>
                 <MoreVertical className="size-4" />
               </Button>
             </DropdownMenuTrigger>

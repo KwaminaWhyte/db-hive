@@ -73,6 +73,7 @@ import { NoTablesEmpty, NoSearchResultsEmpty } from "./empty-states";
 import { ForeignKeyInfo } from "@/types/database";
 import { dropTable } from "@/api/ddl";
 import { useMetadataChangeListener, notifyMetadataChanged } from "@/hooks/useMetadataCache";
+import { useTreeKeyboardNav, TreeNavNode } from "@/hooks/useTreeKeyboardNav";
 import { Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -532,6 +533,53 @@ export function SchemaExplorer({
     [filteredTablesBySchema],
   );
 
+  // Open a table in the main area (same as double-click / "View Data")
+  const openTable = useCallback(
+    (schemaName: string, tableName: string) => {
+      setSelectedSchema(schemaName);
+      setActiveTable({ schema: schemaName, table: tableName });
+      onTableSelect(schemaName, tableName);
+    },
+    [onTableSelect],
+  );
+
+  // Flat list of VISIBLE tree nodes (document order) driving keyboard nav.
+  // Built from the exact same data as the render below.
+  const treeNodes = useMemo<TreeNavNode[]>(() => {
+    const list: TreeNavNode[] = [];
+    for (const schema of filteredSchemas) {
+      const schemaId = `schema:${schema.name}`;
+      const isExpanded = expandedSchemas.has(schema.name);
+      list.push({
+        id: schemaId,
+        level: 1,
+        expanded: isExpanded,
+        parentId: null,
+        toggle: () => toggleSchemaExpansion(schema.name),
+        activate: () => toggleSchemaExpansion(schema.name),
+      });
+      if (isExpanded) {
+        for (const table of filteredTablesBySchema[schema.name] || []) {
+          list.push({
+            id: `table:${schema.name}.${table.name}`,
+            level: 2,
+            parentId: schemaId,
+            activate: () => openTable(schema.name, table.name),
+          });
+        }
+      }
+    }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filteredSchemas, expandedSchemas, filteredTablesBySchema, openTable]);
+
+  const { handleKeyDown: handleTreeKeyDown, getTreeItemProps } =
+    useTreeKeyboardNav(treeNodes);
+
+  // Theme-consistent focus ring for tree items (matches shadcn Button)
+  const treeItemFocusClasses =
+    "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50";
+
   return (
     <div className="h-full flex flex-col">
       {/* Header with Database Selector and Actions */}
@@ -581,6 +629,7 @@ export function SchemaExplorer({
                   size="sm"
                   className="shrink-0"
                   title="Database actions"
+                  aria-label="Database actions"
                 >
                   <MoreVertical className="h-4 w-4" />
                 </Button>
@@ -704,6 +753,7 @@ export function SchemaExplorer({
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
+                  aria-label="Clear search"
                   className="absolute right-3 top-1/2 transform -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <X className="h-4 w-4" />
@@ -713,6 +763,7 @@ export function SchemaExplorer({
             <Button
               variant="ghost"
               size="icon"
+              aria-label="Refresh schemas"
               className="h-9 w-9 shrink-0"
               onClick={() => {
                 fetchSchemas();
@@ -760,7 +811,12 @@ export function SchemaExplorer({
             <div className="p-2">
               {schemas.length > 0 ? (
                 filteredSchemas.length > 0 ? (
-                  <div className="space-y-1">
+                  <div
+                    className="space-y-1"
+                    role="tree"
+                    aria-label="Schemas and tables"
+                    onKeyDown={handleTreeKeyDown}
+                  >
                     {filteredSchemas.map((schema) => {
                       const isExpanded = expandedSchemas.has(schema.name);
                       const schemaTables = getFilteredTablesForSchema(
@@ -782,8 +838,13 @@ export function SchemaExplorer({
                             <ContextMenuTrigger asChild>
                               <CollapsibleTrigger asChild>
                                 <button
-                                  className="w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left hover:bg-accent/50 group"
+                                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left hover:bg-accent/50 group ${treeItemFocusClasses}`}
                                   draggable={false}
+                                  role="treeitem"
+                                  aria-level={1}
+                                  aria-expanded={isExpanded}
+                                  aria-selected={false}
+                                  {...getTreeItemProps(`schema:${schema.name}`)}
                                 >
                                   {isExpanded ? (
                                     <ChevronDown className="h-4 w-4 text-muted-foreground flex-shrink-0" />
@@ -835,7 +896,7 @@ export function SchemaExplorer({
 
                           {/* Tables under this schema */}
                           <CollapsibleContent>
-                            <div className="ml-4 mt-1 space-y-1">
+                            <div className="ml-4 mt-1 space-y-1" role="group">
                               {isLoadingTables ? (
                                 <div className="space-y-1">
                                   {[1, 2, 3].map((i) => (
@@ -859,11 +920,17 @@ export function SchemaExplorer({
                                     >
                                       <ContextMenuTrigger asChild>
                                         <button
-                                          className={`w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left group ${
+                                          className={`w-full flex items-center gap-2 px-3 py-2 rounded-md transition-colors text-left group ${treeItemFocusClasses} ${
                                             isSelected
                                               ? "bg-accent text-accent-foreground"
                                               : "hover:bg-accent/50"
                                           }`}
+                                          role="treeitem"
+                                          aria-level={2}
+                                          aria-selected={isSelected}
+                                          {...getTreeItemProps(
+                                            `table:${schema.name}.${table.name}`,
+                                          )}
                                           onClick={() => {
                                             // Set active table for highlighting on single click
                                             setActiveTable({
@@ -871,17 +938,9 @@ export function SchemaExplorer({
                                               table: table.name,
                                             });
                                           }}
-                                          onDoubleClick={() => {
-                                            setSelectedSchema(schema.name);
-                                            setActiveTable({
-                                              schema: schema.name,
-                                              table: table.name,
-                                            });
-                                            onTableSelect(
-                                              schema.name,
-                                              table.name,
-                                            );
-                                          }}
+                                          onDoubleClick={() =>
+                                            openTable(schema.name, table.name)
+                                          }
                                           draggable
                                           onDragStart={(e) => {
                                             e.dataTransfer.setData(
@@ -907,24 +966,16 @@ export function SchemaExplorer({
                                             className={`h-4 w-4 text-muted-foreground transition-opacity flex-shrink-0 ${
                                               isSelected
                                                 ? "opacity-100"
-                                                : "opacity-0 group-hover:opacity-100"
+                                                : "opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100"
                                             }`}
                                           />
                                         </button>
                                       </ContextMenuTrigger>
                                       <ContextMenuContent>
                                         <ContextMenuItem
-                                          onClick={() => {
-                                            setSelectedSchema(schema.name);
-                                            setActiveTable({
-                                              schema: schema.name,
-                                              table: table.name,
-                                            });
-                                            onTableSelect(
-                                              schema.name,
-                                              table.name,
-                                            );
-                                          }}
+                                          onClick={() =>
+                                            openTable(schema.name, table.name)
+                                          }
                                         >
                                           <Eye className="h-4 w-4 mr-2" />
                                           View Data

@@ -129,6 +129,7 @@ function TableSchemaNode({ data }: { data: TableNodeData }) {
         <span className="font-semibold text-sm truncate">{table.name || "untitled"}</span>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          aria-label="Delete table"
           className="ml-2 text-primary-foreground/70 hover:text-primary-foreground"
         >
           <Trash2 className="h-3.5 w-3.5" />
@@ -533,6 +534,7 @@ function VisualSchemaDesignerInner({ connectionId }: VisualSchemaDesignerInnerPr
                         </Select>
                         <button
                           onClick={() => removeColumn(col.id)}
+                          aria-label="Remove column"
                           className="text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 className="h-3.5 w-3.5" />

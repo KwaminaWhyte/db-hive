@@ -889,12 +889,13 @@ export function TableInspector({
               <Button
                 variant="ghost"
                 size="sm"
-                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                 onClick={(e) => {
                   e.stopPropagation();
                   copyColumnValues(columnInfo.name);
                 }}
                 title={`Copy column "${columnInfo.name}"`}
+                aria-label={`Copy column "${columnInfo.name}"`}
               >
                 <Copy className="h-3 w-3" />
               </Button>
@@ -936,6 +937,7 @@ export function TableInspector({
                     toast.info('New row removed');
                   }}
                   title="Remove new row"
+                  aria-label="Remove new row"
                 >
                   <X className="h-3 w-3 text-destructive" />
                 </Button>
@@ -1001,9 +1003,10 @@ export function TableInspector({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                  className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
                   onClick={() => copyRowValues(row)}
                   title="Copy row"
+                  aria-label="Copy row"
                 >
                   <Copy className="h-3 w-3" />
                 </Button>
@@ -1218,7 +1221,7 @@ export function TableInspector({
       <div className="h-full flex flex-col">
         <div className="flex items-center justify-between px-3 py-2 border-b">
           <h3 className="text-sm font-semibold">Error</h3>
-          <Button variant="ghost" size="sm" onClick={onClose}>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close table inspector">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -1309,10 +1312,10 @@ export function TableInspector({
             <Plus className="h-4 w-4 mr-1" />
             Add Row
           </Button>
-          <Button variant="ghost" size="sm" onClick={handleRefresh}>
+          <Button variant="ghost" size="sm" onClick={handleRefresh} aria-label="Refresh table data">
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={onClose}>
+          <Button variant="ghost" size="sm" onClick={onClose} aria-label="Close table inspector">
             <X className="h-4 w-4" />
           </Button>
         </div>
@@ -1376,7 +1379,7 @@ export function TableInspector({
                     />
                   )}
                   {/* Remove row */}
-                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => removeFilterRow(row.id)}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label="Remove filter" onClick={() => removeFilterRow(row.id)}>
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -1706,6 +1709,7 @@ export function TableInspector({
                     onClick={handleFirstPage}
                     disabled={currentPage === 1 || loadingSampleData}
                     title="First page"
+                    aria-label="First page"
                   >
                     <ChevronsLeft className="h-4 w-4" />
                   </Button>
@@ -1716,6 +1720,7 @@ export function TableInspector({
                     onClick={handlePreviousPage}
                     disabled={currentPage === 1 || loadingSampleData}
                     title="Previous page"
+                    aria-label="Previous page"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -1729,6 +1734,7 @@ export function TableInspector({
                     onClick={handleNextPage}
                     disabled={!keysetHasMore || loadingSampleData}
                     title="Next page"
+                    aria-label="Next page"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>
@@ -1743,6 +1749,7 @@ export function TableInspector({
                     className="h-7 w-7"
                     onClick={handlePreviousPage}
                     disabled={currentPage === 1 || loadingSampleData}
+                    aria-label="Previous page"
                   >
                     <ChevronLeft className="h-4 w-4" />
                   </Button>
@@ -1788,6 +1795,7 @@ export function TableInspector({
                       currentPage >= maxSafePage ||
                       loadingSampleData
                     }
+                    aria-label="Next page"
                   >
                     <ChevronRight className="h-4 w-4" />
                   </Button>

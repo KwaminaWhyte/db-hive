@@ -530,7 +530,7 @@ function ResultsChartComponent({ columns, rows }: ResultsChartProps) {
         {/* Chart Options */}
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-8">
+            <Button variant="outline" size="sm" className="h-8" aria-label="Chart options">
               <Settings2 className="h-4 w-4" />
             </Button>
           </PopoverTrigger>
@@ -568,6 +568,7 @@ function ResultsChartComponent({ columns, rows }: ResultsChartProps) {
           className="h-8"
           onClick={handleExportChart}
           title="Export chart as PNG"
+          aria-label="Export chart as PNG"
         >
           <Download className="h-4 w-4" />
         </Button>

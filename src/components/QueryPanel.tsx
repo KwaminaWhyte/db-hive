@@ -393,7 +393,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
           {/* Horizontal Resizable Handle */}
           <PanelResizeHandle className="group relative h-1 bg-border hover:bg-primary/50 transition-colors">
             <div className="absolute inset-0 flex items-center justify-center">
-              <GripHorizontal className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+              <GripHorizontal className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity" />
             </div>
           </PanelResizeHandle>
 
@@ -458,7 +458,7 @@ export const QueryPanel: FC<QueryPanelProps> = ({
       {/* Vertical Resizable Handle */}
       <PanelResizeHandle className="group relative w-1 bg-border hover:bg-primary/50 transition-colors">
         <div className="absolute inset-0 flex items-center justify-center">
-          <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+          <GripVertical className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity" />
         </div>
       </PanelResizeHandle>
 

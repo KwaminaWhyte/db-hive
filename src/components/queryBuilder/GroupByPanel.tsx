@@ -227,6 +227,7 @@ export const GroupByPanel: FC<GroupByPanelProps> = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => onRemoveGroupBy(clause.tableAlias, clause.columnName)}
+                  aria-label="Remove GROUP BY clause"
                   className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
                 >
                   <X className="h-3 w-3" />
@@ -358,6 +359,7 @@ export const GroupByPanel: FC<GroupByPanelProps> = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => onRemoveHaving(condition.id)}
+                    aria-label="Remove HAVING condition"
                     className="h-6 w-6 p-0 hover:bg-destructive/10 hover:text-destructive"
                   >
                     <X className="h-3 w-3" />

@@ -152,6 +152,7 @@ export const QueryErrorState: FC<QueryErrorStateProps> = ({
               variant="ghost"
               size="icon-sm"
               onClick={handleCopyError}
+              aria-label="Copy error message"
               className="h-6 w-6 hover:bg-destructive/20"
             >
               {copied ? (

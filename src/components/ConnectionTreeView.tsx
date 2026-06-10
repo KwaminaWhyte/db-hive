@@ -194,11 +194,12 @@ export const ConnectionTreeView: FC<ConnectionTreeViewProps> = ({
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
           <Button
             variant="ghost"
             size="icon"
-            className="h-7 w-7"
+            className="h-7 w-7 focus-visible:opacity-100"
+            aria-label={`Connect to ${profile.name}`}
             onClick={(e) => {
               e.stopPropagation();
               onConnect(profile);
@@ -211,7 +212,8 @@ export const ConnectionTreeView: FC<ConnectionTreeViewProps> = ({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7"
+                className="h-7 w-7 focus-visible:opacity-100"
+                aria-label={`Actions for ${profile.name}`}
                 onClick={(e) => e.stopPropagation()}
               >
                 <MoreHorizontal className="h-4 w-4" strokeWidth={1.5} />

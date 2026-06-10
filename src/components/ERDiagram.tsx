@@ -636,6 +636,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
               variant="outline"
               size="sm"
               title="Auto-layout diagram"
+              aria-label="Auto-layout diagram"
               className="hover:bg-primary/10"
             >
               <LayoutGrid className="w-4 h-4" />
@@ -645,6 +646,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
               variant="outline"
               size="sm"
               title={showRelationships ? "Hide relationships" : "Show relationships"}
+              aria-label={showRelationships ? "Hide relationships" : "Show relationships"}
               className="hover:bg-primary/10"
             >
               {showRelationships ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -656,6 +658,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
               variant={snapToGrid ? "default" : "outline"}
               size="sm"
               title={snapToGrid ? "Disable snap to grid" : "Enable snap to grid"}
+              aria-label={snapToGrid ? "Disable snap to grid" : "Enable snap to grid"}
               className={snapToGrid ? "bg-primary hover:bg-primary/90 text-primary-foreground" : "hover:bg-primary/10"}
             >
               <Grid3x3 className="w-4 h-4" />
@@ -665,6 +668,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
               variant="outline"
               size="sm"
               title="Refresh diagram"
+              aria-label="Refresh diagram"
               className="hover:bg-primary/10"
             >
               <RefreshCw className="w-4 h-4" />
@@ -674,6 +678,7 @@ function ERDiagramFlow({ connectionId, schema }: ERDiagramProps) {
               variant="outline"
               size="sm"
               title="Export as SVG"
+              aria-label="Export as SVG"
               className="hover:bg-primary/10"
             >
               <Download className="w-4 h-4" />

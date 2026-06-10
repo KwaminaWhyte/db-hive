@@ -335,6 +335,7 @@ export function AiAssistant({
             onClick={() => setShowSettings(!showSettings)}
             className={`p-1 hover:bg-muted rounded ${showSettings ? 'bg-muted' : ''}`}
             title="Settings"
+            aria-label="AI assistant settings"
           >
             <svg
               className="w-4 h-4 text-muted-foreground"
@@ -360,6 +361,7 @@ export function AiAssistant({
             onClick={() => setShowContext(!showContext)}
             className={`p-1 hover:bg-muted rounded ${showContext ? 'bg-muted' : ''}`}
             title="View schema context"
+            aria-label="View schema context"
           >
             <svg
               className="w-4 h-4 text-muted-foreground"
@@ -379,6 +381,7 @@ export function AiAssistant({
             onClick={checkStatus}
             className="p-1 hover:bg-muted rounded"
             title="Refresh status"
+            aria-label="Refresh AI status"
           >
             <svg
               className="w-4 h-4 text-muted-foreground"

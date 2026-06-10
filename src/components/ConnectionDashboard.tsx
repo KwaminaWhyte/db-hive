@@ -352,11 +352,12 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 focus-visible:opacity-100"
+                aria-label={profile.isFavorite ? "Remove from favorites" : "Add to favorites"}
                 onClick={(e) => {
                   e.stopPropagation();
                   handleToggleFavorite(profile.id);
@@ -370,7 +371,8 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8"
+                className="h-8 w-8 focus-visible:opacity-100"
+                aria-label="Edit connection"
                 onClick={(e) => {
                   e.stopPropagation();
                   onEditConnection?.(profile);
@@ -381,7 +383,8 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 text-destructive hover:text-destructive"
+                className="h-8 w-8 text-destructive hover:text-destructive focus-visible:opacity-100"
+                aria-label="Delete connection"
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDeleteClick(profile.id);
@@ -536,6 +539,7 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
                 className="h-8 w-8"
                 onClick={() => setViewMode("grid")}
                 title="Grid view"
+                aria-label="Grid view"
               >
                 <Grid3x3 className="h-4 w-4" />
               </Button>
@@ -545,6 +549,7 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
                 className="h-8 w-8"
                 onClick={() => setViewMode("list")}
                 title="List view"
+                aria-label="List view"
               >
                 <List className="h-4 w-4" />
               </Button>
@@ -554,6 +559,7 @@ export const ConnectionDashboard: FC<ConnectionDashboardProps> = ({
                 className="h-8 w-8"
                 onClick={() => setViewMode("tree")}
                 title="Tree view (by folder)"
+                aria-label="Tree view, grouped by folder"
               >
                 <FolderTree className="h-4 w-4" />
               </Button>

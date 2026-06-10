@@ -169,7 +169,7 @@ export function PluginMarketplace() {
               onKeyPress={(e) => e.key === "Enter" && handleSearch()}
               className="max-w-md"
             />
-            <Button onClick={handleSearch} size="sm">
+            <Button onClick={handleSearch} size="sm" aria-label="Search plugins">
               <Search className="size-4" />
             </Button>
           </div>

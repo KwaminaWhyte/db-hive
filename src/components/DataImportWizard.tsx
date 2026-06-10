@@ -764,6 +764,7 @@ export function DataImportWizard({
             variant="ghost"
             size="sm"
             onClick={onClose}
+            aria-label="Close import wizard"
             className="text-muted-foreground hover:text-foreground"
           >
             <X className="w-5 h-5" />
