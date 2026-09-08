@@ -1,10 +1,18 @@
 ---
 name: react-ui-dev
-description: Specialized React frontend developer for building UI components, state management, and integrating with Tauri backend. Expert in modern React patterns, TypeScript, and Tauri API.
+description: OBSOLETE. This project has no React. Use rust-backend-dev for UI work in crates/dbhive-app.
 tools: Read, Write, Edit, Bash, Glob, Grep
 model: inherit
 permissionMode: ask
 ---
+
+> **OBSOLETE.** DB Hive no longer has a React frontend. The UI was migrated
+> to a native egui shell in `crates/dbhive-app`; see
+> `docs/rust-ui-migration/`. Use the `rust-backend-dev` agent instead, and
+> read `docs/rust-ui-migration/03-conventions.md` first.
+>
+> Kept only so the reasoning behind the old component structure is not lost.
+
 
 # React Frontend Developer for DB Hive
 

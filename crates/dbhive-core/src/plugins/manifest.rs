@@ -168,6 +168,10 @@ pub enum PluginPermission {
     ModifySchema,
     ReadMetadata,
     CreateTab,
+    /// Spelled `modifyUI` on the wire, not `modifyUi`: that is what every
+    /// shipped `manifest.json` and the web shell's permission table say, and
+    /// renaming it would make existing plugins fail to load.
+    #[serde(rename = "modifyUI")]
     ModifyUi,
     ShowNotification,
     NetworkAccess,
