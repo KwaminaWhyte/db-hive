@@ -27,6 +27,9 @@ pub struct QueryTab {
     pub last_error: Option<String>,
     pub elapsed_ms: Option<u128>,
     pub query_job: Job<(Result<QueryResult, DbError>, u128)>,
+    /// Id of the ActivityLogger entry opened for the running statement, so
+    /// its completion can be recorded against the same row.
+    pub log_id: Option<String>,
 }
 
 impl QueryTab {
@@ -40,6 +43,7 @@ impl QueryTab {
             last_error: None,
             elapsed_ms: None,
             query_job: Job::default(),
+            log_id: None,
         }
     }
 }
@@ -240,6 +244,7 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     let conn_id = ws.connection_id.clone();
     let database = ws.current_database.clone().unwrap_or_default();
     let mut landed: Vec<QueryHistory> = Vec::new();
+    let mut finished: Vec<(String, u64, Result<u64, String>)> = Vec::new();
 
     for tab in &mut ws.tabs {
         if let Some((result, elapsed)) = tab.query_job.take_result() {
@@ -251,18 +256,44 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                 tab.sql.clone(),
                 chrono::Utc::now().to_rfc3339(),
             );
+            let log_id = tab.log_id.take();
             match result {
                 Ok(r) => {
+                    if let Some(id) = &log_id {
+                        finished.push((id.clone(), elapsed as u64, Ok(r.rows.len() as u64)));
+                    }
                     landed.push(entry.with_success(elapsed as u64, Some(r.rows.len() as u64)));
                     tab.grid = results_grid::GridState::default();
                     tab.result = Some(r);
                     tab.last_error = None;
                 }
                 Err(e) => {
+                    if let Some(id) = &log_id {
+                        finished.push((id.clone(), elapsed as u64, Err(e.to_string())));
+                    }
                     landed.push(entry.with_error(e.to_string(), Some(elapsed as u64)));
                     tab.result = None;
                     tab.last_error = Some(e.to_string());
                 }
+            }
+        }
+    }
+
+    // The activity log is separate from query history: it is what the
+    // activity monitor reads, and without these calls that screen would sit
+    // permanently empty in the native shell.
+    for (id, duration, outcome) in finished {
+        match outcome {
+            Ok(rows) => {
+                dbhive_core::service_monitoring::record_query_complete(
+                    &app.state,
+                    &id,
+                    duration,
+                    Some(rows),
+                );
+            }
+            Err(e) => {
+                dbhive_core::service_monitoring::record_query_error(&app.state, &id, duration, e);
             }
         }
     }
@@ -758,7 +789,18 @@ pub fn execute(app: &mut DbHiveApp, ctx: &egui::Context) {
             Some("Connection is no longer open".to_string());
         return;
     };
+    let log = dbhive_core::models::QueryLog::new(
+        uuid::Uuid::new_v4().to_string(),
+        connection_id.clone(),
+        app.workspace.as_ref().unwrap().connection_name.clone(),
+        app.workspace.as_ref().unwrap().current_database.clone(),
+        sql.clone(),
+    );
+    let log_id = log.id.clone();
+    dbhive_core::service_monitoring::record_query_start(&app.state, log);
+
     let handle = app.rt.handle().clone();
+    app.workspace.as_mut().unwrap().active().log_id = Some(log_id);
     app.workspace
         .as_mut()
         .unwrap()

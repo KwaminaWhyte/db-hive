@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use dbhive_core::state::AppState;
 
 use crate::screens::{
-    backup, command_palette, connection_editor, connections, er_diagram, migrations, settings,
-    table_editor, table_inspector, workspace, Screen, Screens,
+    activity_monitor, backup, command_palette, connection_editor, connections, er_diagram,
+    migrations, settings, table_editor, table_inspector, workspace, Screen, Screens,
 };
 use crate::theme;
 
@@ -113,6 +113,8 @@ impl eframe::App for DbHiveApp {
 
             if self.screens.table_editor.open {
                 table_editor::show(self, ui);
+            } else if self.screens.activity_monitor.open {
+                activity_monitor::show(self, ui);
             } else if self.screens.er_diagram.open {
                 er_diagram::show(self, ui);
             } else if self.screens.table_inspector.open {
@@ -167,6 +169,7 @@ fn dispatch(app: &mut DbHiveApp, ctx: &egui::Context, id: command_palette::Comma
         }
         C::GoSettings => app.screens.settings.open = true,
         C::GoMigrations => app.screens.migrations.open = true,
+        C::GoActivityMonitor => app.screens.activity_monitor.open = true,
         C::GoBackup => app.screens.backup.open = true,
         C::GoAiAssistant => {
             if app.workspace.is_some() {
