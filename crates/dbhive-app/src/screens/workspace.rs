@@ -145,6 +145,8 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     let mut reload_tables = false;
     let mut open_inspector: Option<(String, String, String)> = None;
     let mut pending_switch: Option<String> = None;
+    let mut toggle_ai = false;
+    let mut new_table = false;
 
     // Kick off the metadata load once per connection.
     if needs_meta {
@@ -432,6 +434,26 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
             });
         });
 
+    if app.screens.ai_assistant.open {
+        egui::SidePanel::right("ai_panel")
+            .resizable(true)
+            .default_width(360.0)
+            .frame(
+                egui::Frame::none()
+                    .fill(palette.sidebar)
+                    .inner_margin(egui::Margin::same(10.0)),
+            )
+            .show_inside(ui, |ui| {
+                // Insert only. Running generated SQL stays an explicit act
+                // by the user in the editor.
+                if let crate::screens::ai_assistant::AiAction::UseSql(sql) =
+                    crate::screens::ai_assistant::show(app, ui)
+                {
+                    app.workspace.as_mut().unwrap().active().sql = sql;
+                }
+            });
+    }
+
     egui::SidePanel::right("history_panel")
         .resizable(true)
         .default_width(320.0)
@@ -511,6 +533,14 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
             if ui.button("Clear").clicked() {
                 tab.sql.clear();
             }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                if ui.small_button("AI").clicked() {
+                    toggle_ai = true;
+                }
+                if ui.small_button("New table").clicked() {
+                    new_table = true;
+                }
+            });
         });
         ui.add_space(6.0);
 
@@ -556,6 +586,15 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     if reload_tables {
         let ctx = ui.ctx().clone();
         load_metadata(app, &ctx, None);
+    }
+    if toggle_ai {
+        app.screens.ai_assistant.open = !app.screens.ai_assistant.open;
+    }
+    if new_table {
+        let ws = app.workspace.as_ref().unwrap();
+        let schema = current_schema_or_database(ws);
+        let conn = ws.connection_id.clone();
+        app.screens.table_editor.open_new(conn, schema);
     }
     if let Some((conn, schema, table)) = open_inspector {
         app.screens.table_inspector.open_table(conn, schema, table);

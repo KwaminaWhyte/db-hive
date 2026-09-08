@@ -326,6 +326,9 @@ fn progress_channel(
     ctx: &egui::Context,
     slot: Arc<Mutex<Option<BackupProgress>>>,
 ) -> svc::ProgressSink {
+    // A stale "done" from the previous operation must not be drawn as the
+    // opening stage of this one.
+    *slot.lock().unwrap() = None;
     let (sink, mut rx) = svc::ProgressSink::channel();
     let ctx = ctx.clone();
     rt.spawn(async move {
@@ -600,8 +603,8 @@ fn apply(
                     });
                 (file_name, r)
             });
-            // The list is stale the moment the file is gone.
-            app.screens.backup.requested = false;
+            // The listing is refreshed once the delete lands, not now: the
+            // file is still on disk until then.
         }
     }
 }

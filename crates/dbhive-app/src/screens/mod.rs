@@ -19,6 +19,7 @@ pub mod plugins;
 pub mod query_builder;
 pub mod schema_designer;
 pub mod settings;
+pub mod table_editor;
 pub mod table_inspector;
 pub mod workspace;
 
@@ -45,5 +46,6 @@ pub struct Screens {
     pub query_builder: query_builder::QueryBuilder,
     pub schema_designer: schema_designer::SchemaDesigner,
     pub settings: settings::Settings,
+    pub table_editor: table_editor::TableEditor,
     pub table_inspector: table_inspector::TableInspector,
 }

@@ -1998,10 +1998,13 @@ pub async fn get_table_columns_for_import(
 /// so the error report names the rows that actually failed rather than
 /// writing off the whole batch, and so one bad row does not cost the other
 /// 999 in its batch.
+///
+/// `source` arrives behind an `Arc` so a shell can keep the parsed file for a
+/// retry without copying every row into the task.
 pub async fn run_import(
     state: &Mutex<AppState>,
     connection_id: &str,
-    source: ImportSource,
+    source: Arc<ImportSource>,
     options: DataImportOptions,
     cancel: Arc<AtomicBool>,
 ) -> Result<ImportResult, DbError> {

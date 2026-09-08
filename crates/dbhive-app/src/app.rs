@@ -5,8 +5,8 @@ use std::sync::{Arc, Mutex};
 use dbhive_core::state::AppState;
 
 use crate::screens::{
-    command_palette, connection_editor, connections, er_diagram, settings, table_inspector,
-    workspace, Screen, Screens,
+    backup, command_palette, connection_editor, connections, er_diagram, migrations, settings,
+    table_editor, table_inspector, workspace, Screen, Screens,
 };
 use crate::theme;
 
@@ -111,7 +111,9 @@ impl eframe::App for DbHiveApp {
                 ui.separator();
             }
 
-            if self.screens.er_diagram.open {
+            if self.screens.table_editor.open {
+                table_editor::show(self, ui);
+            } else if self.screens.er_diagram.open {
                 er_diagram::show(self, ui);
             } else if self.screens.table_inspector.open {
                 table_inspector::show(self, ui);
@@ -123,6 +125,8 @@ impl eframe::App for DbHiveApp {
             }
         });
         settings::show_window(self, ctx);
+        migrations::show_window(self, ctx);
+        backup::show_window(self, ctx);
 
         if let Some(action) = connection_editor::show(self, ctx) {
             match action {
@@ -162,6 +166,23 @@ fn dispatch(app: &mut DbHiveApp, ctx: &egui::Context, id: command_palette::Comma
             }
         }
         C::GoSettings => app.screens.settings.open = true,
+        C::GoMigrations => app.screens.migrations.open = true,
+        C::GoBackup => app.screens.backup.open = true,
+        C::GoAiAssistant => {
+            if app.workspace.is_some() {
+                app.screens.ai_assistant.open = !app.screens.ai_assistant.open;
+            } else {
+                app.toasts.info("Connect to a database first");
+            }
+        }
+        C::NewTable => match app.workspace.as_ref() {
+            Some(ws) => {
+                let schema = workspace::current_schema_or_database(ws);
+                let conn = ws.connection_id.clone();
+                app.screens.table_editor.open_new(conn, schema);
+            }
+            None => app.toasts.info("Connect to a database first"),
+        },
         C::NewConnection => app.screens.connection_editor.open_new(),
         C::GoErDiagram => match app.workspace.as_ref() {
             Some(ws) => {

@@ -903,6 +903,10 @@ pub async fn schema_context(
     // Drivers that have no notion of a schema (MySQL, SQLite) report none;
     // for them the database name is what `get_tables` expects. Passing
     // "public" there listed MySQL's internal tables instead of the user's.
+    //
+    // System schemas are dropped before anything is fetched, not after:
+    // pg_catalog alone is a few hundred wasted round trips for tables the
+    // context then throws away.
     let mut schema_names: Vec<String> = schema_infos
         .iter()
         .map(|s| s.name.clone())
@@ -912,6 +916,9 @@ pub async fn schema_context(
         schema_names.push(database.to_string());
     }
 
+    // Cap on in-flight requests. The sequential version issued one round
+    // trip per table and took minutes on a large database; flooding the
+    // connection instead is no better.
     const MAX_INFLIGHT: usize = 16;
     use tokio::task::JoinSet;
 
@@ -919,25 +926,29 @@ pub async fn schema_context(
     for schema in schema_names {
         let conn = connection.clone();
         table_set.spawn(async move {
+            // A schema that cannot be listed contributes nothing rather than
+            // failing the whole context.
             let tables = conn.get_tables(&schema).await.unwrap_or_default();
             (schema, tables)
         });
     }
 
+    let mut tables_by_schema: HashMap<String, Vec<crate::models::TableInfo>> = HashMap::new();
     let mut pending: Vec<(String, String)> = Vec::new();
     while let Some(joined) = table_set.join_next().await {
         let (schema, tables) =
             joined.map_err(|e| DbError::InternalError(format!("Metadata task failed: {}", e)))?;
-        for t in tables {
-            pending.push((schema.clone(), t.name));
+        for t in &tables {
+            pending.push((schema.clone(), t.name.clone()));
         }
+        tables_by_schema.insert(schema, tables);
     }
 
-    let mut columns: HashMap<String, Vec<SchemaColumn>> = HashMap::new();
-    let mut column_set: JoinSet<(String, Vec<SchemaColumn>)> = JoinSet::new();
-    let mut queue = pending.clone().into_iter();
+    let mut columns: HashMap<String, Vec<crate::models::ColumnInfo>> = HashMap::new();
+    let mut column_set: JoinSet<(String, Vec<crate::models::ColumnInfo>)> = JoinSet::new();
+    let mut queue = pending.into_iter();
 
-    let spawn_columns = |set: &mut JoinSet<(String, Vec<SchemaColumn>)>,
+    let spawn_columns = |set: &mut JoinSet<(String, Vec<crate::models::ColumnInfo>)>,
                          conn: Arc<dyn DatabaseDriver>,
                          schema: String,
                          table: String| {
@@ -946,14 +957,7 @@ pub async fn schema_context(
             // A table whose schema cannot be read still belongs in the
             // context by name; only its columns are missing.
             let cols = match conn.get_table_schema(&schema, &table).await {
-                Ok(ts) => ts
-                    .columns
-                    .iter()
-                    .map(|c| SchemaColumn {
-                        name: c.name.clone(),
-                        data_type: c.data_type.clone(),
-                    })
-                    .collect(),
+                Ok(ts) => ts.columns,
                 Err(_) => Vec::new(),
             };
             (key, cols)
@@ -975,30 +979,21 @@ pub async fn schema_context(
         }
     }
 
-    let tables: Vec<SchemaTable> = pending
-        .into_iter()
-        .map(|(schema, table)| {
-            let key = format!("{}.{}", schema, table);
-            let columns = columns.get(&key).cloned().unwrap_or_default();
-            SchemaTable {
-                schema,
-                table,
-                columns,
-            }
-        })
-        .collect();
-
-    // Feed the shared cache so autocomplete benefits from the round trips
-    // this just paid for.
-    {
+    // Write through to the shared cache, so SQL autocomplete gets the round
+    // trips this just paid for, and so a second visit to the panel is free.
+    let tables = {
         let mut guard = state.lock().unwrap();
         let cache = guard
             .metadata_cache
             .entry(connection_id.to_string())
             .or_insert_with(MetadataCache::new);
         cache.databases = databases;
+        cache.schemas.insert(database.to_string(), schema_infos);
+        cache.tables = tables_by_schema;
+        cache.columns = columns;
         cache.touch();
-    }
+        tables_from_cache(cache)
+    };
 
     Ok(build_schema_context(database, &tables))
 }
