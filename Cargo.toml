@@ -1,26 +1,21 @@
 # Workspace root.
 #
-# `dbhive-core` holds everything that is not tied to a UI shell. Two shells
-# sit on top of it during the migration to a native UI:
+# `dbhive-core` holds everything that is not tied to a UI shell;
+# `dbhive-app` is the native egui shell on top of it.
 #
-#   src-tauri      the existing Tauri + React shell (reference implementation)
-#   dbhive-app     the native egui shell that replaces it
-#
-# Both depend on the same core, so behaviour cannot drift between them while
-# the migration is in progress. `src-tauri` is deleted once the egui shell
-# reaches parity.
+# The Tauri + React shell that used to live in `src-tauri` and `src` was
+# removed once this reached parity; see docs/rust-ui-migration/.
 [workspace]
 resolver = "2"
-members = ["crates/dbhive-core", "crates/dbhive-app", "src-tauri"]
+members = ["crates/dbhive-core", "crates/dbhive-app"]
 
 # Release profile lives at the workspace root: cargo ignores profiles set on
 # non-root workspace members.
 #
 # opt-level stays at 3 rather than "s": this is a database client, so query
 # and result-decoding throughput matters more than a few MB of binary.
-# `panic` is deliberately left at "unwind": Tauri's command dispatch relies
-# on catch_unwind to turn a panicking command into an IPC error instead of
-# taking the whole app down.
+# `panic` is left at "unwind" so a panic in a driver or a plugin call can be
+# caught and reported rather than taking the whole app down with it.
 [profile.release]
 opt-level = 3
 lto = "fat"

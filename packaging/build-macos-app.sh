@@ -22,17 +22,23 @@ BUNDLE_ID="com.kwamina.db-hive"
 VERSION="$(grep -m1 '^version' "$ROOT/crates/dbhive-app/Cargo.toml" | cut -d'"' -f2)"
 
 SIGN_IDENTITY="-"   # ad-hoc by default; stable enough for the keychain locally
+TARGET=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --sign) SIGN_IDENTITY="$2"; shift 2 ;;
+    --target) TARGET="$2"; shift 2 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
 
 echo "==> building release binary"
-cargo build --release -p dbhive-app --manifest-path "$ROOT/Cargo.toml"
-
-BIN="$ROOT/target/release/dbhive"
+if [[ -n "$TARGET" ]]; then
+  cargo build --release -p dbhive-app --target "$TARGET" --manifest-path "$ROOT/Cargo.toml"
+  BIN="$ROOT/target/$TARGET/release/dbhive"
+else
+  cargo build --release -p dbhive-app --manifest-path "$ROOT/Cargo.toml"
+  BIN="$ROOT/target/release/dbhive"
+fi
 [[ -x "$BIN" ]] || { echo "binary not found at $BIN" >&2; exit 1; }
 
 APP="$ROOT/target/release/bundle/$APP_NAME.app"
@@ -61,7 +67,15 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-ICON_SRC="$ROOT/src-tauri/icons/icon.icns"
+# Bundled plugins. `bundled_source` looks in ../Resources/plugins relative
+# to the executable, so this is what makes plugin install work from the .app
+# rather than only from a checkout.
+if [[ -d "$ROOT/plugins" ]]; then
+  cp -R "$ROOT/plugins" "$APP/Contents/Resources/plugins"
+  echo "    bundled $(ls "$ROOT/plugins" | wc -l | tr -d ' ') plugin(s)"
+fi
+
+ICON_SRC="$ROOT/packaging/icon.icns"
 if [[ -f "$ICON_SRC" ]]; then
   cp "$ICON_SRC" "$APP/Contents/Resources/icon.icns"
 else

@@ -1,27 +1,27 @@
 name: "Release"
 
 on:
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch:
   push:
     tags:
-      - "v*"  # Trigger on version tags like v0.1.0
+      - "v*"
 
 jobs:
-  publish-tauri:
+  build:
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: "macos-latest"  # macOS Apple Silicon (M1/M2/M3)
-            args: "--target aarch64-apple-darwin"
-          - platform: "macos-latest"  # macOS Intel
-            args: "--target x86_64-apple-darwin"
-          - platform: "ubuntu-22.04"  # Linux x64
-            args: ""
-          - platform: "windows-latest"  # Windows x64
-            args: ""
+          - platform: "macos-latest"
+            target: "aarch64-apple-darwin"
+          - platform: "macos-13"
+            target: "x86_64-apple-darwin"
+          - platform: "ubuntu-22.04"
+            target: "x86_64-unknown-linux-gnu"
+          - platform: "windows-latest"
+            target: "x86_64-pc-windows-msvc"
 
     runs-on: ${{ matrix.platform }}
 
@@ -29,90 +29,55 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # eframe renders through wgpu and opens a window through winit, which
+      # on Linux needs X11/Wayland and udev development headers. There is no
+      # WebView dependency any more.
       - name: Install Linux system dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf
+            libx11-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libgl1-mesa-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libudev-dev \
+            pkg-config
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "lts/*"
-
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install Rust stable
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          # Install macOS targets for universal builds
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+          targets: ${{ matrix.target }}
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "./src-tauri -> target"
+          key: ${{ matrix.target }}
 
-      - name: Install frontend dependencies
-        run: bun install
+      - name: Check
+        run: cargo check --workspace --target ${{ matrix.target }}
 
-      - name: Build frontend
-        run: bun run build
+      # The three credentials tests exercise the real OS keyring, which CI
+      # runners do not provide. Everything else must pass.
+      - name: Test
+        run: cargo test --workspace -- --skip credentials::tests
 
-      - name: Build and release Tauri app
-        uses: tauri-apps/tauri-action@v0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+      - name: Build
+        run: cargo build --release -p dbhive-app --target ${{ matrix.target }}
+
+      - name: Package (macOS)
+        if: startsWith(matrix.platform, 'macos')
+        run: ./packaging/build-macos-app.sh --target ${{ matrix.target }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: "DB Hive ${{ github.ref_name }}"
-          releaseBody: |
-            ## DB Hive ${{ github.ref_name }}
-
-            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for details.
-
-            ### Installation
-
-            **macOS:**
-            - Download the `.dmg` file for your architecture:
-              - `aarch64.dmg` for Apple Silicon (M1/M2/M3)
-              - `x64.dmg` for Intel Macs
-            - Open the DMG and drag DB Hive to Applications
-            - On first launch, right-click → Open to bypass Gatekeeper
-
-            **Windows:**
-            - Download the `.msi` installer
-            - Run the installer and follow the prompts
-            - Or download the `setup.exe` for NSIS installer
-
-            **Linux (Debian/Ubuntu):**
-            - Download the `.deb` file
-            - Install: `sudo dpkg -i db-hive_*_amd64.deb`
-
-            **Linux (Fedora/RHEL):**
-            - Download the `.rpm` file
-            - Install: `sudo rpm -i db-hive-*-1.x86_64.rpm`
-
-            **Linux (AppImage - Universal):**
-            - Download the `.AppImage` file
-            - Make executable: `chmod +x db-hive_*_amd64.AppImage`
-            - Run: `./db-hive_*_amd64.AppImage`
-
-            ### Code Signing & Verification
-
-            See [code-signing.md](https://github.com/${{ github.repository }}/blob/main/docs/code-signing.md) for instructions on verifying signatures.
-
-            ### Checksums
-            SHA256 checksums are available in the release assets.
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.args }}
+          name: dbhive-${{ matrix.target }}
+          path: |
+            target/${{ matrix.target }}/release/dbhive
+            target/${{ matrix.target }}/release/dbhive.exe
+            target/release/bundle/
+          if-no-files-found: ignore
