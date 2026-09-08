@@ -24,8 +24,10 @@ pub mod table_inspector;
 pub mod workspace;
 
 /// The full-window view.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Screen {
+    /// A new window starts on the connection list, as the first one does.
+    #[default]
     Connections,
     Workspace,
 }

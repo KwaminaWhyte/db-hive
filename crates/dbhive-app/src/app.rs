@@ -6,10 +6,33 @@ use dbhive_core::state::AppState;
 
 use crate::screens::{
     activity_monitor, backup, command_palette, connection_editor, connections, er_diagram,
-    import_export, migrations, schema_designer, settings, table_editor, table_inspector,
-    workspace, Screen, Screens,
+    import_export, migrations, query_builder, schema_designer, settings, table_editor,
+    table_inspector, workspace, Screen, Screens,
 };
 use crate::theme;
+
+/// The UI state belonging to one window.
+///
+/// The active window's state stays inline on `DbHiveApp` as ordinary fields,
+/// so every screen keeps its `app.screens` / `app.workspace` field access and
+/// none of them needed changing. Other windows park their state here and are
+/// swapped in for the duration of their own frame. Moving these behind a
+/// `current_window` field instead would have rewritten field access in every
+/// screen in the crate for no behavioural gain.
+///
+/// `rt` and `state` are deliberately NOT here. The Tokio runtime and
+/// `AppState` (connections, profiles, history) are shared across windows,
+/// which is what the Tauri shell did: two windows on the same connection
+/// reuse one pool rather than opening a second.
+#[derive(Default)]
+pub struct WindowState {
+    pub screen: Screen,
+    pub workspace: Option<workspace::Workspace>,
+    pub screens: Screens,
+    pub connections: connections::ConnectionsScreen,
+    pub toasts: crate::widgets::toast::Toasts,
+    pub about_open: bool,
+}
 
 pub struct DbHiveApp {
     /// Owned so the runtime lives as long as the app; dropping it would
@@ -30,6 +53,9 @@ pub struct DbHiveApp {
     pub about_open: bool,
     /// Profile to open at startup, from DBHIVE_AUTOCONNECT.
     autoconnect: Option<(String, String)>,
+    /// Windows beyond the first. Each is swapped into the fields above while
+    /// its own viewport renders.
+    pub extra_windows: Vec<WindowState>,
 }
 
 impl DbHiveApp {
@@ -73,21 +99,111 @@ impl DbHiveApp {
             toasts: crate::widgets::toast::Toasts::default(),
             startup_error,
             about_open: false,
+            // Dev aid: DBHIVE_AUTOWINDOWS=<n> opens n extra windows at
+            // startup so multi-window can be exercised without clicking.
+            extra_windows: (0..std::env::var("DBHIVE_AUTOWINDOWS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .unwrap_or(0))
+                .map(|_| WindowState::default())
+                .collect(),
             autoconnect,
         }
     }
 }
 
+impl DbHiveApp {
+    /// Exchange the active window's state with `other`.
+    ///
+    /// Every field is a move, so this costs the same regardless of how much
+    /// the window is holding.
+    fn swap_window(&mut self, other: &mut WindowState) {
+        std::mem::swap(&mut self.screen, &mut other.screen);
+        std::mem::swap(&mut self.workspace, &mut other.workspace);
+        std::mem::swap(&mut self.screens, &mut other.screens);
+        std::mem::swap(&mut self.connections, &mut other.connections);
+        std::mem::swap(&mut self.toasts, &mut other.toasts);
+        std::mem::swap(&mut self.about_open, &mut other.about_open);
+    }
+
+    /// Open another window on the same core.
+    pub fn open_window(&mut self) {
+        self.extra_windows.push(WindowState::default());
+    }
+}
+
 impl eframe::App for DbHiveApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        top_bar(self, ctx);
+        // Settings own the theme for every window, so they load once here
+        // rather than once per window.
+        settings::ensure_loaded(self, ctx);
+        settings::poll(self);
+        settings::ensure_theme(self, ctx);
 
-        if let Some((id, name)) = self.autoconnect.take() {
-            self.connections.connecting = Some(id.clone());
-            let state = self.state.clone();
-            let handle = self.rt.handle().clone();
-            self.connections.pending_name = Some(name);
-            self.connections.connect_job.start(&handle, ctx, async move {
+        render_window(self, ctx);
+
+        // Extra windows render as immediate viewports, inside this same
+        // update() call. That is what lets them borrow `self`; a deferred
+        // viewport would require the whole app behind an Arc<Mutex>.
+        let mut closed: Option<usize> = None;
+        for i in 0..self.extra_windows.len() {
+            let mut parked = std::mem::take(&mut self.extra_windows[i]);
+            self.swap_window(&mut parked);
+
+            let viewport_id = egui::ViewportId::from_hash_of(("dbhive-window", i));
+            let builder = egui::ViewportBuilder::default()
+                .with_title(format!("DB Hive ({})", i + 2))
+                .with_inner_size([1280.0_f32, 800.0_f32])
+                .with_min_inner_size([900.0_f32, 600.0_f32]);
+
+            let mut close_requested = false;
+            let mut reported = false;
+            ctx.show_viewport_immediate(viewport_id, builder, |ctx, class| {
+                // Reported once per window so multi-window can be confirmed
+                // without a screenshot. `Embedded` would mean the platform
+                // refused a real OS window and drew it inside the parent.
+                if std::env::var("DBHIVE_LOG_VIEWPORTS").is_ok() && !reported {
+                    reported = true;
+                    let kind = match class {
+                        egui::ViewportClass::Root => "Root",
+                        egui::ViewportClass::Deferred => "Deferred",
+                        egui::ViewportClass::Immediate => "Immediate (own OS window)",
+                        egui::ViewportClass::Embedded => "Embedded (NOT a separate window)",
+                    };
+                    println!("viewport {} rendered as {}", i + 2, kind);
+                }
+                render_window(self, ctx);
+                if ctx.input(|i| i.viewport().close_requested()) {
+                    close_requested = true;
+                }
+            });
+
+            self.swap_window(&mut parked);
+            self.extra_windows[i] = parked;
+            if close_requested {
+                closed = Some(i);
+            }
+        }
+        if let Some(i) = closed {
+            self.extra_windows.remove(i);
+        }
+    }
+}
+
+/// Draw one window's whole UI into `ctx`.
+///
+/// Called once for the main window and once per extra viewport, with that
+/// window's state swapped in.
+fn render_window(app: &mut DbHiveApp, ctx: &egui::Context) {
+    let self_ = app;
+    top_bar(self_, ctx);
+
+        if let Some((id, name)) = self_.autoconnect.take() {
+            self_.connections.connecting = Some(id.clone());
+            let state = self_.state.clone();
+            let handle = self_.rt.handle().clone();
+            self_.connections.pending_name = Some(name);
+            self_.connections.connect_job.start(&handle, ctx, async move {
                 dbhive_core::service::connect(&state, id, String::new(), None).await
             });
         }
@@ -95,62 +211,74 @@ impl eframe::App for DbHiveApp {
         // Settings own the theme: loaded once, then applied every frame so a
         // saved mode or accent survives a restart even if Settings is never
         // opened. This must run before anything draws.
-        settings::ensure_loaded(self, ctx);
-        settings::poll(self);
-        settings::ensure_theme(self, ctx);
+        settings::ensure_loaded(self_, ctx);
+        settings::poll(self_);
+        settings::ensure_theme(self_, ctx);
 
-        let palette = self.mode.palette();
-        self.toasts.show(ctx, palette);
+        let palette = self_.mode.palette();
+        self_.toasts.show(ctx, palette);
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(err) = self.startup_error.clone() {
+            if let Some(err) = self_.startup_error.clone() {
                 ui.horizontal(|ui| {
-                    ui.colored_label(self.mode.palette().destructive, "Could not load saved data:");
+                    ui.colored_label(self_.mode.palette().destructive, "Could not load saved data:");
                     ui.label(err);
                     if ui.button("Dismiss").clicked() {
-                        self.startup_error = None;
+                        self_.startup_error = None;
                     }
                 });
                 ui.separator();
             }
 
-            if self.screens.table_editor.open {
-                table_editor::show(self, ui);
-            } else if self.screens.activity_monitor.open {
-                activity_monitor::show(self, ui);
-            } else if self.screens.schema_designer.open {
-                schema_designer::show(self, ui);
-            } else if self.screens.er_diagram.open {
-                er_diagram::show(self, ui);
-            } else if self.screens.table_inspector.open {
-                table_inspector::show(self, ui);
+            if self_.screens.table_editor.open {
+                table_editor::show(self_, ui);
+            } else if self_.screens.activity_monitor.open {
+                activity_monitor::show(self_, ui);
+            } else if self_.screens.query_builder.open {
+                if let query_builder::BuilderAction::UseSql(sql) =
+                    query_builder::show(self_, ui)
+                {
+                    self_.screens.query_builder.close();
+                    self_.screen = Screen::Workspace;
+                    if let Some(ws) = self_.workspace.as_mut() {
+                        ws.add_tab();
+                        let tab = ws.active();
+                        tab.title = "Visual Query".to_string();
+                        tab.sql = sql;
+                    }
+                }
+            } else if self_.screens.schema_designer.open {
+                schema_designer::show(self_, ui);
+            } else if self_.screens.er_diagram.open {
+                er_diagram::show(self_, ui);
+            } else if self_.screens.table_inspector.open {
+                table_inspector::show(self_, ui);
             } else {
-                match self.screen {
-                    Screen::Connections => connections::show(self, ui),
-                    Screen::Workspace => workspace::show(self, ui),
+                match self_.screen {
+                    Screen::Connections => connections::show(self_, ui),
+                    Screen::Workspace => workspace::show(self_, ui),
                 }
             }
         });
-        settings::show_window(self, ctx);
-        migrations::show_window(self, ctx);
-        backup::show_window(self, ctx);
-        import_export::show_window(self, ctx);
+        settings::show_window(self_, ctx);
+        migrations::show_window(self_, ctx);
+        backup::show_window(self_, ctx);
+        import_export::show_window(self_, ctx);
 
-        if let Some(action) = connection_editor::show(self, ctx) {
+        if let Some(action) = connection_editor::show(self_, ctx) {
             match action {
                 connection_editor::EditorAction::Saved(id) => {
-                    self.toasts.success("Connection saved");
-                    self.connections.last_saved = Some(id);
+                    self_.toasts.success("Connection saved");
+                    self_.connections.last_saved = Some(id);
                 }
                 connection_editor::EditorAction::Cancelled => {}
             }
         }
 
         // Last, so the palette draws above every other overlay.
-        if let command_palette::PaletteAction::Run(id) = command_palette::show(self, ctx) {
-            dispatch(self, ctx, id);
+        if let command_palette::PaletteAction::Run(id) = command_palette::show(self_, ctx) {
+            dispatch(self_, ctx, id);
         }
-    }
 }
 
 /// Act on a command from the palette or a keyboard shortcut.
@@ -206,6 +334,18 @@ fn dispatch(app: &mut DbHiveApp, ctx: &egui::Context, id: command_palette::Comma
                 let schema = workspace::current_schema_or_database(ws);
                 let conn = ws.connection_id.clone();
                 app.screens.er_diagram.open_for(conn, schema);
+            }
+            None => app.toasts.info("Connect to a database first"),
+        },
+        C::NewWindow => {
+            app.open_window();
+            app.toasts.info("Opened a new window");
+        }
+        C::GoVisualQueryBuilder => match app.workspace.as_ref() {
+            Some(ws) => {
+                let schema = workspace::current_schema_or_database(ws);
+                let conn = ws.connection_id.clone();
+                app.screens.query_builder.open_for(conn, schema);
             }
             None => app.toasts.info("Connect to a database first"),
         },

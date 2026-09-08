@@ -1609,7 +1609,7 @@ fn section<R>(
     if *open {
         egui::Frame::none()
             .fill(palette.card)
-            .stroke(egui::Stroke::new(1.0, palette.border))
+            .stroke(egui::Stroke::new(1.0_f32, palette.border))
             .rounding(egui::Rounding::same(6.0))
             .inner_margin(egui::Margin::same(8.0))
             .show(ui, |ui| {
@@ -2997,9 +2997,35 @@ mod tests {
         s.filters.conditions.push(c);
         let out = sql(&s);
         assert!(out.contains("'x''; DROP TABLE users; --'"), "{}", out);
-        // One statement, terminated once, at the end.
-        assert_eq!(out.matches(';').count(), 2);
-        assert!(out.ends_with(';'));
+        // Outside the string literals there is one statement, terminated
+        // once, and no trace of the injected DDL.
+        let code = strip_literals(&out);
+        assert_eq!(code.matches(';').count(), 1, "{}", code);
+        assert!(code.ends_with(';'), "{}", code);
+        assert!(!code.contains("DROP"), "{}", code);
+    }
+
+    /// Everything outside single-quoted literals, with `''` handled as an
+    /// escaped quote rather than an empty string.
+    fn strip_literals(sql: &str) -> String {
+        let mut out = String::new();
+        let mut chars = sql.chars().peekable();
+        let mut inside = false;
+        while let Some(c) = chars.next() {
+            match (inside, c) {
+                (false, '\'') => inside = true,
+                (false, _) => out.push(c),
+                (true, '\'') => {
+                    if chars.peek() == Some(&'\'') {
+                        chars.next();
+                    } else {
+                        inside = false;
+                    }
+                }
+                (true, _) => {}
+            }
+        }
+        out
     }
 
     #[test]
