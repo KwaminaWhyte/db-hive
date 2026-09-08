@@ -92,44 +92,44 @@ pub fn apply(ctx: &egui::Context, mode: Mode) {
     v.window_fill = p.popover;
     v.extreme_bg_color = p.card;
     v.faint_bg_color = p.muted;
-    v.window_stroke = Stroke::new(1.0, p.border);
+    v.window_stroke = Stroke::new(1.0_f32, p.border);
     v.selection.bg_fill = p.primary.linear_multiply(0.35);
-    v.selection.stroke = Stroke::new(1.0, p.primary);
+    v.selection.stroke = Stroke::new(1.0_f32, p.primary);
     v.hyperlink_color = p.primary;
     v.error_fg_color = p.destructive;
     v.warn_fg_color = p.warning;
 
     let r = Rounding::same(6.0);
     v.widgets.noninteractive.bg_fill = p.background;
-    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, p.border);
-    v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, p.muted_foreground);
+    v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, p.border);
+    v.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, p.muted_foreground);
     v.widgets.noninteractive.rounding = r;
 
     v.widgets.inactive.bg_fill = p.secondary;
     v.widgets.inactive.weak_bg_fill = p.secondary;
-    v.widgets.inactive.bg_stroke = Stroke::new(1.0, p.border);
-    v.widgets.inactive.fg_stroke = Stroke::new(1.0, p.foreground);
+    v.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, p.border);
+    v.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, p.foreground);
     v.widgets.inactive.rounding = r;
 
     v.widgets.hovered.bg_fill = p.accent;
     v.widgets.hovered.weak_bg_fill = p.accent;
-    v.widgets.hovered.bg_stroke = Stroke::new(1.0, p.primary);
-    v.widgets.hovered.fg_stroke = Stroke::new(1.0, p.foreground);
+    v.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, p.primary);
+    v.widgets.hovered.fg_stroke = Stroke::new(1.0_f32, p.foreground);
     v.widgets.hovered.rounding = r;
 
     v.widgets.active.bg_fill = p.primary;
     v.widgets.active.weak_bg_fill = p.primary;
-    v.widgets.active.bg_stroke = Stroke::new(1.0, p.primary);
+    v.widgets.active.bg_stroke = Stroke::new(1.0_f32, p.primary);
     // NOTE: egui derives `strong()` text colour from this stroke, not just
     // pressed-button text. Setting it to `primary_foreground` (dark, meant
     // for text sitting on honey) makes every bold label near-invisible on a
     // dark card. Anything bold therefore sets its colour explicitly; see
     // `text::strong` below.
-    v.widgets.active.fg_stroke = Stroke::new(1.0, p.primary_foreground);
+    v.widgets.active.fg_stroke = Stroke::new(1.0_f32, p.primary_foreground);
     v.widgets.active.rounding = r;
 
     v.widgets.open.bg_fill = p.secondary;
-    v.widgets.open.bg_stroke = Stroke::new(1.0, p.border);
+    v.widgets.open.bg_stroke = Stroke::new(1.0_f32, p.border);
     v.widgets.open.rounding = r;
 
     ctx.set_visuals(v);

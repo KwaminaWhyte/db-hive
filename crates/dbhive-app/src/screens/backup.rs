@@ -1059,7 +1059,7 @@ fn card<R>(
 ) -> R {
     egui::Frame::none()
         .fill(palette.card)
-        .stroke(egui::Stroke::new(1.0, palette.border))
+        .stroke(egui::Stroke::new(1.0_f32, palette.border))
         .rounding(egui::Rounding::same(8.0))
         .inner_margin(egui::Margin::symmetric(14.0, 12.0))
         .show(ui, |ui| {

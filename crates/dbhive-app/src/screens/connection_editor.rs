@@ -914,7 +914,7 @@ fn section_frame<R>(
     ui.add_space(4.0);
     egui::Frame::none()
         .fill(palette.card)
-        .stroke(egui::Stroke::new(1.0, palette.border))
+        .stroke(egui::Stroke::new(1.0_f32, palette.border))
         .rounding(egui::Rounding::same(8.0))
         .inner_margin(egui::Margin::symmetric(12.0, 10.0))
         .show(ui, |ui| {
@@ -1366,7 +1366,7 @@ fn feedback_section(
     if ed.submitted && !validation.is_valid() {
         egui::Frame::none()
             .fill(palette.card)
-            .stroke(egui::Stroke::new(1.0, palette.destructive))
+            .stroke(egui::Stroke::new(1.0_f32, palette.destructive))
             .rounding(egui::Rounding::same(8.0))
             .inner_margin(egui::Margin::symmetric(12.0, 8.0))
             .show(ui, |ui| {
@@ -1386,7 +1386,7 @@ fn feedback_section(
         };
         egui::Frame::none()
             .fill(palette.card)
-            .stroke(egui::Stroke::new(1.0, colour))
+            .stroke(egui::Stroke::new(1.0_f32, colour))
             .rounding(egui::Rounding::same(8.0))
             .inner_margin(egui::Margin::symmetric(12.0, 8.0))
             .show(ui, |ui| {

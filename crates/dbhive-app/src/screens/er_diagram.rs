@@ -330,7 +330,7 @@ fn canvas(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
         } else {
             palette.muted_foreground
         };
-        let width = if involved { 2.0 } else { 1.0 };
+        let width = if involved { 2.0_f32 } else { 1.0_f32 };
 
         // A horizontal-tangent bezier reads better than a straight line when
         // layers are stacked; it makes the direction of the relationship
@@ -369,7 +369,7 @@ fn canvas(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
         painter.rect_stroke(
             box_rect,
             6.0,
-            egui::Stroke::new(if selected { 2.0 } else { 1.0 }, border),
+            egui::Stroke::new(if selected { 2.0_f32 } else { 1.0_f32 }, border),
         );
 
         let header = egui::Rect::from_min_size(top_left, egui::vec2(size.x, HEADER_H * d.zoom));

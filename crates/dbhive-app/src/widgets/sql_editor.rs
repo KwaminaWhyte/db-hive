@@ -314,7 +314,7 @@ fn completion_popup(
         .show(ui.ctx(), |ui| {
             egui::Frame::popup(ui.style())
                 .fill(palette.popover)
-                .stroke(egui::Stroke::new(1.0, palette.border))
+                .stroke(egui::Stroke::new(1.0_f32, palette.border))
                 .show(ui, |ui| {
                     ui.set_max_width(280.0);
                     for (i, c) in state.completions.iter().enumerate() {

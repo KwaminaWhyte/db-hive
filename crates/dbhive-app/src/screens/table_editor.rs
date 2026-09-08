@@ -415,7 +415,7 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         ui.label(crate::theme::text::strong(palette, "SQL to run"));
         egui::Frame::none()
             .fill(palette.card)
-            .stroke(egui::Stroke::new(1.0, palette.border))
+            .stroke(egui::Stroke::new(1.0_f32, palette.border))
             .inner_margin(egui::Margin::same(8.0))
             .rounding(egui::Rounding::same(6.0))
             .show(ui, |ui| {

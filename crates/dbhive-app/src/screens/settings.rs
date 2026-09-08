@@ -225,16 +225,16 @@ pub fn apply_theme(ctx: &egui::Context, mode: Mode, accent: (u8, u8, u8), font_s
 
     let mut v = ctx.style().visuals.clone();
     v.selection.bg_fill = accent.linear_multiply(0.35);
-    v.selection.stroke = egui::Stroke::new(1.0, accent);
+    v.selection.stroke = egui::Stroke::new(1.0_f32, accent);
     v.hyperlink_color = accent;
-    v.widgets.hovered.bg_stroke = egui::Stroke::new(1.0, accent);
+    v.widgets.hovered.bg_stroke = egui::Stroke::new(1.0_f32, accent);
     v.widgets.active.bg_fill = accent;
     v.widgets.active.weak_bg_fill = accent;
-    v.widgets.active.bg_stroke = egui::Stroke::new(1.0, accent);
+    v.widgets.active.bg_stroke = egui::Stroke::new(1.0_f32, accent);
     // Text drawn on top of the accent. `theme::text::strong` sets its own
     // colour, so this only affects pressed-widget labels, which is what it
     // is for.
-    v.widgets.active.fg_stroke = egui::Stroke::new(1.0, on_accent);
+    v.widgets.active.fg_stroke = egui::Stroke::new(1.0_f32, on_accent);
     ctx.set_visuals(v);
 
     // The SQL editor renders through `TextStyle::Monospace`, so resizing that
@@ -523,7 +523,7 @@ fn card<R>(
 ) -> R {
     let inner = egui::Frame::none()
         .fill(palette.card)
-        .stroke(egui::Stroke::new(1.0, palette.border))
+        .stroke(egui::Stroke::new(1.0_f32, palette.border))
         .rounding(egui::Rounding::same(8.0))
         .inner_margin(egui::Margin::symmetric(14.0, 12.0))
         .show(ui, |ui| {

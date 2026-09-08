@@ -1210,7 +1210,7 @@ fn history_tab(
             for entry in &h.entries {
                 egui::Frame::none()
                     .fill(palette.card)
-                    .stroke(egui::Stroke::new(1.0, palette.border))
+                    .stroke(egui::Stroke::new(1.0_f32, palette.border))
                     .rounding(egui::Rounding::same(8.0))
                     .inner_margin(egui::Margin::symmetric(10.0, 8.0))
                     .show(ui, |ui| {
@@ -1421,7 +1421,7 @@ fn snippets_tab(
             for snippet in &visible {
                 egui::Frame::none()
                     .fill(palette.card)
-                    .stroke(egui::Stroke::new(1.0, palette.border))
+                    .stroke(egui::Stroke::new(1.0_f32, palette.border))
                     .rounding(egui::Rounding::same(8.0))
                     .inner_margin(egui::Margin::symmetric(10.0, 8.0))
                     .show(ui, |ui| {
@@ -1750,7 +1750,7 @@ fn templates_tab(
             for template in &visible {
                 egui::Frame::none()
                     .fill(palette.card)
-                    .stroke(egui::Stroke::new(1.0, palette.border))
+                    .stroke(egui::Stroke::new(1.0_f32, palette.border))
                     .rounding(egui::Rounding::same(8.0))
                     .inner_margin(egui::Margin::symmetric(10.0, 8.0))
                     .show(ui, |ui| {
