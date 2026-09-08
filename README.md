@@ -44,7 +44,7 @@ DB Hive is a professional database client designed to compete with tools like Be
   - Inline cell editing via double-click; primary keys are read-only
   - Right-click context menu: Copy Cell, Copy Row as JSON, Edit Cell, Set to NULL, Delete Row
   - Bulk row selection with checkboxes and floating action bar (Copy JSON, Delete, Deselect All)
-  - Pending Changes Panel — Beekeeper Studio-inspired Visual/SQL diff view before committing
+  - Pending Changes Panel: Beekeeper Studio-inspired Visual/SQL diff view before committing
   - Column type badges inline in headers (`#`, `T`, `B`, `{}`, `D`, `U`, `0x`, `[]`)
 
 - **Results Viewer**
@@ -178,14 +178,14 @@ See [Code Signing Guide](docs/code-signing.md) for signing binaries on all platf
 2. Click a table to open the Table Inspector
 3. Use the **Data** tab to view, sort, filter, and edit rows
 4. Double-click a cell to edit; right-click for more options
-5. Changes queue in the Pending Changes Panel — click **Commit All** to apply
+5. Changes queue in the Pending Changes Panel; click **Commit All** to apply
 
 ### Importing a SQL Dump
 
 1. From the toolbar or File menu, choose **Import SQL**
 2. Select your `.sql` file
 3. Choose options (continue-on-error, transaction mode)
-4. Click **Import** — the dialog locks during the operation
+4. Click **Import**; the dialog locks during the operation
 5. Click **Stop** at any time to cancel gracefully
 6. If any statements were skipped, click **Open error log** to see details
 
@@ -265,13 +265,13 @@ from the frame loop (`dbhive-app/src/task.rs`). See
 
 ## Troubleshooting
 
-**"Connection refused"** — Verify the server is running, check host/port, confirm firewall rules.
+**"Connection refused"**: verify the server is running, check host/port, confirm firewall rules.
 
-**"Authentication failed"** — Double-check username and password; verify the user has access to the specified database.
+**"Authentication failed"**: double-check username and password; verify the user has access to the specified database.
 
-**SQL import stuck or slow** — Large files are normal; the dialog shows live progress. Click **Stop** to cancel.
+**SQL import stuck or slow**: large files are normal; the dialog shows live progress. Click **Stop** to cancel.
 
-**"Could not open log file"** — Check that the source SQL file's directory is writable.
+**"Could not open log file"**: check that the source SQL file's directory is writable.
 
 **App won't start**: check `rustc --version` (1.75+ needed) and run `cargo build -p dbhive-app` to see the real error.
 
@@ -286,11 +286,11 @@ from the frame loop (`dbhive-app/src/task.rs`). See
 
 See [Implementation Roadmap](docs/implementation-roadmap.md) for the full plan.
 
-**Current status**: Active beta — `v0.19.0-beta`
+**Current status**: active beta, `v0.21.0-beta`
 
 ## License
 
-MIT License — see [LICENSE](LICENSE)
+MIT License, see [LICENSE](LICENSE)
 
 ## Acknowledgments
 
