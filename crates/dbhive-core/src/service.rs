@@ -17,7 +17,7 @@ use crate::drivers::{
     DatabaseDriver,
 };
 use crate::models::connection::SshAuthMethod;
-use crate::models::{DbDriver, DbError, SslMode};
+use crate::models::{DbDriver, DbError, DdlResult, SslMode};
 use crate::state::AppState;
 
 /// Open a connection for a saved profile and register it in state.
@@ -299,4 +299,233 @@ pub async fn switch_database(
         .add_connection(connection_id.to_string(), new_connection);
 
     Ok(connection_id.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Databases
+// ---------------------------------------------------------------------------
+
+/// Longest database name any supported server accepts.
+///
+/// Postgres and MySQL both cut off at 64 bytes, Postgres counting the
+/// terminator, which leaves 63. Rejecting here says so plainly instead of
+/// letting the server truncate silently or fail with a byte offset.
+pub const MAX_DATABASE_NAME_LEN: usize = 63;
+
+/// Reject a database name that no server would accept, before any SQL is
+/// built.
+///
+/// The name is quoted before it reaches SQL, so this is not what stops an
+/// injection; it exists so the user gets a sentence instead of a syntax
+/// error, and so a name that quoting would happily accept but the server
+/// would refuse (empty, 200 characters long, leading digit) is caught here.
+pub fn validate_database_name(name: &str) -> Result<(), DbError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(DbError::InvalidInput(
+            "Database name cannot be empty".to_string(),
+        ));
+    }
+    if name.chars().count() > MAX_DATABASE_NAME_LEN {
+        return Err(DbError::InvalidInput(format!(
+            "Database name too long (max {} characters)",
+            MAX_DATABASE_NAME_LEN
+        )));
+    }
+    if !name
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '$')
+    {
+        return Err(DbError::InvalidInput(
+            "Database name may only contain letters, digits, underscores, hyphens, and $"
+                .to_string(),
+        ));
+    }
+    if name.starts_with(|c: char| c.is_ascii_digit()) {
+        return Err(DbError::InvalidInput(
+            "Database name cannot start with a digit".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// `CREATE DATABASE <name>` for drivers that have such a statement.
+///
+/// The name is quoted with the driver's own quoting rather than interpolated,
+/// so a hyphenated or reserved name works. Drivers where a database is not a
+/// thing you create with SQL say why: the message is the whole answer the
+/// user gets, and "unsupported" alone would leave them guessing.
+pub fn create_database_sql(
+    driver: &DbDriver,
+    name: &str,
+    quote: &dyn Fn(&str) -> String,
+) -> Result<String, DbError> {
+    validate_database_name(name)?;
+    match driver {
+        DbDriver::Postgres
+        | DbDriver::Supabase
+        | DbDriver::Neon
+        | DbDriver::MySql
+        | DbDriver::SqlServer => Ok(format!("CREATE DATABASE {}", quote(name.trim()))),
+        DbDriver::Sqlite => Err(DbError::InvalidInput(
+            "SQLite databases are individual files and cannot be created from an active connection"
+                .to_string(),
+        )),
+        DbDriver::MongoDb => Err(DbError::InvalidInput(
+            "MongoDB databases are created implicitly when the first collection is written"
+                .to_string(),
+        )),
+        DbDriver::Turso => Err(DbError::InvalidInput(
+            "Turso databases are provisioned via the Turso platform, not via SQL".to_string(),
+        )),
+        DbDriver::Redis => Err(DbError::InvalidInput(
+            "Redis exposes a fixed set of numbered logical databases (0..15); no CREATE DATABASE"
+                .to_string(),
+        )),
+    }
+}
+
+/// Create a database on the server this connection is already talking to.
+///
+/// Returns the SQL that ran, so the caller can show it: DDL is not undoable
+/// and the statement is the only record of what happened.
+pub async fn create_database(
+    state: &Mutex<AppState>,
+    connection_id: &str,
+    name: &str,
+) -> Result<DdlResult, DbError> {
+    let (connection, driver) = {
+        let guard = state.lock().unwrap();
+        let driver = guard
+            .get_profile(connection_id)
+            .ok_or_else(|| {
+                DbError::NotFound(format!(
+                    "Connection profile for '{}' not found",
+                    connection_id
+                ))
+            })?
+            .driver
+            .clone();
+        let connection = guard
+            .get_connection(connection_id)
+            .ok_or_else(|| {
+                DbError::NotFound(format!("Connection '{}' not found", connection_id))
+            })?
+            .clone();
+        (connection, driver)
+    };
+
+    let quote = |s: &str| connection.quote_identifier(s);
+    let sql = create_database_sql(&driver, name, &quote)?;
+    connection.execute_query(&sql).await?;
+
+    Ok(DdlResult {
+        message: format!("Database '{}' created", name.trim()),
+        sql: vec![sql],
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Standard SQL quoting, as Postgres uses.
+    fn q(ident: &str) -> String {
+        format!("\"{}\"", ident.replace('"', "\"\""))
+    }
+    /// MySQL backtick quoting, to prove nothing assumes double quotes.
+    fn q_mysql(ident: &str) -> String {
+        format!("`{}`", ident.replace('`', "``"))
+    }
+    /// T-SQL bracket quoting.
+    fn q_mssql(ident: &str) -> String {
+        format!("[{}]", ident.replace(']', "]]"))
+    }
+
+    #[test]
+    fn a_nameless_database_is_rejected() {
+        assert!(validate_database_name("").is_err());
+        assert!(validate_database_name("   ").is_err());
+    }
+
+    #[test]
+    fn a_database_name_is_length_limited() {
+        let ok = "a".repeat(MAX_DATABASE_NAME_LEN);
+        assert!(validate_database_name(&ok).is_ok());
+        let too_long = "a".repeat(MAX_DATABASE_NAME_LEN + 1);
+        assert!(validate_database_name(&too_long).is_err());
+    }
+
+    #[test]
+    fn a_database_name_cannot_start_with_a_digit() {
+        assert!(validate_database_name("1db").is_err());
+        assert!(validate_database_name("db1").is_ok());
+    }
+
+    #[test]
+    fn punctuation_that_would_change_the_statement_is_rejected() {
+        for bad in ["my db", "db;DROP DATABASE x", "db\"", "db'", "db`", "db.x"] {
+            assert!(
+                validate_database_name(bad).is_err(),
+                "accepted {:?}",
+                bad
+            );
+        }
+        // The characters servers do allow still pass.
+        for good in ["my_db", "my-db", "db$1", "DB"] {
+            assert!(validate_database_name(good).is_ok(), "rejected {:?}", good);
+        }
+    }
+
+    #[test]
+    fn surrounding_whitespace_is_trimmed_rather_than_rejected() {
+        assert!(validate_database_name("  analytics  ").is_ok());
+        let sql = create_database_sql(&DbDriver::Postgres, "  analytics  ", &q).unwrap();
+        assert_eq!(sql, "CREATE DATABASE \"analytics\"");
+    }
+
+    #[test]
+    fn the_name_is_quoted_per_dialect() {
+        assert_eq!(
+            create_database_sql(&DbDriver::Postgres, "my-db", &q).unwrap(),
+            "CREATE DATABASE \"my-db\""
+        );
+        assert_eq!(
+            create_database_sql(&DbDriver::MySql, "my-db", &q_mysql).unwrap(),
+            "CREATE DATABASE `my-db`"
+        );
+        assert_eq!(
+            create_database_sql(&DbDriver::SqlServer, "my-db", &q_mssql).unwrap(),
+            "CREATE DATABASE [my-db]"
+        );
+    }
+
+    #[test]
+    fn postgres_flavours_all_create_databases() {
+        for driver in [DbDriver::Postgres, DbDriver::Supabase, DbDriver::Neon] {
+            assert!(create_database_sql(&driver, "analytics", &q).is_ok(), "{:?}", driver);
+        }
+    }
+
+    #[test]
+    fn drivers_without_create_database_explain_themselves() {
+        for driver in [
+            DbDriver::Sqlite,
+            DbDriver::Turso,
+            DbDriver::MongoDb,
+            DbDriver::Redis,
+        ] {
+            let err = create_database_sql(&driver, "analytics", &q).unwrap_err();
+            let msg = err.to_string();
+            // Not just "unsupported": the message has to say what to do
+            // instead, since it is all the user sees.
+            assert!(msg.len() > 40, "{:?}: {}", driver, msg);
+        }
+    }
+
+    #[test]
+    fn an_invalid_name_is_caught_before_any_sql_is_built() {
+        assert!(create_database_sql(&DbDriver::Postgres, "1bad", &q).is_err());
+        assert!(create_database_sql(&DbDriver::Postgres, "", &q).is_err());
+    }
 }

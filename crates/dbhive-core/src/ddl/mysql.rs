@@ -172,6 +172,9 @@ impl MySqlDdlGenerator {
 
 impl DdlGenerator for MySqlDdlGenerator {
     fn generate_create_table(&self, table: &TableDefinition) -> Result<DdlResult, DbError> {
+        // Escaped up front so every quoted name below is safe; see
+        // ddl::escaping.
+        let table = &crate::ddl::escaping::table(table, '`');
         if table.columns.is_empty() {
             return Err(DbError::InvalidInput(
                 "Table must have at least one column".to_string(),
@@ -248,6 +251,7 @@ impl DdlGenerator for MySqlDdlGenerator {
     }
 
     fn generate_alter_table(&self, alter: &AlterTableDefinition) -> Result<DdlResult, DbError> {
+        let alter = &crate::ddl::escaping::alter(alter, '`');
         if alter.operations.is_empty() {
             return Err(DbError::InvalidInput(
                 "Alter table must have at least one operation".to_string(),
@@ -327,6 +331,7 @@ impl DdlGenerator for MySqlDdlGenerator {
     }
 
     fn generate_drop_table(&self, drop: &DropTableDefinition) -> Result<DdlResult, DbError> {
+        let drop = &crate::ddl::escaping::drop(drop, '`');
         let if_exists = if drop.if_exists { "IF EXISTS " } else { "" };
         // MySQL doesn't support CASCADE in DROP TABLE
         let sql = format!("DROP TABLE {}`{}`;", if_exists, drop.name);

@@ -143,6 +143,12 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         return;
     };
     let palette = app.mode.palette();
+    // Captured before the workspace is borrowed, so the sidebar can quote
+    // identifiers without reaching back into `app`.
+    let quote: Box<dyn Fn(&str) -> String> = match driver(app, &connection_id) {
+        Some(d) => Box::new(move |s: &str| d.quote_identifier(s)),
+        None => Box::new(|s: &str| format!("\"{}\"", s.replace('"', "\"\""))),
+    };
     let mut run_now = false;
     let mut disconnect = false;
     let mut switch_to: Option<String> = None;
@@ -433,8 +439,12 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                 open_inspector = Some((ws.connection_id.clone(), schema, table));
             }
             if let Some(name) = insert {
+                // Quoted through the driver: a table called `order` or
+                // `my table` is perfectly legal and produced broken SQL when
+                // this interpolated the bare name.
+                let quoted = quote(&name);
                 let tab = ws.active();
-                tab.sql = format!("SELECT * FROM {} LIMIT 100;", name);
+                tab.sql = format!("SELECT * FROM {} LIMIT 100;", quoted);
                 tab.title = name;
                 run_now = true;
             }
