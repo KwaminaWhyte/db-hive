@@ -583,6 +583,24 @@ pub async fn export_rows_to_file(
     .map_err(|e| DbError::InternalError(format!("Export task failed: {}", e)))?
 }
 
+/// `SELECT * FROM table` with an optional row cap.
+///
+/// T-SQL has no `LIMIT`; using one there is a syntax error rather than an
+/// unlimited read, so it gets `TOP n` instead.
+pub fn limited_select(
+    driver: &DbDriver,
+    schema: &str,
+    table: &str,
+    limit: Option<usize>,
+) -> String {
+    let target = qualify(driver, schema, table);
+    match (limit, driver) {
+        (None, _) => format!("SELECT * FROM {}", target),
+        (Some(n), DbDriver::SqlServer) => format!("SELECT TOP {} * FROM {}", n, target),
+        (Some(n), _) => format!("SELECT * FROM {} LIMIT {}", target, n),
+    }
+}
+
 /// Read a whole table and export it. Returns the number of rows written.
 pub async fn export_table_to_file(
     state: &Mutex<AppState>,
@@ -594,10 +612,7 @@ pub async fn export_table_to_file(
     let driver = connection(state, connection_id)?;
     let kind = driver_kind(state, connection_id)?;
 
-    let mut sql = format!("SELECT * FROM {}", qualify(&kind, schema, table));
-    if let Some(limit) = opts.row_limit {
-        sql.push_str(&format!(" LIMIT {}", limit));
-    }
+    let sql = limited_select(&kind, schema, table, opts.row_limit);
     let result = driver.execute_query(&sql).await?;
 
     let mut opts = opts;
@@ -3060,6 +3075,23 @@ mod tests {
     fn export_formats_have_distinct_extensions() {
         let exts: Vec<&str> = ExportFormat::ALL.iter().map(|f| f.extension()).collect();
         assert_eq!(exts, vec!["csv", "json", "sql", "xls"]);
+    }
+
+    #[test]
+    fn a_row_capped_select_uses_the_dialects_own_syntax() {
+        assert_eq!(
+            limited_select(&DbDriver::Postgres, "public", "users", Some(10)),
+            "SELECT * FROM \"public\".\"users\" LIMIT 10"
+        );
+        assert_eq!(
+            limited_select(&DbDriver::SqlServer, "dbo", "users", Some(10)),
+            "SELECT TOP 10 * FROM [dbo].[users]",
+            "T-SQL has no LIMIT; using one is a syntax error, not an unlimited read"
+        );
+        assert_eq!(
+            limited_select(&DbDriver::Postgres, "public", "users", None),
+            "SELECT * FROM \"public\".\"users\""
+        );
     }
 
     #[test]

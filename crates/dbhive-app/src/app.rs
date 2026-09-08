@@ -26,6 +26,7 @@ pub struct DbHiveApp {
     /// rather than only printed, since it means the user's connections are
     /// missing and they need to know why.
     pub startup_error: Option<String>,
+    pub about_open: bool,
     /// Profile to open at startup, from DBHIVE_AUTOCONNECT.
     autoconnect: Option<(String, String)>,
 }
@@ -70,6 +71,7 @@ impl DbHiveApp {
             screens: Screens::default(),
             toasts: crate::widgets::toast::Toasts::default(),
             startup_error,
+            about_open: false,
             autoconnect,
         }
     }
@@ -256,8 +258,12 @@ fn top_bar(app: &mut DbHiveApp, ctx: &egui::Context) {
                 ui.label(crate::theme::text::strong(app.mode.palette(), "DB Hive"));
                 ui.separator();
 
+                menu_bar(app, ui);
+
                 // The web shell centred the command palette trigger and had
-                // to fight overlap for it. Here it simply follows the menus.
+                // to fight overlap for it, ending up with the menu items
+                // rendering underneath the search box on a narrow window.
+                // Here it simply follows the menus and cannot collide.
                 ui.add_space(4.0);
 
                 if ui.small_button("Search or run commands…  ⌘K").clicked() {
@@ -279,4 +285,185 @@ fn top_bar(app: &mut DbHiveApp, ctx: &egui::Context) {
                 });
             });
         });
+
+    about_window(app, ctx);
+}
+
+/// File / Schema / View / Help, matching the web shell's menu bar.
+///
+/// Items that need a connection are disabled rather than hidden, so the
+/// shape of the menu does not shift under the user.
+fn menu_bar(app: &mut DbHiveApp, ui: &mut egui::Ui) {
+    let connected = app.workspace.is_some();
+    let mut action: Option<command_palette::CommandId> = None;
+    use command_palette::CommandId as C;
+
+    ui.menu_button("File", |ui| {
+        if ui.button("New Connection…").clicked() {
+            action = Some(C::NewConnection);
+            ui.close_menu();
+        }
+        if ui.button("New Window").clicked() {
+            action = Some(C::NewWindow);
+            ui.close_menu();
+        }
+        ui.separator();
+        if ui.button("Settings…").clicked() {
+            action = Some(C::GoSettings);
+            ui.close_menu();
+        }
+        ui.separator();
+        if ui.button("Quit").clicked() {
+            ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+        }
+    });
+
+    ui.menu_button("Schema", |ui| {
+        if ui
+            .add_enabled(connected, egui::Button::new("New Table…"))
+            .clicked()
+        {
+            action = Some(C::NewTable);
+            ui.close_menu();
+        }
+        if ui
+            .add_enabled(connected, egui::Button::new("ER Diagram"))
+            .clicked()
+        {
+            action = Some(C::GoErDiagram);
+            ui.close_menu();
+        }
+        if ui
+            .add_enabled(connected, egui::Button::new("Schema Designer"))
+            .clicked()
+        {
+            action = Some(C::GoSchemaDesigner);
+            ui.close_menu();
+        }
+        ui.separator();
+        if ui
+            .add_enabled(connected, egui::Button::new("Refresh Metadata"))
+            .clicked()
+        {
+            action = Some(C::RefreshMetadata);
+            ui.close_menu();
+        }
+    });
+
+    ui.menu_button("View", |ui| {
+        if ui
+            .add_enabled(connected, egui::Button::new("Query Editor"))
+            .clicked()
+        {
+            action = Some(C::GoQueryEditor);
+            ui.close_menu();
+        }
+        if ui
+            .add_enabled(connected, egui::Button::new("Table Inspector"))
+            .clicked()
+        {
+            action = Some(C::GoTableInspector);
+            ui.close_menu();
+        }
+        if ui
+            .add_enabled(connected, egui::Button::new("Activity Monitor"))
+            .clicked()
+        {
+            action = Some(C::GoActivityMonitor);
+            ui.close_menu();
+        }
+        ui.separator();
+        if ui.button("Connections").clicked() {
+            action = Some(C::GoConnections);
+            ui.close_menu();
+        }
+        if ui.button("Migrations…").clicked() {
+            action = Some(C::GoMigrations);
+            ui.close_menu();
+        }
+        if ui.button("Backup Manager…").clicked() {
+            action = Some(C::GoBackup);
+            ui.close_menu();
+        }
+        if ui.button("Import / Export…").clicked() {
+            action = Some(C::GoImportExport);
+            ui.close_menu();
+        }
+        if ui.button("Plugins…").clicked() {
+            action = Some(C::GoPlugins);
+            ui.close_menu();
+        }
+    });
+
+    ui.menu_button("Help", |ui| {
+        if ui.button("Keyboard Shortcuts").clicked() {
+            action = Some(C::ShowShortcuts);
+            ui.close_menu();
+        }
+        if ui.button("Documentation").clicked() {
+            // The web shell opened these in a browser; `open` does the same
+            // without pulling in a dependency for two links.
+            let _ = std::process::Command::new(OPEN_CMD)
+                .arg("https://github.com/KwaminaWhyte/db-hive/wiki")
+                .spawn();
+            ui.close_menu();
+        }
+        if ui.button("GitHub Repository").clicked() {
+            let _ = std::process::Command::new(OPEN_CMD)
+                .arg("https://github.com/KwaminaWhyte/db-hive")
+                .spawn();
+            ui.close_menu();
+        }
+        ui.separator();
+        if ui.button("About DB Hive").clicked() {
+            app.about_open = true;
+            ui.close_menu();
+        }
+    });
+
+    if let Some(id) = action {
+        let ctx = ui.ctx().clone();
+        dispatch(app, &ctx, id);
+    }
+}
+
+/// Platform command that opens a URL in the default browser.
+#[cfg(target_os = "macos")]
+const OPEN_CMD: &str = "open";
+#[cfg(target_os = "windows")]
+const OPEN_CMD: &str = "explorer";
+#[cfg(all(unix, not(target_os = "macos")))]
+const OPEN_CMD: &str = "xdg-open";
+
+fn about_window(app: &mut DbHiveApp, ctx: &egui::Context) {
+    if !app.about_open {
+        return;
+    }
+    let palette = app.mode.palette();
+    let mut open = app.about_open;
+    egui::Window::new("About DB Hive")
+        .open(&mut open)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.label(crate::theme::text::heading(palette, "DB Hive"));
+                ui.label(crate::theme::text::muted(
+                    palette,
+                    format!("Version {}", env!("CARGO_PKG_VERSION")),
+                ));
+                ui.add_space(6.0);
+                ui.label(crate::theme::text::muted(
+                    palette,
+                    "A native database client for PostgreSQL, MySQL, SQLite,\nMongoDB, Redis, SQL Server and Turso.",
+                ));
+                ui.add_space(8.0);
+                ui.label(crate::theme::text::muted(
+                    palette,
+                    format!("{} on {}", std::env::consts::ARCH, std::env::consts::OS),
+                ));
+            });
+        });
+    app.about_open = open;
 }

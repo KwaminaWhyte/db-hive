@@ -1535,6 +1535,9 @@ fn step_options(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
     if changed {
         app.screens.import_export.invalidate_plan();
     }
+    if reparse {
+        app.screens.import_export.source = None;
+    }
     if back {
         app.screens.import_export.step = Step::Mapping;
     }
@@ -1879,11 +1882,7 @@ fn start_table_preview(app: &mut DbHiveApp, ctx: &egui::Context, connection_id: 
         return;
     };
     let kind = svc::driver_kind(&app.state, connection_id).unwrap_or(DbDriver::Postgres);
-    let sql = format!(
-        "SELECT * FROM {} LIMIT {}",
-        svc::qualify(&kind, &schema, &table),
-        TABLE_PREVIEW_ROWS
-    );
+    let sql = svc::limited_select(&kind, &schema, &table, Some(TABLE_PREVIEW_ROWS));
 
     let handle = app.rt.handle().clone();
     app.screens
