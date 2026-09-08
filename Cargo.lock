@@ -1974,7 +1974,10 @@ dependencies = [
 name = "dbhive-core"
 version = "0.21.0"
 dependencies = [
+ "arboard",
  "async-trait",
+ "boa_engine",
+ "boa_runtime",
  "calamine",
  "chrono",
  "csv",

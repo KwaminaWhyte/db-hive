@@ -154,6 +154,10 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     let mut switch_to: Option<String> = None;
     let mut reload_tables = false;
     let mut open_inspector: Option<(String, String, String)> = None;
+    let mut open_alter: Option<(String, String, String)> = None;
+    let mut open_drop: Option<(String, String, String)> = None;
+    let mut open_procedures = false;
+    let mut open_create_database = false;
     let mut pending_switch: Option<String> = None;
     let mut toggle_ai = false;
     let mut new_table = false;
@@ -174,8 +178,13 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     let ws = app.workspace.as_mut().unwrap();
     if let Some(result) = ws.meta_job.take_result() {
         match result {
-            Ok((databases, schemas, tables, database)) => {
-                if ws.current_database.is_none() {
+            Ok((databases, schemas, tables, in_use)) => {
+                // Report the database the session is actually on, not simply
+                // the first one the server listed. They differ whenever the
+                // profile names a database, and after a switch.
+                if !in_use.is_empty() {
+                    ws.current_database = Some(in_use);
+                } else if ws.current_database.is_none() {
                     ws.current_database = databases.first().map(|d| d.name.clone());
                 }
                 if ws.current_schema.is_none() {
@@ -382,6 +391,16 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                 ui.add_space(6.0);
             }
 
+            ui.horizontal(|ui| {
+                if ui.small_button("Procedures").clicked() {
+                    open_procedures = true;
+                }
+                if ui.small_button("New database…").clicked() {
+                    open_create_database = true;
+                }
+            });
+            ui.add_space(6.0);
+
             ui.add(
                 egui::TextEdit::singleline(&mut ws.table_filter)
                     .hint_text("Search tables...")
@@ -407,6 +426,8 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
             let needle = ws.table_filter.to_lowercase();
             let mut insert: Option<String> = None;
             let mut inspect: Option<(String, String)> = None;
+            let mut alter: Option<(String, String)> = None;
+            let mut drop_table: Option<(String, String)> = None;
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for t in ws
                     .tables
@@ -432,11 +453,26 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                             inspect = Some((t.schema.clone(), t.name.clone()));
                             ui.close_menu();
                         }
+                        ui.separator();
+                        if ui.button("Alter table…").clicked() {
+                            alter = Some((t.schema.clone(), t.name.clone()));
+                            ui.close_menu();
+                        }
+                        if ui.button("Drop table…").clicked() {
+                            drop_table = Some((t.schema.clone(), t.name.clone()));
+                            ui.close_menu();
+                        }
                     });
                 }
             });
             if let Some((schema, table)) = inspect {
                 open_inspector = Some((ws.connection_id.clone(), schema, table));
+            }
+            if let Some((schema, table)) = alter {
+                open_alter = Some((ws.connection_id.clone(), schema, table));
+            }
+            if let Some((schema, table)) = drop_table {
+                open_drop = Some((ws.connection_id.clone(), schema, table));
             }
             if let Some(name) = insert {
                 // Quoted through the driver: a table called `order` or
@@ -639,6 +675,22 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     }
     if let Some((conn, schema, table)) = open_inspector {
         app.screens.table_inspector.open_table(conn, schema, table);
+    }
+    if let Some((conn, schema, table)) = open_alter {
+        app.screens.table_editor.open_alter(conn, schema, table);
+    }
+    if let Some((conn, schema, table)) = open_drop {
+        app.screens.table_editor.open_drop(conn, schema, table);
+    }
+    if open_procedures {
+        let ws = app.workspace.as_ref().unwrap();
+        let schema = current_schema_or_database(ws);
+        let conn = ws.connection_id.clone();
+        app.screens.procedures.open_for(conn, schema);
+    }
+    if open_create_database {
+        let conn = app.workspace.as_ref().unwrap().connection_id.clone();
+        app.screens.table_editor.open_create_database(conn);
     }
     if run_now {
         execute(app, ui.ctx());

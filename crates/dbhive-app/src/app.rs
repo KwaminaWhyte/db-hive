@@ -6,8 +6,8 @@ use dbhive_core::state::AppState;
 
 use crate::screens::{
     activity_monitor, backup, command_palette, connection_editor, connections, er_diagram,
-    import_export, migrations, query_builder, schema_designer, settings, table_editor,
-    table_inspector, workspace, Screen, Screens,
+    import_export, migrations, plugins, procedures, query_builder, schema_designer, settings,
+    table_editor, table_inspector, workspace, Screen, Screens,
 };
 use crate::theme;
 
@@ -242,6 +242,8 @@ fn render_window(app: &mut DbHiveApp, ctx: &egui::Context) {
                 table_editor::show(self_, ui);
             } else if self_.screens.activity_monitor.open {
                 activity_monitor::show(self_, ui);
+            } else if self_.screens.procedures.open {
+                procedures::show(self_, ui);
             } else if self_.screens.query_builder.open {
                 if let query_builder::BuilderAction::UseSql(sql) =
                     query_builder::show(self_, ui)
@@ -272,6 +274,7 @@ fn render_window(app: &mut DbHiveApp, ctx: &egui::Context) {
         migrations::show_window(self_, ctx);
         backup::show_window(self_, ctx);
         import_export::show_window(self_, ctx);
+        plugins::show_window(self_, ctx);
 
         if let Some(action) = connection_editor::show(self_, ctx) {
             match action {
@@ -321,6 +324,7 @@ fn dispatch(app: &mut DbHiveApp, ctx: &egui::Context, id: command_palette::Comma
             None => app.toasts.info("Connect to a database first"),
         },
         C::GoBackup => app.screens.backup.open = true,
+        C::GoPlugins => app.screens.plugins.open = true,
         C::GoAiAssistant => {
             if app.workspace.is_some() {
                 app.screens.ai_assistant.open = !app.screens.ai_assistant.open;
@@ -437,6 +441,10 @@ fn top_bar(app: &mut DbHiveApp, ctx: &egui::Context) {
                 if ui.small_button("Search or run commands…  ⌘K").clicked() {
                     app.screens.command_palette.open();
                 }
+
+                // Plugin-contributed toolbar buttons, from the descriptors
+                // plugins declare. Nothing here executes plugin code.
+                crate::screens::plugins::toolbar(app, ui);
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if ui.button("Settings").clicked() {

@@ -824,6 +824,28 @@ mod tests {
     }
 
     #[test]
+    fn permission_wire_names_match_the_shipped_manifests() {
+        // `as_str` and the serde name must agree, or a permission would parse
+        // under one spelling and be written back under another. `modifyUI` in
+        // particular is not what rename_all = "camelCase" would produce.
+        for p in PluginPermission::ALL {
+            let encoded = serde_json::to_string(&p).unwrap();
+            assert_eq!(
+                encoded,
+                format!("\"{}\"", p.as_str()),
+                "{:?} encodes differently from as_str()",
+                p
+            );
+            let decoded: PluginPermission = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(decoded, p);
+        }
+        assert_eq!(
+            serde_json::from_str::<PluginPermission>("\"modifyUI\"").unwrap(),
+            PluginPermission::ModifyUi
+        );
+    }
+
+    #[test]
     fn permission_labels_cover_every_variant() {
         for p in PluginPermission::ALL {
             assert!(!p.label().is_empty());

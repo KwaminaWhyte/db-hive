@@ -19,7 +19,6 @@
 //!   the same preview-then-confirm flow over `dbhive_core::service`.
 
 use dbhive_core::ddl::get_ddl_generator;
-use dbhive_core::drivers::DatabaseDriver;
 use dbhive_core::models::{
     AlterColumnOperation, AlterTableDefinition, ColumnDefinition, ColumnType, DbDriver, DbError,
     DropTableDefinition, TableDefinition, TableSchema,
@@ -280,6 +279,10 @@ pub struct TableEditor {
     /// The table exactly as loaded. Kept separately from the rows so a
     /// column the user deleted is still known to have existed.
     pub loaded: Vec<ColumnRow>,
+    /// Set when the table being altered still has to be read. A flag rather
+    /// than "loaded is empty", so a load that comes back with nothing does
+    /// not restart itself on every frame.
+    needs_load: bool,
     /// The user's typed confirmation for a drop.
     pub drop_confirm: String,
     pub drop_cascade: bool,
@@ -300,6 +303,7 @@ impl TableEditor {
         self.confirming = false;
         self.columns.clear();
         self.loaded.clear();
+        self.needs_load = false;
         self.drop_confirm.clear();
         self.drop_cascade = false;
         self.database_name.clear();
@@ -331,6 +335,7 @@ impl TableEditor {
         self.reset(Mode::AlterTable, connection_id);
         self.schema = schema.into();
         self.table_name = table.into();
+        self.needs_load = true;
     }
 
     /// Drop an existing table. No load is needed: dropping does not depend
@@ -721,11 +726,8 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     }
 
     // Alter mode needs the live table before it can diff anything.
-    if mode == Mode::AlterTable
-        && app.screens.table_editor.loaded.is_empty()
-        && app.screens.table_editor.error.is_none()
-        && !app.screens.table_editor.load_job.is_running()
-    {
+    if app.screens.table_editor.needs_load {
+        app.screens.table_editor.needs_load = false;
         start_load(app, ui.ctx());
     }
 
@@ -754,6 +756,11 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         Mode::DropTable => drop_table_form(app, ui, palette),
         Mode::CreateDatabase => create_database_form(app, ui, palette),
     }
+
+    // The form can switch mode: alter offers a drop. Everything below acts on
+    // the mode as it is now, so a frame can never preview a DROP while still
+    // gating it as an ALTER.
+    let mode = app.screens.table_editor.mode;
 
     // Recompute the preview, then release the borrow before drawing: the
     // confirm button needs `app` again to launch the job.
@@ -1069,6 +1076,9 @@ fn columns_editor(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
         .show(ui, |ui| {
             let ed = &mut app.screens.table_editor;
             for (i, row) in ed.columns.iter_mut().enumerate() {
+                // Read before the mutable borrow: the "was x" hint needs the
+                // original name while the editor holds the current one.
+                let origin_name = row.origin.as_ref().map(|o| o.name.trim().to_string());
                 let col = &mut row.col;
                 ui.horizontal(|ui| {
                     ui.add(
@@ -1121,13 +1131,11 @@ fn columns_editor(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
                     }
                     // An existing column that has been renamed says so, since
                     // the SQL will carry a RENAME the user should expect.
-                    if let Some(origin) = row.origin.as_ref() {
-                        if origin.name.trim() != row.col.name.trim()
-                            && !row.col.name.trim().is_empty()
-                        {
+                    if let Some(was) = origin_name.as_ref() {
+                        if was != col.name.trim() && !col.name.trim().is_empty() {
                             ui.label(crate::theme::text::muted(
                                 palette,
-                                format!("was {}", origin.name.trim()),
+                                format!("was {}", was),
                             ));
                         }
                     }
@@ -1769,8 +1777,15 @@ mod tests {
         assert_eq!(ed.mode, Mode::AlterTable);
         assert!(ed.columns.is_empty());
         assert!(ed.loaded.is_empty());
+        assert!(ed.needs_load, "alter mode must ask for the live table");
         // With nothing loaded there is nothing to complain about yet.
         assert!(form_errors(&ed).is_empty());
+
+        // Creating or dropping needs no load, so neither asks for one.
+        ed.open_new("conn", "public");
+        assert!(!ed.needs_load);
+        ed.open_drop("conn", "public", "users");
+        assert!(!ed.needs_load);
     }
 
     #[test]

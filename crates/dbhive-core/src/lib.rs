@@ -19,6 +19,7 @@ pub mod ddl;
 pub mod drivers;
 pub mod migrations;
 pub mod models;
+pub mod plugins;
 pub mod service;
 pub mod service_ai;
 pub mod service_backup;

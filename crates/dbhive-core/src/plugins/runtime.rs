@@ -44,8 +44,10 @@ pub const MAX_RESULT_BYTES: usize = 1024 * 1024;
 ///
 /// Boa is an interpreter with no preemption: without this a `while (true) {}`
 /// in a plugin pins a worker thread forever and the only cure is killing the
-/// application.
-pub const MAX_LOOP_ITERATIONS: u64 = 20_000_000;
+/// application. Measured at roughly four seconds for an empty loop, which is
+/// long enough for real work and short enough that a runaway plugin does not
+/// look like a hang.
+pub const MAX_LOOP_ITERATIONS: u64 = 2_000_000;
 pub const MAX_RECURSION_DEPTH: usize = 400;
 
 /// Something a plugin asked the host to do while it was running.
@@ -178,10 +180,10 @@ impl PluginRuntimeSync {
 
         let mut context = Context::default();
 
-        // Bound the interpreter before any plugin code can reach it. If a
-        // future Boa release renames these, they can be dropped: everything
-        // else here still works, but an endless loop in a plugin will then
-        // hang its worker thread.
+        // Bound the interpreter before any plugin code can reach it.
+        // Verified against boa_engine 0.19: `while (true) {}` in a plugin
+        // ends with an error after a few seconds instead of pinning a worker
+        // thread until the application is killed.
         context
             .runtime_limits_mut()
             .set_loop_iteration_limit(MAX_LOOP_ITERATIONS);
@@ -802,9 +804,251 @@ fn clamp(mut s: String, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use super::super::manifest::{PluginManifest, PluginStats};
 
-    // These cover the pure guards only. Nothing here loads or executes a
-    // plugin from disk.
+    // The JavaScript these tests run is written here, in the test. Nothing
+    // reads a plugin, a manifest or a script off disk: a test that executes
+    // whatever happens to be installed on the machine is not a test.
+
+    const MANIFEST: &str = r#"{
+      "id": "com.test.p", "name": "P", "version": "1.0.0",
+      "author": { "name": "t" }, "category": "tool", "main": "index.js",
+      "pluginType": "javascript",
+      "permissions": ["modifyUI", "showNotification"],
+      "minVersion": "0.1.0", "license": "MIT"
+    }"#;
+
+    /// A temporary data directory that cleans up after itself.
+    struct Scratch(PathBuf);
+
+    impl Scratch {
+        fn new(tag: &str) -> Self {
+            let p = std::env::temp_dir().join(format!(
+                "dbhive-runtime-test-{}-{}",
+                std::process::id(),
+                tag
+            ));
+            let _ = std::fs::remove_dir_all(&p);
+            std::fs::create_dir_all(&p).unwrap();
+            Scratch(p)
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn plugin(permissions: &[PluginPermission], dir: &std::path::Path) -> Plugin {
+        let mut manifest = PluginManifest::parse(MANIFEST).unwrap();
+        manifest.permissions = permissions.to_vec();
+        Plugin {
+            manifest,
+            path: dir.to_path_buf(),
+            enabled: true,
+            loaded: false,
+            config: Some(serde_json::json!({ "delimiter": ";" })),
+            stats: PluginStats::new("2026-01-01T00:00:00Z".into()),
+        }
+    }
+
+    fn runtime(permissions: &[PluginPermission], scratch: &Scratch, code: &str) -> PluginRuntimeSync {
+        let p = plugin(permissions, &scratch.0);
+        let mut rt = PluginRuntimeSync::new(&p, scratch.0.join("data")).unwrap();
+        rt.initialize().unwrap();
+        rt.execute(code).unwrap();
+        rt
+    }
+
+    const UI_PLUGIN: &str = r#"
+      __plugin_exports__ = {
+        onLoad: function () { return { success: true }; },
+        renderUi: function () {
+          return {
+            title: 'Test',
+            toolbar: [ DBHive.ui.toolbarItem('tb', 'Go', { icon: 'export' }) ],
+            panels: [ DBHive.ui.panel('Options', [
+              DBHive.ui.input('name', 'Name', 'out.csv'),
+              DBHive.ui.checkbox('flag', 'Flag', true),
+              DBHive.ui.button('run', 'Run', { style: 'primary' }),
+              DBHive.ui.button('custom', 'Custom', { action: 'doThing' })
+            ]) ]
+          };
+        },
+        onUiEvent: function (event) {
+          DBHive.showNotification({ title: 'got', message: event.type + ':' + event.id });
+          return { panels: [ DBHive.ui.panel('After', [
+            DBHive.ui.text('pressed ' + event.id + ' with ' + event.fields.name, 'muted')
+          ]) ] };
+        },
+        doThing: function () {
+          DBHive.setUi({ panels: [ DBHive.ui.panel('Custom', [
+            DBHive.ui.text('custom handler ran')
+          ]) ] });
+          return null;
+        },
+        readConfig: function () { return DBHive.getConfig(); }
+      };
+    "#;
+
+    #[test]
+    fn a_plugin_describes_an_interface_and_receives_its_events() {
+        let scratch = Scratch::new("render");
+        let mut rt = runtime(
+            &[PluginPermission::ModifyUi, PluginPermission::ShowNotification],
+            &scratch,
+            UI_PLUGIN,
+        );
+
+        assert_eq!(rt.call_on_load().unwrap()["success"], true);
+
+        let descriptor = rt.render_ui().unwrap();
+        assert_eq!(descriptor.title.as_deref(), Some("Test"));
+        assert_eq!(descriptor.toolbar.len(), 1);
+
+        let fields = descriptor.initial_fields();
+        assert_eq!(fields["name"], ui::FieldValue::Text("out.csv".into()));
+        assert_eq!(fields["flag"], ui::FieldValue::Bool(true));
+
+        // A press goes to the default handler, carrying the whole form, and
+        // the descriptor the handler returns replaces the interface.
+        let event = ui::UiEvent::ButtonPressed {
+            id: "run".into(),
+            fields: fields.clone(),
+        };
+        let call = ui::dispatch_for(&descriptor, &event).unwrap();
+        assert_eq!(call.function, ui::DEFAULT_HANDLER);
+        let next = rt.dispatch(&call).unwrap().expect("a replacement interface");
+        match &next.panels[0].items[0] {
+            ui::Item::Text { text, .. } => assert_eq!(text, "pressed run with out.csv"),
+            other => panic!("expected text, got {:?}", other),
+        }
+        match rt.take_outbox().as_slice() {
+            [HostCall::Notify(n)] => assert_eq!(n.message, "buttonPressed:run"),
+            other => panic!("expected one notification, got {:?}", other),
+        }
+
+        // A button may nominate its own handler, and push an interface
+        // instead of returning one.
+        let event = ui::UiEvent::ButtonPressed {
+            id: "custom".into(),
+            fields,
+        };
+        let call = ui::dispatch_for(&descriptor, &event).unwrap();
+        assert_eq!(call.function, "doThing");
+        assert!(rt.dispatch(&call).unwrap().is_none());
+        match rt.take_outbox().as_slice() {
+            [HostCall::SetUi(pushed)] => assert_eq!(pushed.panels[0].title, "Custom"),
+            other => panic!("expected one setUi, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn configuration_reaches_the_plugin() {
+        let scratch = Scratch::new("config");
+        let mut rt = runtime(&[PluginPermission::ModifyUi], &scratch, UI_PLUGIN);
+        assert_eq!(
+            rt.call("readConfig", &JsonValue::Null).unwrap(),
+            serde_json::json!({ "delimiter": ";" })
+        );
+    }
+
+    #[test]
+    fn undeclared_permissions_are_refused_and_nothing_reaches_the_host() {
+        let scratch = Scratch::new("permissions");
+        let mut rt = runtime(
+            &[], // an empty manifest permission list
+            &scratch,
+            "__plugin_exports__ = {
+               renderUi:  function () { DBHive.setUi({}); return {}; },
+               writeIt:   function () { return DBHive.writeFile('a.txt', 'x'); },
+               readIt:    function () { return DBHive.readFile('a.txt'); },
+               net:       function () { return DBHive.httpRequest({ url: 'https://example.com/' }); },
+               notify:    function () { return DBHive.showNotification({ title: 't' }); } };",
+        );
+
+        assert!(rt.render_ui().is_err(), "setUi needs modifyUI");
+        for f in ["writeIt", "readIt", "net", "notify"] {
+            assert!(rt.call(f, &JsonValue::Null).is_err(), "{} should be denied", f);
+        }
+        assert!(rt.take_outbox().is_empty());
+    }
+
+    #[test]
+    fn a_plugin_cannot_reach_the_database() {
+        let scratch = Scratch::new("nodb");
+        let mut rt = runtime(
+            &[PluginPermission::ExecuteQuery, PluginPermission::ReadMetadata],
+            &scratch,
+            "__plugin_exports__ = {
+               q: function () { return DBHive.executeQuery('SELECT 1', 'c'); },
+               m: function () { return DBHive.getMetadata('c'); } };",
+        );
+        // Declaring the permission is not enough: there is no such capability.
+        assert!(rt.call("q", &JsonValue::Null).is_err());
+        assert!(rt.call("m", &JsonValue::Null).is_err());
+    }
+
+    #[test]
+    fn files_outside_the_data_directory_are_unreachable() {
+        let scratch = Scratch::new("files");
+        let mut rt = runtime(
+            &[PluginPermission::ReadFiles, PluginPermission::WriteFiles],
+            &scratch,
+            "__plugin_exports__ = {
+               escape:  function () { return DBHive.readFile('../../../../etc/passwd'); },
+               absolute: function () { return DBHive.writeFile('/tmp/dbhive-escape', 'x'); },
+               own:     function () { DBHive.writeFile('mine.txt', 'ok'); return DBHive.readFile('mine.txt'); } };",
+        );
+        assert!(rt.call("escape", &JsonValue::Null).is_err());
+        assert!(rt.call("absolute", &JsonValue::Null).is_err());
+        assert_eq!(
+            rt.call("own", &JsonValue::Null).unwrap(),
+            JsonValue::String("ok".into())
+        );
+        assert!(!std::path::Path::new("/tmp/dbhive-escape").exists());
+    }
+
+    #[test]
+    fn a_hostile_descriptor_is_refused_at_the_boundary() {
+        let scratch = Scratch::new("hostile");
+        let mut rt = runtime(
+            &[PluginPermission::ModifyUi],
+            &scratch,
+            "__plugin_exports__ = { renderUi: function () {
+               var items = [];
+               for (var i = 0; i < 400; i++) {
+                 items.push({ type: 'button', id: 'b' + i, label: 'x' });
+               }
+               return { panels: [{ title: 'too many', items: items }] };
+             } };",
+        );
+        // 400 items in one panel is over the limit; the host does not draw it.
+        assert!(rt.render_ui().is_err());
+    }
+
+    #[test]
+    fn a_disabled_plugin_gets_no_runtime_at_all() {
+        let scratch = Scratch::new("disabled");
+        let mut p = plugin(&[], &scratch.0);
+        p.enabled = false;
+        assert!(PluginRuntimeSync::new(&p, scratch.0.join("data")).is_err());
+    }
+
+    #[test]
+    fn an_endless_loop_ends_instead_of_pinning_the_thread() {
+        // Deliberately slow (a few seconds): it runs the interpreter into its
+        // iteration limit. Without the limit this test would never return,
+        // which is exactly the failure it exists to prevent.
+        let scratch = Scratch::new("loop");
+        let mut rt = runtime(
+            &[],
+            &scratch,
+            "__plugin_exports__ = { spin: function () { while (true) {} } };",
+        );
+        assert!(rt.call("spin", &JsonValue::Null).is_err());
+    }
 
     #[test]
     fn blocks_private_and_loopback_urls() {

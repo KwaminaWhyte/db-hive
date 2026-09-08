@@ -16,6 +16,7 @@ pub mod history;
 pub mod import_export;
 pub mod migrations;
 pub mod plugins;
+pub mod procedures;
 pub mod query_builder;
 pub mod schema_designer;
 pub mod settings;
@@ -45,6 +46,7 @@ pub struct Screens {
     pub import_export: import_export::ImportExport,
     pub migrations: migrations::Migrations,
     pub plugins: plugins::Plugins,
+    pub procedures: procedures::Procedures,
     pub query_builder: query_builder::QueryBuilder,
     pub schema_designer: schema_designer::SchemaDesigner,
     pub settings: settings::Settings,

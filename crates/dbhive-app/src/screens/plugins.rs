@@ -56,36 +56,12 @@ use crate::theme::{text, Palette};
 use crate::widgets::results_grid::{self, GridState};
 
 // ---------------------------------------------------------------------------
-// SEAM 1: the shared core modules
-// ---------------------------------------------------------------------------
+// The shared plugin core.
 //
-// These five files live in crates/dbhive-core/src/plugins/ and are the real,
-// shared implementation. They are boa-free and depend only on serde,
-// serde_json, chrono and std, so they compile inside this crate unchanged.
-//
-// TO WIRE THEM UP PROPERLY (after adding `pub mod plugins;` to
-// crates/dbhive-core/src/lib.rs), delete the five `#[path]` declarations and
-// replace them with exactly this:
-//
-//     use dbhive_core::plugins::{error, manifest, marketplace, store, ui};
-//
-// Nothing else in this file changes: every reference already goes through
-// these module names.
-//
-// The module names must stay `error`, `manifest`, `ui`, `marketplace` and
-// `store`: the files refer to each other as `super::manifest::…`, which
-// resolves the same way in both crates only if the names match.
-
-#[path = "../../../dbhive-core/src/plugins/error.rs"]
-mod error;
-#[path = "../../../dbhive-core/src/plugins/manifest.rs"]
-mod manifest;
-#[path = "../../../dbhive-core/src/plugins/marketplace.rs"]
-mod marketplace;
-#[path = "../../../dbhive-core/src/plugins/store.rs"]
-mod store;
-#[path = "../../../dbhive-core/src/plugins/ui.rs"]
-mod ui;
+// These modules live in crates/dbhive-core/src/plugins/ and are the real,
+// shared implementation: manifest parsing, the declarative UI schema, the
+// marketplace catalogue and the on-disk plugin store.
+use dbhive_core::plugins::{error, manifest, marketplace, store, ui};
 
 /// `ui` is the module; `ui` is also every egui parameter in this file.
 /// Referring to the descriptor types through this alias keeps the two apart.
@@ -96,66 +72,27 @@ use manifest::Plugin;
 use marketplace::{MarketplacePlugin, SortOption};
 
 // ---------------------------------------------------------------------------
-// SEAM 2: the JavaScript engine
+// The JavaScript engine
 // ---------------------------------------------------------------------------
 
 /// Calls into the plugin runtime.
 ///
-/// Executing a plugin needs `dbhive_core::plugins::{manager, runtime}`, which
-/// need `boa_engine`. Until those are in the build every call here fails with
-/// one clear message, which the UI shows rather than pretending a plugin ran.
-///
-/// # Wiring this up
-///
-/// 1. `crates/dbhive-core/Cargo.toml`:
-///
-/// ```toml
-/// boa_engine = "0.19"
-/// boa_runtime = "0.19"
-/// arboard = "3.4"
-/// ```
-///
-/// 2. `crates/dbhive-core/src/lib.rs`: `pub mod plugins;`
-///
-/// 3. Replace the bodies below with the manager. It owns its own state, so
-///    no field has to be added to `DbHiveApp`:
-///
-/// ```ignore
-/// use std::sync::OnceLock;
-/// use dbhive_core::plugins::{PluginManager, PluginStore};
-///
-/// pub const WIRED: bool = true;
-///
-/// fn manager() -> Result<&'static Arc<PluginManager>, String> {
-///     static M: OnceLock<Arc<PluginManager>> = OnceLock::new();
-///     if M.get().is_none() {
-///         let dir = dbhive_core::storage::app_data_dir().map_err(|e| e.to_string())?;
-///         let m = Arc::new(PluginManager::new(
-///             PluginStore::under_app_dir(&dir),
-///             env!("CARGO_PKG_VERSION"),
-///         ));
-///         let _ = M.set(m);
-///     }
-///     Ok(M.get().expect("just set"))
-/// }
-///
-/// pub async fn render(plugin_id: &str) -> Result<Rendered, String> {
-///     let out = manager()?.render_ui(plugin_id).await.map_err(|e| e.to_string())?;
-///     Ok(Rendered { descriptor: Some(out.value), notes: notes(out.outbox) })
-/// }
-/// ```
-///
-/// `notes` turns `HostCall::Notify` into the toast strings this screen
-/// already shows, and `HostCall::SetUi` into a replacement descriptor.
+/// Every function here is async and is driven from a `Job`. That is not
+/// incidental: a plugin is untrusted JavaScript, and the sandbox bounds it by
+/// loop and recursion count rather than by wall clock, so a hostile plugin
+/// can legitimately run for seconds before the runtime stops it. Calling it
+/// on the UI thread would freeze the window for exactly that long.
 mod engine {
+    use std::sync::{Arc, OnceLock};
+
+    use dbhive_core::plugins::{PluginManager, PluginStore};
+
     use super::descriptor::{PluginUi, UiEvent};
 
     /// Is the JavaScript engine compiled into this build?
-    pub const WIRED: bool = false;
+    pub const WIRED: bool = true;
 
-    pub const REASON: &str = "The plugin JavaScript engine is not part of this build. \
-        Add boa_engine/boa_runtime to dbhive-core and `pub mod plugins;` to its lib.rs, \
-        then wire `engine` in screens/plugins.rs.";
+    pub const REASON: &str = "The plugin JavaScript engine is not available.";
 
     /// What a plugin call produced: a new interface, and anything it asked
     /// the host to show.
@@ -166,24 +103,75 @@ mod engine {
         pub notes: Vec<String>,
     }
 
+    /// The process-wide manager.
+    ///
+    /// A `OnceLock` rather than a field on `DbHiveApp` so that plugin state
+    /// is shared across windows, like connections are, instead of each window
+    /// loading its own copy of every plugin.
+    fn manager() -> Result<&'static Arc<PluginManager>, String> {
+        static M: OnceLock<Arc<PluginManager>> = OnceLock::new();
+        if M.get().is_none() {
+            let dir = dbhive_core::storage::app_data_dir().map_err(|e| e.to_string())?;
+            let _ = M.set(Arc::new(PluginManager::new(
+                PluginStore::under_app_dir(&dir),
+                super::app_version(),
+            )));
+        }
+        Ok(M.get().expect("just set"))
+    }
+
+    /// Turn the plugin's outbox into things this screen can show.
+    ///
+    /// `SetUi` wins over the call's own return value: a plugin that asks for
+    /// a specific interface should get it.
+    fn absorb(
+        mut descriptor: Option<PluginUi>,
+        outbox: Vec<dbhive_core::plugins::HostCall>,
+    ) -> Rendered {
+        let mut notes = Vec::new();
+        for call in outbox {
+            match call {
+                dbhive_core::plugins::HostCall::Notify(n) => notes.push(n.message),
+                dbhive_core::plugins::HostCall::SetUi(ui) => descriptor = Some(*ui),
+                // Nothing routes these yet; the Tauri shell did not either.
+                dbhive_core::plugins::HostCall::OpenTab { .. }
+                | dbhive_core::plugins::HostCall::Message { .. } => {}
+            }
+        }
+        Rendered { descriptor, notes }
+    }
+
     /// Ask a plugin to describe its interface (`renderUi`).
-    pub fn render(_plugin_id: &str) -> Result<Rendered, String> {
-        Err(REASON.to_string())
+    pub async fn render(plugin_id: &str) -> Result<Rendered, String> {
+        let out = manager()?
+            .render_ui(plugin_id)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(absorb(Some(out.value), out.outbox))
     }
 
     /// Deliver an event. Resolution against `current` happens in core, so an
     /// event for a control the plugin never declared never becomes a call.
-    pub fn dispatch(
-        _plugin_id: &str,
-        _current: &PluginUi,
-        _event: &UiEvent,
+    pub async fn dispatch(
+        plugin_id: &str,
+        current: &PluginUi,
+        event: &UiEvent,
     ) -> Result<Rendered, String> {
-        Err(REASON.to_string())
+        let out = manager()?
+            .dispatch_ui_event(plugin_id, current, event)
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(absorb(out.value, out.outbox))
     }
 
     /// Load (`onLoad`) or unload a plugin's runtime.
-    pub fn set_loaded(_plugin_id: &str, _loaded: bool) -> Result<(), String> {
-        Err(REASON.to_string())
+    pub async fn set_loaded(plugin_id: &str, loaded: bool) -> Result<(), String> {
+        let m = manager()?;
+        if loaded {
+            m.load(plugin_id).await.map(|_| ()).map_err(|e| e.to_string())
+        } else {
+            m.unload(plugin_id).await.map_err(|e| e.to_string())
+        }
     }
 }
 
@@ -236,6 +224,11 @@ pub struct Plugins {
     scan_requested: bool,
     scan_job: Job<Result<store::ScanResult, String>>,
     action_job: Job<Result<String, String>>,
+    /// Engine calls run here rather than on the frame: plugin JavaScript is
+    /// bounded by loop count, not wall clock, so it can legitimately take
+    /// seconds. Tagged with the plugin and whether it is opening the view,
+    /// since the user may have moved on by the time it lands.
+    engine_job: Job<(String, bool, Result<engine::Rendered, String>)>,
     /// Plugin the in-flight action applies to, for per-row spinners.
     busy: Option<String>,
 
@@ -261,6 +254,7 @@ impl Default for Plugins {
             scan_requested: false,
             scan_job: Job::default(),
             action_job: Job::default(),
+            engine_job: Job::default(),
             busy: None,
             confirm_uninstall: None,
             form: None,
@@ -419,9 +413,11 @@ pub fn toolbar(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     for item in &items {
         let button = egui::Button::new(format!("{} {}", item.icon.glyph(), item.label)).frame(false);
         let response = ui.add_enabled(item.enabled, button);
+        // The tooltip always names the plugin: a button in the application's
+        // own title bar should say whose it is.
         let response = match &item.tooltip {
-            Some(tip) => response.on_hover_text(tip),
-            None => response.on_hover_text(text::muted(palette, &plugin_id).text().to_string()),
+            Some(tip) => response.on_hover_text(format!("{}\n{}", tip, plugin_id)),
+            None => response.on_hover_text(text::muted(palette, &plugin_id)),
         };
         if response.clicked() {
             pressed = Some(item.id.clone());
@@ -490,6 +486,51 @@ fn poll(app: &mut DbHiveApp) {
             Err(e) => {
                 app.screens.plugins.problems = vec![e.clone()];
                 app.toasts.error(format!("Could not read plugins: {}", e));
+            }
+        }
+    }
+
+    if let Some((plugin_id, opening, result)) = app.screens.plugins.engine_job.take_result() {
+        app.screens.plugins.busy = None;
+        match result {
+            Ok(rendered) => {
+                for note in rendered.notes {
+                    app.toasts.info(note);
+                }
+                if opening {
+                    let d = rendered.descriptor.unwrap_or_default();
+                    app.screens.plugins.view = Some(View {
+                        plugin_id,
+                        fields: d.initial_fields(),
+                        descriptor: d,
+                        error: None,
+                    });
+                } else if let Some(next) = rendered.descriptor {
+                    // Only if the user is still looking at this plugin.
+                    if let Some(view) = app
+                        .screens
+                        .plugins
+                        .view
+                        .as_mut()
+                        .filter(|v| v.plugin_id == plugin_id)
+                    {
+                        view.fields = merge_fields(&next, &view.fields);
+                        view.descriptor = next;
+                        view.error = None;
+                    }
+                }
+            }
+            Err(e) => {
+                if let Some(view) = app
+                    .screens
+                    .plugins
+                    .view
+                    .as_mut()
+                    .filter(|v| v.plugin_id == plugin_id)
+                {
+                    view.error = Some(e.clone());
+                }
+                app.toasts.error(e);
             }
         }
     }
@@ -1452,7 +1493,7 @@ fn apply(app: &mut DbHiveApp, ctx: &egui::Context, action: Action) {
             // Disabling unloads the runtime first, as the web shell did: a
             // disabled plugin must not still be running.
             if !enabled {
-                let _ = engine::set_loaded(&id, false);
+                unload(app, &id);
                 if app
                     .screens
                     .plugins
@@ -1474,13 +1515,8 @@ fn apply(app: &mut DbHiveApp, ctx: &egui::Context, action: Action) {
                 store
                     .set_enabled(&mut owned, enabled)
                     .map_err(|e| e.to_string())?;
-                if enabled && engine::WIRED {
-                    // Enabling loads the runtime; a load failure is reported
-                    // but does not undo the enable, matching the web shell.
-                    if let Err(e) = engine::set_loaded(&owned.manifest.id, true) {
-                        return Ok(format!("{} enabled, but did not load: {}", name, e));
-                    }
-                }
+                // The runtime is loaded lazily on first use, so enabling
+                // does not have to block on it here.
                 Ok(format!(
                     "{} {}",
                     name,
@@ -1498,7 +1534,7 @@ fn apply(app: &mut DbHiveApp, ctx: &egui::Context, action: Action) {
                 return;
             };
             let name = plugin.manifest.name.clone();
-            let _ = engine::set_loaded(&id, false);
+            unload(app, &id);
             if app
                 .screens
                 .plugins
@@ -1576,21 +1612,17 @@ fn apply(app: &mut DbHiveApp, ctx: &egui::Context, action: Action) {
             });
         }
 
-        Action::OpenView(id) => match engine::render(&id) {
-            Ok(rendered) => {
-                for note in rendered.notes {
-                    app.toasts.info(note);
-                }
-                let d = rendered.descriptor.unwrap_or_default();
-                app.screens.plugins.view = Some(View {
-                    plugin_id: id,
-                    fields: d.initial_fields(),
-                    descriptor: d,
-                    error: None,
+        Action::OpenView(id) => {
+            app.screens.plugins.busy = Some(id.clone());
+            let handle = app.rt.handle().clone();
+            app.screens
+                .plugins
+                .engine_job
+                .start(&handle, ctx, async move {
+                    let out = engine::render(&id).await;
+                    (id, true, out)
                 });
-            }
-            Err(e) => app.toasts.error(e),
-        },
+        }
 
         Action::CloseView => app.screens.plugins.view = None,
 
@@ -1605,31 +1637,33 @@ fn apply(app: &mut DbHiveApp, ctx: &egui::Context, action: Action) {
             else {
                 return;
             };
-            match engine::dispatch(&id, &current, &event) {
-                Ok(rendered) => {
-                    for note in rendered.notes {
-                        app.toasts.info(note);
-                    }
-                    if let Some(next) = rendered.descriptor {
-                        if let Some(view) = app.screens.plugins.view.as_mut() {
-                            view.fields = merge_fields(&next, &view.fields);
-                            view.descriptor = next;
-                            view.error = None;
-                        }
-                    }
-                }
-                Err(e) => {
-                    if let Some(view) = app.screens.plugins.view.as_mut() {
-                        view.error = Some(e.clone());
-                    }
-                    app.toasts.error(e);
-                }
-            }
+            let handle = app.rt.handle().clone();
+            app.screens
+                .plugins
+                .engine_job
+                .start(&handle, ctx, async move {
+                    let out = engine::dispatch(&id, &current, &event).await;
+                    (id, false, out)
+                });
         }
     }
 }
 
 /// Run a blocking plugin-directory operation off the frame thread.
+/// Drop a plugin's runtime, without waiting for it.
+///
+/// Nothing depends on the result: the plugin is being disabled or removed
+/// either way, and the store write that actually records it is a separate,
+/// reported action.
+fn unload(app: &DbHiveApp, plugin_id: &str) {
+    let id = plugin_id.to_string();
+    app.rt.spawn(async move {
+        if let Err(e) = engine::set_loaded(&id, false).await {
+            eprintln!("Warning: failed to unload plugin {}: {}", id, e);
+        }
+    });
+}
+
 fn start_action<F>(app: &mut DbHiveApp, ctx: &egui::Context, work: F)
 where
     F: FnOnce() -> Result<String, String> + Send + 'static,
@@ -1869,17 +1903,25 @@ mod tests {
     }
 
     #[test]
-    fn the_engine_seam_fails_loudly_rather_than_silently() {
-        // While the engine is not compiled in, every call must return the
-        // explanation the UI shows; none may quietly succeed.
-        assert!(!engine::WIRED);
-        assert!(engine::render("com.x.y").is_err());
-        assert!(engine::set_loaded("com.x.y", true).is_err());
-        assert!(engine::dispatch(
-            "com.x.y",
-            &PluginUi::default(),
-            &UiEvent::Opened
-        )
-        .is_err());
+    fn the_engine_is_wired_and_refuses_unknown_plugins() {
+        // The seam is closed: the runtime is compiled in. An unknown plugin
+        // must still be an error rather than a silent empty interface.
+        assert!(engine::WIRED);
+
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            assert!(engine::render("com.does.not.exist").await.is_err());
+            assert!(engine::set_loaded("com.does.not.exist", true).await.is_err());
+            assert!(engine::dispatch(
+                "com.does.not.exist",
+                &PluginUi::default(),
+                &UiEvent::Opened
+            )
+            .await
+            .is_err());
+        });
     }
 }
