@@ -300,6 +300,7 @@ pub struct ImportExport {
 
     // -- SQL dump import ---------------------------------------------------
     pub sql_import_path: String,
+    pub sql_picker: crate::widgets::file_dialog::PathPicker,
     pub sql_import: SqlImportOptions,
     pub sql_import_cancel: Arc<AtomicBool>,
     pub sql_import_job: Job<Result<SqlImportResult, DbError>>,
@@ -308,6 +309,7 @@ pub struct ImportExport {
     // -- data import wizard ------------------------------------------------
     pub step: Step,
     pub file_path: String,
+    pub data_picker: crate::widgets::file_dialog::PathPicker,
     pub options: DataImportOptions,
     pub preview: Option<ImportPreview>,
     pub preview_grid: results_grid::GridState,
@@ -359,6 +361,7 @@ impl Default for ImportExport {
             dump_job: Job::default(),
 
             sql_import_path: String::new(),
+            sql_picker: Default::default(),
             sql_import: SqlImportOptions::default(),
             sql_import_cancel: Arc::new(AtomicBool::new(false)),
             sql_import_job: Job::default(),
@@ -366,6 +369,7 @@ impl Default for ImportExport {
 
             step: Step::File,
             file_path: String::new(),
+            data_picker: Default::default(),
             options: DataImportOptions::default(),
             preview: None,
             preview_grid: results_grid::GridState::default(),
@@ -898,6 +902,9 @@ fn dump_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, connectio
 // -- SQL dump import ---------------------------------------------------------
 
 fn sql_import_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, connection_id: &str) {
+    // Captured before the screen state is borrowed, so the picker can
+    // spawn on the runtime without re-borrowing `app`.
+    let rt = app.rt.handle().clone();
     let mut start = false;
     let mut stop = false;
 
@@ -908,10 +915,16 @@ fn sql_import_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, con
         ui.add_enabled_ui(!running, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Path");
-                ui.add(
-                    egui::TextEdit::singleline(&mut s.sql_import_path)
-                        .hint_text("/path/to/dump.sql")
-                        .desired_width(ui.available_width() - 20.0),
+                crate::widgets::file_dialog::path_field(
+                    ui,
+                    &rt,
+                    &mut s.sql_picker,
+                    &mut s.sql_import_path,
+                    "/path/to/dump.sql",
+                    || crate::widgets::file_dialog::Pick::OpenFile {
+                        title: "Choose a SQL file".into(),
+                        filters: crate::widgets::file_dialog::sql_filters(),
+                    },
                 );
             });
             ui.add_space(6.0);
@@ -1061,20 +1074,26 @@ fn steps_bar(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
 }
 
 fn step_file(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
+    // Captured before the screen state is borrowed, so the picker can
+    // spawn on the runtime without re-borrowing `app`.
+    let rt = app.rt.handle().clone();
     let mut load = false;
 
     card(ui, palette, "Choose a file", |ui| {
         let s = &mut app.screens.import_export;
         ui.horizontal(|ui| {
             ui.label("Path");
-            if ui
-                .add(
-                    egui::TextEdit::singleline(&mut s.file_path)
-                        .hint_text("/path/to/data.csv")
-                        .desired_width(ui.available_width() - 20.0),
-                )
-                .changed()
-            {
+            if crate::widgets::file_dialog::path_field(
+                ui,
+                &rt,
+                &mut s.data_picker,
+                &mut s.file_path,
+                "/path/to/data.csv",
+                || crate::widgets::file_dialog::Pick::OpenFile {
+                    title: "Choose a data file".into(),
+                    filters: crate::widgets::file_dialog::data_filters(),
+                },
+            ) {
                 s.preview = None;
                 s.source = None;
                 s.invalidate_plan();

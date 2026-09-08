@@ -27,4 +27,8 @@ serde_json = "1"
 uuid = { version = "1.11", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 directories = "5.0"
+# Native file and folder pickers. The async variant is used deliberately:
+# the blocking one parks the calling thread, which for an immediate-mode UI
+# means the window stops repainting while the panel is open.
+rfd = "0.15"
 anyhow = "1.0"

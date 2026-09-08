@@ -219,6 +219,7 @@ pub struct Backup {
     /// Typed absolute path; empty means the default backup directory. There
     /// is no file picker crate in this workspace.
     output_dir: String,
+    dir_picker: crate::widgets::file_dialog::PathPicker,
     show_advanced: bool,
 
     list_job: Job<Listing>,
@@ -256,6 +257,7 @@ impl Default for Backup {
             note: String::new(),
             tables: String::new(),
             output_dir: String::new(),
+            dir_picker: Default::default(),
             show_advanced: false,
             list_job: Job::default(),
             create_job: Job::default(),
@@ -661,6 +663,9 @@ fn create_panel(
     target: Option<&(String, String, DbDriver)>,
     actions: &mut Vec<Action>,
 ) {
+    // Captured before the screen state is borrowed, so the picker can
+    // spawn on the runtime without re-borrowing `app`.
+    let rt = app.rt.handle().clone();
     let busy = app.screens.backup.busy();
     let creating = app.screens.backup.create_job.is_running();
 
@@ -730,10 +735,15 @@ fn create_panel(
                     palette,
                     "Output directory (absolute path; blank uses the default above)",
                 ));
-                ui.add(
-                    egui::TextEdit::singleline(&mut b.output_dir)
-                        .hint_text("/Users/me/db-backups")
-                        .desired_width(f32::INFINITY),
+                crate::widgets::file_dialog::path_field(
+                    ui,
+                    &rt,
+                    &mut b.dir_picker,
+                    &mut b.output_dir,
+                    "/Users/me/db-backups",
+                    || crate::widgets::file_dialog::Pick::Folder {
+                        title: "Backup directory".into(),
+                    },
                 );
             }
         });
