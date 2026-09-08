@@ -2,7 +2,7 @@
 
 > A modern, cross-platform database client. Native Rust, no WebView.
 
-![Version](https://img.shields.io/badge/version-0.19.0--beta-blue)
+![Version](https://img.shields.io/badge/version-0.21.0--beta-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Overview
