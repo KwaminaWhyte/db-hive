@@ -1,13 +1,13 @@
 # DB Hive
 
-> A modern, cross-platform database client built with Tauri 2.0 and React 19
+> A modern, cross-platform database client. Native Rust, no WebView.
 
 ![Version](https://img.shields.io/badge/version-0.19.0--beta-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Overview
 
-DB Hive is a professional database client designed to compete with tools like Beekeeper Studio and DbGate. Built with security, performance, and developer experience in mind — fast, native, and lightweight.
+DB Hive is a professional database client designed to compete with tools like Beekeeper Studio and DbGate. Built with security, performance, and developer experience in mind: fast, native, and lightweight.
 
 ## Features
 
@@ -23,7 +23,7 @@ DB Hive is a professional database client designed to compete with tools like Be
 - **Connection Management**
   - Save and manage multiple connection profiles with folder organisation
   - Test connections before saving
-  - Password persistence using Tauri plugin-store
+  - Password persistence in the OS keyring
   - SSH tunnelling with password and private key (OpenSSH/PEM) authentication
 
 - **SQL Editor**
@@ -84,7 +84,7 @@ DB Hive is a professional database client designed to compete with tools like Be
 
 - **Settings**
   - General, Appearance, Query Execution, Keyboard Shortcuts sections
-  - Persistent storage via Tauri Store plugin
+  - Persistent JSON storage in the platform app-data directory
   - Query timeout, max rows, auto-commit, theme mode
 
 ### 🚧 Planned
@@ -99,8 +99,8 @@ DB Hive is a professional database client designed to compete with tools like Be
 
 ### Frontend
 
-- React 19 with TypeScript (strict mode)
-- Tauri 2.0 for native functionality
+- egui / eframe for the native UI
+- wgpu for rendering, AccessKit for screen readers
 - Monaco Editor for SQL editing
 - TanStack Table v8 for virtualised data grids
 - shadcn/ui + TailwindCSS for styling
@@ -121,33 +121,35 @@ DB Hive is a professional database client designed to compete with tools like Be
 
 ### Prerequisites
 
-- **Node.js** 18+ (Bun recommended)
-- **Rust** 1.70+
+- **Rust** 1.75+
 - **Git**
+
+No Node, no npm, no bundler. The UI is Rust.
 
 ### Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/KwaminaWhyte/db-hive.git
 cd db-hive
 
-# Install dependencies
-bun install
-
-# Run in development mode
-npm run tauri dev
+cargo run -p dbhive-app          # debug
+cargo run --release -p dbhive-app
 ```
 
 ### Building for Production
 
 ```bash
-bun run build          # Frontend only
-npm run tauri build    # Full Tauri app
+cargo build --release -p dbhive-app     # target/release/dbhive
 
-# Output in src-tauri/target/release/bundle/
-#   macOS  → .dmg / .app
-#   Linux  → .deb / .rpm / .AppImage
+# macOS: assemble and sign DB Hive.app
+./packaging/build-macos-app.sh
+./packaging/build-macos-app.sh --sign "Developer ID Application: ..."
+```
+
+Code signing is not only about distribution. Connection passwords live in
+the OS keychain, and macOS grants keychain items to a stable code identity;
+an unsigned binary gets a new identity on every rebuild and cannot read back
+what it saved. The script ad-hoc signs by default so that works locally.
 #   Windows → .msi / .exe
 ```
 
@@ -196,18 +198,17 @@ See [Code Signing Guide](docs/code-signing.md) for signing binaries on all platf
 
 ```
 db-hive/
-├── src/                  # React frontend
+├── crates/dbhive-app/    # native egui shell
 │   ├── components/       # UI components
-│   ├── hooks/            # Custom React hooks
+│   ├── widgets/          # shared widgets (grid, editor, graph layout)
 │   ├── store/            # Zustand stores
 │   └── types/            # TypeScript type definitions
 ├── src-tauri/            # Rust backend
 │   ├── src/
-│   │   ├── commands/     # Tauri command handlers
+│   │   ├── service*.rs   # shell-agnostic operations
 │   │   ├── drivers/      # Database drivers
 │   │   ├── models/       # Data models
 │   │   └── state/        # Application state
-│   ├── capabilities/     # Tauri permission config
 │   └── tauri.conf.json
 └── docs/                 # Architecture and planning docs
 ```
@@ -215,30 +216,49 @@ db-hive/
 ## Development
 
 ```bash
-# Run dev server
-npm run tauri dev
-
-# Rust checks and tests
-cd src-tauri
-cargo check
-cargo test
+cargo run -p dbhive-app     # run it
+cargo check --workspace
+cargo test --workspace
 cargo fmt
+```
 
-# Frontend build
-bun run build
+Three `credentials::tests::*` failures are expected on macOS: they exercise
+the real OS keyring, which the system denies to an unsigned test binary.
+
+Development aids, all unset in normal use:
+
+```bash
+DBHIVE_AUTOCONNECT="Local MySQL"   # open a profile at startup
+DBHIVE_AUTODB=mydb                 # switch database once connected
+DBHIVE_AUTOQUERY="SELECT 1;"       # run a statement
+DBHIVE_AUTOSCREEN=er               # open a screen
+DBHIVE_AUTOWINDOWS=1               # open extra windows
+DBHIVE_DEV_WINDOW="0,0,1300,820"   # pin window geometry
 ```
 
 ## Architecture
 
-### Multi-Process Design
+### Single process
 
-- **Core Process (Rust)**: database connections, state, credentials, all I/O
-- **WebView Process (React)**: UI rendering, user interactions
-- **IPC**: Tauri Commands (frontend → backend), Events (backend → frontend)
+```
+crates/dbhive-core   drivers, DDL, SSH, credentials, migrations, AI,
+                     AppState, storage, and the service layer. No UI.
+crates/dbhive-app    the egui shell. screens/, widgets/, task, theme.
+```
+
+One process and one window server connection, rather than an app process
+plus WebView, GPU and networking helpers. Idle memory is 111-130 MB against
+roughly 400-650 MB for the previous Tauri build; see
+`docs/rust-ui-migration/00-baseline-measurements.md` for the measurements.
+
+The UI never blocks: database work is spawned on a Tokio runtime and polled
+from the frame loop (`dbhive-app/src/task.rs`). See
+`docs/rust-ui-migration/03-conventions.md` before adding a screen.
 
 ### Security Model
 
-- Credentials stored via Tauri plugin-store (encrypted local storage)
+- Credentials stored in the OS keyring (`keyring` crate), never in the
+  settings files
 - No sensitive data in frontend state
 - SQL injection prevention through parameterised queries
 - SSH tunnelling for secure remote connections
@@ -253,7 +273,7 @@ bun run build
 
 **"Could not open log file"** — Check that the source SQL file's directory is writable.
 
-**App won't start** — Run `bun install` and `rustc --version` to verify dependencies.
+**App won't start**: check `rustc --version` (1.75+ needed) and run `cargo build -p dbhive-app` to see the real error.
 
 ## Contributing
 
@@ -276,7 +296,7 @@ MIT License — see [LICENSE](LICENSE)
 
 Inspired by [Beekeeper Studio](https://www.beekeeperstudio.io/), [DbGate](https://dbgate.org/), and [DBeaver](https://dbeaver.io/).
 
-Built with [Tauri](https://tauri.app/), [React](https://react.dev/), [Monaco Editor](https://microsoft.github.io/monaco-editor/), [TanStack Table](https://tanstack.com/table/), and [shadcn/ui](https://ui.shadcn.com/).
+Built with [egui](https://github.com/emilk/egui), [eframe](https://github.com/emilk/egui/tree/master/crates/eframe), [Tokio](https://tokio.rs/), and [syntect](https://github.com/trishume/syntect).
 
 For issues and feature requests: [GitHub Issues](https://github.com/KwaminaWhyte/db-hive/issues)
 
