@@ -144,6 +144,7 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     let mut switch_to: Option<String> = None;
     let mut reload_tables = false;
     let mut open_inspector: Option<(String, String, String)> = None;
+    let mut pending_switch: Option<String> = None;
 
     // Kick off the metadata load once per connection.
     if needs_meta {
@@ -155,6 +156,7 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
             app.workspace.as_mut().unwrap().active().sql = sql;
             run_now = true;
         }
+
     }
 
     let ws = app.workspace.as_mut().unwrap();
@@ -171,6 +173,34 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                 ws.schemas = schemas;
                 ws.tables = tables;
                 rebuild_index(ws);
+
+                // Dev aid: DBHIVE_AUTODB switches to a named database once
+                // the list is known, before anything else keys off it.
+                if let Ok(want) = std::env::var("DBHIVE_AUTODB") {
+                    if ws.current_database.as_deref() != Some(want.as_str())
+                        && ws.databases.iter().any(|d| d.name == want)
+                    {
+                        pending_switch = Some(want);
+                    }
+                }
+
+                // Dev aid: opening this before the metadata landed passed an
+                // empty schema, which MySQL silently ignored and Postgres
+                // would have got wrong.
+                let want_db = std::env::var("DBHIVE_AUTODB").ok();
+                let on_target = match (&want_db, &ws.current_database) {
+                    (Some(w), Some(c)) => w == c,
+                    (Some(_), None) => false,
+                    (None, _) => true,
+                };
+                if pending_switch.is_none()
+                    && on_target
+                    && std::env::var("DBHIVE_AUTOSCREEN").as_deref() == Ok("er")
+                {
+                    let conn = ws.connection_id.clone();
+                    let schema = current_schema_or_database(ws);
+                    app.screens.er_diagram.open_for(conn, schema);
+                }
             }
             Err(e) => ws.last_error = Some(e.to_string()),
         }
@@ -179,6 +209,13 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         match result {
             Ok(_) => {
                 let db = ws.pending_database.take();
+                // The session is on this database now. The profile still
+                // names the original one, so anything re-deriving the label
+                // from the profile would put the picker out of step with
+                // what the connection is actually pointed at.
+                if let Some(name) = db.clone() {
+                    ws.current_database = Some(name);
+                }
                 let ctx = ui.ctx().clone();
                 load_metadata(app, &ctx, db);
                 let ws = app.workspace.as_mut().unwrap();
@@ -506,6 +543,10 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         }
     });
 
+    if let Some(db) = pending_switch {
+        app.workspace.as_mut().unwrap().current_schema = None;
+        switch_database(app, ui.ctx(), db);
+    }
     if let Some(db) = switch_to {
         // A different database means different schemas; let them be
         // rediscovered rather than carrying the old one across.
@@ -568,11 +609,11 @@ fn load_metadata(app: &mut DbHiveApp, ctx: &egui::Context, database: Option<Stri
         return;
     };
     let connection_id = ws.connection_id.clone();
-    let target = database
-        .or_else(|| ws.current_database.clone())
-        .or_else(|| ws.databases.first().map(|d| d.name.clone()));
+    let target = database.or_else(|| ws.current_database.clone());
 
     let wanted_schema = ws.current_schema.clone();
+    // What the session is on, which outranks the profile after a switch.
+    let session_database = ws.current_database.clone();
     let Some(d) = driver(app, &connection_id) else {
         return;
     };
@@ -608,6 +649,7 @@ fn load_metadata(app: &mut DbHiveApp, ctx: &egui::Context, database: Option<Stri
             // Default to the database the session is actually on, not
             // simply the first one the server reports.
             let database = target
+                .or(session_database)
                 .or(connected_database)
                 .or_else(|| databases.first().map(|db| db.name.clone()))
                 .unwrap_or_default();
@@ -630,6 +672,15 @@ fn load_metadata(app: &mut DbHiveApp, ctx: &egui::Context, database: Option<Stri
             let tables = d.get_tables(&schema_arg).await.unwrap_or_default();
             Ok((databases, schemas, tables, database))
         });
+}
+
+/// The schema to browse, falling back to the database on drivers with no
+/// schema concept (MySQL, SQLite).
+pub fn current_schema_or_database(ws: &Workspace) -> String {
+    ws.current_schema
+        .clone()
+        .or_else(|| ws.current_database.clone())
+        .unwrap_or_default()
 }
 
 /// Prefer "public" when a Postgres server offers it, else the first schema.

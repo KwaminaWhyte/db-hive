@@ -91,10 +91,57 @@ pub fn layout(nodes: &[Node], edges: &[Edge], opts: LayoutOptions) -> Layout {
         .filter(|e| e.from != e.to && ids.contains(e.from.as_str()) && ids.contains(e.to.as_str()))
         .collect();
 
+    // With nothing to relate, layering degenerates to a single row holding
+    // every node, which on a schema with no declared foreign keys (MySQL's
+    // own system tables, say) draws one enormous column. Tile instead.
+    if edges.is_empty() {
+        return grid(nodes, opts);
+    }
+
     let acyclic = break_cycles(nodes, &edges);
     let layers = assign_layers(nodes, &acyclic);
     let ordered = order_within_layers(&layers, &acyclic, opts.sweeps);
     place(nodes, &ordered, opts)
+}
+
+/// Tile unrelated nodes into a roughly square grid.
+///
+/// Rows are packed to a target width derived from the node count, so the
+/// result stays close to the aspect ratio of a window rather than running off
+/// in one direction.
+fn grid(nodes: &[Node], opts: LayoutOptions) -> Layout {
+    let per_row = (nodes.len() as f32).sqrt().ceil().max(1.0) as usize;
+
+    let mut placements = HashMap::new();
+    let mut x = 0.0_f32;
+    let mut y = 0.0_f32;
+    let mut row_height = 0.0_f32;
+    let mut width = 0.0_f32;
+
+    for (i, n) in nodes.iter().enumerate() {
+        if i % per_row == 0 && i > 0 {
+            y += row_height + opts.node_gap;
+            x = 0.0;
+            row_height = 0.0;
+        }
+        placements.insert(
+            n.id.clone(),
+            Placement {
+                x,
+                y,
+                layer: i / per_row,
+            },
+        );
+        x += n.width + opts.node_gap;
+        width = width.max(x - opts.node_gap);
+        row_height = row_height.max(n.height);
+    }
+
+    Layout {
+        placements,
+        width,
+        height: y + row_height,
+    }
 }
 
 /// Remove edges that close a cycle, found by depth-first search.
@@ -455,6 +502,30 @@ mod tests {
         let cross_of = |id: &str| l.placements[id].y;
         // y follows a (index 0), x follows b (index 1), so y sits above x.
         assert!(cross_of("y") < cross_of("x"));
+    }
+
+    #[test]
+    fn unrelated_nodes_tile_instead_of_stacking() {
+        // Nine tables, no foreign keys between them.
+        let nodes: Vec<Node> = (0..9).map(|i| n(&format!("t{}", i))).collect();
+        let l = layout(&nodes, &[], LayoutOptions::default());
+        assert_eq!(l.placements.len(), 9);
+
+        let rows: std::collections::HashSet<usize> =
+            l.placements.values().map(|p| p.layer).collect();
+        assert!(rows.len() > 1, "everything landed in one row");
+
+        // Roughly square, not one tall column or one long row.
+        let distinct_x: std::collections::HashSet<i32> =
+            l.placements.values().map(|p| p.x as i32).collect();
+        assert!(distinct_x.len() > 1, "everything landed in one column");
+    }
+
+    #[test]
+    fn a_single_unrelated_node_sits_at_the_origin() {
+        let l = layout(&[n("solo")], &[], LayoutOptions::default());
+        assert_eq!(l.placements["solo"].x, 0.0);
+        assert_eq!(l.placements["solo"].y, 0.0);
     }
 
     #[test]
