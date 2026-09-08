@@ -92,3 +92,48 @@ as a memory win should read this table first.
 - The accent colour picker in Settings writes `theme.accentColor` and
   nothing anywhere reads it. Still dead as of this commit; the setting is
   purely decorative.
+
+---
+
+# Result: native shell vs the Tauri shell
+
+Measured the same way (`footprint` `phys_footprint`, 12 samples at 8s
+intervals, app idle, connected to the same local MySQL), against release
+builds of both.
+
+| | Processes | Idle memory |
+| --- | --- | --- |
+| Tauri + React | 4 (app, WebContent, GPU, Networking) | **~400-650 MB** |
+| Native egui | 1 | **111 MB min, 130 avg, 294 max** |
+
+Steady state settles at 111-118 MB. The single 294 MB sample is the first
+frames after the schema loads, where the GPU textures are uploaded; it does
+not recur.
+
+Component breakdown of the old figure, for comparison:
+
+| Tauri process | phys_footprint |
+| --- | --- |
+| Rust core | 31-36 MB |
+| WebKit WebContent | 310 / 390 / 565 MB (min/avg/max) |
+| WebKit GPU helper | ~42 MB |
+| WebKit Networking helper | ~11 MB |
+
+So roughly **3.5x to 5x less memory**, and three fewer processes. Binary is
+25 MB bundled against the Tauri bundle's 31 MB.
+
+## Honesty about this comparison
+
+- The native shell is not yet at full parity, so it is not loading quite as
+  much as the Tauri build was. The structural difference is real regardless:
+  the WebView and its two helper processes are gone entirely, and they were
+  ~90% of the old footprint.
+- The original estimate in this document's first section put a Rust rewrite
+  at "best case ~110-120 MB", and that is exactly where it landed. What the
+  estimate got wrong was the *baseline*: an early pass used `ps` RSS, which
+  understated WebContent badly. Corrected, the saving is far larger than
+  first predicted, which is why the rewrite was worth doing.
+- The 310-565 MB idle WebContent figure was never explained. It is now moot
+  for this app, but if the same retention mistake exists in the native
+  UI it would show up here too, so the number above is worth re-checking as
+  parity work continues.

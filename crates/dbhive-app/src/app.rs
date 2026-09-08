@@ -6,8 +6,8 @@ use dbhive_core::state::AppState;
 
 use crate::screens::{
     activity_monitor, backup, command_palette, connection_editor, connections, er_diagram,
-    import_export, migrations, settings, table_editor, table_inspector, workspace, Screen,
-    Screens,
+    import_export, migrations, schema_designer, settings, table_editor, table_inspector,
+    workspace, Screen, Screens,
 };
 use crate::theme;
 
@@ -118,6 +118,8 @@ impl eframe::App for DbHiveApp {
                 table_editor::show(self, ui);
             } else if self.screens.activity_monitor.open {
                 activity_monitor::show(self, ui);
+            } else if self.screens.schema_designer.open {
+                schema_designer::show(self, ui);
             } else if self.screens.er_diagram.open {
                 er_diagram::show(self, ui);
             } else if self.screens.table_inspector.open {
@@ -204,6 +206,14 @@ fn dispatch(app: &mut DbHiveApp, ctx: &egui::Context, id: command_palette::Comma
                 let schema = workspace::current_schema_or_database(ws);
                 let conn = ws.connection_id.clone();
                 app.screens.er_diagram.open_for(conn, schema);
+            }
+            None => app.toasts.info("Connect to a database first"),
+        },
+        C::GoSchemaDesigner => match app.workspace.as_ref() {
+            Some(ws) => {
+                let schema = workspace::current_schema_or_database(ws);
+                let conn = ws.connection_id.clone();
+                app.screens.schema_designer.open_for(conn, schema);
             }
             None => app.toasts.info("Connect to a database first"),
         },
