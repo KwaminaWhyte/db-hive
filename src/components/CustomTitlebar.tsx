@@ -115,16 +115,18 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
   return (
     <div
       data-tauri-drag-region
-      className="relative flex items-center justify-between h-10 bg-background border-b border-border select-none"
+      className="flex items-center h-10 bg-background border-b border-border select-none"
       onMouseDown={handleDragStart}
     >
       {/* Left: Logo and Menu — extra left padding on macOS for native traffic lights */}
-      <div className={`flex items-center gap-2 px-3 ${isMacOS ? "pl-[78px]" : ""}`}>
+      <div
+        className={`flex shrink-0 items-center gap-2 px-3 ${isMacOS ? "pl-[78px]" : ""}`}
+      >
         {/* App Logo - Small version */}
         <HiveLogo size="sm" />
 
         {/* App Name */}
-        <span className="text-sm font-medium text-foreground">
+        <span className="whitespace-nowrap text-sm font-medium text-foreground">
           DB Hive
         </span>
 
@@ -295,14 +297,19 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
         </div>
       </div>
 
-      {/* Center: Command Palette Trigger — absolute-centered on the titlebar so side groups don't skew it */}
+      {/* Center: Command Palette Trigger.
+          Centred within the space the menu bar leaves rather than within the
+          window. Absolute centring (the previous approach) let the button sit
+          on top of the menu items on narrow windows, and a strict
+          1fr/auto/1fr grid clipped the menus instead, since it forces both
+          side columns to the same width. */}
       <div
-        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        className="flex min-w-0 flex-1 justify-center px-2"
         onMouseDown={(e) => e.stopPropagation()}
       >
         <button
           onClick={onOpenCommandPalette}
-          className="pointer-events-auto flex items-center gap-2 px-3 h-7 rounded-md border border-border bg-muted/50 text-xs text-muted-foreground hover:bg-accent transition-colors w-[360px]"
+          className="flex w-full min-w-0 max-w-[22.5rem] items-center gap-2 px-3 h-7 rounded-md border border-border bg-muted/50 text-xs text-muted-foreground hover:bg-accent transition-colors"
         >
           <Search className="h-3.5 w-3.5 shrink-0" />
           <span className="truncate">Search or run commands...</span>
@@ -314,9 +321,12 @@ export function CustomTitlebar({ onShowShortcuts, onOpenCommandPalette }: Custom
 
       {/* Right: Window Controls (hidden on macOS where native traffic lights are used) */}
       {isMacOS ? (
-        <div className="w-4 shrink-0" />
+        <div className="w-4 shrink-0 justify-self-end" />
       ) : (
-        <div className="flex items-center" onMouseDown={(e) => e.stopPropagation()}>
+        <div
+          className="flex items-center justify-self-end"
+          onMouseDown={(e) => e.stopPropagation()}
+        >
           <button
             onClick={handleMinimize}
             className="h-10 px-4 hover:bg-accent transition-colors"

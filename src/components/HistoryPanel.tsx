@@ -140,12 +140,12 @@ export function HistoryPanel({
                 : "No active connection"}
             </CardDescription>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Select
               value={limit.toString()}
               onValueChange={(value) => setLimit(parseInt(value))}
             >
-              <SelectTrigger className="w-[120px]">
+              <SelectTrigger className="w-[120px] min-w-[6rem] shrink">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
