@@ -4,6 +4,7 @@
 //! particular is used by the query view, the table inspector and the data
 //! browser, and they must behave identically.
 
+pub mod graph_layout;
 pub mod results_grid;
 pub mod sql_editor;
 pub mod toast;

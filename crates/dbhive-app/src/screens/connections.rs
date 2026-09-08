@@ -19,7 +19,25 @@ pub struct ConnectionsScreen {
     pub last_error: Option<String>,
     /// Name of a connection started outside the list (see DBHIVE_AUTOCONNECT).
     pub pending_name: Option<String>,
+    /// Profile awaiting a typed password, and the text entered so far.
+    pub password_prompt: Option<PasswordPrompt>,
+    /// Profile id most recently saved by the editor, for highlighting.
+    pub last_saved: Option<String>,
     pub connected: Vec<String>,
+}
+
+/// Prompt shown when no stored password is available for a profile.
+///
+/// The keyring is the normal source, but it can legitimately have nothing:
+/// a profile added on another machine, an entry the user cleared, or a build
+/// that the OS will not hand credentials to. Without this the connection
+/// just failed with whatever the driver said, and there was no way to
+/// supply the password at all.
+pub struct PasswordPrompt {
+    pub profile_id: String,
+    pub profile_name: String,
+    pub password: String,
+    pub save: bool,
 }
 
 pub fn driver_label(driver: &DbDriver) -> &'static str {
@@ -81,7 +99,9 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     ui.horizontal(|ui| {
         ui.label(crate::theme::text::heading(palette, "Saved Connections"));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            let _ = ui.button("New");
+            if ui.button("New").clicked() {
+                app.screens.connection_editor.open_new();
+            }
         });
     });
     ui.add_space(4.0);
@@ -145,16 +165,35 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     });
 
     if let Some(id) = to_connect {
-        app.connections.last_error = None;
-        app.connections.connecting = Some(id.clone());
-        let state = app.state.clone();
-        // The password is left empty on purpose: the service falls back to
-        // the OS keyring and then to this session's cache, which is what the
-        // web shell's "connect" button did too.
-        app.connections.connect_job.start(app.rt.handle(), ui.ctx(), async move {
-            dbhive_core::service::connect(&state, id, String::new(), None).await
-        });
+        // Ask for a password up front when nothing is stored, rather than
+        // letting the driver fail with an opaque message.
+        let known = dbhive_core::credentials::CredentialManager::has_password(&id)
+            .unwrap_or(false)
+            || app
+                .state
+                .lock()
+                .unwrap()
+                .connection_passwords
+                .contains_key(&id);
+
+        if known {
+            start_connect(app, ui.ctx(), id, String::new());
+        } else {
+            let name = profiles
+                .iter()
+                .find(|p| p.id == id)
+                .map(|p| p.name.clone())
+                .unwrap_or_else(|| id.clone());
+            app.connections.password_prompt = Some(PasswordPrompt {
+                profile_id: id,
+                profile_name: name,
+                password: String::new(),
+                save: true,
+            });
+        }
     }
+
+    password_prompt(app, ui.ctx());
 
     if let Some(id) = to_disconnect {
         let state = app.state.clone();
@@ -162,6 +201,83 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         app.connections.disconnect_job.start(app.rt.handle(), ui.ctx(), async move {
             dbhive_core::service::disconnect(&state, &id).await
         });
+    }
+}
+
+/// Kick off a connection with an explicit password ("" defers to the
+/// keyring and this session's cache).
+pub fn start_connect(app: &mut DbHiveApp, ctx: &egui::Context, id: String, password: String) {
+    app.connections.last_error = None;
+    app.connections.connecting = Some(id.clone());
+    let state = app.state.clone();
+    let handle = app.rt.handle().clone();
+    app.connections.connect_job.start(&handle, ctx, async move {
+        dbhive_core::service::connect(&state, id, password, None).await
+    });
+}
+
+/// Modal asking for a password when none is stored.
+fn password_prompt(app: &mut DbHiveApp, ctx: &egui::Context) {
+    let Some(prompt) = app.connections.password_prompt.as_mut() else {
+        return;
+    };
+    let palette = if matches!(app.mode, crate::theme::Mode::Dark) {
+        &crate::theme::DARK
+    } else {
+        &crate::theme::LIGHT
+    };
+
+    let mut submit = false;
+    let mut cancel = false;
+    let title = format!("Password for {}", prompt.profile_name);
+
+    egui::Window::new(title)
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0, 0.0))
+        .show(ctx, |ui| {
+            ui.label(crate::theme::text::muted(
+                palette,
+                "No saved password was found for this connection.",
+            ));
+            ui.add_space(6.0);
+            let response = ui.add(
+                egui::TextEdit::singleline(&mut prompt.password)
+                    .password(true)
+                    .hint_text("Password")
+                    .desired_width(260.0),
+            );
+            response.request_focus();
+            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                submit = true;
+            }
+            ui.checkbox(&mut prompt.save, "Remember in the system keychain");
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button("Connect").clicked() {
+                    submit = true;
+                }
+                if ui.button("Cancel").clicked() {
+                    cancel = true;
+                }
+            });
+        });
+
+    if cancel {
+        app.connections.password_prompt = None;
+        app.connections.connecting = None;
+        return;
+    }
+    if submit {
+        let prompt = app.connections.password_prompt.take().unwrap();
+        // service::connect saves a non-empty password to the keyring itself,
+        // so "don't remember" means clearing it again after connecting.
+        if !prompt.save {
+            let _ = dbhive_core::credentials::CredentialManager::delete_password(
+                &prompt.profile_id,
+            );
+        }
+        start_connect(app, ctx, prompt.profile_id, prompt.password);
     }
 }
 

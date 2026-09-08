@@ -5,13 +5,44 @@
 use std::sync::Arc;
 
 use dbhive_core::drivers::{DatabaseDriver, QueryResult};
-use dbhive_core::models::{DatabaseInfo, DbError, TableInfo};
+use dbhive_core::models::{DatabaseInfo, DbError, QueryHistory, SchemaInfo, TableInfo};
+use dbhive_core::state::AppState;
 
 use crate::app::DbHiveApp;
 use crate::task::Job;
 use crate::widgets::{results_grid, sql_editor};
 
-type Metadata = (Vec<DatabaseInfo>, Vec<TableInfo>);
+/// databases, schemas, tables, and the database actually in use.
+type Metadata = (Vec<DatabaseInfo>, Vec<SchemaInfo>, Vec<TableInfo>, String);
+
+/// One query tab. Each carries its own statement, results and in-flight
+/// query, so running a slow query in one tab does not block editing in
+/// another.
+pub struct QueryTab {
+    pub title: String,
+    pub sql: String,
+    pub editor: sql_editor::EditorState,
+    pub grid: results_grid::GridState,
+    pub result: Option<QueryResult>,
+    pub last_error: Option<String>,
+    pub elapsed_ms: Option<u128>,
+    pub query_job: Job<(Result<QueryResult, DbError>, u128)>,
+}
+
+impl QueryTab {
+    pub fn new(index: usize) -> Self {
+        Self {
+            title: format!("Query {}", index),
+            sql: String::new(),
+            editor: sql_editor::EditorState::default(),
+            grid: results_grid::GridState::default(),
+            result: None,
+            last_error: None,
+            elapsed_ms: None,
+            query_job: Job::default(),
+        }
+    }
+}
 
 pub struct Workspace {
     pub connection_id: String,
@@ -19,23 +50,52 @@ pub struct Workspace {
 
     pub databases: Vec<DatabaseInfo>,
     pub current_database: Option<String>,
+    pub schemas: Vec<SchemaInfo>,
+    pub current_schema: Option<String>,
     pub tables: Vec<TableInfo>,
     pub table_filter: String,
 
-    pub sql: String,
-    pub editor: sql_editor::EditorState,
     pub schema_index: sql_editor::SchemaIndex,
 
-    pub grid: results_grid::GridState,
-    pub result: Option<QueryResult>,
-    pub last_error: Option<String>,
-    pub elapsed_ms: Option<u128>,
+    pub tabs: Vec<QueryTab>,
+    pub active_tab: usize,
+    /// Monotonic counter so closing tab 2 does not make the next new tab
+    /// also "Query 2".
+    next_tab_number: usize,
 
-    pub query_job: Job<(Result<QueryResult, DbError>, u128)>,
     pub meta_job: Job<Result<Metadata, DbError>>,
     pub switch_job: Job<Result<String, DbError>>,
     pub pending_database: Option<String>,
+    /// Connection-level failure (metadata load, database switch), as opposed
+    /// to a per-tab query error.
+    pub last_error: Option<String>,
     meta_requested: bool,
+}
+
+impl Workspace {
+    pub fn active(&mut self) -> &mut QueryTab {
+        let i = self.active_tab.min(self.tabs.len().saturating_sub(1));
+        &mut self.tabs[i]
+    }
+
+    pub fn add_tab(&mut self) {
+        self.next_tab_number += 1;
+        self.tabs.push(QueryTab::new(self.next_tab_number));
+        self.active_tab = self.tabs.len() - 1;
+    }
+
+    /// Close a tab, keeping at least one open.
+    pub fn close_tab(&mut self, index: usize) {
+        if self.tabs.len() <= 1 || index >= self.tabs.len() {
+            return;
+        }
+        self.tabs.remove(index);
+        if self.active_tab >= self.tabs.len() {
+            self.active_tab = self.tabs.len() - 1;
+        } else if index < self.active_tab {
+            self.active_tab -= 1;
+        }
+    }
 }
 
 impl Workspace {
@@ -45,19 +105,18 @@ impl Workspace {
             connection_name,
             databases: Vec::new(),
             current_database: None,
+            schemas: Vec::new(),
+            current_schema: None,
             tables: Vec::new(),
             table_filter: String::new(),
-            sql: String::new(),
-            editor: sql_editor::EditorState::default(),
             schema_index: sql_editor::SchemaIndex::default(),
-            grid: results_grid::GridState::default(),
-            result: None,
-            last_error: None,
-            elapsed_ms: None,
-            query_job: Job::default(),
+            tabs: vec![QueryTab::new(1)],
+            active_tab: 0,
+            next_tab_number: 1,
             meta_job: Job::default(),
             switch_job: Job::default(),
             pending_database: None,
+            last_error: None,
             meta_requested: false,
         }
     }
@@ -83,6 +142,8 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     let mut run_now = false;
     let mut disconnect = false;
     let mut switch_to: Option<String> = None;
+    let mut reload_tables = false;
+    let mut open_inspector: Option<(String, String, String)> = None;
 
     // Kick off the metadata load once per connection.
     if needs_meta {
@@ -91,7 +152,7 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         // Development aid, paired with DBHIVE_AUTOCONNECT: run a statement as
         // soon as the workspace opens. Unset in normal use.
         if let Ok(sql) = std::env::var("DBHIVE_AUTOQUERY") {
-            app.workspace.as_mut().unwrap().sql = sql;
+            app.workspace.as_mut().unwrap().active().sql = sql;
             run_now = true;
         }
     }
@@ -99,11 +160,15 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     let ws = app.workspace.as_mut().unwrap();
     if let Some(result) = ws.meta_job.take_result() {
         match result {
-            Ok((databases, tables)) => {
+            Ok((databases, schemas, tables, database)) => {
                 if ws.current_database.is_none() {
                     ws.current_database = databases.first().map(|d| d.name.clone());
                 }
+                if ws.current_schema.is_none() {
+                    ws.current_schema = pick_default_schema(&schemas);
+                }
                 ws.databases = databases;
+                ws.schemas = schemas;
                 ws.tables = tables;
                 rebuild_index(ws);
             }
@@ -117,8 +182,10 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                 let ctx = ui.ctx().clone();
                 load_metadata(app, &ctx, db);
                 let ws = app.workspace.as_mut().unwrap();
-                ws.result = None;
-                ws.last_error = None;
+                for tab in &mut ws.tabs {
+                    tab.result = None;
+                    tab.last_error = None;
+                }
             }
             Err(e) => {
                 ws.pending_database = None;
@@ -127,20 +194,56 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         }
     }
 
+    // Every tab is polled, not just the active one: a query started in one
+    // tab must still land if the user switches away while it runs.
     let ws = app.workspace.as_mut().unwrap();
-    if let Some((result, elapsed)) = ws.query_job.take_result() {
-        ws.elapsed_ms = Some(elapsed);
-        match result {
-            Ok(r) => {
-                ws.grid = results_grid::GridState::default();
-                ws.result = Some(r);
-                ws.last_error = None;
-            }
-            Err(e) => {
-                ws.result = None;
-                ws.last_error = Some(e.to_string());
+    let conn_name = ws.connection_name.clone();
+    let conn_id = ws.connection_id.clone();
+    let database = ws.current_database.clone().unwrap_or_default();
+    let mut landed: Vec<QueryHistory> = Vec::new();
+
+    for tab in &mut ws.tabs {
+        if let Some((result, elapsed)) = tab.query_job.take_result() {
+            tab.elapsed_ms = Some(elapsed);
+            let entry = QueryHistory::new(
+                conn_id.clone(),
+                conn_name.clone(),
+                database.clone(),
+                tab.sql.clone(),
+                chrono::Utc::now().to_rfc3339(),
+            );
+            match result {
+                Ok(r) => {
+                    landed.push(entry.with_success(elapsed as u64, Some(r.rows.len() as u64)));
+                    tab.grid = results_grid::GridState::default();
+                    tab.result = Some(r);
+                    tab.last_error = None;
+                }
+                Err(e) => {
+                    landed.push(entry.with_error(e.to_string(), Some(elapsed as u64)));
+                    tab.result = None;
+                    tab.last_error = Some(e.to_string());
+                }
             }
         }
+    }
+
+    // Persisting history is fire-and-forget: it must never delay showing the
+    // result, and a failed write is not worth interrupting the user for.
+    if !landed.is_empty() {
+        let snapshot = {
+            let mut guard = app.state.lock().unwrap();
+            for entry in landed {
+                guard.add_history(entry);
+            }
+            guard.get_all_history()
+        };
+        app.screens.history.invalidate_history();
+        app.rt.spawn(async move {
+            if let Err(e) = AppState::save_history_to_store(&snapshot) {
+                eprintln!("Warning: failed to persist query history: {}", e);
+            }
+        });
     }
 
     egui::SidePanel::left("schema_sidebar")
@@ -183,12 +286,40 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                 ui.add_space(6.0);
             }
 
+            if !ws.schemas.is_empty() {
+                let current = ws
+                    .current_schema
+                    .clone()
+                    .unwrap_or_else(|| ws.schemas[0].name.clone());
+                egui::ComboBox::from_id_salt("schema_picker")
+                    .selected_text(current.clone())
+                    .width(ui.available_width())
+                    .show_ui(ui, |ui| {
+                        for sc in &ws.schemas {
+                            let selected = current == sc.name;
+                            if ui.selectable_label(selected, &sc.name).clicked() && !selected {
+                                ws.current_schema = Some(sc.name.clone());
+                                reload_tables = true;
+                            }
+                        }
+                    });
+                ui.add_space(6.0);
+            }
+
             ui.add(
                 egui::TextEdit::singleline(&mut ws.table_filter)
                     .hint_text("Search tables...")
                     .desired_width(f32::INFINITY),
             );
             ui.add_space(6.0);
+
+            if let Some(err) = ws.last_error.clone() {
+                ui.colored_label(palette.destructive, err);
+                if ui.small_button("Dismiss").clicked() {
+                    ws.last_error = None;
+                }
+                ui.add_space(4.0);
+            }
 
             if ws.meta_job.is_running() {
                 ui.horizontal(|ui| {
@@ -199,6 +330,7 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
 
             let needle = ws.table_filter.to_lowercase();
             let mut insert: Option<String> = None;
+            let mut inspect: Option<(String, String)> = None;
             egui::ScrollArea::vertical().show(ui, |ui| {
                 for t in ws
                     .tables
@@ -209,17 +341,31 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                         Some(n) => format!("{}  ({} rows)", t.name, n),
                         None => t.name.clone(),
                     };
-                    if ui
+                    let response = ui
                         .add(egui::Label::new(label).sense(egui::Sense::click()))
-                        .on_hover_text("Click to query this table")
-                        .clicked()
-                    {
+                        .on_hover_text("Click to query, right-click for more");
+                    if response.clicked() {
                         insert = Some(t.name.clone());
                     }
+                    response.context_menu(|ui| {
+                        if ui.button("Query first 100 rows").clicked() {
+                            insert = Some(t.name.clone());
+                            ui.close_menu();
+                        }
+                        if ui.button("Inspect table").clicked() {
+                            inspect = Some((t.schema.clone(), t.name.clone()));
+                            ui.close_menu();
+                        }
+                    });
                 }
             });
+            if let Some((schema, table)) = inspect {
+                open_inspector = Some((ws.connection_id.clone(), schema, table));
+            }
             if let Some(name) = insert {
-                ws.sql = format!("SELECT * FROM {} LIMIT 100;", name);
+                let tab = ws.active();
+                tab.sql = format!("SELECT * FROM {} LIMIT 100;", name);
+                tab.title = name;
                 run_now = true;
             }
         });
@@ -233,24 +379,90 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         )
         .show_inside(ui, |ui| {
             let ws = app.workspace.as_ref().unwrap();
+            let tab = ws.tabs.get(ws.active_tab);
             ui.horizontal(|ui| {
-                match (&ws.result, ws.elapsed_ms) {
-                    (Some(r), Some(ms)) => ui.label(crate::theme::text::muted(
+                match tab.map(|t| (&t.result, t.elapsed_ms)) {
+                    Some((Some(r), Some(ms))) => ui.label(crate::theme::text::muted(
                         palette,
                         format!("{} rows in {} ms", r.rows.len(), ms),
                     )),
                     _ => ui.label(crate::theme::text::muted(palette, "Ready")),
                 };
+                if let Some(db) = &ws.current_database {
+                    ui.separator();
+                    ui.label(crate::theme::text::muted(palette, db.clone()));
+                }
             });
+        });
+
+    egui::SidePanel::right("history_panel")
+        .resizable(true)
+        .default_width(320.0)
+        .frame(
+            egui::Frame::none()
+                .fill(palette.sidebar)
+                .inner_margin(egui::Margin::same(10.0)),
+        )
+        .show_inside(ui, |ui| {
+            if let crate::screens::history::HistoryAction::UseSql(sql) =
+                crate::screens::history::show(app, ui)
+            {
+                app.workspace.as_mut().unwrap().active().sql = sql;
+            }
         });
 
     egui::CentralPanel::default().show_inside(ui, |ui| {
         let ws = app.workspace.as_mut().unwrap();
 
+        // Tab strip. Recorded then applied, since the buttons borrow `ws`.
+        let mut select: Option<usize> = None;
+        let mut close: Option<usize> = None;
+        let mut new_tab = false;
+        egui::ScrollArea::horizontal()
+            .id_salt("query_tabs")
+            .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    let closable = ws.tabs.len() > 1;
+                    for (i, tab) in ws.tabs.iter().enumerate() {
+                        let active = i == ws.active_tab;
+                        let mut label = tab.title.clone();
+                        if tab.query_job.is_running() {
+                            label.push_str(" …");
+                        }
+                        if ui.selectable_label(active, label).clicked() {
+                            select = Some(i);
+                        }
+                        if closable && ui.small_button("✕").on_hover_text("Close tab").clicked() {
+                            close = Some(i);
+                        }
+                        ui.separator();
+                    }
+                    if ui.small_button("+").on_hover_text("New query tab").clicked() {
+                        new_tab = true;
+                    }
+                });
+            });
+        if let Some(i) = select {
+            ws.active_tab = i;
+        }
+        if let Some(i) = close {
+            ws.close_tab(i);
+        }
+        if new_tab {
+            ws.add_tab();
+        }
+        ui.add_space(6.0);
+
+        let schema_index = ws.schema_index.clone();
+        let tab = ws.active();
+
         ui.horizontal(|ui| {
-            let running = ws.query_job.is_running();
+            let running = tab.query_job.is_running();
             if ui
-                .add_enabled(!running && !ws.sql.trim().is_empty(), egui::Button::new("Execute"))
+                .add_enabled(
+                    !running && !tab.sql.trim().is_empty(),
+                    egui::Button::new("Execute"),
+                )
                 .on_hover_text("Cmd/Ctrl + Enter")
                 .clicked()
             {
@@ -260,12 +472,12 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                 ui.add(egui::Spinner::new());
             }
             if ui.button("Clear").clicked() {
-                ws.sql.clear();
+                tab.sql.clear();
             }
         });
         ui.add_space(6.0);
 
-        let action = sql_editor::show(ui, palette, &mut ws.editor, &ws.schema_index, &mut ws.sql);
+        let action = sql_editor::show(ui, palette, &mut tab.editor, &schema_index, &mut tab.sql);
         if action == sql_editor::EditorAction::Execute {
             run_now = true;
         }
@@ -274,15 +486,15 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         ui.separator();
         ui.add_space(4.0);
 
-        if let Some(err) = ws.last_error.clone() {
+        if let Some(err) = tab.last_error.clone() {
             ui.horizontal_wrapped(|ui| {
                 ui.colored_label(palette.destructive, "Query failed:");
                 ui.label(err);
             });
-        } else if let Some(result) = &ws.result {
-            let mut grid = std::mem::take(&mut ws.grid);
-            results_grid::show(ui, palette, result, &mut grid);
-            ws.grid = grid;
+        } else if tab.result.is_some() {
+            let result = tab.result.take().unwrap();
+            results_grid::show(ui, palette, &result, &mut tab.grid);
+            tab.result = Some(result);
         } else {
             ui.add_space(24.0);
             ui.vertical_centered(|ui| {
@@ -295,7 +507,17 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     });
 
     if let Some(db) = switch_to {
+        // A different database means different schemas; let them be
+        // rediscovered rather than carrying the old one across.
+        app.workspace.as_mut().unwrap().current_schema = None;
         switch_database(app, ui.ctx(), db);
+    }
+    if reload_tables {
+        let ctx = ui.ctx().clone();
+        load_metadata(app, &ctx, None);
+    }
+    if let Some((conn, schema, table)) = open_inspector {
+        app.screens.table_inspector.open_table(conn, schema, table);
     }
     if run_now {
         execute(app, ui.ctx());
@@ -350,9 +572,31 @@ fn load_metadata(app: &mut DbHiveApp, ctx: &egui::Context, database: Option<Stri
         .or_else(|| ws.current_database.clone())
         .or_else(|| ws.databases.first().map(|d| d.name.clone()));
 
+    let wanted_schema = ws.current_schema.clone();
     let Some(d) = driver(app, &connection_id) else {
         return;
     };
+    // The profile decides both what `get_tables` expects and which database
+    // the connection is actually on.
+    let (is_postgres_family, connected_database) = {
+        let guard = app.state.lock().unwrap();
+        match guard.get_profile(&connection_id) {
+            Some(p) => {
+                let pg = p.driver.is_postgres_compatible();
+                // service::connect falls back to "postgres" when a
+                // Postgres profile names no database; mirror that, or the
+                // picker will claim a database the session is not on.
+                let db = match p.database.as_deref() {
+                    Some(d) if !d.is_empty() => Some(d.to_string()),
+                    _ if pg => Some("postgres".to_string()),
+                    _ => None,
+                };
+                (pg, db)
+            }
+            None => (false, None),
+        }
+    };
+
     let handle = app.rt.handle().clone();
     let ctx = ctx.clone();
     app.workspace
@@ -361,13 +605,46 @@ fn load_metadata(app: &mut DbHiveApp, ctx: &egui::Context, database: Option<Stri
         .meta_job
         .start(&handle, &ctx, async move {
             let databases = d.get_databases().await?;
-            let schema = target
+            // Default to the database the session is actually on, not
+            // simply the first one the server reports.
+            let database = target
+                .or(connected_database)
                 .or_else(|| databases.first().map(|db| db.name.clone()))
-                .unwrap_or_else(|| "public".to_string());
+                .unwrap_or_default();
+
+            // `get_tables` takes a *schema* on Postgres and is driven by the
+            // connection's own database on MySQL. Passing the database name to
+            // Postgres returned nothing; passing "public" to MySQL listed its
+            // internal tables. Both bugs were visible in the sidebar.
+            let (schemas, schema_arg) = if is_postgres_family {
+                let schemas = d.get_schemas(&database).await.unwrap_or_default();
+                let chosen = wanted_schema
+                    .or_else(|| pick_default_schema(&schemas))
+                    .unwrap_or_else(|| "public".to_string());
+                (schemas, chosen)
+            } else {
+                (Vec::new(), database.clone())
+            };
+
             // An empty table list is not fatal; the sidebar just stays empty.
-            let tables = d.get_tables(&schema).await.unwrap_or_default();
-            Ok((databases, tables))
+            let tables = d.get_tables(&schema_arg).await.unwrap_or_default();
+            Ok((databases, schemas, tables, database))
         });
+}
+
+/// Prefer "public" when a Postgres server offers it, else the first schema.
+///
+/// Postgres lists internal schemas too; landing the user in pg_catalog would
+/// be useless.
+fn pick_default_schema(schemas: &[SchemaInfo]) -> Option<String> {
+    if schemas.iter().any(|s| s.name == "public") {
+        return Some("public".to_string());
+    }
+    schemas
+        .iter()
+        .find(|s| !s.name.starts_with("pg_") && s.name != "information_schema")
+        .or_else(|| schemas.first())
+        .map(|s| s.name.clone())
 }
 
 /// Refresh the completion index from the loaded tables.
@@ -375,25 +652,38 @@ fn rebuild_index(ws: &mut Workspace) {
     ws.schema_index.tables = ws.tables.iter().map(|t| t.name.clone()).collect();
 }
 
-fn execute(app: &mut DbHiveApp, ctx: &egui::Context) {
+pub fn execute(app: &mut DbHiveApp, ctx: &egui::Context) {
     let Some(ws) = app.workspace.as_mut() else {
         return;
     };
-    if ws.query_job.is_running() || ws.sql.trim().is_empty() {
+    let connection_id = ws.connection_id.clone();
+    let tab = ws.active();
+    if tab.query_job.is_running() || tab.sql.trim().is_empty() {
         return;
     }
-    let sql = ws.sql.clone();
-    let connection_id = ws.connection_id.clone();
+    let sql = tab.sql.clone();
+
     let Some(d) = driver(app, &connection_id) else {
-        app.workspace.as_mut().unwrap().last_error =
+        app.workspace.as_mut().unwrap().active().last_error =
             Some("Connection is no longer open".to_string());
         return;
     };
     let handle = app.rt.handle().clone();
-    let ws = app.workspace.as_mut().unwrap();
-    ws.query_job.start(&handle, ctx, async move {
-        let started = std::time::Instant::now();
-        let out = d.execute_query(&sql).await;
-        (out, started.elapsed().as_millis())
-    });
+    app.workspace
+        .as_mut()
+        .unwrap()
+        .active()
+        .query_job
+        .start(&handle, ctx, async move {
+            let started = std::time::Instant::now();
+            let out = d.execute_query(&sql).await;
+            (out, started.elapsed().as_millis())
+        });
+}
+
+/// Reload databases, schemas and tables for the open connection.
+pub fn refresh_metadata(app: &mut DbHiveApp, ctx: &egui::Context) {
+    if app.workspace.is_some() {
+        load_metadata(app, ctx, None);
+    }
 }

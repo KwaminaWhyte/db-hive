@@ -20,6 +20,7 @@ pub mod drivers;
 pub mod migrations;
 pub mod models;
 pub mod service;
+pub mod settings;
 pub mod ssh;
 pub mod state;
 pub mod storage;

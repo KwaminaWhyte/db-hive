@@ -55,6 +55,7 @@ pub async fn connect(
     } else {
         password
     };
+    let had_no_password = password.is_empty();
 
     // With a tunnel configured the driver connects to the local forwarded
     // port instead of the real host.
@@ -100,16 +101,44 @@ pub async fn connect(
             || (profile.driver.is_postgres_compatible() && profile.ssl_mode == SslMode::Require),
     };
 
-    let connection: Arc<dyn DatabaseDriver> = match profile.driver {
-        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => {
-            Arc::new(PostgresDriver::connect(opts).await?)
+    let connected: Result<Arc<dyn DatabaseDriver>, DbError> = match profile.driver {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => PostgresDriver::connect(opts)
+            .await
+            .map(|d| Arc::new(d) as Arc<dyn DatabaseDriver>),
+        DbDriver::Sqlite => SqliteDriver::connect(opts)
+            .await
+            .map(|d| Arc::new(d) as Arc<dyn DatabaseDriver>),
+        DbDriver::MySql => MysqlDriver::connect(opts)
+            .await
+            .map(|d| Arc::new(d) as Arc<dyn DatabaseDriver>),
+        DbDriver::MongoDb => MongoDbDriver::connect(opts)
+            .await
+            .map(|d| Arc::new(d) as Arc<dyn DatabaseDriver>),
+        DbDriver::SqlServer => SqlServerDriver::connect(opts)
+            .await
+            .map(|d| Arc::new(d) as Arc<dyn DatabaseDriver>),
+        DbDriver::Turso => TursoDriver::connect(opts)
+            .await
+            .map(|d| Arc::new(d) as Arc<dyn DatabaseDriver>),
+        DbDriver::Redis => RedisDriver::connect(opts)
+            .await
+            .map(|d| Arc::new(d) as Arc<dyn DatabaseDriver>),
+    };
+
+    // A server that wants a password and got none produces a driver-level
+    // message with no hint about the real problem: tokio-postgres, for one,
+    // just says "invalid configuration". Say what actually happened, so the
+    // caller can prompt instead of leaving the user guessing.
+    let connection = match connected {
+        Ok(c) => c,
+        Err(e) if had_no_password => {
+            return Err(DbError::AuthError(format!(
+                "No password available for this connection, and the server refused the \
+                 connection without one. Enter the password and try again. ({})",
+                e
+            )))
         }
-        DbDriver::Sqlite => Arc::new(SqliteDriver::connect(opts).await?),
-        DbDriver::MySql => Arc::new(MysqlDriver::connect(opts).await?),
-        DbDriver::MongoDb => Arc::new(MongoDbDriver::connect(opts).await?),
-        DbDriver::SqlServer => Arc::new(SqlServerDriver::connect(opts).await?),
-        DbDriver::Turso => Arc::new(TursoDriver::connect(opts).await?),
-        DbDriver::Redis => Arc::new(RedisDriver::connect(opts).await?),
+        Err(e) => return Err(e),
     };
 
     {

@@ -4,7 +4,10 @@ use std::sync::{Arc, Mutex};
 
 use dbhive_core::state::AppState;
 
-use crate::screens::{connections, workspace, Screen};
+use crate::screens::{
+    command_palette, connection_editor, connections, settings, table_inspector, workspace, Screen,
+    Screens,
+};
 use crate::theme;
 
 pub struct DbHiveApp {
@@ -16,6 +19,8 @@ pub struct DbHiveApp {
     pub screen: Screen,
     pub connections: connections::ConnectionsScreen,
     pub workspace: Option<workspace::Workspace>,
+    /// State for every other screen and dialog.
+    pub screens: Screens,
     pub toasts: crate::widgets::toast::Toasts,
     /// Set when startup could not read the saved data. Shown in the UI
     /// rather than only printed, since it means the user's connections are
@@ -62,6 +67,7 @@ impl DbHiveApp {
             screen: Screen::Connections,
             connections: connections::ConnectionsScreen::default(),
             workspace: None,
+            screens: Screens::default(),
             toasts: crate::widgets::toast::Toasts::default(),
             startup_error,
             autoconnect,
@@ -83,6 +89,13 @@ impl eframe::App for DbHiveApp {
             });
         }
 
+        // Settings own the theme: loaded once, then applied every frame so a
+        // saved mode or accent survives a restart even if Settings is never
+        // opened. This must run before anything draws.
+        settings::ensure_loaded(self, ctx);
+        settings::poll(self);
+        settings::ensure_theme(self, ctx);
+
         let palette = self.mode.palette();
         self.toasts.show(ctx, palette);
 
@@ -98,11 +111,101 @@ impl eframe::App for DbHiveApp {
                 ui.separator();
             }
 
-            match self.screen {
-                Screen::Connections => connections::show(self, ui),
-                Screen::Workspace => workspace::show(self, ui),
+            if self.screens.table_inspector.open {
+                table_inspector::show(self, ui);
+            } else {
+                match self.screen {
+                    Screen::Connections => connections::show(self, ui),
+                    Screen::Workspace => workspace::show(self, ui),
+                }
             }
         });
+        settings::show_window(self, ctx);
+
+        if let Some(action) = connection_editor::show(self, ctx) {
+            match action {
+                connection_editor::EditorAction::Saved(id) => {
+                    self.toasts.success("Connection saved");
+                    self.connections.last_saved = Some(id);
+                }
+                connection_editor::EditorAction::Cancelled => {}
+            }
+        }
+
+        // Last, so the palette draws above every other overlay.
+        if let command_palette::PaletteAction::Run(id) = command_palette::show(self, ctx) {
+            dispatch(self, ctx, id);
+        }
+    }
+}
+
+/// Act on a command from the palette or a keyboard shortcut.
+///
+/// Theme, window and modal-opening commands are handled inside the palette
+/// itself and arrive here only for information; everything else is dispatched
+/// here because it needs app state the palette cannot reach.
+fn dispatch(app: &mut DbHiveApp, ctx: &egui::Context, id: command_palette::CommandId) {
+    use command_palette::CommandId as C;
+    match id {
+        C::GoConnections | C::ConnectionsBack => {
+            app.screens.table_inspector.open = false;
+            app.screen = Screen::Connections;
+        }
+        C::GoQueryEditor => {
+            app.screens.table_inspector.open = false;
+            if app.workspace.is_some() {
+                app.screen = Screen::Workspace;
+            } else {
+                app.toasts.info("Connect to a database first");
+            }
+        }
+        C::GoSettings => app.screens.settings.open = true,
+        C::NewConnection => app.screens.connection_editor.open_new(),
+        C::GoTableInspector => {
+            if app.workspace.is_some() {
+                app.screens.table_inspector.open = true;
+            } else {
+                app.toasts.info("Connect to a database first");
+            }
+        }
+        C::RunQuery => {
+            if app.workspace.is_some() {
+                workspace::execute(app, ctx);
+            }
+        }
+        C::NewTab => {
+            if let Some(ws) = app.workspace.as_mut() {
+                ws.add_tab();
+            }
+        }
+        C::CloseTab => {
+            if let Some(ws) = app.workspace.as_mut() {
+                let i = ws.active_tab;
+                ws.close_tab(i);
+            }
+        }
+        C::Disconnect => {
+            if let Some(ws) = app.workspace.as_ref() {
+                let id = ws.connection_id.clone();
+                let state = app.state.clone();
+                let handle = app.rt.handle().clone();
+                app.connections.connected.retain(|c| c != &id);
+                app.connections
+                    .disconnect_job
+                    .start(&handle, ctx, async move {
+                        dbhive_core::service::disconnect(&state, &id).await
+                    });
+                app.workspace = None;
+                app.screens.table_inspector.open = false;
+                app.screen = Screen::Connections;
+            }
+        }
+        C::RefreshMetadata => workspace::refresh_metadata(app, ctx),
+        // Handled inside the palette, or belonging to a screen not yet built.
+        other => {
+            app.toasts
+                .info(format!("{} is not wired up yet", command_palette::command(other).title));
+        }
     }
 }
 
@@ -123,7 +226,14 @@ fn top_bar(app: &mut DbHiveApp, ctx: &egui::Context) {
                 // to fight overlap for it. Here it simply follows the menus.
                 ui.add_space(4.0);
 
+                if ui.small_button("Search or run commands…  ⌘K").clicked() {
+                    app.screens.command_palette.open();
+                }
+
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui.button("Settings").clicked() {
+                        app.screens.settings.open = true;
+                    }
                     let (icon, next) = match app.mode {
                         theme::Mode::Dark => ("Light", theme::Mode::Light),
                         theme::Mode::Light => ("Dark", theme::Mode::Dark),
