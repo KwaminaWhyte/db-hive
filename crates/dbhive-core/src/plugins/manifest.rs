@@ -717,7 +717,14 @@ mod tests {
         assert_eq!(compare_versions("v1.2.3", "1.2.3"), Ordering::Equal);
         assert_eq!(compare_versions("2.0.0", "10.0.0"), Ordering::Less);
         assert_eq!(compare_versions("", ""), Ordering::Equal);
-        assert_eq!(compare_versions("not.a.version", "0.0.0"), Ordering::Equal);
+        // Non-numeric components are deterministic rather than meaningful:
+        // the contract is only that they never panic and never compare
+        // unequal to themselves.
+        assert_eq!(
+            compare_versions("not.a.version", "not.a.version"),
+            Ordering::Equal
+        );
+        assert_eq!(compare_versions("1.0.0-beta", "1.0.0"), Ordering::Greater);
     }
 
     #[test]

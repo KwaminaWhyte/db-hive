@@ -20,7 +20,7 @@
 #![allow(dead_code)]
 
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use sha2::{Digest, Sha256};

@@ -583,6 +583,14 @@ impl PluginUi {
                 limit: MAX_DESCRIPTOR_BYTES,
             });
         }
+        // A descriptor is an object. serde will happily build a struct out of
+        // a JSON *array* by position, so `[]` would otherwise deserialise to
+        // an empty interface: accepting a shape the schema does not describe.
+        if raw.trim_start().as_bytes().first() != Some(&b'{') {
+            return Err(UiError::Malformed(
+                "descriptor must be a JSON object".to_string(),
+            ));
+        }
         // serde_json enforces its own nesting limit and returns an error
         // rather than recursing without bound, which is what makes a
         // "[[[[[..." bomb harmless here.
@@ -1297,7 +1305,7 @@ mod tests {
     #[test]
     fn control_characters_are_stripped_and_text_is_clamped() {
         let raw = format!(
-            r#"{{"panels":[{{"title":"ab","items":[
+            r#"{{"panels":[{{"title":"a\u0007b","items":[
                 {{"type":"text","text":"{}"}},
                 {{"type":"button","id":"b","label":"one\ntwo"}}]}}]}}"#,
             "y".repeat(MAX_TEXT_CHARS + 500)
