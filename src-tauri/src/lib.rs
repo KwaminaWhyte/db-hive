@@ -1,14 +1,13 @@
 // Module declarations
-mod ai;
 mod commands;
-mod credentials;
-mod ddl;
-mod drivers;
-mod migrations;
-mod models;
 mod plugins;
-mod ssh;
 mod state;
+
+// These modules were moved out to the `dbhive-core` crate so the native egui
+// shell can share them. Re-exported under their original paths so the
+// thousands of existing `crate::models::...` references keep resolving while
+// the two shells coexist.
+pub use dbhive_core::{ai, credentials, ddl, drivers, migrations, models, ssh};
 
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;

@@ -18,6 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+dbhive-core = { path = "../crates/dbhive-core" }
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
@@ -73,20 +74,3 @@ tauri-plugin-updater = "2.9.0"
 # `test` feature enables tauri::test::mock_app(), used by command unit
 # tests to obtain a real `State<'_, _>` (the type has no public ctor).
 tauri = { version = "2", features = ["test"] }
-
-
-# Release profile. Absent before: cargo defaulted to opt-level 3 with 16
-# codegen units and no LTO, leaving cross-crate inlining on the table and
-# shipping full debug symbols in the bundled binary.
-#
-# opt-level stays at 3 rather than "s": this is a database client, so query
-# and result-decoding throughput matters more than a few MB of binary.
-# `panic` is deliberately left at "unwind": Tauri's command dispatch relies
-# on catch_unwind to turn a panicking command into an IPC error instead of
-# taking the whole app down.
-[profile.release]
-opt-level = 3
-lto = "fat"
-codegen-units = 1
-strip = true
-incremental = false

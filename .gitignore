@@ -23,3 +23,5 @@ dist-ssr
 *.sln
 *.sw?
 /.playwright-mcp
+# Workspace build output (moved from src-tauri/target when the workspace was created)
+/target

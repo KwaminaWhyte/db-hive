@@ -5,9 +5,7 @@
 //! All state is managed through a thread-safe `Mutex<AppState>` that is shared
 //! across the Tauri application.
 
-mod activity_logger;
-
-pub use activity_logger::ActivityLogger;
+pub use dbhive_core::ActivityLogger;
 
 use std::collections::HashMap;
 use std::sync::Arc;
