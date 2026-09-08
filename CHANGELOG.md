@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **DB Hive is now a native Rust application.** The Tauri shell and the
+  React frontend were replaced by a single binary built on egui/eframe.
+  There is no WebView, and no Node toolchain in the build.
+
+  Measured, release builds of both, idle and connected: the Tauri build ran
+  four processes at roughly 400-650 MB; the native build runs one at
+  75-130 MB. The WebView and its GPU and networking helpers accounted for
+  about 90% of the old footprint.
+
+  Your data carries over untouched. Connections, query history and snippets
+  are read from the same files in the same format and location, and
+  passwords stay in the OS keyring.
+
+  Feature parity was the bar, and everything in the previous release is
+  present. Three things are deliberately not carried over, and are recorded
+  in `docs/rust-ui-migration/04-plan.md`: automatic update installation
+  (releases are not signed, and an updater that runs an unverified download
+  is a code execution channel; the app checks and links to the release
+  instead), keyset pagination in the table inspector (offset paging with a
+  deep-offset guard replaces it), and inline editing in the data grid.
+
+  Plugins keep their JavaScript runtime but now declare their interface as
+  data, which the host renders natively, rather than rendering React.
+  Existing plugins need updating for that.
+
+### Fixed
+
+- Identifiers in generated DDL are escaped. A table named with a quote
+  character could previously terminate its own identifier, which was a way
+  to append arbitrary DDL from the table editor.
+- Restoring a backup with "drop existing" now actually drops the target.
+  The flag was accepted and silently ignored, so a restore would fail
+  halfway on duplicate objects while the user believed the target had been
+  cleared.
+- The database picker reports the database the session is on, rather than
+  the first one the server lists.
+- Query history and the activity log are recorded for every executed
+  statement.
+
 ## [0.21.0] - 2026-05-17
 
 ### Added (2026-05-17)

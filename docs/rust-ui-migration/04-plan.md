@@ -31,47 +31,22 @@ location `tauri_plugin_store` used, so an existing installation keeps its
 connections, history and snippets. This has been verified against a real
 installation: the native shell lists the same five saved connections.
 
-## Status
+## Status: complete
 
-Done:
+The Tauri shell and the React frontend were removed at commit 8a27d25. What
+runs now is a single native binary.
 
-- [x] Extract 12,494 LOC of Tauri-free logic into `dbhive-core`
-- [x] Replace `tauri_plugin_store` with `JsonStore`, move `AppState` into core
-- [x] `service::{connect, disconnect, switch_database, load_persisted}`
-- [x] Async bridge (`task::Job`), theme (OKLCH tokens as sRGB), toasts
-- [x] Results grid (virtualised, sortable, filterable)
-- [x] SQL editor (highlighting, completion, find/replace, gutter)
-- [x] Connections list, connect/disconnect, password prompt
-- [x] Workspace: schema sidebar, database and schema switching, query tabs
-- [x] Query history recording and persistence
-- [x] Settings (persisted, owns theme; accent colour actually wired)
-- [x] Connection editor (all 9 drivers, SSH, validation, test connection)
-- [x] Table inspector (data, columns, indexes, relations, paging, filters)
-- [x] Command palette and shortcut registry
-- [x] History / Snippets / Templates panel
-- [x] Table editor (create table via the DDL generator)
-- [x] Migrations (schema diff, generate, apply)
-- [x] Backup / restore
-- [x] AI assistant
-- [x] Activity monitor, and feeding the ActivityLogger
-- [x] ER diagram, and `graph_layout` as the dagre replacement
-- [x] Menu bar, About
+Everything in the parity inventory is built and wired: connections (with
+edit, duplicate, favourite, delete and a password prompt), the workspace
+with query tabs, the SQL editor, the results grid, the schema sidebar with
+database and schema switching, table inspector, table editor
+(create/alter/drop, create database), stored procedures, history / snippets
+/ templates, settings, command palette and shortcut registry, migrations,
+backup and restore, import and export, activity monitor, AI assistant, ER
+diagram, visual schema designer, visual query builder, plugins, multi-window,
+the menu bar, About, update checking, native file dialogs and toasts.
 
-In progress (parallel):
-
-- [ ] Visual schema designer, visual query builder, plugins
-
-Not started:
-
-- [ ] Multi-window (eframe multi-viewport, replacing `commands/window.rs`).
-      Deliberately last: it reshapes `DbHiveApp` into per-window state and
-      would collide with any screen being written at the same time.
-- [ ] Import / export (agent reported; wiring pending)
-- [ ] Updater
-- [ ] File pickers. Several screens take a typed path because `rfd` is not
-      a dependency yet. Adding it closes them all at once.
-- [ ] Strip the remaining Tauri command wrappers
-- [ ] Delete `src-tauri`, drop the npm toolchain, single-binary packaging
+No screen is a stub and no screen is unreachable.
 
 ## Known risks
 

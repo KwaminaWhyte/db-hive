@@ -104,11 +104,12 @@ builds of both.
 | | Processes | Idle memory |
 | --- | --- | --- |
 | Tauri + React | 4 (app, WebContent, GPU, Networking) | **~400-650 MB** |
-| Native egui | 1 | **111 MB min, 130 avg, 294 max** |
+| Native egui | 1 | **75-130 MB** |
 
-Steady state settles at 111-118 MB. The single 294 MB sample is the first
-frames after the schema loads, where the GPU textures are uploaded; it does
-not recur.
+Three runs of the shipping build, same protocol, differing in what had been
+loaded: 75 MB flat, 109 MB flat, and 111-130 MB with a single 294 MB sample
+during the first frames after a large schema loads (GPU texture upload; it
+does not recur). Call it 75-130 MB in normal use against 400-650 MB before.
 
 Component breakdown of the old figure, for comparison:
 
