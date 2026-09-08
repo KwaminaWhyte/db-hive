@@ -56,6 +56,12 @@ pub struct DbHiveApp {
     /// Windows beyond the first. Each is swapped into the fields above while
     /// its own viewport renders.
     pub extra_windows: Vec<WindowState>,
+    /// In-flight update check and its last result. App-level rather than
+    /// per-window: the running version is the same in every window.
+    pub update_job: crate::task::Job<
+        Result<dbhive_core::service_updater::UpdateStatus, dbhive_core::models::DbError>,
+    >,
+    pub update_status: Option<String>,
 }
 
 impl DbHiveApp {
@@ -99,6 +105,8 @@ impl DbHiveApp {
             toasts: crate::widgets::toast::Toasts::default(),
             startup_error,
             about_open: false,
+            update_job: Default::default(),
+            update_status: None,
             // Dev aid: DBHIVE_AUTOWINDOWS=<n> opens n extra windows at
             // startup so multi-window can be exercised without clicking.
             extra_windows: (0..std::env::var("DBHIVE_AUTOWINDOWS")
@@ -574,6 +582,11 @@ fn menu_bar(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                 .spawn();
             ui.close_menu();
         }
+        if ui.button("Check for Updates…").clicked() {
+            check_for_updates(app, ui.ctx());
+            app.about_open = true;
+            ui.close_menu();
+        }
         ui.separator();
         if ui.button("About DB Hive").clicked() {
             app.about_open = true;
@@ -595,12 +608,42 @@ const OPEN_CMD: &str = "explorer";
 #[cfg(all(unix, not(target_os = "macos")))]
 const OPEN_CMD: &str = "xdg-open";
 
+/// Ask the release manifest whether there is anything newer.
+fn check_for_updates(app: &mut DbHiveApp, ctx: &egui::Context) {
+    if app.update_job.is_running() {
+        return;
+    }
+    app.update_status = Some("Checking…".into());
+    let current = env!("CARGO_PKG_VERSION").to_string();
+    let handle = app.rt.handle().clone();
+    app.update_job.start(&handle, ctx, async move {
+        dbhive_core::service_updater::check(&current).await
+    });
+}
+
 fn about_window(app: &mut DbHiveApp, ctx: &egui::Context) {
+    if let Some(result) = app.update_job.take_result() {
+        app.update_status = Some(match result {
+            Ok(dbhive_core::service_updater::UpdateStatus::UpToDate { current }) => {
+                format!("You are on the latest version ({}).", current)
+            }
+            Ok(dbhive_core::service_updater::UpdateStatus::Available { latest, .. }) => {
+                format!("Version {} is available.", latest)
+            }
+            Err(e) => format!("Could not check for updates: {}", e),
+        });
+    }
     if !app.about_open {
         return;
     }
     let palette = app.mode.palette();
     let mut open = app.about_open;
+    let checking = app.update_job.is_running();
+    let status = app.update_status.clone();
+    let update_available = status
+        .as_deref()
+        .is_some_and(|s| s.starts_with("Version "));
+    let mut check_now = false;
     egui::Window::new("About DB Hive")
         .open(&mut open)
         .collapsible(false)
@@ -623,7 +666,35 @@ fn about_window(app: &mut DbHiveApp, ctx: &egui::Context) {
                     palette,
                     format!("{} on {}", std::env::consts::ARCH, std::env::consts::OS),
                 ));
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(!checking, egui::Button::new("Check for updates"))
+                        .clicked()
+                    {
+                        check_now = true;
+                    }
+                    if checking {
+                        ui.add(egui::Spinner::new());
+                    }
+                });
+                if let Some(msg) = status.as_ref() {
+                    ui.label(crate::theme::text::muted(palette, msg.clone()));
+                }
+                if update_available {
+                    // Installation is deliberately not automated: releases
+                    // are not signed yet, and an updater that runs an
+                    // unverified download is a code execution channel.
+                    if ui.button("Open the releases page").clicked() {
+                        let _ = std::process::Command::new(OPEN_CMD)
+                            .arg(dbhive_core::service_updater::RELEASES_URL)
+                            .spawn();
+                    }
+                }
             });
         });
     app.about_open = open;
+    if check_now {
+        check_for_updates(app, ctx);
+    }
 }
