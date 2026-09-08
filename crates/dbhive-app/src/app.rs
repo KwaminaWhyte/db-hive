@@ -65,6 +65,35 @@ pub struct DbHiveApp {
 }
 
 impl DbHiveApp {
+    /// Build the app without eframe, for tests.
+    ///
+    /// Skips reading the user's saved data: a test must not depend on, or
+    /// be affected by, whatever is on the machine running it.
+    #[cfg(test)]
+    pub fn for_test() -> Self {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .enable_all()
+            .build()
+            .expect("failed to start the Tokio runtime");
+        Self {
+            rt,
+            state: Arc::new(Mutex::new(AppState::new())),
+            mode: theme::Mode::Dark,
+            screen: Screen::Connections,
+            connections: connections::ConnectionsScreen::default(),
+            workspace: None,
+            screens: Screens::default(),
+            toasts: crate::widgets::toast::Toasts::default(),
+            startup_error: None,
+            about_open: false,
+            update_job: Default::default(),
+            update_status: None,
+            extra_windows: Vec::new(),
+            autoconnect: None,
+        }
+    }
+
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let rt = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -704,5 +733,99 @@ fn about_window(app: &mut DbHiveApp, ctx: &egui::Context) {
     app.about_open = open;
     if check_now {
         check_for_updates(app, ctx);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Draw `body` in a headless egui context and return whether it panicked.
+    ///
+    /// This exercises the drawing code that unit tests deliberately skip.
+    /// Layout code is where the index arithmetic lives, so it is exactly
+    /// where an out-of-range slice or an unwrap on empty state shows up, and
+    /// a panic there takes the whole window down.
+    fn draws(mut body: impl FnMut(&egui::Context)) {
+        let ctx = egui::Context::default();
+        // Give it a real screen rect; a zero-sized viewport hides layout bugs.
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(1400.0_f32, 900.0_f32),
+            )),
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| body(ctx));
+    }
+
+    /// Every screen must survive being drawn with no connection and no data.
+    ///
+    /// That is the state a screen is in the moment it opens, and the one
+    /// most likely to trip an empty-slice panic.
+    #[test]
+    fn every_screen_draws_from_empty_state() {
+        // (name, how to open it) so a failure names the screen.
+        type Opener = fn(&mut DbHiveApp);
+        let screens: Vec<(&str, Opener)> = vec![
+            ("connections", |_a| {}),
+            ("settings", |a| a.screens.settings.open = true),
+            ("plugins", |a| a.screens.plugins.open = true),
+            ("procedures", |a| a.screens.procedures.open = true),
+            ("table_inspector", |a| a.screens.table_inspector.open = true),
+            ("table_editor", |a| {
+                a.screens.table_editor.open_new("conn", "public")
+            }),
+            ("er_diagram", |a| a.screens.er_diagram.open = true),
+            ("schema_designer", |a| a.screens.schema_designer.open = true),
+            ("query_builder", |a| a.screens.query_builder.open = true),
+            ("activity_monitor", |a| a.screens.activity_monitor.open = true),
+            ("migrations", |a| a.screens.migrations.open = true),
+            ("backup", |a| a.screens.backup.open = true),
+            ("import_export", |a| a.screens.import_export.open = true),
+            ("command_palette", |a| a.screens.command_palette.open()),
+            ("connection_editor", |a| a.screens.connection_editor.open_new()),
+            ("about", |a| a.about_open = true),
+        ];
+
+        for (name, open) in screens {
+            let mut app = DbHiveApp::for_test();
+            open(&mut app);
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                draws(|ctx| render_window(&mut app, ctx));
+            }));
+            assert!(result.is_ok(), "{} panicked while drawing", name);
+        }
+    }
+
+    /// The workspace and the panels that live inside it.
+    #[test]
+    fn the_workspace_draws_without_a_live_connection() {
+        let mut app = DbHiveApp::for_test();
+        app.workspace = Some(workspace::Workspace::new(
+            "conn".to_string(),
+            "Test".to_string(),
+        ));
+        app.screen = Screen::Workspace;
+        app.screens.ai_assistant.open = true;
+
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            // Twice: the second frame runs with state the first frame left
+            // behind, which is where "works once" bugs surface.
+            draws(|ctx| render_window(&mut app, ctx));
+            draws(|ctx| render_window(&mut app, ctx));
+        }));
+        assert!(result.is_ok(), "workspace panicked while drawing");
+    }
+
+    /// Light mode must be drawable too; the palettes are separate constants.
+    #[test]
+    fn light_mode_draws() {
+        let mut app = DbHiveApp::for_test();
+        app.mode = theme::Mode::Light;
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            draws(|ctx| render_window(&mut app, ctx));
+        }));
+        assert!(result.is_ok(), "light mode panicked while drawing");
     }
 }
