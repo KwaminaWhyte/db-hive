@@ -1,13 +1,12 @@
 // Module declarations
 mod commands;
 mod plugins;
-mod state;
 
 // These modules were moved out to the `dbhive-core` crate so the native egui
 // shell can share them. Re-exported under their original paths so the
 // thousands of existing `crate::models::...` references keep resolving while
 // the two shells coexist.
-pub use dbhive_core::{ai, credentials, ddl, drivers, migrations, models, ssh};
+pub use dbhive_core::{ai, credentials, ddl, drivers, migrations, models, ssh, state};
 
 use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
@@ -89,7 +88,7 @@ pub fn run() {
             let mut state = AppState::default();
 
             // Load saved profiles from persistent storage
-            match state.load_profiles_from_store(&app.handle()) {
+            match state.load_profiles_from_store() {
                 Ok(count) => {
                     if count > 0 {
                         println!("Loaded {} connection profile(s) from storage", count);
@@ -101,7 +100,7 @@ pub fn run() {
             }
 
             // Migrate any plaintext passwords from older versions to the OS keyring
-            match state.migrate_passwords_to_keyring(&app.handle()) {
+            match state.migrate_passwords_to_keyring() {
                 Ok(count) => {
                     if count > 0 {
                         println!("Migrated {} saved password(s) to the OS keyring", count);
@@ -113,7 +112,7 @@ pub fn run() {
             }
 
             // Load query history from persistent storage
-            match state.load_history_from_store(&app.handle()) {
+            match state.load_history_from_store() {
                 Ok(count) => {
                     if count > 0 {
                         println!("Loaded {} query history record(s) from storage", count);
@@ -125,7 +124,7 @@ pub fn run() {
             }
 
             // Load query snippets from persistent storage
-            match state.load_snippets_from_store(&app.handle()) {
+            match state.load_snippets_from_store() {
                 Ok(count) => {
                     if count > 0 {
                         println!("Loaded {} query snippet(s) from storage", count);

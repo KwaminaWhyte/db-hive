@@ -5,7 +5,7 @@
 //! All state is managed through a thread-safe `Mutex<AppState>` that is shared
 //! across the Tauri application.
 
-pub use dbhive_core::ActivityLogger;
+pub use crate::activity_logger::ActivityLogger;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -17,8 +17,7 @@ use crate::models::{
     TableInfo,
 };
 use crate::ssh::SshTunnelManager;
-use tauri::AppHandle;
-use tauri_plugin_store::StoreExt;
+use crate::storage::JsonStore;
 
 /// Maximum number of query history entries kept in memory and on disk.
 ///
@@ -343,15 +342,11 @@ impl AppState {
     ///
     /// # Arguments
     ///
-    /// * `app` - Tauri application handle
-    ///
     /// # Returns
     ///
     /// Number of profiles loaded
-    pub fn load_profiles_from_store(&mut self, app: &AppHandle) -> Result<usize, DbError> {
-        let store = app
-            .store("profiles.json")
-            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+    pub fn load_profiles_from_store(&mut self) -> Result<usize, DbError> {
+        let mut store = JsonStore::open("profiles.json")?;
 
         // Get profiles from store
         if let Some(profiles_value) = store.get("profiles") {
@@ -379,15 +374,11 @@ impl AppState {
     ///
     /// # Arguments
     ///
-    /// * `app` - Tauri application handle
-    ///
     /// # Returns
     ///
     /// Ok(()) if successful
-    pub fn save_profiles_to_store(&self, app: &AppHandle) -> Result<(), DbError> {
-        let store = app
-            .store("profiles.json")
-            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+    pub fn save_profiles_to_store(&self) -> Result<(), DbError> {
+        let mut store = JsonStore::open("profiles.json")?;
 
         // Convert profiles map to vector
         let profiles: Vec<&ConnectionProfile> = self.connection_profiles.values().collect();
@@ -417,15 +408,11 @@ impl AppState {
     ///
     /// # Arguments
     ///
-    /// * `app` - Tauri application handle
-    ///
     /// # Returns
     ///
     /// Number of passwords migrated into the keyring
-    pub fn migrate_passwords_to_keyring(&mut self, app: &AppHandle) -> Result<usize, DbError> {
-        let store = app
-            .store("passwords.json")
-            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+    pub fn migrate_passwords_to_keyring(&mut self) -> Result<usize, DbError> {
+        let mut store = JsonStore::open("passwords.json")?;
 
         let Some(passwords_value) = store.get("passwords") else {
             // Nothing to migrate
@@ -513,10 +500,8 @@ impl AppState {
     }
 
     /// Load query history from persistent storage
-    pub fn load_history_from_store(&mut self, app: &AppHandle) -> Result<usize, DbError> {
-        let store = app
-            .store("history.json")
-            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+    pub fn load_history_from_store(&mut self) -> Result<usize, DbError> {
+        let mut store = JsonStore::open("history.json")?;
 
         if let Some(history_value) = store.get("history") {
             let mut history: Vec<QueryHistory> =
@@ -545,10 +530,8 @@ impl AppState {
     /// history vector inside the `AppState` lock and perform the serialization
     /// and disk write *after* releasing the lock, keeping the per-query hot
     /// path off the global mutex.
-    pub fn save_history_to_store(app: &AppHandle, history: &[QueryHistory]) -> Result<(), DbError> {
-        let store = app
-            .store("history.json")
-            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+    pub fn save_history_to_store(history: &[QueryHistory]) -> Result<(), DbError> {
+        let mut store = JsonStore::open("history.json")?;
 
         let history_value = serde_json::to_value(history)
             .map_err(|e| DbError::InternalError(format!("Failed to serialize history: {}", e)))?;
@@ -601,10 +584,8 @@ impl AppState {
     }
 
     /// Load query snippets from persistent storage
-    pub fn load_snippets_from_store(&mut self, app: &AppHandle) -> Result<usize, DbError> {
-        let store = app
-            .store("snippets.json")
-            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+    pub fn load_snippets_from_store(&mut self) -> Result<usize, DbError> {
+        let mut store = JsonStore::open("snippets.json")?;
 
         if let Some(snippets_value) = store.get("snippets") {
             let snippets: Vec<QuerySnippet> =
@@ -623,10 +604,8 @@ impl AppState {
     }
 
     /// Save query snippets to persistent storage
-    pub fn save_snippets_to_store(&self, app: &AppHandle) -> Result<(), DbError> {
-        let store = app
-            .store("snippets.json")
-            .map_err(|e| DbError::InternalError(format!("Failed to access store: {}", e)))?;
+    pub fn save_snippets_to_store(&self) -> Result<(), DbError> {
+        let mut store = JsonStore::open("snippets.json")?;
 
         let snippets: Vec<&QuerySnippet> = self.query_snippets.values().collect();
         let snippets_value = serde_json::to_value(&snippets)

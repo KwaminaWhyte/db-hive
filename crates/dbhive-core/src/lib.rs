@@ -20,5 +20,8 @@ pub mod drivers;
 pub mod migrations;
 pub mod models;
 pub mod ssh;
+pub mod state;
+pub mod storage;
 
 pub use activity_logger::ActivityLogger;
+pub use state::{AppState, MetadataCache, MAX_HISTORY_ENTRIES};

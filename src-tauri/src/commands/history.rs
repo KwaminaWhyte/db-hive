@@ -61,7 +61,7 @@ pub fn save_to_history(
         state.query_history.clone()
     };
 
-    AppState::save_history_to_store(&app, &snapshot)?;
+    AppState::save_history_to_store(&snapshot)?;
 
     Ok(history_id)
 }
@@ -166,7 +166,7 @@ pub fn clear_history(
         (count, state.query_history.clone())
     };
 
-    AppState::save_history_to_store(&app, &snapshot)?;
+    AppState::save_history_to_store(&snapshot)?;
 
     Ok(count)
 }
@@ -240,7 +240,7 @@ pub fn save_snippet(
 
     // Save to persistent storage
     let state = state.lock().unwrap();
-    state.save_snippets_to_store(&app)?;
+    state.save_snippets_to_store()?;
 
     Ok(snippet_id)
 }
@@ -324,7 +324,7 @@ pub fn delete_snippet(
 
     // Save to persistent storage
     let state = state.lock().unwrap();
-    state.save_snippets_to_store(&app)?;
+    state.save_snippets_to_store()?;
 
     Ok(())
 }

@@ -191,7 +191,7 @@ pub fn create_connection_profile(
     state.add_profile(profile);
 
     // Save profiles to persistent storage
-    state.save_profiles_to_store(&app)?;
+    state.save_profiles_to_store()?;
 
     Ok(profile_id)
 }
@@ -229,7 +229,7 @@ pub fn update_connection_profile(
     state.add_profile(profile);
 
     // Save profiles to persistent storage
-    state.save_profiles_to_store(&app)?;
+    state.save_profiles_to_store()?;
 
     Ok(())
 }
@@ -284,7 +284,7 @@ pub async fn delete_connection_profile(
         state_guard.connection_passwords.remove(&profile_id);
 
         // Save profiles to persistent storage
-        state_guard.save_profiles_to_store(&app)?;
+        state_guard.save_profiles_to_store()?;
     }
 
     Ok(())
@@ -843,7 +843,7 @@ pub fn record_connection(
         // Save updated profiles
         drop(state_guard); // Release lock before saving
         let state_guard = state.lock().unwrap();
-        state_guard.save_profiles_to_store(&app)?;
+        state_guard.save_profiles_to_store()?;
 
         Ok(())
     } else {
@@ -884,7 +884,7 @@ pub fn toggle_favorite(
         // Save updated profiles
         drop(state_guard);
         let state_guard = state.lock().unwrap();
-        state_guard.save_profiles_to_store(&app)?;
+        state_guard.save_profiles_to_store()?;
 
         Ok(new_status)
     } else {
@@ -927,7 +927,7 @@ pub fn update_connection_folder(
         // Save updated profiles
         drop(state_guard);
         let state_guard = state.lock().unwrap();
-        state_guard.save_profiles_to_store(&app)?;
+        state_guard.save_profiles_to_store()?;
 
         Ok(())
     } else {
@@ -1065,7 +1065,7 @@ pub fn duplicate_connection(
     // Save profiles
     drop(state_guard);
     let state_guard = state.lock().unwrap();
-    state_guard.save_profiles_to_store(&app)?;
+    state_guard.save_profiles_to_store()?;
 
     Ok(new_id)
 }
