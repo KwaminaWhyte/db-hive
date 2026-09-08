@@ -6,7 +6,8 @@ use dbhive_core::state::AppState;
 
 use crate::screens::{
     activity_monitor, backup, command_palette, connection_editor, connections, er_diagram,
-    migrations, settings, table_editor, table_inspector, workspace, Screen, Screens,
+    import_export, migrations, settings, table_editor, table_inspector, workspace, Screen,
+    Screens,
 };
 use crate::theme;
 
@@ -131,6 +132,7 @@ impl eframe::App for DbHiveApp {
         settings::show_window(self, ctx);
         migrations::show_window(self, ctx);
         backup::show_window(self, ctx);
+        import_export::show_window(self, ctx);
 
         if let Some(action) = connection_editor::show(self, ctx) {
             match action {
@@ -172,6 +174,14 @@ fn dispatch(app: &mut DbHiveApp, ctx: &egui::Context, id: command_palette::Comma
         C::GoSettings => app.screens.settings.open = true,
         C::GoMigrations => app.screens.migrations.open = true,
         C::GoActivityMonitor => app.screens.activity_monitor.open = true,
+        C::GoImportExport => match app.workspace.as_ref() {
+            Some(ws) => {
+                let schema = workspace::current_schema_or_database(ws);
+                let conn = ws.connection_id.clone();
+                app.screens.import_export.open_for(conn, schema);
+            }
+            None => app.toasts.info("Connect to a database first"),
+        },
         C::GoBackup => app.screens.backup.open = true,
         C::GoAiAssistant => {
             if app.workspace.is_some() {
