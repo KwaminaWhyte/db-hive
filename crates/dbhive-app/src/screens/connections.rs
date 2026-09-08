@@ -23,6 +23,8 @@ pub struct ConnectionsScreen {
     pub password_prompt: Option<PasswordPrompt>,
     /// Profile id most recently saved by the editor, for highlighting.
     pub last_saved: Option<String>,
+    /// Profile awaiting delete confirmation: (id, name).
+    pub deleting: Option<(String, String)>,
     pub connected: Vec<String>,
 }
 
@@ -152,6 +154,10 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     // list is borrowed, so the click is recorded and acted on afterwards.
     let mut to_connect: Option<String> = None;
     let mut to_disconnect: Option<String> = None;
+    let mut to_edit: Option<ConnectionProfile> = None;
+    let mut to_duplicate: Option<ConnectionProfile> = None;
+    let mut to_favorite: Option<String> = None;
+    let mut to_delete: Option<(String, String)> = None;
     let row_ctx = app_row_ctx(app);
 
     egui::ScrollArea::vertical().show(ui, |ui| {
@@ -160,6 +166,10 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                 RowAction::None => {}
                 RowAction::Connect => to_connect = Some(profile.id.clone()),
                 RowAction::Disconnect => to_disconnect = Some(profile.id.clone()),
+                RowAction::Edit => to_edit = Some(profile.clone()),
+                RowAction::Duplicate => to_duplicate = Some(profile.clone()),
+                RowAction::ToggleFavorite => to_favorite = Some(profile.id.clone()),
+                RowAction::Delete => to_delete = Some((profile.id.clone(), profile.name.clone())),
             }
         }
     });
@@ -193,6 +203,20 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         }
     }
 
+    if let Some(profile) = to_edit {
+        app.screens.connection_editor.open_edit(&profile);
+    }
+    if let Some(profile) = to_duplicate {
+        duplicate_profile(app, &profile);
+    }
+    if let Some(id) = to_favorite {
+        toggle_favorite(app, &id);
+    }
+    if let Some((id, name)) = to_delete {
+        app.connections.deleting = Some((id, name));
+    }
+
+    delete_confirm(app, ui.ctx());
     password_prompt(app, ui.ctx());
 
     if let Some(id) = to_disconnect {
@@ -201,6 +225,110 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         app.connections.disconnect_job.start(app.rt.handle(), ui.ctx(), async move {
             dbhive_core::service::disconnect(&state, &id).await
         });
+    }
+}
+
+/// Copy a profile under a new id and name.
+///
+/// The password is deliberately NOT copied: keyring entries are keyed by
+/// profile id, and silently duplicating a credential into a second entry the
+/// user did not ask for is not something to do quietly.
+fn duplicate_profile(app: &mut DbHiveApp, profile: &ConnectionProfile) {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    let mut copy = profile.clone();
+    copy.id = uuid::Uuid::new_v4().to_string();
+    copy.name = format!("{} (Copy)", profile.name);
+    copy.last_connected_at = None;
+    copy.connection_count = 0;
+    copy.created_at = now;
+    copy.updated_at = now;
+
+    let result = {
+        let mut guard = app.state.lock().unwrap();
+        guard.add_profile(copy);
+        guard.save_profiles_to_store()
+    };
+    match result {
+        Ok(()) => app.toasts.success("Connection duplicated"),
+        Err(e) => app.toasts.error(format!("Could not duplicate: {}", e)),
+    }
+}
+
+fn toggle_favorite(app: &mut DbHiveApp, id: &str) {
+    let result = {
+        let mut guard = app.state.lock().unwrap();
+        match guard.get_profile_mut(id) {
+            Some(p) => {
+                p.is_favorite = !p.is_favorite;
+                guard.save_profiles_to_store()
+            }
+            None => Ok(()),
+        }
+    };
+    if let Err(e) = result {
+        app.toasts.error(format!("Could not save: {}", e));
+    }
+}
+
+/// Confirm before removing a profile, naming what is going.
+fn delete_confirm(app: &mut DbHiveApp, ctx: &egui::Context) {
+    let Some((id, name)) = app.connections.deleting.clone() else {
+        return;
+    };
+    let palette = if matches!(app.mode, crate::theme::Mode::Dark) {
+        &crate::theme::DARK
+    } else {
+        &crate::theme::LIGHT
+    };
+
+    let mut confirmed = false;
+    let mut cancelled = false;
+    egui::Window::new("Delete connection")
+        .collapsible(false)
+        .resizable(false)
+        .anchor(egui::Align2::CENTER_CENTER, egui::vec2(0.0_f32, 0.0_f32))
+        .show(ctx, |ui| {
+            ui.label(crate::theme::text::strong(
+                palette,
+                format!("Delete \"{}\"?", name),
+            ));
+            ui.label(crate::theme::text::muted(
+                palette,
+                "The saved password is removed from the system keychain too.",
+            ));
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                if ui.button("Delete").clicked() {
+                    confirmed = true;
+                }
+                if ui.button("Cancel").clicked() {
+                    cancelled = true;
+                }
+            });
+        });
+
+    if cancelled {
+        app.connections.deleting = None;
+    }
+    if confirmed {
+        app.connections.deleting = None;
+        let result = {
+            let mut guard = app.state.lock().unwrap();
+            guard.remove_profile(&id);
+            guard.connection_passwords.remove(&id);
+            guard.save_profiles_to_store()
+        };
+        // Leaving the credential behind would keep a password for a profile
+        // that no longer exists, which the user cannot then see or clear.
+        let _ = dbhive_core::credentials::CredentialManager::delete_password(&id);
+        match result {
+            Ok(()) => app.toasts.success(format!("Deleted {}", name)),
+            Err(e) => app.toasts.error(format!("Could not delete: {}", e)),
+        }
     }
 }
 
@@ -285,6 +413,10 @@ pub enum RowAction {
     None,
     Connect,
     Disconnect,
+    Edit,
+    Duplicate,
+    ToggleFavorite,
+    Delete,
 }
 
 /// The bits of the app a row needs, split out so the row borrow does not
@@ -348,6 +480,30 @@ fn row(ctx: &RowCtx, ui: &mut egui::Ui, profile: &ConnectionProfile) -> RowActio
                     } else if ui.button("Connect").clicked() {
                         action = RowAction::Connect;
                     }
+                    ui.menu_button("⋯", |ui| {
+                        if ui.button("Edit…").clicked() {
+                            action = RowAction::Edit;
+                            ui.close_menu();
+                        }
+                        if ui.button("Duplicate").clicked() {
+                            action = RowAction::Duplicate;
+                            ui.close_menu();
+                        }
+                        let fav = if profile.is_favorite {
+                            "Remove from favourites"
+                        } else {
+                            "Add to favourites"
+                        };
+                        if ui.button(fav).clicked() {
+                            action = RowAction::ToggleFavorite;
+                            ui.close_menu();
+                        }
+                        ui.separator();
+                        if ui.button("Delete…").clicked() {
+                            action = RowAction::Delete;
+                            ui.close_menu();
+                        }
+                    });
                 });
             });
         });
