@@ -17,6 +17,8 @@ pub struct ConnectionsScreen {
     pub connect_job: Job<Result<String, DbError>>,
     pub disconnect_job: Job<Result<(), DbError>>,
     pub last_error: Option<String>,
+    /// Name of a connection started outside the list (see DBHIVE_AUTOCONNECT).
+    pub pending_name: Option<String>,
     pub connected: Vec<String>,
 }
 
@@ -53,11 +55,23 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         match result {
             Ok(id) => {
                 if !app.connections.connected.contains(&id) {
-                    app.connections.connected.push(id);
+                    app.connections.connected.push(id.clone());
                 }
                 app.connections.last_error = None;
+                let name = profiles
+                    .iter()
+                    .find(|p| p.id == id)
+                    .map(|p| p.name.clone())
+                    .or_else(|| app.connections.pending_name.take())
+                    .unwrap_or_else(|| id.clone());
+                app.toasts.success(format!("Connected to {}", name));
+                app.workspace = Some(crate::screens::workspace::Workspace::new(id, name));
+                app.screen = crate::screens::Screen::Workspace;
             }
-            Err(e) => app.connections.last_error = Some(e.to_string()),
+            Err(e) => {
+                app.connections.last_error = Some(e.to_string());
+                app.toasts.error(format!("Connection failed: {}", e));
+            }
         }
     }
 

@@ -186,3 +186,88 @@ pub fn load_persisted(state: &Mutex<AppState>) -> Result<(), DbError> {
     guard.load_snippets_from_store()?;
     Ok(())
 }
+
+/// Switch an open connection to a different database.
+///
+/// This reconnects rather than issuing a USE statement, because the drivers
+/// bind a database at connect time: `MysqlDriver::get_tables` ignores its
+/// schema argument entirely and reports `self.current_database`
+/// (`drivers/mysql.rs:168`), so nothing short of a new connection changes
+/// what the sidebar lists.
+///
+/// The connection id is preserved, so anything holding it keeps working.
+pub async fn switch_database(
+    state: &Mutex<AppState>,
+    connection_id: &str,
+    new_database: &str,
+) -> Result<String, DbError> {
+    let (profile, password) = {
+        let guard = state.lock().unwrap();
+        guard.get_connection(connection_id).ok_or_else(|| {
+            DbError::NotFound(format!("Connection with ID {} not found", connection_id))
+        })?;
+        let profile = guard
+            .get_profile(connection_id)
+            .ok_or_else(|| {
+                DbError::NotFound(format!("Profile for connection {} not found", connection_id))
+            })?
+            .clone();
+        let password = guard
+            .connection_passwords
+            .get(connection_id)
+            .cloned()
+            .ok_or_else(|| DbError::AuthError("Password not found for connection".to_string()))?;
+        (profile, password)
+    };
+
+    // Reuse the live tunnel if there is one rather than opening a second.
+    let (actual_host, actual_port) = if profile.ssh_tunnel.is_some() {
+        let tunnel_manager = state.lock().unwrap().ssh_tunnel_manager.clone();
+        match tunnel_manager.get_local_port(connection_id).await {
+            Some(local_port) => ("127.0.0.1".to_string(), local_port),
+            None => (profile.host.clone(), profile.port),
+        }
+    } else {
+        (profile.host.clone(), profile.port)
+    };
+
+    let opts = ConnectionOptions {
+        host: actual_host,
+        port: actual_port,
+        username: profile.username.clone(),
+        password: Some(password),
+        database: Some(new_database.to_string()),
+        timeout: Some(30),
+        require_tls: matches!(profile.driver, DbDriver::Supabase | DbDriver::Neon)
+            || (profile.driver.is_postgres_compatible() && profile.ssl_mode == SslMode::Require),
+    };
+
+    let new_connection: Arc<dyn DatabaseDriver> = match profile.driver {
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => {
+            Arc::new(PostgresDriver::connect(opts).await?)
+        }
+        DbDriver::Sqlite => Arc::new(SqliteDriver::connect(opts).await?),
+        DbDriver::MySql => Arc::new(MysqlDriver::connect(opts).await?),
+        DbDriver::MongoDb => Arc::new(MongoDbDriver::connect(opts).await?),
+        DbDriver::Turso => Arc::new(TursoDriver::connect(opts).await?),
+        DbDriver::Redis => Arc::new(RedisDriver::connect(opts).await?),
+        DbDriver::SqlServer => {
+            return Err(DbError::InternalError(
+                "Database switching not supported for this driver".to_string(),
+            ))
+        }
+    };
+
+    // Only drop the old connection once the new one is established, so a
+    // failed switch leaves the user still connected.
+    let old = state.lock().unwrap().remove_connection(connection_id);
+    if let Some(old) = old {
+        let _ = old.close().await;
+    }
+    state
+        .lock()
+        .unwrap()
+        .add_connection(connection_id.to_string(), new_connection);
+
+    Ok(connection_id.to_string())
+}

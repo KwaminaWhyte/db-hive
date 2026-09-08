@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use dbhive_core::state::AppState;
 
-use crate::screens::{connections, Screen};
+use crate::screens::{connections, workspace, Screen};
 use crate::theme;
 
 pub struct DbHiveApp {
@@ -15,10 +15,14 @@ pub struct DbHiveApp {
     pub mode: theme::Mode,
     pub screen: Screen,
     pub connections: connections::ConnectionsScreen,
+    pub workspace: Option<workspace::Workspace>,
+    pub toasts: crate::widgets::toast::Toasts,
     /// Set when startup could not read the saved data. Shown in the UI
     /// rather than only printed, since it means the user's connections are
     /// missing and they need to know why.
     pub startup_error: Option<String>,
+    /// Profile to open at startup, from DBHIVE_AUTOCONNECT.
+    autoconnect: Option<(String, String)>,
 }
 
 impl DbHiveApp {
@@ -40,13 +44,27 @@ impl DbHiveApp {
         let mode = theme::Mode::Dark;
         theme::apply(&cc.egui_ctx, mode);
 
+        // Development aid: DBHIVE_AUTOCONNECT=<profile name> opens that
+        // connection at startup, so the workspace can be exercised without
+        // clicking through the connection list. Unset in normal use.
+        let autoconnect = std::env::var("DBHIVE_AUTOCONNECT").ok().and_then(|wanted| {
+            let g = state.lock().unwrap();
+            g.list_profiles()
+                .into_iter()
+                .find(|p| p.name == wanted)
+                .map(|p| (p.id.clone(), p.name.clone()))
+        });
+
         Self {
             rt,
             state,
             mode,
             screen: Screen::Connections,
             connections: connections::ConnectionsScreen::default(),
+            workspace: None,
+            toasts: crate::widgets::toast::Toasts::default(),
             startup_error,
+            autoconnect,
         }
     }
 }
@@ -54,6 +72,19 @@ impl DbHiveApp {
 impl eframe::App for DbHiveApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         top_bar(self, ctx);
+
+        if let Some((id, name)) = self.autoconnect.take() {
+            self.connections.connecting = Some(id.clone());
+            let state = self.state.clone();
+            let handle = self.rt.handle().clone();
+            self.connections.pending_name = Some(name);
+            self.connections.connect_job.start(&handle, ctx, async move {
+                dbhive_core::service::connect(&state, id, String::new(), None).await
+            });
+        }
+
+        let palette = self.mode.palette();
+        self.toasts.show(ctx, palette);
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(err) = self.startup_error.clone() {
@@ -69,6 +100,7 @@ impl eframe::App for DbHiveApp {
 
             match self.screen {
                 Screen::Connections => connections::show(self, ui),
+                Screen::Workspace => workspace::show(self, ui),
             }
         });
     }

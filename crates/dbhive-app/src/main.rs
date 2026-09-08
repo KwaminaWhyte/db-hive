@@ -10,6 +10,7 @@
 mod app;
 mod screens;
 mod task;
+mod widgets;
 mod theme;
 
 use app::DbHiveApp;
