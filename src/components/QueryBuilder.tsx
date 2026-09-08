@@ -5,6 +5,10 @@
  * Provides a split view with query builder controls and real-time SQL preview.
  */
 
+// Configures @monaco-editor/react to use the locally bundled Monaco.
+// Must be evaluated before the editor module below. Lives here rather
+// than main.tsx so Monaco loads with this chunk, not at app boot.
+import "@/lib/monacoLoader";
 import { FC, useState, useMemo, useCallback } from 'react';
 import Editor from '@monaco-editor/react';
 import {

@@ -188,6 +188,12 @@ impl AppState {
 
     /// Remove an active database connection
     ///
+    /// Also drops the connection's metadata cache. That cache holds every
+    /// column of every table of every schema the user browsed, so on a wide
+    /// database it is the largest thing keyed by connection id. Keeping it
+    /// past disconnect bought nothing: `MetadataCache::is_stale` expires it
+    /// after 5 minutes, so a later reconnect refetches in the common case.
+    ///
     /// # Arguments
     ///
     /// * `id` - Connection identifier to remove
@@ -196,6 +202,7 @@ impl AppState {
     ///
     /// The removed connection if it existed, `None` otherwise
     pub fn remove_connection(&mut self, id: &str) -> Option<Arc<dyn DatabaseDriver>> {
+        self.metadata_cache.remove(id);
         self.connections.remove(id)
     }
 

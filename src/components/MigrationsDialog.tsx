@@ -7,6 +7,10 @@
  *   3. Preview generated SQL and apply
  */
 
+// Configures @monaco-editor/react to use the locally bundled Monaco.
+// Must be evaluated before the editor module below. Lives here rather
+// than main.tsx so Monaco loads with this chunk, not at app boot.
+import "@/lib/monacoLoader";
 import { FC, useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Editor from "@monaco-editor/react";

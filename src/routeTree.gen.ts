@@ -222,7 +222,7 @@ declare module '@tanstack/react-router' {
     '/_connected': {
       id: '/_connected'
       path: ''
-      fullPath: ''
+      fullPath: '/'
       preLoaderRoute: typeof ConnectedRouteRouteImport
       parentRoute: typeof rootRouteImport
     }

@@ -9,7 +9,7 @@
  * `/plugins`) are intentionally left intact for URL deep-linking.
  */
 
-import { useState } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,12 +23,28 @@ import { AboutContent } from "@/components/AboutContent";
 import { SettingsPage } from "@/components/SettingsPage";
 import { InstalledPlugins } from "@/components/InstalledPlugins";
 import { PluginMarketplace } from "@/components/PluginMarketplace";
-import { MigrationsDialog } from "@/components/MigrationsDialog";
+
+// MigrationsDialog embeds a Monaco editor. It is mounted at the app root, so
+// a static import would drag Monaco into the boot chunk for every window.
+const MigrationsDialog = lazy(() =>
+  import("@/components/MigrationsDialog").then((m) => ({
+    default: m.MigrationsDialog,
+  }))
+);
 import { BackupManagerDialog } from "@/components/BackupManagerDialog";
 import { useAppModal, setAppModal } from "@/store/useAppModal";
 
 export function GlobalModals() {
   const modal = useAppModal();
+
+  // Mount the migrations dialog only after it has first been opened, then
+  // leave it mounted so its close animation still runs. Rendering it
+  // unconditionally would fetch the Monaco chunk on app start, which is the
+  // whole thing the lazy import above avoids.
+  const [migrationsMounted, setMigrationsMounted] = useState(false);
+  useEffect(() => {
+    if (modal === "migrations") setMigrationsMounted(true);
+  }, [modal]);
 
   const handleOpenChange = (open: boolean) => {
     if (!open) setAppModal(null);
@@ -64,10 +80,14 @@ export function GlobalModals() {
       </Dialog>
 
       {/* Schema Migrations Modal */}
-      <MigrationsDialog
-        open={modal === "migrations"}
-        onOpenChange={handleOpenChange}
-      />
+      {migrationsMounted && (
+        <Suspense fallback={null}>
+          <MigrationsDialog
+            open={modal === "migrations"}
+            onOpenChange={handleOpenChange}
+          />
+        </Suspense>
+      )}
 
       {/* Backup Manager Modal */}
       <BackupManagerDialog

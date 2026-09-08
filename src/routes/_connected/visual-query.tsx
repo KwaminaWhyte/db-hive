@@ -7,9 +7,14 @@
 
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useConnectionContext } from '@/contexts/ConnectionContext';
-import { QueryBuilder } from '@/components/QueryBuilder';
-import { useCallback } from 'react';
+import { useCallback, lazy, Suspense } from 'react';
 import { toast } from 'sonner';
+import { Spinner } from '@/components/ui/spinner';
+
+// QueryBuilder embeds Monaco for its SQL preview pane.
+const QueryBuilder = lazy(() =>
+  import('@/components/QueryBuilder').then((m) => ({ default: m.QueryBuilder }))
+);
 
 export const Route = createFileRoute('/_connected/visual-query')({
   component: VisualQueryBuilderPage,
@@ -17,6 +22,18 @@ export const Route = createFileRoute('/_connected/visual-query')({
     return search;
   },
 });
+
+function RouteChunkFallback({ label }: { label: string }) {
+  return (
+    <div
+      role="status"
+      aria-label={label}
+      className="flex h-full w-full items-center justify-center"
+    >
+      <Spinner className="size-6 text-muted-foreground" />
+    </div>
+  );
+}
 
 function VisualQueryBuilderPage() {
   const navigate = useNavigate();
@@ -122,12 +139,14 @@ function VisualQueryBuilderPage() {
 
   return (
     <div className="h-full">
-      <QueryBuilder
-        connectionId={connectionId}
-        driver={connectionProfile.driver}
-        currentDatabase={currentDatabase}
-        onExecute={handleExecute}
-      />
+      <Suspense fallback={<RouteChunkFallback label="Loading query builder" />}>
+        <QueryBuilder
+          connectionId={connectionId}
+          driver={connectionProfile.driver}
+          currentDatabase={currentDatabase}
+          onExecute={handleExecute}
+        />
+      </Suspense>
     </div>
   );
 }

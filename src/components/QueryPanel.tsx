@@ -1,6 +1,5 @@
-import { FC, useState, useEffect, useRef, useCallback } from 'react';
+import { FC, useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { SQLEditor } from './SQLEditor';
 import { ResultsViewer } from './ResultsViewer';
 import { QueryPlanVisualizer, parseExplainJson } from './QueryPlanVisualizer';
 import type { QueryPlanResult } from '@/types/database';
@@ -17,6 +16,12 @@ import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 import { GripHorizontal, GripVertical, Sparkles } from 'lucide-react';
 import { QueryStatusBar } from './QueryStatusBar';
+
+// Monaco is ~75% of the JS bundle. Splitting SQLEditor out keeps it off the
+// app-boot path so windows that never open a query view never pay for it.
+const SQLEditor = lazy(() =>
+  import('./SQLEditor').then((m) => ({ default: m.SQLEditor }))
+);
 import { ConnectionLostError } from './ConnectionLostError';
 import { useNavigate } from '@tanstack/react-router';
 import { useSchemaContext } from '@/hooks/useSchemaContext';
@@ -421,14 +426,24 @@ export const QueryPanel: FC<QueryPanelProps> = ({
           {/* SQL Editor Panel */}
           <Panel defaultSize={40} minSize={20} className="relative flex flex-col">
             <div className="flex-1 overflow-hidden flex flex-col">
-              <SQLEditor
-                connectionId={connectionId}
-                database={currentDatabase || null}
-                onExecuteQuery={handleExecute}
-                value={sql}
-                onChange={(value) => setSql(value || '')}
-                loading={loading}
-              />
+              <Suspense
+                fallback={
+                  <div
+                    role="status"
+                    aria-label="Loading SQL editor"
+                    className="flex-1 bg-muted/20 animate-pulse"
+                  />
+                }
+              >
+                <SQLEditor
+                  connectionId={connectionId}
+                  database={currentDatabase || null}
+                  onExecuteQuery={handleExecute}
+                  value={sql}
+                  onChange={(value) => setSql(value || '')}
+                  loading={loading}
+                />
+              </Suspense>
             </div>
           </Panel>
 
@@ -510,8 +525,11 @@ export const QueryPanel: FC<QueryPanelProps> = ({
       {/* Right Sidebar - History, Snippets, and Templates */}
       <Panel defaultSize={30} minSize={20} maxSize={50}>
         <Tabs defaultValue="history" className="h-full flex flex-col">
-          <div className="border-b px-4 shrink-0">
-            <TabsList className="h-10">
+          {/* Scrolls horizontally rather than clipping: this panel is
+              user-resizable, and at narrow widths the trailing "AI" tab was
+              cut off with no way to reach it. */}
+          <div className="border-b px-4 shrink-0 overflow-x-auto">
+            <TabsList className="h-10 w-max">
               <TabsTrigger value="history">History</TabsTrigger>
               <TabsTrigger value="snippets">Snippets</TabsTrigger>
               <TabsTrigger value="templates">Templates</TabsTrigger>

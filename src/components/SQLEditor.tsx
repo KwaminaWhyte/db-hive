@@ -1,3 +1,7 @@
+// Configures @monaco-editor/react to use the locally bundled Monaco.
+// Must be evaluated before the editor module below. Lives here rather
+// than main.tsx so Monaco loads with this chunk, not at app boot.
+import "@/lib/monacoLoader";
 import { FC, useRef, useEffect } from 'react';
 import Editor, { Monaco } from '@monaco-editor/react';
 import { useTheme } from './theme-provider';

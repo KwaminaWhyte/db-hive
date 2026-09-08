@@ -5,7 +5,7 @@
  * performance metrics, and activity statistics.
  */
 
-import { FC, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { FC, useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   RefreshCw,
@@ -63,7 +63,14 @@ import type {
   QueryStatus,
 } from '@/types/activity';
 import { ProcessList } from './activityMonitor/ProcessList';
-import { ServerMetricsChart } from './activityMonitor/ServerMetricsChart';
+
+// Shares the recharts chunk with ResultsChart; whichever view opens first
+// pays the download, the second reuses it.
+const ServerMetricsChart = lazy(() =>
+  import('./activityMonitor/ServerMetricsChart').then((m) => ({
+    default: m.ServerMetricsChart,
+  }))
+);
 
 interface ActivityMonitorProps {
   /** Optional initial connection ID filter */
@@ -592,7 +599,17 @@ export const ActivityMonitor: FC<ActivityMonitorProps> = ({ connectionId }) => {
                         <div className="text-xs font-medium mb-2 text-muted-foreground">
                           Server Metrics
                         </div>
-                        <ServerMetricsChart connectionId={filters.connectionId} />
+                        <Suspense
+                          fallback={
+                            <div
+                              role="status"
+                              aria-label="Loading server metrics"
+                              className="h-40 rounded bg-muted/20 animate-pulse"
+                            />
+                          }
+                        >
+                          <ServerMetricsChart connectionId={filters.connectionId} />
+                        </Suspense>
                       </div>
                       <Separator />
                       <div>

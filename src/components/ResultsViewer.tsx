@@ -1,4 +1,4 @@
-import { FC, useMemo, useState, useCallback, useRef, memo } from "react";
+import { FC, useMemo, useState, useCallback, useRef, memo, lazy, Suspense } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -31,7 +31,12 @@ import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { toast } from "sonner";
 import { QueryErrorState } from "./QueryErrorState";
 import { NoResultsEmpty } from "./empty-states";
-import { ResultsChart } from "./ResultsChart";
+
+// recharts is only reachable through the chart tab, which Radix unmounts
+// while inactive, so the chunk is fetched the first time a user opens it.
+const ResultsChart = lazy(() =>
+  import("./ResultsChart").then((m) => ({ default: m.ResultsChart }))
+);
 
 /** Maximum number of rows rendered in the JSON/Raw text views */
 const MAX_TEXT_VIEW_ROWS = 2000;
@@ -709,7 +714,17 @@ const ResultsViewerComponent: FC<ResultsViewerProps> = ({
 
           {/* Chart View */}
           <TabsContent value="chart" className="flex-1 m-0 overflow-hidden">
-            <ResultsChart columns={columns} rows={rows} />
+            <Suspense
+              fallback={
+                <div
+                  role="status"
+                  aria-label="Loading chart"
+                  className="h-full bg-muted/20 animate-pulse"
+                />
+              }
+            >
+              <ResultsChart columns={columns} rows={rows} />
+            </Suspense>
           </TabsContent>
         </Tabs>
       </CardContent>
