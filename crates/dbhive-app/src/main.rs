@@ -1,8 +1,18 @@
 //! DB Hive native shell.
 //!
-//! Replaces the Tauri + React shell with a native egui UI. All database
-//! logic lives in `dbhive-core` and is shared with the Tauri shell until
-//! that shell is removed at parity.
+//! A standalone cross-platform desktop binary. No WebView, no Tauri: eframe
+//! opens a native window and egui draws into it, on macOS, Windows and
+//! Linux from one codebase.
+//!
+//! All database logic lives in `dbhive-core` and is shared with the Tauri
+//! shell until that shell is removed at parity.
+
+mod app;
+mod screens;
+mod task;
+mod theme;
+
+use app::DbHiveApp;
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -16,18 +26,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "DB Hive",
         options,
-        Box::new(|_cc| Ok(Box::new(DbHiveApp::default()))),
+        Box::new(|cc| Ok(Box::new(DbHiveApp::new(cc)))),
     )
-}
-
-#[derive(Default)]
-struct DbHiveApp {}
-
-impl eframe::App for DbHiveApp {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("DB Hive");
-            ui.label("Native shell bootstrapping.");
-        });
-    }
 }

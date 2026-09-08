@@ -19,6 +19,7 @@ pub mod ddl;
 pub mod drivers;
 pub mod migrations;
 pub mod models;
+pub mod service;
 pub mod ssh;
 pub mod state;
 pub mod storage;
