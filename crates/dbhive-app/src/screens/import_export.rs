@@ -826,7 +826,7 @@ fn dump_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, connectio
             ui.label("Tables");
             ui.add(
                 egui::TextEdit::singleline(&mut s.dump_tables_input)
-                    .hint_text("users, orders — leave empty for every table")
+                    .hint_text("users, orders: leave empty for every table")
                     .desired_width(360.0),
             );
         });
@@ -1350,14 +1350,14 @@ fn step_mapping(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
 
                     egui::ComboBox::from_id_salt(("ie_map_target", i))
                         .selected_text(if m.target_column.is_empty() {
-                            "—".to_string()
+                            "-".to_string()
                         } else {
                             m.target_column.clone()
                         })
                         .width(170.0)
                         .show_ui(ui, |ui| {
                             if ui
-                                .selectable_label(m.target_column.is_empty(), "—")
+                                .selectable_label(m.target_column.is_empty(), "-")
                                 .clicked()
                             {
                                 m.target_column.clear();

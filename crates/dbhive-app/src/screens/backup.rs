@@ -81,14 +81,14 @@ pub fn format_duration(d: Duration) -> String {
 /// what `list_backups` reports for a file with no readable mtime.
 pub fn format_timestamp(unix_secs: i64) -> String {
     if unix_secs <= 0 {
-        return "—".to_string();
+        return "-".to_string();
     }
     match chrono::DateTime::from_timestamp(unix_secs, 0) {
         Some(dt) => dt
             .with_timezone(&chrono::Local)
             .format("%Y-%m-%d %H:%M")
             .to_string(),
-        None => "—".to_string(),
+        None => "-".to_string(),
     }
 }
 
@@ -674,7 +674,7 @@ fn create_panel(
             Some((_, name, driver)) => {
                 ui.label(text::muted(
                     palette,
-                    format!("{} ({:?}) — via {}", name, driver, svc::backup_tool(driver)),
+                    format!("{} ({:?}): via {}", name, driver, svc::backup_tool(driver)),
                 ));
             }
             None => {
@@ -1136,8 +1136,8 @@ mod tests {
 
     #[test]
     fn unknown_timestamps_render_as_a_dash() {
-        assert_eq!(format_timestamp(0), "—");
-        assert_eq!(format_timestamp(-1), "—");
+        assert_eq!(format_timestamp(0), "-");
+        assert_eq!(format_timestamp(-1), "-");
         // A real timestamp formats to a local date; only the shape is stable
         // across machines.
         let s = format_timestamp(1_700_000_000);

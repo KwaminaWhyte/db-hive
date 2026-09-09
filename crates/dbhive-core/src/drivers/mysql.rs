@@ -72,7 +72,7 @@ impl DatabaseDriver for MysqlDriver {
             .user(Some(user))
             .pass(Some(password))
             .db_name(Some(database))
-            .max_allowed_packet(Some(1073741824)); // 1GB — needed for large mysqldump imports
+            .max_allowed_packet(Some(1073741824)); // 1GB: needed for large mysqldump imports
 
         let pool = Pool::new(opts_builder.clone());
 
@@ -130,7 +130,7 @@ impl DatabaseDriver for MysqlDriver {
             // DML statement (INSERT, UPDATE, DELETE, SET, etc.)
             let affected_rows = result.affected_rows();
 
-            // REQUIRED: same reason as above — must always call drop_result()
+            // REQUIRED: same reason as above: must always call drop_result()
             result.drop_result().await.map_err(Self::map_mysql_error)?;
 
             Ok(QueryResult::with_affected(affected_rows))

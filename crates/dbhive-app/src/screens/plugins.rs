@@ -2,7 +2,7 @@
 //! plugin describes.
 //!
 //! Parity target: the React `PluginsRoute` (2.13 in
-//! docs/rust-ui-migration/01-frontend-inventory.md) — `PluginMarketplace`,
+//! docs/rust-ui-migration/01-frontend-inventory.md): `PluginMarketplace`,
 //! `InstalledPlugins`, `PluginToolbar` and `PluginContext`.
 //!
 //! # The one thing that had to change
@@ -24,7 +24,7 @@
 //!
 //! Can: draw from the fixed vocabulary, receive events for controls it
 //! declared, read and write its own data directory, raise notifications, make
-//! guarded http/https requests, use the clipboard — each only if its manifest
+//! guarded http/https requests, use the clipboard: each only if its manifest
 //! declares the matching permission.
 //!
 //! Cannot: reach a database, connection, credential or driver; touch any file

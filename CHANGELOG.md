@@ -60,17 +60,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Backup Manager UI**: New `<BackupManagerDialog>` driving the existing backup commands. Opened from the titlebar View menu ("Backup Manager") via the `useAppModal` store (modal key `"backup"`, rendered in `GlobalModals`). Header shows the backup directory with Open Folder (`open_backup_directory`) + Refresh. Create panel: Include Schema / Include Data checkboxes, optional note, slow-op loading state, disabled with hint when no active connection or nothing selected. Backups list: shadcn table (file, connection, driver badge, human-readable size, created date, status) with per-row Restore (destructive `AlertDialog` + "Drop & recreate database first" checkbox bound to `dropExisting`) and Delete (confirm → `delete_backup`). Operates on the active connection via `useConnectionContext`; errors surfaced through `sonner`.
 
-- **Redis Key Browser (left sidebar)**: For Redis connections the left schema tree is replaced by `<RedisSchemaTree>` — five collapsible key-type groups (Strings/Hashes/Lists/Sets/Sorted Sets) that lazy-load via a server-side type-filtered `SCAN <cursor> MATCH <pattern> COUNT 300 TYPE <t>` (no per-key TYPE calls), honour the SchemaExplorer search box as a glob pattern, de-dupe, and offer "Load more…" until the cursor exhausts. Clicking a key opens its value in a main-area tab (`<RedisValuePanel>`, tab id `rediskey-{encodeURIComponent(key)}`, rebuildable by the query route's URL-sync recreation): copyable key name, type badge, TTL label, type-appropriate rendering (string with JSON pretty-print, hash, list, set, zset), Refresh, and per-key Delete (`DEL`) behind a destructive `AlertDialog`. New TabContext tab type `"redis"` (+ `redisKey`). Everything runs through the Redis driver's raw-command `execute_query`. (Supersedes the earlier titlebar-menu `/redis-keys` two-pane browser, which was removed.)
+- **Redis Key Browser (left sidebar)**: For Redis connections the left schema tree is replaced by `<RedisSchemaTree>`: five collapsible key-type groups (Strings/Hashes/Lists/Sets/Sorted Sets) that lazy-load via a server-side type-filtered `SCAN <cursor> MATCH <pattern> COUNT 300 TYPE <t>` (no per-key TYPE calls), honour the SchemaExplorer search box as a glob pattern, de-dupe, and offer "Load more…" until the cursor exhausts. Clicking a key opens its value in a main-area tab (`<RedisValuePanel>`, tab id `rediskey-{encodeURIComponent(key)}`, rebuildable by the query route's URL-sync recreation): copyable key name, type badge, TTL label, type-appropriate rendering (string with JSON pretty-print, hash, list, set, zset), Refresh, and per-key Delete (`DEL`) behind a destructive `AlertDialog`. New TabContext tab type `"redis"` (+ `redisKey`). Everything runs through the Redis driver's raw-command `execute_query`. (Supersedes the earlier titlebar-menu `/redis-keys` two-pane browser, which was removed.)
 
 - **Foreign-Key Drill-Down**: Hovering a foreign-key cell in the Table Inspector reveals an external-link button; a "Open Referenced Record" entry is also added to the cell context menu. Activating it opens a new tab on the referenced table pre-filtered to the related row. `TableInspector` now fetches `get_foreign_keys` on schema load and maps FK columns → referenced schema/table/column. New props `initialFilter` (seeds an `equals` filter row + auto-opens the filter bar) and `onOpenRelated`. Drill-down tabs use a deterministic `tablefk-{schema}.{table}::{column}::{encodeURIComponent(value)}` id so the URL-sync recreation can rebuild them authoritatively (schema/table/column/value + filter) even if pruned before the URL syncs; re-clicking the same FK focuses the existing tab instead of duplicating it. `ForeignKeyInfo` is now re-exported from `@/types`.
 
 ### Fixed (2026-05-17)
 
-- **Foreign-key tab "db error"**: FK drill-down tabs were created with a `table-…-fk{ts}` id that the URL-sync recreation re-parsed via `replace("table-","").split(".")`, yielding a non-existent table name (e.g. `forms-fk1779022533436`) and dropping the filter — producing `Query execution failed: db error`. Switched to a self-describing `tablefk-` id with a dedicated recreation branch that decodes schema/table/column/value and restores the filter.
+- **Foreign-key tab "db error"**: FK drill-down tabs were created with a `table-…-fk{ts}` id that the URL-sync recreation re-parsed via `replace("table-","").split(".")`, yielding a non-existent table name (e.g. `forms-fk1779022533436`) and dropping the filter: producing `Query execution failed: db error`. Switched to a self-describing `tablefk-` id with a dedicated recreation branch that decodes schema/table/column/value and restores the filter.
 
 - **Keyset cursor SQL bug**: `get_table_data_keyset` interpolated the cursor via `serde_json::Value::to_string()`, emitting double-quoted string literals (invalid SQL in every engine) and breaking entirely for UUID / date / timestamp cursor columns. Replaced with a type-aware `cursor_sql_literal` that emits standard single-quoted, `'`-escaped literals.
 
-- **Test harness compile errors**: `commands/schema.rs` unit tests called `State::from(&Mutex<…>)`, which does not exist — the entire `cargo test --lib` target failed to compile, so *no* Rust test could run. Tests now build a `tauri::test::mock_app()` (new `tauri` `test` dev-feature) and obtain a real `State<'_, _>` via `app.state()`. Full suite restored: 118 tests run, 115 pass (the 3 `credentials` failures are environmental — no OS keyring in headless runs).
+- **Test harness compile errors**: `commands/schema.rs` unit tests called `State::from(&Mutex<…>)`, which does not exist: the entire `cargo test --lib` target failed to compile, so *no* Rust test could run. Tests now build a `tauri::test::mock_app()` (new `tauri` `test` dev-feature) and obtain a real `State<'_, _>` via `app.state()`. Full suite restored: 118 tests run, 115 pass (the 3 `credentials` failures are environmental: no OS keyring in headless runs).
 
 ### Performance (2026-05-17)
 
@@ -86,11 +86,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Non-blocking log export**: `export_query_logs` no longer calls `std::fs::write` on the async runtime; the serialized payload is written via `tokio::task::spawn_blocking`, and the state `MutexGuard` is dropped before the await.
 
-- **ActivityMonitor refetch decoupling**: split the single init effect so `fetchMetadata` (lists connection profiles + databases) no longer re-runs on every pagination / sort change — it now fires only on mount and `connectionId` change. Logs/stats refetch behavior unchanged.
+- **ActivityMonitor refetch decoupling**: split the single init effect so `fetchMetadata` (lists connection profiles + databases) no longer re-runs on every pagination / sort change: it now fires only on mount and `connectionId` change. Logs/stats refetch behavior unchanged.
 
 - **Vite vendor code-splitting**: added `build.rollupOptions.manualChunks` splitting `monaco` / `dagre` / `reactflow` / `radix` / `react-vendor` / `icons` / `tanstack` into separate chunks (was one combined bundle); `__APP_VERSION__` injection preserved.
 
-- **TableInspector keyset pagination**: when a table has exactly one primary-key column and the driver is not MongoDB, the data grid pages via the (now filter/sort-aware) `get_table_data_keyset` with a per-page cursor stack and First/Prev/Next controls — deep pages become index seeks instead of `OFFSET` scan-and-discard. Falls back to the original numbered-`OFFSET` path (with its deep-offset guard) for MongoDB / no-or-composite PK so the column-filter and FK drill-down features cannot regress.
+- **TableInspector keyset pagination**: when a table has exactly one primary-key column and the driver is not MongoDB, the data grid pages via the (now filter/sort-aware) `get_table_data_keyset` with a per-page cursor stack and First/Prev/Next controls: deep pages become index seeks instead of `OFFSET` scan-and-discard. Falls back to the original numbered-`OFFSET` path (with its deep-offset guard) for MongoDB / no-or-composite PK so the column-filter and FK drill-down features cannot regress.
 
 ### Added (2026-05-15)
 
@@ -128,7 +128,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **OpenRouter AI Provider** (dbpro parity): New `AiProviderType::OpenRouter` routes through `openrouter.ai/api/v1/chat/completions` with `HTTP-Referer` + `X-Title` headers. Default model `anthropic/claude-3.5-sonnet`; model field accepts the full FQID format (e.g. `openai/gpt-4o`, `google/gemini-2.0-flash-exp`). Settings entry in `AiAssistant` with link to openrouter.ai/keys.
 
-- **Activity Monitor — Real-time Process List & Server Metrics**: New Tauri commands `get_active_queries`, `kill_query`, `get_server_stats` driven by connection-profile driver type. PostgreSQL via `pg_stat_activity` / `pg_stat_database`; MySQL via `information_schema.PROCESSLIST` / `SHOW GLOBAL STATUS`. New `<ProcessList>` (polls 2s, per-row cancel) and `<ServerMetricsChart>` (60-sample rolling recharts line chart) in `src/components/activityMonitor/`. SQLite / MongoDB / SQL Server / Turso return `InvalidInput` and the UI shows a "Not supported" state.
+- **Activity Monitor: Real-time Process List & Server Metrics**: New Tauri commands `get_active_queries`, `kill_query`, `get_server_stats` driven by connection-profile driver type. PostgreSQL via `pg_stat_activity` / `pg_stat_database`; MySQL via `information_schema.PROCESSLIST` / `SHOW GLOBAL STATUS`. New `<ProcessList>` (polls 2s, per-row cancel) and `<ServerMetricsChart>` (60-sample rolling recharts line chart) in `src/components/activityMonitor/`. SQLite / MongoDB / SQL Server / Turso return `InvalidInput` and the UI shows a "Not supported" state.
 
 - **Table Editor for Existing Tables**: New `<TableEditDialog>` loads a table's schema and lets the user add/rename/drop columns, toggle nullability, and preview the generated `ALTER TABLE` SQL before committing. Wired to SchemaExplorer and the TableInspector Columns tab.
 
@@ -142,7 +142,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `src-tauri/src/migrations/` module: `diff.rs` (pure `compute_diff(source, target) -> SchemaDiff`) and `sql_gen.rs` (driver-aware SQL emission reusing the existing DDL generators).
   - Tauri commands `compute_schema_diff`, `generate_migration`, `apply_migration` (transactional by default with rollback on first error; returns `ApplyResult`).
   - New `<MigrationsDialog>` with source/target pickers, diff preview grouped by added/removed/modified tables, Monaco SQL preview, and Apply-with-confirmation. Entry point added to the command palette ("Schema Migrations...").
-  - Coverage: PostgreSQL / Supabase / Neon full; MySQL columns + indexes + FKs; SQL Server type/nullable via `ALTER COLUMN`; SQLite + Turso CREATE/DROP + ADD/DROP column + indexes + FKs (no ALTER COLUMN TYPE — emits a `-- no-op` comment since SQLite doesn't support it). MongoDB rejected with `InvalidInput`.
+  - Coverage: PostgreSQL / Supabase / Neon full; MySQL columns + indexes + FKs; SQL Server type/nullable via `ALTER COLUMN`; SQLite + Turso CREATE/DROP + ADD/DROP column + indexes + FKs (no ALTER COLUMN TYPE: emits a `-- no-op` comment since SQLite doesn't support it). MongoDB rejected with `InvalidInput`.
   - Known gaps: no column-rename detection (treated as drop+add), no check-constraint diffing, no view/trigger/sequence diffing, no FK `ON DELETE` action change detection on same-named FKs, cross-table FKs between two newly-added tables are omitted.
 
 - **Real Database Brand Icons**: New shared `<DatabaseBrandIcon />` component replaces the custom abbreviation tiles (`PG`, `My`, `Sb`, etc.) with official brand logos via `react-icons/si`. Covered: PostgreSQL, MySQL, MariaDB, SQLite, MongoDB, Supabase, Redis, Turso. SQL Server and Neon fall back to the lucide `Database` icon in their brand colors (no simple-icons asset available). Used in the new-connection picker, saved-connections list, connection-form header, and `ConnectionCard`.
@@ -154,8 +154,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Frontend `DbDriver` union, `getDefaultPort`, and `getDriverDisplayName` extended for the new drivers.
 - New-connection picker (`routes/index.tsx`) marks Supabase and Neon tiles as available with correct colors and icons.
 - **Create Table Dialog Width**: Increased the dialog's max-width from `max-w-4xl` (~896px) to a responsive `min(1280px, 95vw)` so the column grid, constraint cards, and SQL preview have room to breathe on larger screens.
-- **`useKeyboardShortcuts` Hardening**: The hook now skips empty-string bindings (so unbound shortcuts no longer crash the matcher) and on macOS automatically remaps a stored `Ctrl+X` binding to `Cmd+X` so a single stored value works across platforms — replaces the old workaround of registering both variants explicitly.
-- **Command Palette Placement**: Titlebar search trigger no longer stretches/clips at the right edge — centered with a `max-w-[360px]` cap, truncating label, and balanced spacer on macOS.
+- **`useKeyboardShortcuts` Hardening**: The hook now skips empty-string bindings (so unbound shortcuts no longer crash the matcher) and on macOS automatically remaps a stored `Ctrl+X` binding to `Cmd+X` so a single stored value works across platforms: replaces the old workaround of registering both variants explicitly.
+- **Command Palette Placement**: Titlebar search trigger no longer stretches/clips at the right edge: centered with a `max-w-[360px]` cap, truncating label, and balanced spacer on macOS.
 - **Home Screen**: Branding panel now hides on narrow windows (`md:` breakpoint); connections panel takes full width. Search placeholder corrected to "Search connections...". Footer version bumped to match `package.json`.
 - **Database Picker**: Tile grid is now responsive (`grid-cols-1 sm:grid-cols-2`). Neon color darkened from `#00E699` to `#00A88E` for WCAG-compliant white-text contrast.
 - **Connection Form**: Required-field asterisks on Name / Host / Username / SQLite path. Split `loading` into separate `testing` / `saving` flags so each button shows its own label. Test-connection failures render in a destructive banner instead of the green success style.
@@ -165,7 +165,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Exhaustive `DbDriver` Matches**: All `match` arms over `DbDriver` (in `commands::connection`, `commands::ddl`, `commands::export`, `ddl::get_ddl_generator`) now handle every variant explicitly. Previously any new driver would have caused a non-exhaustive-match build error; the new fallbacks return clear `InvalidInput` / `InternalError` messages where the operation is genuinely not applicable.
 - **Empty Home Screen**: Plain-text empty state replaced with icon + headline + "New Connection" CTA.
-- **Topbar Items Destroy Work**: Opening Settings, About, or Plugin Manager from the titlebar menus (or from the command palette, or via `Ctrl+,` / `⌘+,`) no longer navigates away from the current route — they now open as global modal dialogs overlaid on whatever you're doing (query editor, table inspector, etc.). A new lightweight modal store (`src/store/useAppModal.ts`) coordinates which modal is open; `<GlobalModals />` is mounted once at the app root. Routes `/settings`, `/about`, and `/plugins` remain intact for URL deep-linking.
+- **Topbar Items Destroy Work**: Opening Settings, About, or Plugin Manager from the titlebar menus (or from the command palette, or via `Ctrl+,` / `⌘+,`) no longer navigates away from the current route: they now open as global modal dialogs overlaid on whatever you're doing (query editor, table inspector, etc.). A new lightweight modal store (`src/store/useAppModal.ts`) coordinates which modal is open; `<GlobalModals />` is mounted once at the app root. Routes `/settings`, `/about`, and `/plugins` remain intact for URL deep-linking.
 - **Command Palette Not Centered**: Trigger is now absolute-positioned (`left-1/2 -translate-x-1/2`), truly centered on the titlebar regardless of left/right group widths.
 - **Topbar Shows Connection-Only Items When Disconnected**: View menu now hides SQL Editor / Visual Query Builder / Activity Monitor when there is no active database connection. Plugin Manager and Theme remain available in all states.
 - **Connection Lost UI**: The inline oversized error card on the home screen now opens as a centered `Dialog` instead of crushing the connection list below it.
@@ -184,13 +184,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Query Status Bar**: A slim status bar at the bottom of the results pane shows the active connection name, database, query type (SELECT / INSERT / etc.), row count, and execution time. Pulses while a query is loading.
 
-- **Query Type on Results**: Every query result now carries the first SQL keyword (`queryType` field) — consumed by the status bar and available for future features.
+- **Query Type on Results**: Every query result now carries the first SQL keyword (`queryType` field): consumed by the status bar and available for future features.
 
 - **Keyset Pagination Command**: New `get_table_data_keyset` Tauri command for cursor-based (keyset) pagination. Eliminates `OFFSET` performance cliffs on large tables by using a cursor column + cursor value. Returns `{ rows, nextCursor, hasMore, executionTime }`.
 
 - **Structured Filter Builder**: The Table Inspector data tab now has a proper filter builder. Click **Filter** to open a panel where each row has a column selector, an operator dropdown (contains, equals, not equals, starts with, ends with, >, ≥, <, ≤, is null, is not null), and a value input. Multiple filters combine with AND. Filters reset pagination to page 1 automatically.
 
-- **Connection Environment Labels**: Connections can now be tagged with an environment — **Local**, **Staging**, or **Production** — via the connection form. A colour-coded badge (green / yellow / red) appears next to the connection name everywhere connections are listed: the home screen list, the connection info bar (shown while connected), grid cards, list view, and tree view.
+- **Connection Environment Labels**: Connections can now be tagged with an environment: **Local**, **Staging**, or **Production**: via the connection form. A colour-coded badge (green / yellow / red) appears next to the connection name everywhere connections are listed: the home screen list, the connection info bar (shown while connected), grid cards, list view, and tree view.
 
 ### Fixed
 
@@ -234,7 +234,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **MySQL `max_allowed_packet` for Large Dumps**: Set the `mysql_async` client-side limit to 1 GB in `OptsBuilder` (was 16 MB default). This matches the `--max_allowed_packet=1G` flag used when producing `mysqldump` backups, preventing "packet too large" errors on large multi-row INSERT batches.
 
-- **SQL Import Default Options**: Changed import dialog defaults to `continueOnError: true` / `useTransaction: false` — matching `mysqldump --force` behaviour so large dumps complete even if individual statements fail.
+- **SQL Import Default Options**: Changed import dialog defaults to `continueOnError: true` / `useTransaction: false`: matching `mysqldump --force` behaviour so large dumps complete even if individual statements fail.
 
 ## [0.18.0-beta] - 2026-02-13
 
@@ -246,7 +246,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Collapsible Sidebar**: Toggle sidebar visibility with `Cmd+B` / `Ctrl+B` or the toggle button in the connection info bar. Smooth width transition animation.
 
-- **Right-Click Context Menu on Table Cells**: Copy Cell, Copy Row as JSON, Edit Cell, Set to NULL, Delete Row — all accessible via right-click on any data cell.
+- **Right-Click Context Menu on Table Cells**: Copy Cell, Copy Row as JSON, Edit Cell, Set to NULL, Delete Row: all accessible via right-click on any data cell.
 
 - **Column Type Badges**: Table column headers display inline type badges (`#` for numbers, `T` for text, `B` for booleans, `{}` for JSON, `D` for dates, `U` for UUID, `0x` for binary, `[]` for arrays) with color-coded backgrounds.
 
@@ -274,7 +274,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- **Removed Edit Mode Toggle**: Cells are now always editable on double-click — no explicit edit mode toggle button needed. Insert row button is always visible.
+- **Removed Edit Mode Toggle**: Cells are now always editable on double-click: no explicit edit mode toggle button needed. Insert row button is always visible.
 
 - **Unified Footer Bar**: Data/Columns/Indexes tabs and pagination controls now share a single footer bar instead of separate areas.
 
@@ -304,14 +304,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **macOS Keyboard Input**: Fixed critical bug where typing in input fields produced beep sounds and no text appeared on macOS. Root cause was WRY 0.53.5's `WryWebViewParent` NSView silently dropping regular keystrokes when `decorations: false` was set. Switched to `titleBarStyle: "Overlay"` with `hiddenTitle: true` to keep native window chrome for proper keyboard routing while preserving custom titlebar.
 
-- **PostgreSQL Tables Not Loading**: Fixed schema explorer not loading tables for the initially expanded "public" schema on connect. The `expandedSchemas` state initialized with "public" expanded, but `fetchTables` was only triggered by user click — not on mount. Tables now auto-load for initially expanded schemas after schemas are fetched.
+- **PostgreSQL Tables Not Loading**: Fixed schema explorer not loading tables for the initially expanded "public" schema on connect. The `expandedSchemas` state initialized with "public" expanded, but `fetchTables` was only triggered by user click: not on mount. Tables now auto-load for initially expanded schemas after schemas are fetched.
 
 - **Password Prompt Modal Removed**: Eliminated the unnecessary password prompt modal that appeared when connecting to saved profiles. Passwords are now always saved to the OS keychain when provided during connection creation/editing, and automatically retrieved on connect. Removed the modal from all connection views (ConnectionList, EnhancedConnectionList, ConnectionDashboard, index page).
 
 ### Changed
 
 - **macOS Window Configuration**: Window now uses `decorations: true` with `titleBarStyle: "Overlay"` instead of `decorations: false`. Custom titlebar adds 78px left padding on macOS for native traffic lights. Windows-style window controls hidden on macOS.
-- **Connection Form**: Removed "Enable Keychain" checkbox — passwords are always saved securely when provided. Shows static "Saved to keychain" label instead.
+- **Connection Form**: Removed "Enable Keychain" checkbox: passwords are always saved securely when provided. Shows static "Saved to keychain" label instead.
 - Removed `objc2` macOS-specific dependencies that were used for the previous keyboard workaround.
 
 ## [0.13.0-beta] - 2025-11-24

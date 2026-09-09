@@ -220,8 +220,7 @@ cargo run -p dbhive-app --example smoke -- "Local MySQL"
 
 - **Migration record**: `docs/rust-ui-migration/`
   - `00-baseline-measurements.md` measured memory, before and after
-  - `01-frontend-inventory.md` the React feature inventory and parity list
-  - `02-backend-surface.md` the original command surface
+  - `01-frontend-inventory.md` what parity meant, referenced from the screens
   - `03-conventions.md` **read before adding a screen**
   - `04-plan.md` status and the parity items that cannot be met as specified
 - **Original design**: `docs/base-plan.md`

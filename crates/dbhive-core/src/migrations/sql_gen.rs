@@ -66,7 +66,7 @@ pub fn generate_migration_sql(
         }
     }
 
-    // 5. ADD foreign keys — both for new tables and modified tables
+    // 5. ADD foreign keys: both for new tables and modified tables
     for t in &diff.added_tables {
         // FKs for added tables come via diff.modified_tables only when both
         // sides exist; for brand-new tables we have no FK info in SchemaDiff,

@@ -1165,7 +1165,7 @@ pub async fn import_from_sql(
             } else {
                 skipped += 1;
                 errors.push(format!(
-                    "Statement {}: skipped — single row is {} MB, exceeds server max_allowed_packet",
+                    "Statement {}: skipped: single row is {} MB, exceeds server max_allowed_packet",
                     stmt_index,
                     stmt.len() / 1024 / 1024
                 ));

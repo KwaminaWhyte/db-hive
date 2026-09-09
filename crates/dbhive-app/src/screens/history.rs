@@ -1932,7 +1932,7 @@ fn template_form_dialog(
 
                     ui.label(crate::theme::text::muted(
                         palette,
-                        "SQL — use {{name}} or {{name:type}} for parameters",
+                        "SQL: use {{name}} or {{name:type}} for parameters",
                     ));
                     ui.add(
                         egui::TextEdit::multiline(&mut form.sql)

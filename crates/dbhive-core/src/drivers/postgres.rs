@@ -23,10 +23,10 @@ fn quote_ident(ident: &str) -> String {
 ///
 /// The previous heuristic was `sql.matches(';').count() > 1`, which misrouted
 /// a single statement containing semicolons inside string literals (or
-/// comments, or dollar-quoted bodies) to `batch_execute` — silently returning
+/// comments, or dollar-quoted bodies) to `batch_execute`: silently returning
 /// no rows. This scanner ignores semicolons inside:
 ///
-/// - single-quoted string literals (`'it''s'` — doubled-quote escape)
+/// - single-quoted string literals (`'it''s'`: doubled-quote escape)
 /// - double-quoted identifiers (`"weird;name"`)
 /// - dollar-quoted strings (`$$ ... $$`, `$tag$ ... $tag$`)
 /// - line comments (`-- ...`) and nested block comments (`/* ... */`)
@@ -496,7 +496,7 @@ impl DatabaseDriver for PostgresDriver {
         let client = self.client().await?;
 
         // Multi-statement SQL (transactions, scripts) must go through
-        // batch_execute — the extended protocol only accepts one statement.
+        // batch_execute: the extended protocol only accepts one statement.
         // count_statements() ignores semicolons inside string literals,
         // dollar-quoted strings, and comments (PERF-11), so a single query
         // like `SELECT 'a;b'` is no longer misrouted here.
@@ -542,7 +542,7 @@ impl DatabaseDriver for PostgresDriver {
         // Data-returning statement (SELECT, or DML with RETURNING).
         //
         // `query_raw` returns a `RowStream` instead of a fully materialized
-        // `Vec<Row>`, which lets us stop pulling rows at MAX_RESULT_ROWS — an
+        // `Vec<Row>`, which lets us stop pulling rows at MAX_RESULT_ROWS: an
         // unbounded `SELECT *` on a huge table would otherwise buffer every
         // row in memory before any cap could apply (PERF-03). We fetch one
         // extra row past the cap so the caller can detect truncation.

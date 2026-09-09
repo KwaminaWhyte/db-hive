@@ -1,6 +1,6 @@
 //! Schema diff data structures and algorithm.
 //!
-//! Pure functions — no IO. Tables are matched by `(schema, name)`; columns,
+//! Pure functions: no IO. Tables are matched by `(schema, name)`; columns,
 //! indexes, and foreign keys are matched by name (case-sensitive).
 
 use serde::{Deserialize, Serialize};

@@ -332,7 +332,7 @@ impl RedisDriver {
     async fn sample_key_types(&self) -> Result<Vec<String>, DbError> {
         let mut conn = self.conn.lock().await;
 
-        // SCAN 0 COUNT 100 — returns (cursor, keys)
+        // SCAN 0 COUNT 100: returns (cursor, keys)
         let (_, keys): (u64, Vec<String>) = redis::cmd("SCAN")
             .arg(0u64)
             .arg("COUNT")
@@ -344,7 +344,7 @@ impl RedisDriver {
         let mut seen_types: std::collections::HashSet<String> = std::collections::HashSet::new();
 
         // Issue all TYPE probes as a single pipeline (one network round-trip)
-        // instead of one awaited TYPE command per key — up to 100 sequential
+        // instead of one awaited TYPE command per key: up to 100 sequential
         // round-trips on every schema load (PERF-09).
         if !keys.is_empty() {
             let mut pipe = redis::pipe();
@@ -456,7 +456,7 @@ fn redis_value_to_query_result(value: redis::Value) -> QueryResult {
             vec!["result".to_string()],
             vec![vec![serde_json::json!(text)]],
         ),
-        // Attribute, Push — treat as informational; surface as JSON string
+        // Attribute, Push: treat as informational; surface as JSON string
         Value::Attribute { data, attributes: _ } => redis_value_to_query_result(*data),
         Value::Push { kind: _, data } => {
             let rows: Vec<Vec<serde_json::Value>> = data

@@ -35,7 +35,7 @@ pub fn get_ddl_generator(driver: &DbDriver) -> Result<Box<dyn DdlGenerator>, DbE
             Ok(Box::new(postgres::PostgresDdlGenerator))
         }
         DbDriver::MySql => Ok(Box::new(mysql::MySqlDdlGenerator)),
-        // Turso is libSQL — same DDL surface as SQLite.
+        // Turso is libSQL: same DDL surface as SQLite.
         DbDriver::Sqlite | DbDriver::Turso => Ok(Box::new(sqlite::SqliteDdlGenerator)),
         DbDriver::SqlServer => Ok(Box::new(sqlserver::SqlServerDdlGenerator)),
         DbDriver::MongoDb | DbDriver::Redis => Err(DbError::InvalidInput(
