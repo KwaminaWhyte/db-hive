@@ -13,6 +13,7 @@ use dbhive_core::drivers::QueryResult;
 use egui_extras::{Column, TableBuilder};
 
 use crate::theme::Palette;
+use crate::widgets::ui_kit::thousands;
 
 /// Grid state the caller owns across frames.
 #[derive(Default)]
@@ -113,18 +114,29 @@ pub fn show(
     ui.horizontal(|ui| {
         ui.add(
             egui::TextEdit::singleline(&mut state.filter)
-                .hint_text("Filter rows...")
-                .desired_width(220.0),
+                .hint_text(format!("{}  Filter rows", crate::theme::glyph::SEARCH))
+                .desired_width(220.0)
+                .margin(egui::Margin::symmetric(8.0_f32, 5.0_f32)),
         );
-        ui.label(crate::theme::text::muted(
-            palette,
-            format!("{} of {} rows", rows.len(), result.rows.len()),
-        ));
-        if state.sort.is_some() && ui.small_button("Clear sort").clicked() {
+        // Showing "40 of 40" on an unfiltered grid is noise; only say it
+        // when filtering actually removed something.
+        let label = if rows.len() == result.rows.len() {
+            format!("{} rows", thousands(result.rows.len()))
+        } else {
+            format!(
+                "{} of {} rows",
+                thousands(rows.len()),
+                thousands(result.rows.len())
+            )
+        };
+        ui.label(crate::theme::text::muted(palette, label));
+        if state.sort.is_some()
+            && crate::widgets::ui_kit::ghost_button(ui, palette, "Clear sort").clicked()
+        {
             state.sort = None;
         }
     });
-    ui.add_space(4.0);
+    ui.add_space(6.0);
 
     let text_height = egui::TextStyle::Body.resolve(ui.style()).size + 8.0;
 
@@ -141,17 +153,25 @@ pub fn show(
         .header(text_height + 4.0, |mut header| {
             for (i, name) in result.columns.iter().enumerate() {
                 header.col(|ui| {
+                    let sorted_here = matches!(state.sort, Some((c, _)) if c == i);
                     let arrow = match state.sort {
-                        Some((c, false)) if c == i => " ▲",
-                        Some((c, true)) if c == i => " ▼",
+                        Some((c, false)) if c == i => " ⏶",
+                        Some((c, true)) if c == i => " ⏷",
                         _ => "",
                     };
                     let label = format!("{}{}", name, arrow);
+                    // Column names are uppercase and tracked out, so the
+                    // header reads as a header and not as another data row.
+                    let text = egui::RichText::new(label.to_uppercase())
+                        .size(crate::theme::size::SMALL)
+                        .strong()
+                        .color(if sorted_here {
+                            palette.primary
+                        } else {
+                            palette.muted_foreground
+                        });
                     if ui
-                        .add(
-                            egui::Label::new(crate::theme::text::strong(palette, label))
-                                .sense(egui::Sense::click()),
-                        )
+                        .add(egui::Label::new(text).sense(egui::Sense::click()))
                         .on_hover_text("Sort by this column")
                         .clicked()
                     {

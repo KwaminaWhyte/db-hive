@@ -1009,7 +1009,7 @@ fn table_list(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
                         select = Some(t.id);
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.small_button("✕").on_hover_text("Remove table").clicked() {
+                        if ui.small_button("✖").on_hover_text("Remove table").clicked() {
                             remove = Some(t.id);
                         }
                     });
@@ -1124,7 +1124,7 @@ fn properties(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
                                             );
                                         }
                                     });
-                                if ui.small_button("✕").on_hover_text("Remove column").clicked() {
+                                if ui.small_button("✖").on_hover_text("Remove column").clicked() {
                                     remove_column = Some(i);
                                 }
                             });

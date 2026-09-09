@@ -70,32 +70,82 @@ impl Toasts {
             .interactable(true)
             .show(ctx, |ui| {
                 for (i, toast) in self.items.iter().enumerate() {
-                    let accent = match toast.level {
-                        Level::Info => palette.primary,
-                        Level::Success => palette.success,
-                        Level::Error => palette.destructive,
+                    let (accent, tint, icon) = match toast.level {
+                        Level::Info => (
+                            palette.primary,
+                            palette.primary_soft,
+                            crate::theme::glyph::INFO,
+                        ),
+                        Level::Success => (
+                            palette.success,
+                            palette.success_soft,
+                            crate::theme::glyph::CHECK,
+                        ),
+                        Level::Error => (
+                            palette.destructive,
+                            palette.destructive_soft,
+                            crate::theme::glyph::WARNING,
+                        ),
                     };
                     egui::Frame::none()
                         .fill(palette.popover)
-                        .stroke(egui::Stroke::new(1.0_f32, accent))
-                        .rounding(egui::Rounding::same(8.0))
-                        .inner_margin(egui::Margin::symmetric(12.0, 8.0))
+                        .stroke(egui::Stroke::new(1.0_f32, palette.border_strong))
+                        .rounding(crate::theme::radius::CARD)
+                        .shadow(egui::epaint::Shadow {
+                            offset: egui::vec2(0.0_f32, 4.0_f32),
+                            blur: 16.0,
+                            spread: 0.0,
+                            color: egui::Color32::from_black_alpha(90),
+                        })
+                        .inner_margin(egui::Margin::symmetric(12.0_f32, 10.0_f32))
                         .show(ui, |ui| {
+                            ui.set_max_width(360.0);
                             ui.horizontal(|ui| {
-                                ui.colored_label(accent, match toast.level {
-                                    Level::Info => "i",
-                                    Level::Success => "✓",
-                                    Level::Error => "!",
-                                });
-                                ui.label(
-                                    egui::RichText::new(&toast.text).color(palette.foreground),
+                                ui.spacing_mut().item_spacing.x = 8.0;
+                                // A tinted disc, so the level reads before
+                                // the text does.
+                                let (r, _) = ui.allocate_exact_size(
+                                    egui::vec2(20.0_f32, 20.0_f32),
+                                    egui::Sense::hover(),
                                 );
-                                if ui.small_button("✕").clicked() {
-                                    dismissed = Some(i);
-                                }
+                                ui.painter().circle_filled(r.center(), 10.0, tint);
+                                ui.painter().text(
+                                    r.center(),
+                                    egui::Align2::CENTER_CENTER,
+                                    icon,
+                                    egui::FontId::proportional(11.0),
+                                    accent,
+                                );
+                                ui.label(
+                                    egui::RichText::new(&toast.text)
+                                        .size(crate::theme::size::LABEL)
+                                        .color(palette.foreground),
+                                );
+                                ui.with_layout(
+                                    egui::Layout::right_to_left(egui::Align::Center),
+                                    |ui| {
+                                        if ui
+                                            .add(
+                                                egui::Button::new(
+                                                    egui::RichText::new(
+                                                        crate::theme::glyph::CLOSE,
+                                                    )
+                                                    .size(9.0)
+                                                    .color(palette.dim_foreground),
+                                                )
+                                                .fill(egui::Color32::TRANSPARENT)
+                                                .stroke(egui::Stroke::NONE)
+                                                .small(),
+                                            )
+                                            .clicked()
+                                        {
+                                            dismissed = Some(i);
+                                        }
+                                    },
+                                );
                             });
                         });
-                    ui.add_space(6.0);
+                    ui.add_space(8.0);
                 }
             });
 

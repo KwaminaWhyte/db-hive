@@ -203,9 +203,10 @@ fn gutter(ui: &mut egui::Ui, palette: &Palette, sql: &str) {
 
 fn find_bar(ui: &mut egui::Ui, palette: &Palette, state: &mut EditorState, sql: &mut String) {
     egui::Frame::none()
-        .fill(palette.secondary)
-        .inner_margin(egui::Margin::symmetric(8.0, 6.0))
-        .rounding(egui::Rounding::same(6.0))
+        .fill(palette.card)
+        .stroke(egui::Stroke::new(1.0_f32, palette.border))
+        .inner_margin(egui::Margin::symmetric(10.0_f32, 8.0_f32))
+        .rounding(crate::theme::radius::CONTROL)
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.add(
@@ -229,13 +230,34 @@ fn find_bar(ui: &mut egui::Ui, palette: &Palette, state: &mut EditorState, sql: 
                 {
                     replace_all(sql, &state.find, &state.replace);
                 }
-                ui.label(crate::theme::text::muted(
+                crate::widgets::ui_kit::badge(
+                    ui,
                     palette,
-                    format!("{} match(es)", matches),
-                ));
-                if ui.small_button("✕").clicked() {
-                    state.find_open = false;
-                }
+                    format!("{} matches", matches),
+                    if matches > 0 {
+                        crate::widgets::ui_kit::Tone::Accent
+                    } else {
+                        crate::widgets::ui_kit::Tone::Neutral
+                    },
+                );
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new(crate::theme::glyph::CLOSE)
+                                    .size(9.0)
+                                    .color(palette.dim_foreground),
+                            )
+                            .fill(egui::Color32::TRANSPARENT)
+                            .stroke(egui::Stroke::NONE)
+                            .small(),
+                        )
+                        .on_hover_text("Close find")
+                        .clicked()
+                    {
+                        state.find_open = false;
+                    }
+                });
             });
         });
     ui.add_space(4.0);

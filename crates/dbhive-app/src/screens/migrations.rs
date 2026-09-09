@@ -861,7 +861,7 @@ fn profile_picker(
         .show_ui(ui, |ui| {
             for p in profiles {
                 let is_selected = selected.as_deref() == Some(p.id.as_str());
-                let mark = if connected.contains(&p.id) { "●" } else { "○" };
+                let mark = if connected.contains(&p.id) { "•" } else { "○" };
                 let text = format!(
                     "{} {} ({})",
                     mark,
@@ -1029,7 +1029,7 @@ fn table_diff_row(ui: &mut egui::Ui, palette: &crate::theme::Palette, td: &Table
             for c in &td.modified_columns {
                 ui.label(mono(
                     format!(
-                        "~ column {}: {} → {}",
+                        "~ column {}: {} ➡ {}",
                         c.name, c.target.data_type, c.source.data_type
                     ),
                     palette.warning,
@@ -1046,7 +1046,7 @@ fn table_diff_row(ui: &mut egui::Ui, palette: &crate::theme::Palette, td: &Table
             }
             for f in &td.added_fks {
                 ui.label(mono(
-                    format!("+ fk {} → {}", f.name, f.referenced_table),
+                    format!("+ fk {} ➡ {}", f.name, f.referenced_table),
                     palette.success,
                 ));
             }

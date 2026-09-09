@@ -117,7 +117,7 @@ pub fn grouped(procedures: &[ProcedureInfo], query: &str) -> Vec<(String, Vec<Pr
 /// A one-line summary for the list row.
 pub fn summary(p: &ProcedureInfo) -> String {
     match &p.return_type {
-        Some(r) => format!("{} → {}", p.argument_signature, r),
+        Some(r) => format!("{} ➡ {}", p.argument_signature, r),
         None => p.argument_signature.clone(),
     }
 }
@@ -801,7 +801,7 @@ mod tests {
         let mut p = proc("public", "add", RoutineKind::Function, "(a int)");
         assert_eq!(summary(&p), "(a int)");
         p.return_type = Some("integer".into());
-        assert_eq!(summary(&p), "(a int) → integer");
+        assert_eq!(summary(&p), "(a int) ➡ integer");
     }
 
     // ── selection ────────────────────────────────────────────────────────

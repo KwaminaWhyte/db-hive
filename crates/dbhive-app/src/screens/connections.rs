@@ -6,6 +6,7 @@
 use dbhive_core::models::{ConnectionProfile, DbDriver, DbError};
 
 use crate::app::DbHiveApp;
+use crate::widgets::ui_kit as kit;
 use crate::task::Job;
 
 #[derive(Default)]
@@ -97,33 +98,36 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
 
     let palette = app.mode.palette();
 
-    ui.add_space(8.0);
-    ui.horizontal(|ui| {
-        ui.label(crate::theme::text::heading(palette, "Saved Connections"));
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            if ui.button("New").clicked() {
-                app.screens.connection_editor.open_new();
-            }
-        });
+    let count = profiles.len();
+    let subtitle = match count {
+        0 => "No saved connections yet".to_string(),
+        1 => "1 connection".to_string(),
+        n => format!("{} connections", n),
+    };
+
+    ui.add_space(14.0);
+    let mut new_clicked = false;
+    kit::screen_header(ui, palette, "Connections", Some(subtitle), |ui| {
+        if kit::primary_button(ui, palette, "New connection").clicked() {
+            new_clicked = true;
+        }
     });
-    ui.add_space(4.0);
+    if new_clicked {
+        app.screens.connection_editor.open_new();
+    }
 
     ui.add(
         egui::TextEdit::singleline(&mut app.connections.search)
-            .hint_text("Search connections...")
-            .desired_width(f32::INFINITY),
+            .hint_text("Search by name or host")
+            .desired_width(f32::INFINITY)
+            .margin(egui::Margin::symmetric(10.0_f32, 7.0_f32)),
     );
-    ui.add_space(8.0);
+    ui.add_space(12.0);
 
     if let Some(err) = app.connections.last_error.clone() {
-        ui.horizontal(|ui| {
-            ui.colored_label(palette.destructive, "Connection failed:");
-            ui.label(err);
-            if ui.button("Dismiss").clicked() {
-                app.connections.last_error = None;
-            }
-        });
-        ui.add_space(4.0);
+        if kit::banner(ui, palette, kit::Tone::Danger, format!("Connection failed: {}", err)) {
+            app.connections.last_error = None;
+        }
     }
 
     let needle = app.connections.search.to_lowercase();
@@ -137,16 +141,41 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         .collect();
 
     if profiles.is_empty() {
-        empty_state(ui, palette, "No saved connections", "Add a connection to get started.");
+        let mut add = false;
+        kit::empty_state(
+            ui,
+            palette,
+            "⌘",
+            "No connections yet",
+            "Add a database and it will appear here.",
+            |ui| {
+                if kit::primary_button(ui, palette, "Add your first connection").clicked() {
+                    add = true;
+                }
+            },
+        );
+        if add {
+            app.screens.connection_editor.open_new();
+        }
         return;
     }
     if visible.is_empty() {
-        empty_state(
+        let mut clear = false;
+        kit::empty_state(
             ui,
             palette,
+            "🔍",
             "No matches",
             "No saved connection matches that search.",
+            |ui| {
+                if kit::ghost_button(ui, palette, "Clear search").clicked() {
+                    clear = true;
+                }
+            },
         );
+        if clear {
+            app.connections.search.clear();
+        }
         return;
     }
 
@@ -436,85 +465,144 @@ fn app_row_ctx(app: &DbHiveApp) -> RowCtx {
 }
 
 fn row(ctx: &RowCtx, ui: &mut egui::Ui, profile: &ConnectionProfile) -> RowAction {
-    let palette = if ctx.dark { &crate::theme::DARK } else { &crate::theme::LIGHT };
+    let palette = if ctx.dark {
+        &crate::theme::DARK
+    } else {
+        &crate::theme::LIGHT
+    };
     let is_connected = ctx.connected.contains(&profile.id);
     let is_connecting = ctx.connecting.as_deref() == Some(profile.id.as_str());
     let mut action = RowAction::None;
 
-    egui::Frame::none()
-        .fill(palette.card)
-        .stroke(egui::Stroke::new(1.0_f32, palette.border))
-        .rounding(egui::Rounding::same(8.0))
-        .inner_margin(egui::Margin::symmetric(12.0, 10.0))
-        .show(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
-                    ui.horizontal(|ui| {
-                        ui.label(crate::theme::text::strong(palette, profile.name.clone()));
-                        if profile.is_favorite {
-                            ui.colored_label(palette.primary, "★");
-                        }
-                        if is_connected {
-                            ui.colored_label(palette.success, "● Connected");
-                        }
-                    });
-                    ui.label(crate::theme::text::muted(
-                        palette,
-                        format!(
-                            "{} · {}:{}",
-                            driver_label(&profile.driver),
-                            profile.host,
-                            profile.port
-                        ),
-                    ));
+    let (response, _) = kit::clickable_card(ui, palette, is_connected, |ui| {
+        ui.horizontal(|ui| {
+            // A driver chip carries the type at a glance, which a line of
+            // grey text underneath does not.
+            driver_chip(ui, palette, &profile.driver);
+            ui.add_space(4.0);
+
+            ui.vertical(|ui| {
+                ui.spacing_mut().item_spacing.y = 3.0;
+                ui.horizontal(|ui| {
+                    ui.label(crate::theme::text::strong(palette, profile.name.clone()));
+                    if profile.is_favorite {
+                        ui.label(
+                            egui::RichText::new("★")
+                                .size(crate::theme::size::SMALL)
+                                .color(palette.primary),
+                        );
+                    }
+                    if let Some(env) = environment_label(profile) {
+                        kit::badge(ui, palette, env.0, env.1);
+                    }
+                    if is_connected {
+                        kit::status_badge(ui, palette, "Connected", kit::Tone::Success);
+                    }
+                });
+                ui.label(crate::theme::text::muted(
+                    palette,
+                    format!("{}:{}", profile.host, profile.port),
+                ));
+            });
+
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.menu_button("…", |ui| {
+                    if ui.button("Edit…").clicked() {
+                        action = RowAction::Edit;
+                        ui.close_menu();
+                    }
+                    if ui.button("Duplicate").clicked() {
+                        action = RowAction::Duplicate;
+                        ui.close_menu();
+                    }
+                    let fav = if profile.is_favorite {
+                        "Remove from favourites"
+                    } else {
+                        "Add to favourites"
+                    };
+                    if ui.button(fav).clicked() {
+                        action = RowAction::ToggleFavorite;
+                        ui.close_menu();
+                    }
+                    ui.separator();
+                    if ui.button("Delete…").clicked() {
+                        action = RowAction::Delete;
+                        ui.close_menu();
+                    }
                 });
 
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if is_connecting {
-                        ui.add(egui::Spinner::new());
-                        ui.label(crate::theme::text::muted(palette, "Connecting"));
-                    } else if is_connected {
-                        if ui.button("Disconnect").clicked() {
-                            action = RowAction::Disconnect;
-                        }
-                    } else if ui.button("Connect").clicked() {
-                        action = RowAction::Connect;
+                if is_connecting {
+                    ui.add(egui::Spinner::new().size(14.0));
+                    ui.label(crate::theme::text::muted(palette, "Connecting"));
+                } else if is_connected {
+                    if kit::ghost_button(ui, palette, "Disconnect").clicked() {
+                        action = RowAction::Disconnect;
                     }
-                    ui.menu_button("⋯", |ui| {
-                        if ui.button("Edit…").clicked() {
-                            action = RowAction::Edit;
-                            ui.close_menu();
-                        }
-                        if ui.button("Duplicate").clicked() {
-                            action = RowAction::Duplicate;
-                            ui.close_menu();
-                        }
-                        let fav = if profile.is_favorite {
-                            "Remove from favourites"
-                        } else {
-                            "Add to favourites"
-                        };
-                        if ui.button(fav).clicked() {
-                            action = RowAction::ToggleFavorite;
-                            ui.close_menu();
-                        }
-                        ui.separator();
-                        if ui.button("Delete…").clicked() {
-                            action = RowAction::Delete;
-                            ui.close_menu();
-                        }
-                    });
-                });
+                } else if kit::primary_button(ui, palette, "Connect").clicked() {
+                    action = RowAction::Connect;
+                }
             });
         });
-    ui.add_space(6.0);
+    });
+
+    // The whole card opens the connection, so the user does not have to aim
+    // for the button. A click that landed on a control inside is consumed by
+    // that control, so this cannot double-fire.
+    if matches!(action, RowAction::None) && response.clicked() && !is_connected && !is_connecting {
+        action = RowAction::Connect;
+    }
+
+    ui.add_space(8.0);
     action
 }
 
-fn empty_state(ui: &mut egui::Ui, palette: &crate::theme::Palette, title: &str, message: &str) {
-    ui.add_space(48.0);
-    ui.vertical_centered(|ui| {
-        ui.label(crate::theme::text::heading(palette, title));
-        ui.label(crate::theme::text::muted(palette, message));
-    });
+/// Environment tag, if the profile carries one.
+fn environment_label(profile: &ConnectionProfile) -> Option<(&'static str, kit::Tone)> {
+    use dbhive_core::models::connection::Environment;
+    match profile.environment.as_ref()? {
+        Environment::Local => Some(("Local", kit::Tone::Neutral)),
+        Environment::Staging => Some(("Staging", kit::Tone::Warning)),
+        Environment::Production => Some(("Production", kit::Tone::Danger)),
+    }
 }
+
+/// A square chip carrying the driver's initials.
+///
+/// egui ships no icon set, so the chip is drawn: a tinted square with two
+/// letters reads faster in a list than a word of grey text.
+fn driver_chip(ui: &mut egui::Ui, palette: &crate::theme::Palette, driver: &DbDriver) {
+    let (initials, tint) = match driver {
+        DbDriver::Postgres => ("PG", egui::Color32::from_rgb(56, 118, 171)),
+        DbDriver::Supabase => ("SB", egui::Color32::from_rgb(62, 175, 124)),
+        DbDriver::Neon => ("NE", egui::Color32::from_rgb(0, 229, 153)),
+        DbDriver::MySql => ("MY", egui::Color32::from_rgb(0, 117, 143)),
+        DbDriver::Sqlite => ("SL", egui::Color32::from_rgb(0, 121, 168)),
+        DbDriver::MongoDb => ("MG", egui::Color32::from_rgb(77, 179, 61)),
+        DbDriver::SqlServer => ("MS", egui::Color32::from_rgb(168, 61, 61)),
+        DbDriver::Turso => ("TU", egui::Color32::from_rgb(78, 205, 196)),
+        DbDriver::Redis => ("RD", egui::Color32::from_rgb(196, 60, 44)),
+    };
+
+    let size = egui::vec2(30.0_f32, 30.0_f32);
+    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    ui.painter()
+        .rect_filled(rect, crate::theme::radius::CONTROL, tint.gamma_multiply(0.22));
+    ui.painter().rect_stroke(
+        rect,
+        crate::theme::radius::CONTROL,
+        egui::Stroke::new(1.0_f32, tint.gamma_multiply(0.55)),
+    );
+    ui.painter().text(
+        rect.center(),
+        egui::Align2::CENTER_CENTER,
+        initials,
+        egui::FontId::proportional(11.0),
+        if palette.foreground.r() > 128 {
+            tint.gamma_multiply(2.0)
+        } else {
+            tint.gamma_multiply(0.85)
+        },
+    );
+    let _ = driver_label(driver);
+}
+

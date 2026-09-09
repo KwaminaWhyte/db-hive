@@ -2469,7 +2469,7 @@ fn order_by_section(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                     o.direction = o.direction.toggled();
                 }
                 if ui
-                    .add_enabled(i > 0, egui::Button::new("↑").small())
+                    .add_enabled(i > 0, egui::Button::new("⬆").small())
                     .on_hover_text("Sort by this earlier")
                     .clicked()
                 {

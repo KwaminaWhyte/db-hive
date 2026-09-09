@@ -1126,7 +1126,7 @@ fn columns_editor(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
                             .hint_text("default")
                             .desired_width(100.0),
                     );
-                    if ui.small_button("✕").on_hover_text("Remove column").clicked() {
+                    if ui.small_button("✖").on_hover_text("Remove column").clicked() {
                         remove = Some(i);
                     }
                     // An existing column that has been renamed says so, since

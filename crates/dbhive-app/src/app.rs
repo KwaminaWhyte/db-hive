@@ -447,18 +447,35 @@ fn dispatch(app: &mut DbHiveApp, ctx: &egui::Context, id: command_palette::Comma
 }
 
 fn top_bar(app: &mut DbHiveApp, ctx: &egui::Context) {
+    let palette = app.mode.palette();
     egui::TopBottomPanel::top("titlebar")
-        .exact_height(40.0)
+        .exact_height(42.0)
         .frame(
             egui::Frame::none()
-                .fill(app.mode.palette().sidebar)
-                .inner_margin(egui::Margin::symmetric(12.0, 0.0)),
+                .fill(palette.sidebar)
+                // A hairline along the bottom, so the chrome reads as a
+                // separate surface rather than bleeding into the content.
+                .stroke(egui::Stroke::NONE)
+                .inner_margin(egui::Margin::symmetric(12.0_f32, 0.0_f32)),
         )
         .show(ctx, |ui| {
             ui.horizontal_centered(|ui| {
-                ui.label(crate::theme::text::strong(app.mode.palette(), "DB Hive"));
-                ui.separator();
+                // Menu buttons are flat until hovered. Bordered buttons make
+                // a menu bar look like a row of controls competing for
+                // attention with the content underneath.
+                let flat = |ui: &mut egui::Ui| {
+                    let v = &mut ui.style_mut().visuals.widgets;
+                    v.inactive.bg_fill = egui::Color32::TRANSPARENT;
+                    v.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+                    v.inactive.bg_stroke = egui::Stroke::NONE;
+                    v.hovered.bg_stroke = egui::Stroke::NONE;
+                    v.open.bg_stroke = egui::Stroke::NONE;
+                };
 
+                ui.label(crate::theme::text::strong(palette, "DB Hive"));
+                ui.add_space(6.0);
+
+                flat(ui);
                 menu_bar(app, ui);
 
                 // The web shell centred the command palette trigger and had
@@ -467,7 +484,19 @@ fn top_bar(app: &mut DbHiveApp, ctx: &egui::Context) {
                 // Here it simply follows the menus and cannot collide.
                 ui.add_space(4.0);
 
-                if ui.small_button("Search or run commands…  ⌘K").clicked() {
+                ui.add_space(6.0);
+                // The command trigger reads as a search field, not a button:
+                // that is what it behaves like once open.
+                let trigger = egui::Button::new(
+                    egui::RichText::new("Search or run commands…      ⌘K")
+                        .size(crate::theme::size::LABEL)
+                        .color(palette.dim_foreground),
+                )
+                .fill(palette.card)
+                .stroke(egui::Stroke::new(1.0_f32, palette.border))
+                .rounding(crate::theme::radius::CONTROL)
+                .min_size(egui::vec2(280.0_f32, 26.0_f32));
+                if ui.add(trigger).clicked() {
                     app.screens.command_palette.open();
                 }
 
@@ -476,19 +505,46 @@ fn top_bar(app: &mut DbHiveApp, ctx: &egui::Context) {
                 crate::screens::plugins::toolbar(app, ui);
 
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("Settings").clicked() {
-                        app.screens.settings.open = true;
-                    }
-                    let (icon, next) = match app.mode {
-                        theme::Mode::Dark => ("Light", theme::Mode::Light),
-                        theme::Mode::Light => ("Dark", theme::Mode::Dark),
+                    let (icon, next, hint) = match app.mode {
+                        theme::Mode::Dark => ("☀", theme::Mode::Light, "Switch to light"),
+                        theme::Mode::Light => ("◑", theme::Mode::Dark, "Switch to dark"),
                     };
-                    if ui.button(icon).on_hover_text("Toggle theme").clicked() {
+                    if ui
+                        .add(
+                            egui::Button::new(egui::RichText::new(icon).size(14.0))
+                                .fill(egui::Color32::TRANSPARENT)
+                                .stroke(egui::Stroke::NONE),
+                        )
+                        .on_hover_text(hint)
+                        .clicked()
+                    {
                         app.mode = next;
                         theme::apply(ui.ctx(), next);
                     }
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("Settings")
+                                    .size(crate::theme::size::LABEL)
+                                    .color(palette.muted_foreground),
+                            )
+                            .fill(egui::Color32::TRANSPARENT)
+                            .stroke(egui::Stroke::NONE),
+                        )
+                        .clicked()
+                    {
+                        app.screens.settings.open = true;
+                    }
                 });
             });
+
+            // Bottom hairline.
+            let r = ui.max_rect();
+            ui.painter().hline(
+                r.x_range().expand(12.0),
+                r.bottom() + 0.5,
+                egui::Stroke::new(1.0_f32, palette.border),
+            );
         });
 
     about_window(app, ctx);

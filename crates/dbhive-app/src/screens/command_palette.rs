@@ -180,22 +180,28 @@ impl Chord {
         self.command as u8 + self.shift as u8 + self.alt as u8
     }
 
-    /// Format for display: `⌘⇧N` on macOS, `Ctrl+Shift+N` elsewhere.
+    /// Format for display: `Shift ⌘N` on macOS, `Ctrl+Shift+N` elsewhere.
+    ///
+    /// Only `⌘` is spelled as a symbol. The bundled fonts carry no `⇧`, `⌥`
+    /// or `⌃`, and a missing glyph renders as an empty box rather than
+    /// failing, so those modifiers are written as words. See
+    /// `theme::glyph`.
     ///
     /// `mac` is a parameter rather than a `cfg!` so the formatting is
     /// testable for both platforms from either.
     pub fn format(&self, mac: bool) -> String {
         let key = key_label(self.key);
         if mac {
+            // Apple's order is Control, Option, Shift, Command, key.
             let mut s = String::new();
-            if self.command {
-                s.push('\u{2318}'); // ⌘
+            if self.alt {
+                s.push_str("Option ");
             }
             if self.shift {
-                s.push('\u{21E7}'); // ⇧
+                s.push_str("Shift ");
             }
-            if self.alt {
-                s.push('\u{2325}'); // ⌥
+            if self.command {
+                s.push_str(crate::theme::glyph::COMMAND);
             }
             s.push_str(key);
             s
@@ -250,7 +256,7 @@ pub struct Command {
     pub group: Group,
     pub chord: Option<Chord>,
     pub scope: Scope,
-    /// Whether the command is offered in the palette. `Escape` → back is a
+    /// Whether the command is offered in the palette. `Escape` ➡ back is a
     /// real binding worth documenting but is meaningless as a menu entry.
     pub in_palette: bool,
 }
@@ -1334,15 +1340,17 @@ mod tests {
         assert_eq!(k.format(true), "\u{2318}K");
         assert_eq!(k.format(false), "Ctrl+K");
 
+        // Shift is spelled, not symbolised: the bundled fonts have no U+21E7
+        // and a missing glyph renders as an empty box. See theme::glyph.
         let new_window = Chord::cmd_shift(Key::N);
-        assert_eq!(new_window.format(true), "\u{2318}\u{21E7}N");
+        assert_eq!(new_window.format(true), "Shift \u{2318}N");
         assert_eq!(new_window.format(false), "Ctrl+Shift+N");
     }
 
     #[test]
-    fn alt_formats_as_the_option_glyph_on_mac() {
+    fn alt_is_spelled_option_on_mac_because_the_font_lacks_the_symbol() {
         let chord = Chord { command: true, shift: false, alt: true, key: Key::F };
-        assert_eq!(chord.format(true), "\u{2318}\u{2325}F");
+        assert_eq!(chord.format(true), "Option \u{2318}F");
         assert_eq!(chord.format(false), "Ctrl+Alt+F");
     }
 

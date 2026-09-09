@@ -981,7 +981,7 @@ fn general_section(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &crate::them
                             let selected = ed.form.environment == env;
                             ui.horizontal(|ui| {
                                 if let Some(dot) = environment_color(palette, env.as_ref()) {
-                                    ui.colored_label(dot, "●");
+                                    ui.colored_label(dot, "•");
                                 }
                                 if ui.selectable_label(selected, label).clicked() {
                                     ed.form.environment = env.clone();

@@ -10,6 +10,8 @@ use dbhive_core::state::AppState;
 
 use crate::app::DbHiveApp;
 use crate::task::Job;
+use crate::widgets::ui_kit as kit;
+use crate::widgets::ui_kit::thousands;
 use crate::widgets::{results_grid, sql_editor};
 
 /// databases, schemas, tables, and the database actually in use.
@@ -342,14 +344,20 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         .show_inside(ui, |ui| {
             let ws = app.workspace.as_mut().unwrap();
             ui.horizontal(|ui| {
-                ui.label(crate::theme::text::strong(palette, ws.connection_name.clone()));
+                ui.vertical(|ui| {
+                    ui.spacing_mut().item_spacing.y = 2.0;
+                    ui.label(crate::theme::text::strong(palette, ws.connection_name.clone()));
+                    ui.horizontal(|ui| {
+                        kit::status_badge(ui, palette, "Connected", kit::Tone::Success);
+                    });
+                });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("Disconnect").clicked() {
+                    if kit::ghost_button(ui, palette, "Disconnect").clicked() {
                         disconnect = true;
                     }
                 });
             });
-            ui.add_space(6.0);
+            ui.add_space(10.0);
 
             if !ws.databases.is_empty() {
                 let current = ws
@@ -434,13 +442,38 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
                     .iter()
                     .filter(|t| needle.is_empty() || t.name.to_lowercase().contains(&needle))
                 {
-                    let label = match t.row_count {
-                        Some(n) => format!("{}  ({} rows)", t.name, n),
-                        None => t.name.clone(),
-                    };
-                    let response = ui
-                        .add(egui::Label::new(label).sense(egui::Sense::click()))
-                        .on_hover_text("Click to query, right-click for more");
+                    // A full-width row that highlights on hover, rather than
+                    // a bare label: a list of plain text does not look
+                    // clickable, and the row counts ran into the names.
+                    let row_h = 24.0_f32;
+                    let (rect, response) = ui.allocate_exact_size(
+                        egui::vec2(ui.available_width(), row_h),
+                        egui::Sense::click(),
+                    );
+                    if response.hovered() {
+                        ui.painter().rect_filled(
+                            rect.expand2(egui::vec2(4.0_f32, 0.0_f32)),
+                            crate::theme::radius::CONTROL,
+                            palette.hover,
+                        );
+                    }
+                    ui.painter().text(
+                        egui::pos2(rect.left(), rect.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        &t.name,
+                        egui::FontId::proportional(crate::theme::size::BODY),
+                        palette.foreground,
+                    );
+                    if let Some(n) = t.row_count {
+                        ui.painter().text(
+                            egui::pos2(rect.right(), rect.center().y),
+                            egui::Align2::RIGHT_CENTER,
+                            thousands(n as usize),
+                            egui::FontId::proportional(crate::theme::size::SMALL),
+                            palette.dim_foreground,
+                        );
+                    }
+                    let response = response.on_hover_text("Click to query, right-click for more");
                     if response.clicked() {
                         insert = Some(t.name.clone());
                     }
@@ -496,18 +529,41 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         .show_inside(ui, |ui| {
             let ws = app.workspace.as_ref().unwrap();
             let tab = ws.tabs.get(ws.active_tab);
-            ui.horizontal(|ui| {
-                match tab.map(|t| (&t.result, t.elapsed_ms)) {
-                    Some((Some(r), Some(ms))) => ui.label(crate::theme::text::muted(
-                        palette,
-                        format!("{} rows in {} ms", r.rows.len(), ms),
-                    )),
-                    _ => ui.label(crate::theme::text::muted(palette, "Ready")),
-                };
-                if let Some(db) = &ws.current_database {
-                    ui.separator();
-                    ui.label(crate::theme::text::muted(palette, db.clone()));
+            ui.horizontal_centered(|ui| {
+                match tab.map(|t| (&t.result, t.elapsed_ms, &t.last_error)) {
+                    Some((_, _, Some(_))) => {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{}  Query failed",
+                                crate::theme::glyph::WARNING
+                            ))
+                            .size(crate::theme::size::SMALL)
+                            .color(palette.destructive),
+                        );
+                    }
+                    Some((Some(r), Some(ms), _)) => {
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{}  {} rows",
+                                crate::theme::glyph::CHECK,
+                                thousands(r.rows.len())
+                            ))
+                            .size(crate::theme::size::SMALL)
+                            .color(palette.success),
+                        );
+                        ui.label(crate::theme::text::dim(palette, format!("{} ms", ms)));
+                    }
+                    _ => {
+                        ui.label(crate::theme::text::dim(palette, "Ready"));
+                    }
                 }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if let Some(db) = &ws.current_database {
+                        ui.label(crate::theme::text::dim(palette, db.clone()));
+                        ui.label(crate::theme::text::dim(palette, crate::theme::glyph::DOT));
+                    }
+                    ui.label(crate::theme::text::dim(palette, ws.connection_name.clone()));
+                });
             });
         });
 
@@ -558,22 +614,93 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
             .id_salt("query_tabs")
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 2.0;
                     let closable = ws.tabs.len() > 1;
                     for (i, tab) in ws.tabs.iter().enumerate() {
                         let active = i == ws.active_tab;
-                        let mut label = tab.title.clone();
-                        if tab.query_job.is_running() {
-                            label.push_str(" …");
+                        let running = tab.query_job.is_running();
+
+                        let frame = egui::Frame::none()
+                            .fill(if active {
+                                palette.card
+                            } else {
+                                egui::Color32::TRANSPARENT
+                            })
+                            .rounding(egui::Rounding {
+                                nw: 8.0,
+                                ne: 8.0,
+                                sw: 0.0,
+                                se: 0.0,
+                            })
+                            .inner_margin(egui::Margin::symmetric(10.0_f32, 6.0_f32))
+                            .show(ui, |ui| {
+                                ui.spacing_mut().item_spacing.x = 6.0;
+                                let colour = if active {
+                                    palette.foreground
+                                } else {
+                                    palette.muted_foreground
+                                };
+                                if ui
+                                    .add(
+                                        egui::Label::new(
+                                            egui::RichText::new(&tab.title)
+                                                .size(crate::theme::size::LABEL)
+                                                .color(colour),
+                                        )
+                                        .sense(egui::Sense::click()),
+                                    )
+                                    .clicked()
+                                {
+                                    select = Some(i);
+                                }
+                                if running {
+                                    ui.add(egui::Spinner::new().size(10.0));
+                                }
+                                if closable
+                                    && ui
+                                        .add(
+                                            egui::Button::new(
+                                                egui::RichText::new(crate::theme::glyph::CLOSE)
+                                                    .size(9.0)
+                                                    .color(palette.dim_foreground),
+                                            )
+                                            .fill(egui::Color32::TRANSPARENT)
+                                            .stroke(egui::Stroke::NONE)
+                                            .small(),
+                                        )
+                                        .on_hover_text("Close tab")
+                                        .clicked()
+                                {
+                                    close = Some(i);
+                                }
+                            });
+
+                        // The active tab is marked by a brand-coloured rule
+                        // along its top, which reads at a glance in a row of
+                        // otherwise similar chips.
+                        if active {
+                            let r = frame.response.rect;
+                            ui.painter().hline(
+                                r.x_range(),
+                                r.top(),
+                                egui::Stroke::new(2.0_f32, palette.primary),
+                            );
                         }
-                        if ui.selectable_label(active, label).clicked() {
-                            select = Some(i);
-                        }
-                        if closable && ui.small_button("✕").on_hover_text("Close tab").clicked() {
-                            close = Some(i);
-                        }
-                        ui.separator();
                     }
-                    if ui.small_button("+").on_hover_text("New query tab").clicked() {
+                    ui.add_space(4.0);
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new(crate::theme::glyph::ADD)
+                                    .size(11.0)
+                                    .color(palette.muted_foreground),
+                            )
+                            .fill(egui::Color32::TRANSPARENT)
+                            .stroke(egui::Stroke::NONE),
+                        )
+                        .on_hover_text("New query tab")
+                        .clicked()
+                    {
                         new_tab = true;
                     }
                 });
@@ -594,20 +721,23 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
 
         ui.horizontal(|ui| {
             let running = tab.query_job.is_running();
-            if ui
-                .add_enabled(
-                    !running && !tab.sql.trim().is_empty(),
-                    egui::Button::new("Execute"),
+            let ready = !running && !tab.sql.trim().is_empty();
+            ui.add_enabled_ui(ready, |ui| {
+                if kit::primary_button(
+                    ui,
+                    palette,
+                    format!("{}  Execute", crate::theme::glyph::RUN),
                 )
                 .on_hover_text("Cmd/Ctrl + Enter")
                 .clicked()
-            {
-                run_now = true;
-            }
+                {
+                    run_now = true;
+                }
+            });
             if running {
-                ui.add(egui::Spinner::new());
+                ui.add(egui::Spinner::new().size(14.0));
             }
-            if ui.button("Clear").clicked() {
+            if kit::ghost_button(ui, palette, "Clear").clicked() {
                 tab.sql.clear();
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -640,13 +770,16 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
             results_grid::show(ui, palette, &result, &mut tab.grid);
             tab.result = Some(result);
         } else {
-            ui.add_space(24.0);
-            ui.vertical_centered(|ui| {
-                ui.label(crate::theme::text::muted(
-                    palette,
-                    "Execute a query to see results",
-                ));
-            });
+            kit::empty_state(
+                ui,
+                palette,
+                crate::theme::glyph::RUN,
+                "No results yet",
+                "Write a statement above and run it, or pick a table on the left.",
+                |ui| {
+                    ui.label(crate::theme::text::dim(palette, "Cmd/Ctrl + Enter to run"));
+                },
+            );
         }
     });
 
@@ -880,4 +1013,11 @@ pub fn refresh_metadata(app: &mut DbHiveApp, ctx: &egui::Context) {
     if app.workspace.is_some() {
         load_metadata(app, ctx, None);
     }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
 }

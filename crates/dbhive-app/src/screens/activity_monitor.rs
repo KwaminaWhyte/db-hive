@@ -961,7 +961,7 @@ fn query_log(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
                 }
             });
         if ui
-            .small_button(if am.sort_desc { "▼" } else { "▲" })
+            .small_button(if am.sort_desc { "⏷" } else { "⏶" })
             .on_hover_text(if am.sort_desc {
                 "Newest / largest first"
             } else {

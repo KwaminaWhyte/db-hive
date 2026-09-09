@@ -9,3 +9,4 @@ pub mod graph_layout;
 pub mod results_grid;
 pub mod sql_editor;
 pub mod toast;
+pub mod ui_kit;
