@@ -1,19 +1,265 @@
+import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Divider } from "kit/kit.slint";
+import { ConnectionsScreen, ConnectionItem } from "screens/connections.slint";
+
+export { Theme, Icons, Tone, ConnectionItem }
 export { SqlEditorSpike } from "spikes/sql_editor_spike.slint";
 export { GridSpike } from "spikes/grid_spike.slint";
 export { DiagramSpike } from "spikes/diagram_spike.slint";
 export { KitGallery } from "spikes/kit_gallery.slint";
 
-import { Theme } from "theme.slint";
-export { Theme }
+export enum Screen { connections, workspace }
+
+export struct ToastItem {
+    id: int,
+    text: string,
+    tone: Tone,
+}
+
+component Toast inherits Rectangle {
+    in property <ToastItem> item;
+    callback dismiss;
+
+    property <color> fg: root.item.tone == Tone.success ? Theme.success
+        : root.item.tone == Tone.danger ? Theme.destructive
+        : Theme.primary;
+
+    width: 360px;
+    background: Theme.popover;
+    border-radius: Theme.radius-card;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: 16px;
+    drop-shadow-offset-y: 4px;
+    drop-shadow-color: #00000060;
+
+    HorizontalLayout {
+        padding: 10px;
+        padding-left: 12px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.item.tone == Tone.success ? Icons.circle-check
+                    : root.item.tone == Tone.danger ? Icons.triangle-alert
+                    : Icons.info;
+                tint: root.fg;
+            }
+        }
+        Text {
+            text: root.item.text;
+            color: Theme.foreground;
+            font-size: Theme.size-label;
+            wrap: word-wrap;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        TouchArea {
+            width: 16px;
+            mouse-cursor: pointer;
+            clicked => { root.dismiss(); }
+            Icon { source: Icons.x; tint: Theme.dim-foreground; width: 13px; height: 13px; }
+        }
+    }
+}
 
 export component AppWindow inherits Window {
     title: "DB Hive";
-    preferred-width: 1100px;
-    preferred-height: 720px;
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    min-width: 900px;
+    min-height: 600px;
     background: Theme.background;
-    Text {
-        text: "DB Hive on Slint";
-        color: Theme.foreground;
-        font-size: 22px;
+
+    in-out property <Screen> screen: Screen.connections;
+
+    // Connections.
+    in property <[ConnectionItem]> connections;
+    in property <int> connection-total;
+    in property <string> connection-error;
+    in-out property <string> connection-search;
+    callback connection-search-changed(string);
+    callback connect(string);
+    callback disconnect(string);
+    callback edit-connection(string);
+    callback duplicate-connection(string);
+    callback toggle-favorite(string);
+    callback delete-connection(string);
+    callback dismiss-connection-error;
+
+    // Shell.
+    in property <[ToastItem]> toasts;
+    callback dismiss-toast(int);
+    callback new-connection;
+    callback new-window;
+    callback open-settings;
+    callback open-palette;
+    callback toggle-theme;
+    callback about;
+
+    MenuBar {
+        Menu {
+            title: "File";
+            MenuItem {
+                title: "New Connection…";
+                shortcut: @keys(Control + N);
+                activated => { root.new-connection(); }
+            }
+            MenuItem {
+                title: "New Window";
+                shortcut: @keys(Control + Shift + N);
+                activated => { root.new-window(); }
+            }
+            MenuSeparator { }
+            MenuItem {
+                title: "Settings…";
+                shortcut: @keys(Control + Comma);
+                activated => { root.open-settings(); }
+            }
+        }
+        Menu {
+            title: "View";
+            MenuItem {
+                title: "Connections";
+                activated => { root.screen = Screen.connections; }
+            }
+            MenuItem {
+                title: "Command Palette";
+                shortcut: @keys(Control + K);
+                activated => { root.open-palette(); }
+            }
+            MenuSeparator { }
+            MenuItem {
+                title: Theme.dark ? "Light Theme" : "Dark Theme";
+                activated => { root.toggle-theme(); }
+            }
+        }
+        Menu {
+            title: "Help";
+            MenuItem {
+                title: "About DB Hive";
+                activated => { root.about(); }
+            }
+        }
+    }
+
+    VerticalLayout {
+        spacing: 0;
+
+        // Top bar.
+        Rectangle {
+            height: 44px;
+            background: Theme.sidebar;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 8px;
+                spacing: 10px;
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: "DB Hive";
+                        color: Theme.foreground;
+                        font-size: Theme.size-body;
+                        font-weight: 700;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    // Reads as a search field, because that is what it
+                    // becomes once opened.
+                    TouchArea {
+                        width: 300px;
+                        height: 28px;
+                        mouse-cursor: pointer;
+                        clicked => { root.open-palette(); }
+                        Rectangle {
+                            background: Theme.card;
+                            border-radius: Theme.radius-control;
+                            border-width: 1px;
+                            border-color: parent.has-hover ? Theme.border-strong : Theme.border;
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 8px;
+                                spacing: 8px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Icon { source: Icons.search; tint: Theme.dim-foreground; width: 13px; height: 13px; }
+                                }
+                                Text {
+                                    text: "Search or run commands…";
+                                    color: Theme.dim-foreground;
+                                    font-size: Theme.size-label;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                                Text {
+                                    text: "⌘K";
+                                    color: Theme.dim-foreground;
+                                    font-size: Theme.size-small;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        has-icon: true;
+                        icon: Theme.dark ? Icons.sun : Icons.moon;
+                        variant: ButtonVariant.ghost;
+                        clicked => { root.toggle-theme(); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        has-icon: true;
+                        icon: Icons.settings;
+                        variant: ButtonVariant.ghost;
+                        clicked => { root.open-settings(); }
+                    }
+                }
+            }
+            Divider { y: parent.height - 1px; }
+        }
+
+        if root.screen == Screen.connections: ConnectionsScreen {
+            vertical-stretch: 1;
+            items: root.connections;
+            total: root.connection-total;
+            error: root.connection-error;
+            search <=> root.connection-search;
+            search-changed(t) => { root.connection-search-changed(t); }
+            new-connection => { root.new-connection(); }
+            connect(id) => { root.connect(id); }
+            disconnect(id) => { root.disconnect(id); }
+            edit(id) => { root.edit-connection(id); }
+            duplicate(id) => { root.duplicate-connection(id); }
+            toggle-favorite(id) => { root.toggle-favorite(id); }
+            delete(id) => { root.delete-connection(id); }
+            dismiss-error => { root.dismiss-connection-error(); }
+        }
+
+        if root.screen == Screen.workspace: Rectangle {
+            vertical-stretch: 1;
+            Text {
+                text: "Workspace: Phase 3";
+                color: Theme.muted-foreground;
+            }
+        }
+    }
+
+    // Toasts, bottom right, above everything.
+    VerticalLayout {
+        x: root.width - 380px;
+        y: root.height - self.preferred-height - 16px;
+        width: 360px;
+        spacing: 8px;
+        alignment: end;
+        for t in root.toasts: Toast {
+            item: t;
+            dismiss => { root.dismiss-toast(t.id); }
+        }
     }
 }

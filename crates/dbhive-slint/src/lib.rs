@@ -6,6 +6,9 @@
 
 slint::include_modules!();
 
+pub mod app;
+pub mod connection_list;
 pub mod diagram_model;
 pub mod grid_model;
+pub mod runtime;
 pub mod sql_highlight;

@@ -2069,6 +2069,7 @@ dependencies = [
  "i-slint-backend-testing",
  "slint",
  "slint-build",
+ "tokio",
 ]
 
 [[package]]

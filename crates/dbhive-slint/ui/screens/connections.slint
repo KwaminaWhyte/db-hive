@@ -1,0 +1,245 @@
+// Saved connections.
+//
+// Rust supplies the list already filtered and sorted; this file only draws it
+// and reports intents. It holds no state of its own beyond the search text.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Tone, ButtonVariant, Icon, Button, ClickableCard, Badge, TextField,
+    ScreenHeader, Banner, EmptyState } from "../kit/kit.slint";
+
+export struct ConnectionItem {
+    id: string,
+    name: string,
+    host: string,
+    // Two letters and a tint for the driver chip.
+    initials: string,
+    tint: color,
+    env-label: string,
+    env-tone: Tone,
+    favorite: bool,
+    connected: bool,
+    connecting: bool,
+}
+
+component DriverChip inherits Rectangle {
+    in property <string> initials;
+    in property <color> tint;
+    width: 32px;
+    height: 32px;
+    border-radius: Theme.radius-control;
+    background: root.tint.transparentize(0.78);
+    border-width: 1px;
+    border-color: root.tint.transparentize(0.5);
+    Text {
+        text: root.initials;
+        color: Theme.dark ? root.tint.brighter(0.6) : root.tint.darker(0.2);
+        font-size: 11px;
+        font-weight: 700;
+    }
+}
+
+component ConnectionRow inherits ClickableCard {
+    in property <ConnectionItem> item;
+    callback connect;
+    callback disconnect;
+    callback edit;
+    callback duplicate;
+    callback toggle-favorite;
+    callback delete;
+
+    selected: root.item.connected;
+    clicked => {
+        if (!root.item.connected && !root.item.connecting) {
+            root.connect();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 10px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        spacing: 12px;
+
+        VerticalLayout {
+            alignment: center;
+            DriverChip {
+                initials: root.item.initials;
+                tint: root.item.tint;
+            }
+        }
+
+        VerticalLayout {
+            alignment: center;
+            spacing: 3px;
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                Text {
+                    text: root.item.name;
+                    color: Theme.foreground;
+                    font-size: Theme.size-body;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+                if root.item.favorite: VerticalLayout {
+                    alignment: center;
+                    Icon { source: Icons.star; tint: Theme.primary; width: 13px; height: 13px; }
+                }
+                if root.item.env-label != "": Badge {
+                    text: root.item.env-label;
+                    tone: root.item.env-tone;
+                }
+                if root.item.connected: Badge {
+                    text: "Connected";
+                    tone: Tone.success;
+                    dot: true;
+                }
+            }
+            Text {
+                text: root.item.host;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+            }
+        }
+
+        Rectangle { horizontal-stretch: 1; }
+
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: 6px;
+                if root.item.connecting: Text {
+                    text: "Connecting…";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    vertical-alignment: center;
+                }
+                if !root.item.connecting && root.item.connected: Button {
+                    text: "Disconnect";
+                    variant: ButtonVariant.ghost;
+                    clicked => { root.disconnect(); }
+                }
+                if !root.item.connecting && !root.item.connected: Button {
+                    text: "Connect";
+                    variant: ButtonVariant.primary;
+                    clicked => { root.connect(); }
+                }
+                menu := ContextMenuArea {
+                    Menu {
+                        MenuItem { title: "Edit…"; activated => { root.edit(); } }
+                        MenuItem { title: "Duplicate"; activated => { root.duplicate(); } }
+                        MenuItem {
+                            title: root.item.favorite ? "Remove from favourites" : "Add to favourites";
+                            activated => { root.toggle-favorite(); }
+                        }
+                        MenuSeparator { }
+                        MenuItem { title: "Delete…"; activated => { root.delete(); } }
+                    }
+                    Button {
+                        has-icon: true;
+                        icon: Icons.ellipsis;
+                        variant: ButtonVariant.ghost;
+                        clicked => { menu.show({x: self.x, y: self.y + self.height}); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component ConnectionsScreen inherits Rectangle {
+    in property <[ConnectionItem]> items;
+    in property <int> total;
+    in property <string> error;
+    in-out property <string> search;
+
+    callback search-changed(string);
+    callback new-connection;
+    callback connect(string);
+    callback disconnect(string);
+    callback edit(string);
+    callback duplicate(string);
+    callback toggle-favorite(string);
+    callback delete(string);
+    callback dismiss-error;
+
+    background: Theme.background;
+
+    VerticalLayout {
+        padding: 24px;
+        padding-top: 20px;
+        spacing: 16px;
+
+        ScreenHeader {
+            title: "Connections";
+            subtitle: root.total == 0 ? "No saved connections yet"
+                : root.total == 1 ? "1 connection"
+                : root.total + " connections";
+            Button {
+                text: "New connection";
+                variant: ButtonVariant.primary;
+                has-icon: true;
+                icon: Icons.plus;
+                clicked => { root.new-connection(); }
+            }
+        }
+
+        if root.total > 0: TextField {
+            text <=> root.search;
+            placeholder: "Search by name or host";
+            has-icon: true;
+            icon: Icons.search;
+            edited(t) => { root.search-changed(t); }
+        }
+
+        if root.error != "": Banner {
+            message: root.error;
+            dismissed => { root.dismiss-error(); }
+        }
+
+        if root.total == 0: EmptyState {
+            vertical-stretch: 1;
+            icon: Icons.database;
+            title: "No connections yet";
+            message: "Add a database and it will appear here.";
+            Button {
+                text: "Add your first connection";
+                variant: ButtonVariant.primary;
+                clicked => { root.new-connection(); }
+            }
+        }
+
+        if root.total > 0 && root.items.length == 0: EmptyState {
+            vertical-stretch: 1;
+            icon: Icons.search;
+            title: "No matches";
+            message: "No saved connection matches that search.";
+            Button {
+                text: "Clear search";
+                variant: ButtonVariant.ghost;
+                clicked => {
+                    root.search = "";
+                    root.search-changed("");
+                }
+            }
+        }
+
+        if root.items.length > 0: ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                spacing: 8px;
+                alignment: start;
+                for item in root.items: ConnectionRow {
+                    item: item;
+                    connect => { root.connect(item.id); }
+                    disconnect => { root.disconnect(item.id); }
+                    edit => { root.edit(item.id); }
+                    duplicate => { root.duplicate(item.id); }
+                    toggle-favorite => { root.toggle-favorite(item.id); }
+                    delete => { root.delete(item.id); }
+                }
+            }
+        }
+    }
+}
