@@ -1,10 +1,12 @@
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Divider } from "kit/kit.slint";
 import { ConnectionsScreen, ConnectionItem } from "screens/connections.slint";
+import { WorkspaceScreen, TableItem } from "screens/workspace.slint";
+import { GridColumn, GridRow } from "components/results_grid.slint";
 import { AboutDialog } from "dialogs/about.slint";
 import { ConfirmDialog } from "dialogs/confirm.slint";
 import { ConnectionEditorDialog, ConnectionFormData } from "dialogs/connection_editor.slint";
 
-export { Theme, Icons, Tone, ConnectionItem, ConnectionFormData }
+export { Theme, Icons, Tone, ConnectionItem, ConnectionFormData, TableItem, GridColumn, GridRow }
 export { SqlEditorSpike } from "spikes/sql_editor_spike.slint";
 export { GridSpike } from "spikes/grid_spike.slint";
 export { DiagramSpike } from "spikes/diagram_spike.slint";
@@ -88,6 +90,27 @@ export component AppWindow inherits Window {
     callback toggle-favorite(string);
     callback delete-connection(string);
     callback dismiss-connection-error;
+
+    // Workspace.
+    in property <string> workspace-connection-name;
+    in property <string> workspace-location-label;
+    in property <[TableItem]> workspace-tables;
+    in property <string> workspace-selected-table;
+    in property <bool> workspace-loading-tables;
+    in property <bool> workspace-loading-rows;
+    in property <string> workspace-tables-error;
+    in property <string> workspace-rows-error;
+    in-out property <string> workspace-filter;
+    in property <[GridColumn]> workspace-columns;
+    in property <[GridRow]> workspace-rows;
+    in property <length> workspace-grid-width;
+    in property <int> workspace-row-count;
+    in property <int> workspace-visible-row-count;
+    callback workspace-back;
+    callback workspace-refresh-tables;
+    callback workspace-select-table(string);
+    callback workspace-filter-changed(string);
+    callback workspace-header-clicked(int);
 
     // Shell.
     in property <[ToastItem]> toasts;
@@ -284,12 +307,27 @@ export component AppWindow inherits Window {
             dismiss-error => { root.dismiss-connection-error(); }
         }
 
-        if root.screen == Screen.workspace: Rectangle {
+        if root.screen == Screen.workspace: WorkspaceScreen {
             vertical-stretch: 1;
-            Text {
-                text: "Workspace: Phase 3";
-                color: Theme.muted-foreground;
-            }
+            connection-name: root.workspace-connection-name;
+            location-label: root.workspace-location-label;
+            tables: root.workspace-tables;
+            selected-table: root.workspace-selected-table;
+            loading-tables: root.workspace-loading-tables;
+            loading-rows: root.workspace-loading-rows;
+            tables-error: root.workspace-tables-error;
+            rows-error: root.workspace-rows-error;
+            filter <=> root.workspace-filter;
+            columns: root.workspace-columns;
+            rows: root.workspace-rows;
+            grid-width: root.workspace-grid-width;
+            row-count: root.workspace-row-count;
+            visible-row-count: root.workspace-visible-row-count;
+            back => { root.workspace-back(); }
+            refresh-tables => { root.workspace-refresh-tables(); }
+            select-table(name) => { root.workspace-select-table(name); }
+            filter-changed(t) => { root.workspace-filter-changed(t); }
+            header-clicked(i) => { root.workspace-header-clicked(i); }
         }
     }
 

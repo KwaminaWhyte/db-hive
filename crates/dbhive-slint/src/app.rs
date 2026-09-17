@@ -10,7 +10,9 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use dbhive_core::models::ConnectionProfile;
+use dbhive_core::drivers::DatabaseDriver;
+use dbhive_core::models::metadata::TableInfo;
+use dbhive_core::models::{ConnectionProfile, DbDriver};
 use dbhive_core::state::AppState;
 use slint::{ComponentHandle, ModelRc, VecModel};
 
@@ -18,11 +20,42 @@ use dbhive_ui_model::connection_editor::{
     build_profile, build_profile_with, form_from_profile, save_profile, test_profile, validate,
     ConnectionForm,
 };
+use dbhive_ui_model::results_grid::{visible_rows, GridState};
 
 use crate::connection_editor as editor_view;
 use crate::connection_list::{self, EnvTone};
+use crate::grid_model::{layout_columns, LazyRows};
 use crate::runtime;
-use crate::{AppWindow, ConnectionItem, Screen, Theme, ToastItem, Tone};
+use crate::workspace_model;
+use crate::{AppWindow, ConnectionItem, GridRow, Screen, TableItem, Theme, ToastItem, Tone};
+
+/// How many rows a table preview pulls. Not user-configurable yet; the
+/// egui table editor's own default (`workspace.rs:516`) is 100, this is a
+/// little more generous since the grid virtualises past what is on screen.
+const PREVIEW_ROW_LIMIT: u32 = 200;
+
+/// The connected workspace: which connection, which table, and its rows.
+#[derive(Default)]
+struct Workspace {
+    connection_id: String,
+    connection_name: String,
+    driver: Option<DbDriver>,
+    database: Option<String>,
+    schema: Option<String>,
+    tables: Vec<TableInfo>,
+    selected_table: Option<String>,
+    loading_tables: bool,
+    loading_rows: bool,
+    tables_error: String,
+    rows_error: String,
+    /// The last query's full result. Filtering and sorting read this and
+    /// project a subset every refresh, rather than mutating it in place, so
+    /// "reset the filter" never needs to remember the original order.
+    result: Option<dbhive_core::drivers::QueryResult>,
+    grid: GridState,
+    tables_latest: runtime::Latest,
+    rows_latest: runtime::Latest,
+}
 
 /// The new/edit connection dialog's state.
 ///
@@ -68,6 +101,7 @@ struct Session {
     editor: Editor,
     /// The connection a delete confirmation is pending for: `(id, name)`.
     pending_delete: Option<(String, String)>,
+    workspace: Workspace,
 }
 
 struct Ctx {
@@ -175,13 +209,15 @@ impl Ctx {
                 match result {
                     Ok(conn_id) => {
                         ctx.session.borrow_mut().connected.insert(conn_id.clone());
-                        let name = ctx
-                            .profiles()
-                            .into_iter()
-                            .find(|p| p.id == conn_id)
-                            .map(|p| p.name)
-                            .unwrap_or(conn_id);
+                        let profile = ctx.find_profile(&conn_id);
+                        let name = profile
+                            .as_ref()
+                            .map(|p| p.name.clone())
+                            .unwrap_or_else(|| conn_id.clone());
                         ctx.toast(format!("Connected to {}", name), Tone::Success);
+                        if let Some(profile) = profile {
+                            ctx.open_workspace(profile);
+                        }
                     }
                     Err(e) => {
                         ctx.session.borrow_mut().error = format!("Connection failed: {}", e);
@@ -200,8 +236,16 @@ impl Ctx {
             async move { dbhive_core::service::disconnect(&state, &worker_id).await },
             move |result| with_ctx(|ctx| {
                 ctx.session.borrow_mut().connected.remove(&id);
-                if let Err(e) = result {
-                    ctx.toast(format!("Disconnect failed: {}", e), Tone::Danger);
+                match result {
+                    Ok(()) => {
+                        // The workspace screen has nothing to show once its
+                        // connection is gone.
+                        let showing_it = ctx.session.borrow().workspace.connection_id == id;
+                        if showing_it {
+                            ctx.leave_workspace();
+                        }
+                    }
+                    Err(e) => ctx.toast(format!("Disconnect failed: {}", e), Tone::Danger),
                 }
                 ctx.refresh_connections();
             }),
@@ -413,6 +457,231 @@ impl Ctx {
         self.session.borrow_mut().pending_delete = None;
     }
 
+    // -- Workspace -----------------------------------------------------------
+
+    /// A cloned handle to the driver behind an open connection, if it is
+    /// still open. Cloning the `Arc` and dropping the lock immediately means
+    /// nothing holds `AppState`'s mutex across an `.await`.
+    fn open_driver(&self, connection_id: &str) -> Option<Arc<dyn DatabaseDriver>> {
+        self.state.lock().unwrap().get_connection(connection_id).cloned()
+    }
+
+    fn refresh_workspace(&self) {
+        let Some(w) = self.window.upgrade() else { return };
+        let s = self.session.borrow();
+        let ws = &s.workspace;
+
+        w.set_workspace_connection_name(ws.connection_name.as_str().into());
+        let location = match (&ws.database, &ws.schema) {
+            (Some(db), Some(schema)) if schema != db => format!("{} · {}", db, schema),
+            (Some(db), _) => db.clone(),
+            _ => String::new(),
+        };
+        w.set_workspace_location_label(location.into());
+
+        let mut names: Vec<&TableInfo> = ws.tables.iter().collect();
+        names.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        let items: Vec<TableItem> = names
+            .into_iter()
+            .map(|t| TableItem {
+                name: t.name.as_str().into(),
+                row_count: t
+                    .row_count
+                    .map(|n| format!("~{}", workspace_model::group_thousands(n)))
+                    .unwrap_or_default()
+                    .into(),
+            })
+            .collect();
+        w.set_workspace_tables(ModelRc::new(VecModel::from(items)));
+        w.set_workspace_selected_table(ws.selected_table.as_deref().unwrap_or("").into());
+        w.set_workspace_loading_tables(ws.loading_tables);
+        w.set_workspace_loading_rows(ws.loading_rows);
+        w.set_workspace_tables_error(ws.tables_error.as_str().into());
+        w.set_workspace_rows_error(ws.rows_error.as_str().into());
+
+        // The grid only has something to show once a query has actually
+        // landed.
+        let Some(result) = &ws.result else {
+            w.set_workspace_columns(ModelRc::new(VecModel::from(Vec::<crate::GridColumn>::new())));
+            w.set_workspace_rows(ModelRc::new(VecModel::from(Vec::<GridRow>::new())));
+            w.set_workspace_grid_width(0.0);
+            w.set_workspace_row_count(0);
+            w.set_workspace_visible_row_count(0);
+            return;
+        };
+
+        let widths = vec![workspace_model::DEFAULT_COLUMN_WIDTH; result.columns.len()];
+        let (columns, total_width) = layout_columns(&result.columns, &widths);
+        w.set_workspace_columns(columns);
+        w.set_workspace_grid_width(total_width);
+
+        let order = visible_rows(result, &ws.grid);
+        let visible = dbhive_core::drivers::QueryResult {
+            columns: result.columns.clone(),
+            rows: order.iter().map(|&i| result.rows[i].clone()).collect(),
+            rows_affected: None,
+        };
+        let ordered = workspace_model::to_grid_rows(&visible);
+        w.set_workspace_rows(ModelRc::new(LazyRows::new(std::rc::Rc::new(ordered))));
+        w.set_workspace_row_count(result.rows.len() as i32);
+        w.set_workspace_visible_row_count(order.len() as i32);
+    }
+
+    fn open_workspace(self: &Rc<Self>, profile: ConnectionProfile) {
+        {
+            let mut s = self.session.borrow_mut();
+            s.workspace = Workspace {
+                connection_id: profile.id.clone(),
+                connection_name: profile.name.clone(),
+                driver: Some(profile.driver.clone()),
+                database: workspace_model::connected_database(&profile),
+                loading_tables: true,
+                ..Workspace::default()
+            };
+        }
+        if let Some(w) = self.window.upgrade() {
+            w.set_screen(Screen::Workspace);
+        }
+        self.refresh_workspace();
+        self.load_tables();
+    }
+
+    fn leave_workspace(&self) {
+        self.session.borrow_mut().workspace = Workspace::default();
+        if let Some(w) = self.window.upgrade() {
+            w.set_screen(Screen::Connections);
+        }
+        self.refresh_workspace();
+    }
+
+    fn load_tables(self: &Rc<Self>) {
+        let (connection_id, driver, database) = {
+            let s = self.session.borrow();
+            let ws = &s.workspace;
+            (ws.connection_id.clone(), ws.driver.clone(), ws.database.clone())
+        };
+        let Some(driver_kind) = driver else { return };
+        let Some(d) = self.open_driver(&connection_id) else {
+            self.session.borrow_mut().workspace.tables_error =
+                "This connection is no longer open.".to_string();
+            self.refresh_workspace();
+            return;
+        };
+
+        let ticket = self.session.borrow_mut().workspace.tables_latest.begin();
+        self.session.borrow_mut().workspace.loading_tables = true;
+        self.session.borrow_mut().workspace.tables_error.clear();
+        self.refresh_workspace();
+
+        runtime::spawn(
+            async move {
+                let databases = d.get_databases().await.unwrap_or_default();
+                let database = database
+                    .or_else(|| databases.first().map(|db| db.name.clone()))
+                    .unwrap_or_default();
+                let schemas = if driver_kind.is_postgres_compatible() {
+                    d.get_schemas(&database).await.unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                let schema_arg =
+                    workspace_model::tables_schema_arg(&driver_kind, &database, None, &schemas);
+                let tables = d.get_tables(&schema_arg).await;
+                (database, schema_arg, tables)
+            },
+            move |(database, schema, tables)| with_ctx(|ctx| {
+                if !ticket.is_current() {
+                    return;
+                }
+                let mut s = ctx.session.borrow_mut();
+                let ws = &mut s.workspace;
+                ws.loading_tables = false;
+                ws.database = Some(database);
+                ws.schema = Some(schema);
+                match tables {
+                    Ok(t) => ws.tables = t,
+                    Err(e) => ws.tables_error = format!("Could not list tables: {}", e),
+                }
+                drop(s);
+                ctx.refresh_workspace();
+            }),
+        );
+    }
+
+    fn select_table(self: &Rc<Self>, name: &str) {
+        {
+            let mut s = self.session.borrow_mut();
+            let ws = &mut s.workspace;
+            ws.selected_table = Some(name.to_string());
+            ws.grid = GridState::default();
+            ws.result = None;
+            ws.rows_error.clear();
+        }
+        self.refresh_workspace();
+        self.load_rows();
+    }
+
+    fn load_rows(self: &Rc<Self>) {
+        let (connection_id, table) = {
+            let s = self.session.borrow();
+            (s.workspace.connection_id.clone(), s.workspace.selected_table.clone())
+        };
+        let Some(table) = table else { return };
+        let Some(d) = self.open_driver(&connection_id) else {
+            self.session.borrow_mut().workspace.rows_error =
+                "This connection is no longer open.".to_string();
+            self.refresh_workspace();
+            return;
+        };
+
+        let ticket = self.session.borrow_mut().workspace.rows_latest.begin();
+        {
+            let mut s = self.session.borrow_mut();
+            s.workspace.loading_rows = true;
+            s.workspace.rows_error.clear();
+        }
+        self.refresh_workspace();
+
+        let sql = format!(
+            "SELECT * FROM {} LIMIT {}",
+            d.quote_identifier(&table),
+            PREVIEW_ROW_LIMIT
+        );
+        runtime::spawn(
+            async move { d.execute_query(&sql).await },
+            move |result| with_ctx(|ctx| {
+                if !ticket.is_current() {
+                    return;
+                }
+                let mut s = ctx.session.borrow_mut();
+                let ws = &mut s.workspace;
+                ws.loading_rows = false;
+                match result {
+                    Ok(r) => ws.result = Some(r),
+                    Err(e) => ws.rows_error = format!("Could not load rows: {}", e),
+                }
+                drop(s);
+                ctx.refresh_workspace();
+            }),
+        );
+    }
+
+    fn set_workspace_filter(&self, filter: String) {
+        self.session.borrow_mut().workspace.grid.filter = filter;
+        self.refresh_workspace();
+    }
+
+    fn sort_workspace_by(&self, column: usize) {
+        let mut s = self.session.borrow_mut();
+        let ws = &mut s.workspace;
+        ws.grid.sort = match ws.grid.sort {
+            Some((c, desc)) if c == column => Some((c, !desc)),
+            _ => Some((column, false)),
+        };
+        drop(s);
+        self.refresh_workspace();
+    }
+
     fn toggle_favorite(self: &Rc<Self>, id: &str) {
         let result = {
             let mut guard = self.state.lock().unwrap();
@@ -603,6 +872,28 @@ pub fn run() -> Result<(), slint::PlatformError> {
     {
         let ctx = ctx.clone();
         window.on_editor_cancel(move || ctx.close_editor());
+    }
+
+    // -- Workspace ------------------------------------------------------
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_back(move || ctx.leave_workspace());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_refresh_tables(move || ctx.load_tables());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_select_table(move |name| ctx.select_table(&name));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_filter_changed(move |t| ctx.set_workspace_filter(t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_header_clicked(move |i| ctx.sort_workspace_by(i as usize));
     }
 
     ctx.refresh_connections();

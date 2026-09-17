@@ -39,6 +39,50 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
+        "workspace" | "workspace-empty" | "workspace-loading" => {
+            let c = AppWindow::new().expect("AppWindow");
+            c.set_screen(Screen::Workspace);
+            c.set_workspace_connection_name("Production Postgres".into());
+            c.set_workspace_location_label("app · public".into());
+
+            let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products", "refunds"]
+                .iter()
+                .enumerate()
+                .map(|(i, name)| TableItem {
+                    name: (*name).into(),
+                    row_count: format!("~{}", (i + 1) * 1240).into(),
+                })
+                .collect();
+            c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
+
+            if name == "workspace-loading" {
+                c.set_workspace_loading_tables(true);
+            } else if name == "workspace" {
+                c.set_workspace_selected_table("customers".into());
+                let cols = vec!["id".to_string(), "name".to_string(), "email".to_string(), "plan".to_string()];
+                let widths = vec![80.0f32, 220.0, 260.0, 140.0];
+                let (columns, width) = dbhive_slint::grid_model::layout_columns(&cols, &widths);
+                c.set_workspace_columns(columns);
+                c.set_workspace_grid_width(width);
+                let rows: Vec<Vec<Option<String>>> = (1..=8)
+                    .map(|i| {
+                        vec![
+                            Some(i.to_string()),
+                            Some(format!("Customer {i}")),
+                            if i == 3 { None } else { Some(format!("user{i}@example.com")) },
+                            Some(if i % 2 == 0 { "pro" } else { "free" }.to_string()),
+                        ]
+                    })
+                    .collect();
+                c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(
+                    std::rc::Rc::new(rows),
+                )));
+                c.set_workspace_row_count(8);
+                c.set_workspace_visible_row_count(8);
+            }
+            c.show().unwrap();
+            Box::new(c)
+        }
         "about" => {
             let c = AppWindow::new().expect("AppWindow");
             c.set_app_version("0.21.0".into());

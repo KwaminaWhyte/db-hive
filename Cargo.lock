@@ -2067,6 +2067,8 @@ dependencies = [
  "dbhive-core",
  "dbhive-ui-model",
  "i-slint-backend-testing",
+ "rusqlite",
+ "serde_json",
  "slint",
  "slint-build",
  "tokio",

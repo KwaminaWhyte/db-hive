@@ -13,3 +13,4 @@ pub mod diagram_model;
 pub mod grid_model;
 pub mod runtime;
 pub mod sql_highlight;
+pub mod workspace_model;

@@ -1,0 +1,243 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, ButtonVariant, Button, TextField, Divider, ClickableCard, Banner, EmptyState } from "../kit/kit.slint";
+import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
+
+export struct TableItem {
+    name: string,
+    // Preformatted ("~1,234 rows"), empty when the driver reports nothing.
+    row-count: string,
+}
+
+// The connected workspace: a table list down the side, that table's rows on
+// the right. One connection, one schema, at a time; switching either is a
+// callback out to the controller, which re-populates these properties.
+export component WorkspaceScreen inherits VerticalLayout {
+    in property <string> connection-name;
+    // e.g. "app · public", blank on a driver with no separate database.
+    in property <string> location-label;
+    in property <[TableItem]> tables;
+    in property <string> selected-table;
+    in property <bool> loading-tables;
+    in property <bool> loading-rows;
+    in property <string> tables-error;
+    in property <string> rows-error;
+    in-out property <string> filter;
+
+    in property <[GridColumn]> columns;
+    in property <[GridRow]> rows;
+    in property <length> grid-width;
+    in property <int> row-count;
+    in property <int> visible-row-count;
+
+    callback back;
+    callback refresh-tables;
+    callback select-table(string);
+    callback filter-changed(string);
+    callback header-clicked(int);
+
+    spacing: 0;
+
+    Rectangle {
+        height: 48px;
+        background: Theme.sidebar;
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 14px;
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "Connections";
+                    has-icon: true;
+                    icon: Icons.chevron-left;
+                    variant: ButtonVariant.ghost;
+                    clicked => { root.back(); }
+                }
+            }
+            Rectangle {
+                width: 1px;
+                background: Theme.border;
+            }
+            VerticalLayout {
+                alignment: center;
+                spacing: 1px;
+                Text {
+                    text: root.connection-name;
+                    color: Theme.foreground;
+                    font-size: Theme.size-body;
+                    font-weight: 700;
+                }
+                if root.location-label != "": Text {
+                    text: root.location-label;
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    has-icon: true;
+                    icon: Icons.refresh-cw;
+                    variant: ButtonVariant.ghost;
+                    enabled: !root.loading-tables;
+                    clicked => { root.refresh-tables(); }
+                }
+            }
+        }
+        Divider { y: parent.height - 1px; }
+    }
+
+    HorizontalLayout {
+        vertical-stretch: 1;
+        spacing: 0;
+
+        Rectangle {
+            width: 220px;
+            background: Theme.background;
+
+            VerticalLayout {
+                padding: 10px;
+                spacing: 6px;
+
+                Text {
+                    text: "TABLES" + (root.tables.length > 0 ? " (" + root.tables.length + ")" : "");
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    font-weight: 600;
+                    letter-spacing: 0.6px;
+                }
+
+                if root.tables-error != "": Banner {
+                    message: root.tables-error;
+                    dismissible: false;
+                }
+
+                // Exactly one of these branches is active at a time, and
+                // each claims the layout's leftover height with
+                // vertical-stretch. Without a stretch child, Slint spreads
+                // slack space as gaps between every row instead of below the
+                // last one (see connection_editor.slint's ScrollView for the
+                // same layout, fixed the other way: alignment: start).
+                if root.loading-tables: Text {
+                    vertical-stretch: 1;
+                    text: "Loading tables…";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-label;
+                }
+
+                if !root.loading-tables && root.tables-error == "" && root.tables.length == 0: EmptyState {
+                    vertical-stretch: 1;
+                    icon: Icons.table;
+                    title: "No tables";
+                    message: "This schema has no tables yet.";
+                }
+
+                if !root.loading-tables && root.tables.length > 0: ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        spacing: 2px;
+                        for t in root.tables: ClickableCard {
+                            height: 32px;
+                            selected: t.name == root.selected-table;
+                            clicked => { root.select-table(t.name); }
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 8px;
+                                Icon {
+                                    source: Icons.table;
+                                    tint: t.name == root.selected-table ? Theme.primary : Theme.muted-foreground;
+                                    width: 13px;
+                                    height: 13px;
+                                }
+                                Text {
+                                    text: t.name;
+                                    color: Theme.foreground;
+                                    font-size: Theme.size-label;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                    overflow: elide;
+                                }
+                                if t.row-count != "": Text {
+                                    text: t.row-count;
+                                    color: Theme.dim-foreground;
+                                    font-size: Theme.size-small;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                x: parent.width - 1px;
+                width: 1px;
+                background: Theme.border;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            padding: 14px;
+            spacing: 10px;
+
+            HorizontalLayout {
+                spacing: 10px;
+                Text {
+                    text: root.selected-table == "" ? "No table selected" : root.selected-table;
+                    color: Theme.foreground;
+                    font-size: Theme.size-subheading;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+                if root.selected-table != "" && root.row-count >= 0: Text {
+                    text: root.visible-row-count == root.row-count
+                        ? root.row-count + " rows"
+                        : root.visible-row-count + " of " + root.row-count + " rows";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    vertical-alignment: center;
+                }
+                if root.selected-table != "": TextField {
+                    width: 220px;
+                    has-icon: true;
+                    icon: Icons.search;
+                    placeholder: "Filter rows";
+                    text <=> root.filter;
+                    edited(t) => { root.filter-changed(t); }
+                }
+            }
+
+            if root.rows-error != "": Banner {
+                message: root.rows-error;
+                dismissible: false;
+            }
+
+            if root.selected-table == "": EmptyState {
+                vertical-stretch: 1;
+                icon: Icons.table;
+                title: "Pick a table";
+                message: "Choose a table from the list to view its rows.";
+            }
+
+            if root.selected-table != "" && root.loading-rows: Text {
+                vertical-stretch: 1;
+                text: "Loading rows…";
+                color: Theme.muted-foreground;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            if root.selected-table != "" && !root.loading-rows && root.rows-error == "": ResultsGrid {
+                vertical-stretch: 1;
+                columns: root.columns;
+                rows: root.rows;
+                total-width: root.grid-width;
+                header-clicked(i) => { root.header-clicked(i); }
+            }
+        }
+    }
+}

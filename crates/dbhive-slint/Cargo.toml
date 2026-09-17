@@ -22,6 +22,8 @@ slint = { version = "=1.18.0", features = ["software-renderer-systemfonts"] }
 # Headless backend for interaction tests: real key events, element lookup,
 # no window server. Pinned with slint; the two must move together.
 i-slint-backend-testing = "=1.18.0"
+serde_json = "1"
+rusqlite = { version = "0.37.0", features = ["bundled"] }
 
 [build-dependencies]
 slint-build = "=1.18.0"
