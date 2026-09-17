@@ -10,6 +10,7 @@ path = "src/main.rs"
 
 [dependencies]
 dbhive-core = { path = "../dbhive-core" }
+dbhive-ui-model = { path = "../dbhive-ui-model" }
 # Pinned exactly: Slint 1.x still moves between minors, and upgrades should be
 # a deliberate commit, not a side effect of `cargo update`.
 # `software-renderer-systemfonts` lets the headless snapshot tool

@@ -5,7 +5,8 @@
 //! browser, and they must behave identically.
 
 pub mod file_dialog;
-pub mod graph_layout;
+// Moved to dbhive-ui-model; re-exported so existing paths keep working.
+pub use dbhive_ui_model::graph_layout;
 pub mod results_grid;
 pub mod sql_editor;
 pub mod toast;

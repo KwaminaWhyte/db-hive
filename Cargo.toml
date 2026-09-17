@@ -7,7 +7,12 @@
 # removed once this reached parity; see docs/rust-ui-migration/.
 [workspace]
 resolver = "2"
-members = ["crates/dbhive-core", "crates/dbhive-app", "crates/dbhive-slint"]
+members = [
+    "crates/dbhive-core",
+    "crates/dbhive-ui-model",
+    "crates/dbhive-app",
+    "crates/dbhive-slint",
+]
 
 # Release profile lives at the workspace root: cargo ignores profiles set on
 # non-root workspace members.

@@ -20,6 +20,7 @@
 //!   elevated    something on top of a card (menus, popups, selected rows)
 //! ```
 
+use dbhive_ui_model::tokens;
 use egui::{Color32, FontFamily, FontId, Rounding, Shadow, Stroke, TextStyle, Visuals};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,77 +70,43 @@ pub struct Palette {
     pub accent: Color32,
 }
 
-pub const DARK: Palette = Palette {
-    background: Color32::from_rgb(9, 10, 14),
-    sidebar: Color32::from_rgb(13, 14, 19),
-    card: Color32::from_rgb(19, 20, 26),
-    elevated: Color32::from_rgb(26, 28, 35),
-    popover: Color32::from_rgb(24, 25, 32),
+// The colours themselves live in dbhive_ui_model::tokens, shared with the
+// Slint shell and guarded by the contrast tests there. This converts them.
+const fn c(rgb: tokens::Rgb) -> Color32 {
+    Color32::from_rgb(rgb.0, rgb.1, rgb.2)
+}
 
-    foreground: Color32::from_rgb(240, 241, 244),
-    muted_foreground: Color32::from_rgb(150, 153, 162),
-    dim_foreground: Color32::from_rgb(104, 108, 118),
+const fn from_tokens(t: &tokens::Palette) -> Palette {
+    Palette {
+        background: c(t.background),
+        sidebar: c(t.sidebar),
+        card: c(t.card),
+        elevated: c(t.elevated),
+        popover: c(t.popover),
+        foreground: c(t.foreground),
+        muted_foreground: c(t.muted_foreground),
+        dim_foreground: c(t.dim_foreground),
+        primary: c(t.primary),
+        primary_foreground: c(t.primary_foreground),
+        primary_soft: c(t.primary_soft),
+        secondary: c(t.secondary),
+        hover: c(t.hover),
+        pressed: c(t.pressed),
+        border: c(t.border),
+        border_strong: c(t.border_strong),
+        destructive: c(t.destructive),
+        destructive_soft: c(t.destructive_soft),
+        warning: c(t.warning),
+        warning_soft: c(t.warning_soft),
+        success: c(t.success),
+        success_soft: c(t.success_soft),
+        muted: c(t.muted),
+        accent: c(t.accent),
+    }
+}
 
-    primary: Color32::from_rgb(248, 176, 42),
-    primary_foreground: Color32::from_rgb(24, 17, 2),
-    primary_soft: Color32::from_rgb(48, 39, 18),
-
-    secondary: Color32::from_rgb(30, 32, 40),
-    hover: Color32::from_rgb(38, 41, 50),
-    pressed: Color32::from_rgb(46, 49, 60),
-
-    border: Color32::from_rgb(38, 40, 49),
-    border_strong: Color32::from_rgb(58, 61, 72),
-
-    destructive: Color32::from_rgb(248, 113, 113),
-    destructive_soft: Color32::from_rgb(56, 26, 28),
-    warning: Color32::from_rgb(240, 189, 70),
-    warning_soft: Color32::from_rgb(54, 42, 15),
-    success: Color32::from_rgb(74, 205, 122),
-    success_soft: Color32::from_rgb(20, 48, 32),
-
-    muted: Color32::from_rgb(30, 32, 40),
-    accent: Color32::from_rgb(38, 41, 50),
-};
-
-pub const LIGHT: Palette = Palette {
-    // Light mode inverts how depth works: the page is grey and content is
-    // white, and the topmost layer is separated by shadow rather than by a
-    // lighter fill, because there is nothing lighter than white.
-    background: Color32::from_rgb(245, 246, 249),
-    sidebar: Color32::from_rgb(239, 241, 245),
-    card: Color32::from_rgb(255, 255, 255),
-    elevated: Color32::from_rgb(255, 255, 255),
-    popover: Color32::from_rgb(255, 255, 255),
-
-    foreground: Color32::from_rgb(17, 19, 24),
-    muted_foreground: Color32::from_rgb(98, 103, 113),
-    dim_foreground: Color32::from_rgb(142, 147, 158),
-
-    primary: Color32::from_rgb(226, 148, 12),
-    // Dark text on honey, not white: white on this amber is 3.2:1, which is
-    // below the readable floor. It also matches the brand, where the primary
-    // button has always been dark text on gold.
-    primary_foreground: Color32::from_rgb(28, 18, 0),
-    primary_soft: Color32::from_rgb(254, 243, 220),
-
-    secondary: Color32::from_rgb(241, 243, 246),
-    hover: Color32::from_rgb(236, 238, 242),
-    pressed: Color32::from_rgb(226, 229, 235),
-
-    border: Color32::from_rgb(224, 227, 232),
-    border_strong: Color32::from_rgb(198, 203, 212),
-
-    destructive: Color32::from_rgb(198, 40, 40),
-    destructive_soft: Color32::from_rgb(253, 235, 235),
-    warning: Color32::from_rgb(140, 88, 0),
-    warning_soft: Color32::from_rgb(254, 246, 227),
-    success: Color32::from_rgb(21, 128, 61),
-    success_soft: Color32::from_rgb(233, 248, 238),
-
-    muted: Color32::from_rgb(241, 243, 246),
-    accent: Color32::from_rgb(236, 238, 242),
-};
+pub const DARK: Palette = from_tokens(&tokens::DARK);
+pub const LIGHT: Palette = from_tokens(&tokens::LIGHT);
 
 impl Mode {
     pub fn palette(self) -> &'static Palette {
@@ -449,27 +416,7 @@ pub mod text {
 mod tests {
     use super::*;
 
-    /// Text must not vanish into the surface it sits on.
-    ///
-    /// A contrast floor catches the class of bug that made bold labels
-    /// near-invisible on dark cards: a colour that is legal but unreadable.
-    fn luminance(c: Color32) -> f32 {
-        let f = |v: u8| {
-            let s = v as f32 / 255.0;
-            if s <= 0.03928 {
-                s / 12.92
-            } else {
-                ((s + 0.055) / 1.055).powf(2.4)
-            }
-        };
-        0.2126 * f(c.r()) + 0.7152 * f(c.g()) + 0.0722 * f(c.b())
-    }
-
-    fn contrast(a: Color32, b: Color32) -> f32 {
-        let (x, y) = (luminance(a), luminance(b));
-        let (hi, lo) = if x > y { (x, y) } else { (y, x) };
-        (hi + 0.05) / (lo + 0.05)
-    }
+    // Contrast and surface tests live with the tokens in dbhive_ui_model.
 
     /// Every icon must exist in the fonts actually bundled with the build.
     ///
@@ -502,98 +449,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn body_text_is_readable_on_every_surface() {
-        for (name, p) in [("dark", &DARK), ("light", &LIGHT)] {
-            for (surface, c) in [
-                ("background", p.background),
-                ("sidebar", p.sidebar),
-                ("card", p.card),
-                ("elevated", p.elevated),
-                ("popover", p.popover),
-            ] {
-                let ratio = contrast(p.foreground, c);
-                assert!(
-                    ratio >= 7.0,
-                    "{} foreground on {} is only {:.1}:1",
-                    name,
-                    surface,
-                    ratio
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn supporting_text_still_clears_the_accessibility_floor() {
-        // 4.5:1 is the WCAG AA threshold for normal text. Muted text is
-        // quieter than body text, not unreadable.
-        for (name, p) in [("dark", &DARK), ("light", &LIGHT)] {
-            let ratio = contrast(p.muted_foreground, p.card);
-            assert!(
-                ratio >= 4.5,
-                "{} muted text on card is only {:.1}:1",
-                name,
-                ratio
-            );
-        }
-    }
-
-    #[test]
-    fn text_on_the_primary_colour_is_readable() {
-        for (name, p) in [("dark", &DARK), ("light", &LIGHT)] {
-            let ratio = contrast(p.primary_foreground, p.primary);
-            assert!(
-                ratio >= 4.5,
-                "{} text on primary is only {:.1}:1",
-                name,
-                ratio
-            );
-        }
-    }
-
-    #[test]
-    fn status_colours_read_against_their_own_tint() {
-        for (name, p) in [("dark", &DARK), ("light", &LIGHT)] {
-            for (what, fg, bg) in [
-                ("destructive", p.destructive, p.destructive_soft),
-                ("warning", p.warning, p.warning_soft),
-                ("success", p.success, p.success_soft),
-            ] {
-                let ratio = contrast(fg, bg);
-                assert!(
-                    ratio >= 4.5,
-                    "{} {} on its tint is only {:.1}:1",
-                    name,
-                    what,
-                    ratio
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn content_is_separated_from_the_page_it_sits_on() {
-        // A card must be visibly distinct from the background, or the layout
-        // reads as one flat sheet.
-        for (name, p) in [("dark", &DARK), ("light", &LIGHT)] {
-            let delta = (luminance(p.card) - luminance(p.background)).abs();
-            assert!(
-                delta > 0.002,
-                "{}: card and background are indistinguishable",
-                name
-            );
-        }
-    }
-
-    #[test]
-    fn dark_mode_has_a_third_surface_level() {
-        // Dark mode raises the topmost layer with a lighter fill. Light mode
-        // cannot: there is nothing lighter than white, so it uses shadow
-        // instead, which is why this only applies to dark.
-        assert!(
-            luminance(DARK.elevated) > luminance(DARK.card),
-            "elevated must sit above card in dark mode"
-        );
-    }
 }

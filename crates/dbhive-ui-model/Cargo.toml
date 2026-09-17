@@ -1,0 +1,14 @@
+[package]
+name = "dbhive-ui-model"
+version = "0.21.0"
+description = "UI-independent view logic for DB Hive: SQL builders, validation, layout, formatting"
+edition = "2021"
+
+# No UI toolkit may be a dependency of this crate, ever. Everything here must
+# be usable, and testable, from egui, Slint or no UI at all.
+[dependencies]
+dbhive-core = { path = "../dbhive-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.11", features = ["v4", "serde"] }
