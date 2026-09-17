@@ -25,102 +25,20 @@
 //! four actions and free-form chat append to one conversation, and the
 //! conversation (trimmed) is what a follow-up question is sent with.
 
-use dbhive_core::ai::{AiModel, AiProviderType, ChatMessage};
+//!
+//! The pure logic (transcript types, readiness rules, empty states, request
+//! planning, formatting) lives in `dbhive_ui_model::ai_assistant` and is
+//! re-exported here; this file keeps the drawing and the job glue.
+
+use dbhive_core::ai::{AiModel, AiProviderType};
 use dbhive_core::models::DbError;
-use dbhive_core::service_ai::{self, AiResponse, AiSettings, AiTask, ProviderStatus};
+use dbhive_core::service_ai::{self, AiResponse, AiSettings, ProviderStatus};
+
+pub use dbhive_ui_model::ai_assistant::*;
 
 use crate::app::DbHiveApp;
 use crate::task::Job;
 use crate::theme::{text, Palette};
-
-/// What the caller should do once the panel has been drawn.
-///
-/// The panel owns neither the editor nor a connection, so a generated
-/// statement is handed back rather than applied, and never executed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AiAction {
-    None,
-    /// Put this statement in the editor. The user still has to run it.
-    UseSql(String),
-}
-
-/// Which of the five requests a turn came from.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Kind {
-    Generate,
-    Explain,
-    Optimize,
-    Fix,
-    Chat,
-}
-
-impl Kind {
-    pub fn label(self) -> &'static str {
-        match self {
-            Kind::Generate => "Generate SQL",
-            Kind::Explain => "Explain",
-            Kind::Optimize => "Optimize",
-            Kind::Fix => "Fix Error",
-            Kind::Chat => "Chat",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Who {
-    User,
-    Assistant,
-}
-
-/// One entry in the conversation.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Turn {
-    pub who: Who,
-    /// Heading shown above the body, e.g. "You" or "Explain".
-    pub heading: String,
-    pub content: String,
-    /// SQL pulled out of an assistant answer, if there was any.
-    pub sql: Option<String>,
-    pub duration_ms: Option<u64>,
-    pub failed: bool,
-}
-
-impl Turn {
-    fn user(heading: impl Into<String>, content: impl Into<String>) -> Self {
-        Self {
-            who: Who::User,
-            heading: heading.into(),
-            content: content.into(),
-            sql: None,
-            duration_ms: None,
-            failed: false,
-        }
-    }
-
-    fn assistant(heading: impl Into<String>, content: impl Into<String>) -> Self {
-        let content = content.into();
-        let sql = service_ai::extract_sql(&content);
-        Self {
-            who: Who::Assistant,
-            heading: heading.into(),
-            content,
-            sql,
-            duration_ms: None,
-            failed: false,
-        }
-    }
-
-    fn failure(heading: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            who: Who::Assistant,
-            heading: heading.into(),
-            content: message.into(),
-            sql: None,
-            duration_ms: None,
-            failed: true,
-        }
-    }
-}
 
 #[derive(Default)]
 pub struct AiAssistant {
@@ -168,133 +86,13 @@ impl AiAssistant {
     }
 }
 
-// ===========================================================================
-// Pure logic
-// ===========================================================================
-
-/// Format a request duration the way the web shell did: milliseconds below a
-/// second, then one decimal of seconds.
-pub fn format_duration(ms: u64) -> String {
-    if ms < 1000 {
-        format!("{}ms", ms)
-    } else {
-        format!("{:.1}s", ms as f64 / 1000.0)
-    }
-}
-
-/// Turn the transcript into provider messages.
-///
-/// Failed turns are dropped: an error message is UI feedback, not something
-/// the model said, and feeding it back invites the model to apologise for
-/// an outage instead of answering.
-pub fn history_messages(turns: &[Turn]) -> Vec<ChatMessage> {
-    turns
-        .iter()
-        .filter(|t| !t.failed)
-        .map(|t| match t.who {
-            Who::User => ChatMessage::user(t.content.clone()),
-            Who::Assistant => ChatMessage::assistant(t.content.clone()),
-        })
-        .collect()
-}
-
-/// Everything the enable/disable rules depend on, in one testable value.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Readiness {
-    pub configured: bool,
-    pub available: bool,
-    pub has_model: bool,
-    pub busy: bool,
-    pub has_prompt: bool,
-    pub has_sql: bool,
-    pub has_error: bool,
-    pub has_question: bool,
-}
-
-impl Readiness {
-    /// A request can be sent at all: provider reachable, key present, model
-    /// chosen, nothing already in flight.
-    pub fn can_request(&self) -> bool {
-        self.configured && self.available && self.has_model && !self.busy
-    }
-
-    pub fn can_generate(&self) -> bool {
-        self.can_request() && self.has_prompt
-    }
-
-    pub fn can_explain(&self) -> bool {
-        self.can_request() && self.has_sql
-    }
-
-    pub fn can_optimize(&self) -> bool {
-        self.can_request() && self.has_sql
-    }
-
-    /// Fixing needs both a statement and the error it produced.
-    pub fn can_fix(&self) -> bool {
-        self.can_request() && self.has_sql && self.has_error
-    }
-
-    pub fn can_chat(&self) -> bool {
-        self.can_request() && self.has_question
-    }
-}
-
-/// Which guided empty state to show instead of the controls, if any.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EmptyState {
-    /// Status has not come back yet.
-    Checking,
-    /// Provider needs an API key and has none.
-    NeedsApiKey,
-    /// Ollama is configured by definition but is not answering.
-    OllamaUnavailable,
-    /// A remote provider has a key but did not answer.
-    Unavailable,
-}
-
-pub fn empty_state(provider: AiProviderType, status: Option<ProviderStatus>) -> Option<EmptyState> {
-    let Some(status) = status else {
-        return Some(EmptyState::Checking);
-    };
-    if !status.configured {
-        return Some(EmptyState::NeedsApiKey);
-    }
-    if !status.available {
-        return Some(if provider == AiProviderType::Ollama {
-            EmptyState::OllamaUnavailable
-        } else {
-            EmptyState::Unavailable
-        });
-    }
-    None
-}
-
 /// Colour for the header status dot.
 fn status_color(palette: &Palette, status: Option<ProviderStatus>) -> egui::Color32 {
-    match status {
-        None => palette.muted_foreground,
-        Some(s) if s.available && s.configured => palette.success,
-        Some(s) if !s.configured => palette.warning,
-        Some(_) => palette.destructive,
-    }
-}
-
-fn status_tooltip(provider: AiProviderType, status: Option<ProviderStatus>) -> String {
-    let label = service_ai::provider_info(provider).label;
-    match status {
-        None => "Checking provider status".to_string(),
-        Some(s) if s.available && s.configured => format!("{} connected", label),
-        Some(s) if !s.configured => "API key required".to_string(),
-        Some(_) => format!("{} not available", label),
-    }
-}
-
-/// Label for a model in the picker: name plus its description, if any.
-pub fn model_label(model: &AiModel) -> String {
-    match model.description.as_deref().map(str::trim) {
-        Some(d) if !d.is_empty() => format!("{} ({})", model.name, d),
-        _ => model.name.clone(),
+    match status_tone(status) {
+        StatusTone::Muted => palette.muted_foreground,
+        StatusTone::Success => palette.success,
+        StatusTone::Warning => palette.warning,
+        StatusTone::Destructive => palette.destructive,
     }
 }
 
@@ -418,10 +216,7 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) -> AiAction {
             .show_ui(ui, |ui| {
                 for p in service_ai::PROVIDERS.iter() {
                     let label = format!("{} ({})", p.label, p.description);
-                    if ui
-                        .selectable_label(p.provider == provider, label)
-                        .clicked()
-                    {
+                    if ui.selectable_label(p.provider == provider, label).clicked() {
                         chosen = p.provider;
                     }
                 }
@@ -656,25 +451,18 @@ fn controls(
     // --- model -----------------------------------------------------------
     ui.horizontal(|ui| {
         ui.label(text::muted(palette, "Model"));
-        if ui.small_button("Reload").on_hover_text("Fetch the model list again").clicked() {
+        if ui
+            .small_button("Reload")
+            .on_hover_text("Fetch the model list again")
+            .clicked()
+        {
             intents.push(Intent::RefreshModels);
         }
         if s.models_job.is_running() {
             ui.add(egui::Spinner::new());
         }
     });
-    let selected = s
-        .models
-        .iter()
-        .find(|m| m.id == s.model)
-        .map(model_label)
-        .unwrap_or_else(|| {
-            if s.models.is_empty() {
-                "No models available".to_string()
-            } else {
-                "Select a model".to_string()
-            }
-        });
+    let selected = selected_model_text(&s.models, &s.model);
     let mut picked: Option<String> = None;
     egui::ComboBox::from_id_salt("ai_model")
         .selected_text(selected)
@@ -785,12 +573,7 @@ fn controls(
 }
 
 /// The conversation, newest at the bottom.
-fn transcript(
-    s: &mut AiAssistant,
-    ui: &mut egui::Ui,
-    palette: &Palette,
-    action: &mut AiAction,
-) {
+fn transcript(s: &mut AiAssistant, ui: &mut egui::Ui, palette: &Palette, action: &mut AiAction) {
     ui.separator();
     if s.turns.is_empty() {
         ui.add_space(8.0);
@@ -839,13 +622,13 @@ fn transcript(
                                 );
                             });
 
-                            let body = egui::RichText::new(turn.content.clone())
-                                .monospace()
-                                .color(if turn.failed {
+                            let body = egui::RichText::new(turn.content.clone()).monospace().color(
+                                if turn.failed {
                                     palette.destructive
                                 } else {
                                     palette.foreground
-                                });
+                                },
+                            );
                             ui.add(egui::Label::new(body).wrap());
 
                             if turn.who == Who::Assistant && !turn.failed {
@@ -935,7 +718,9 @@ fn poll(app: &mut DbHiveApp) -> (bool, bool) {
             match result {
                 Ok(status) => {
                     s.status = Some(status);
-                    if status.available && status.configured && s.models_requested_for != Some(s.provider)
+                    if status.available
+                        && status.configured
+                        && s.models_requested_for != Some(s.provider)
                     {
                         refresh_models_now = true;
                     }
@@ -1022,7 +807,11 @@ fn change_provider(app: &mut DbHiveApp, ctx: &egui::Context, provider: AiProvide
     app.screens
         .ai_assistant
         .save_job
-        .start(&handle, ctx, async move { service_ai::save_settings(&settings) });
+        .start(
+            &handle,
+            ctx,
+            async move { service_ai::save_settings(&settings) },
+        );
     refresh_status(app, ctx);
 }
 
@@ -1092,7 +881,11 @@ fn save_settings(app: &mut DbHiveApp, ctx: &egui::Context) {
     app.screens
         .ai_assistant
         .save_job
-        .start(&handle, ctx, async move { service_ai::save_settings(&settings) });
+        .start(
+            &handle,
+            ctx,
+            async move { service_ai::save_settings(&settings) },
+        );
     refresh_status(app, ctx);
 }
 
@@ -1129,78 +922,26 @@ fn run(
     if s.busy() {
         return;
     }
-    let schema_context = s.schema_context.clone();
-    let sql = current_sql.trim().to_string();
 
-    let (task, prompt_turn) = match kind {
-        Kind::Generate => {
-            let prompt = s.prompt.trim().to_string();
-            if prompt.is_empty() {
-                return;
-            }
-            (
-                AiTask::Generate {
-                    prompt: prompt.clone(),
-                    schema_context,
-                },
-                Turn::user("You", prompt),
-            )
+    let plan = plan_request(
+        kind,
+        RequestInputs {
+            prompt: &s.prompt,
+            chat_input: &s.chat_input,
+            current_sql,
+            last_error,
+            schema_context: &s.schema_context,
+            turns: &s.turns,
+            max_history_messages: s.settings.max_history_messages,
+        },
+    );
+    let (task, prompt_turn) = match plan {
+        RequestPlan::Skip => return,
+        RequestPlan::Refuse(message) => {
+            s.error = Some(message);
+            return;
         }
-        Kind::Explain => {
-            if sql.is_empty() {
-                s.error = Some("No SQL to explain. Enter a query in the editor first.".into());
-                return;
-            }
-            (
-                AiTask::Explain { sql: sql.clone() },
-                Turn::user("Explain this", sql),
-            )
-        }
-        Kind::Optimize => {
-            if sql.is_empty() {
-                s.error = Some("No SQL to optimize. Enter a query in the editor first.".into());
-                return;
-            }
-            (
-                AiTask::Optimize {
-                    sql: sql.clone(),
-                    schema_context,
-                },
-                Turn::user("Optimize this", sql),
-            )
-        }
-        Kind::Fix => {
-            if sql.is_empty() {
-                s.error = Some("No SQL to fix. Enter a query in the editor first.".into());
-                return;
-            }
-            let Some(error_message) = last_error.map(str::to_string) else {
-                s.error = Some("No error to fix. Run the query first to see the error.".into());
-                return;
-            };
-            (
-                AiTask::Fix {
-                    sql: sql.clone(),
-                    error_message: error_message.clone(),
-                    schema_context,
-                },
-                Turn::user("Fix this", format!("{}\n\nError: {}", sql, error_message)),
-            )
-        }
-        Kind::Chat => {
-            let question = s.chat_input.trim().to_string();
-            if question.is_empty() {
-                return;
-            }
-            let history = history_messages(&s.turns);
-            let messages = service_ai::build_chat_messages(
-                &schema_context,
-                &history,
-                &question,
-                s.settings.max_history_messages,
-            );
-            (AiTask::Chat { messages }, Turn::user("You", question))
-        }
+        RequestPlan::Send { task, turn } => (task, turn),
     };
 
     s.turns.push(prompt_turn);
@@ -1231,292 +972,5 @@ fn run(
         });
 }
 
-// ===========================================================================
-// Tests
-// ===========================================================================
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use dbhive_core::ai::ChatRole;
-
-    fn model(id: &str, name: &str, description: Option<&str>) -> AiModel {
-        AiModel {
-            id: id.to_string(),
-            name: name.to_string(),
-            provider: AiProviderType::Ollama,
-            description: description.map(str::to_string),
-            context_window: None,
-        }
-    }
-
-    fn status(available: bool, configured: bool) -> ProviderStatus {
-        ProviderStatus {
-            provider: AiProviderType::OpenAI,
-            available,
-            configured,
-        }
-    }
-
-    // --- formatting -------------------------------------------------------
-
-    #[test]
-    fn duration_switches_to_seconds_at_one_second() {
-        assert_eq!(format_duration(0), "0ms");
-        assert_eq!(format_duration(999), "999ms");
-        assert_eq!(format_duration(1000), "1.0s");
-        assert_eq!(format_duration(2500), "2.5s");
-    }
-
-    #[test]
-    fn model_label_appends_a_description_when_there_is_one() {
-        assert_eq!(model_label(&model("a", "Llama", Some("8B"))), "Llama (8B)");
-        assert_eq!(model_label(&model("a", "Llama", None)), "Llama");
-        assert_eq!(model_label(&model("a", "Llama", Some("  "))), "Llama");
-    }
-
-    // --- provider and model lists -----------------------------------------
-
-    #[test]
-    fn the_picker_offers_the_same_five_providers_as_the_web_shell() {
-        let labels: Vec<&str> = service_ai::PROVIDERS.iter().map(|p| p.label).collect();
-        assert_eq!(
-            labels,
-            vec!["Ollama", "OpenAI", "Claude", "Gemini", "OpenRouter"]
-        );
-    }
-
-    #[test]
-    fn model_list_is_deduplicated_before_it_reaches_the_picker() {
-        let models = service_ai::dedupe_models(vec![
-            model("llama3.2", "llama3.2", None),
-            model("llama3.2", "llama3.2", None),
-            model("", "broken", None),
-            model("mistral", "mistral", None),
-        ]);
-        let ids: Vec<&str> = models.iter().map(|m| m.id.as_str()).collect();
-        assert_eq!(ids, vec!["llama3.2", "mistral"]);
-    }
-
-    #[test]
-    fn selected_model_survives_a_reload_that_still_offers_it() {
-        let models = vec![model("a", "a", None), model("b", "b", None)];
-        assert_eq!(
-            service_ai::preferred_model(&models, "b", "a"),
-            Some("b".to_string())
-        );
-        // Gone from the list: fall back to the configured default.
-        assert_eq!(
-            service_ai::preferred_model(&models, "vanished", "a"),
-            Some("a".to_string())
-        );
-        assert_eq!(service_ai::preferred_model(&[], "a", "a"), None);
-    }
-
-    // --- readiness rules --------------------------------------------------
-
-    fn ready() -> Readiness {
-        Readiness {
-            configured: true,
-            available: true,
-            has_model: true,
-            busy: false,
-            has_prompt: true,
-            has_sql: true,
-            has_error: true,
-            has_question: true,
-        }
-    }
-
-    #[test]
-    fn nothing_can_be_sent_without_a_key_a_provider_and_a_model() {
-        for broken in [
-            Readiness {
-                configured: false,
-                ..ready()
-            },
-            Readiness {
-                available: false,
-                ..ready()
-            },
-            Readiness {
-                has_model: false,
-                ..ready()
-            },
-            Readiness {
-                busy: true,
-                ..ready()
-            },
-        ] {
-            assert!(!broken.can_request());
-            assert!(!broken.can_generate());
-            assert!(!broken.can_explain());
-            assert!(!broken.can_fix());
-            assert!(!broken.can_chat());
-        }
-    }
-
-    #[test]
-    fn each_action_requires_its_own_input() {
-        let r = ready();
-        assert!(r.can_generate() && r.can_explain() && r.can_optimize() && r.can_fix());
-
-        let no_prompt = Readiness {
-            has_prompt: false,
-            ..ready()
-        };
-        assert!(!no_prompt.can_generate());
-        assert!(no_prompt.can_explain());
-
-        let no_sql = Readiness {
-            has_sql: false,
-            ..ready()
-        };
-        assert!(!no_sql.can_explain());
-        assert!(!no_sql.can_optimize());
-        assert!(!no_sql.can_fix());
-        assert!(no_sql.can_generate());
-
-        // Fixing needs the error as well as the statement.
-        let no_error = Readiness {
-            has_error: false,
-            ..ready()
-        };
-        assert!(!no_error.can_fix());
-        assert!(no_error.can_explain());
-
-        let no_question = Readiness {
-            has_question: false,
-            ..ready()
-        };
-        assert!(!no_question.can_chat());
-    }
-
-    // --- empty states -----------------------------------------------------
-
-    #[test]
-    fn empty_states_follow_the_provider_status() {
-        assert_eq!(
-            empty_state(AiProviderType::OpenAI, None),
-            Some(EmptyState::Checking)
-        );
-        assert_eq!(
-            empty_state(AiProviderType::OpenAI, Some(status(true, false))),
-            Some(EmptyState::NeedsApiKey)
-        );
-        assert_eq!(
-            empty_state(AiProviderType::Ollama, Some(status(false, true))),
-            Some(EmptyState::OllamaUnavailable)
-        );
-        assert_eq!(
-            empty_state(AiProviderType::OpenAI, Some(status(false, true))),
-            Some(EmptyState::Unavailable)
-        );
-        assert_eq!(empty_state(AiProviderType::OpenAI, Some(status(true, true))), None);
-    }
-
-    // --- transcript to messages -------------------------------------------
-
-    #[test]
-    fn history_keeps_roles_and_drops_failures() {
-        let turns = vec![
-            Turn::user("You", "count users"),
-            Turn::assistant("Chat", "```sql\nSELECT count(*) FROM users;\n```"),
-            Turn::failure("Chat", "Connection refused"),
-        ];
-        let msgs = history_messages(&turns);
-        assert_eq!(msgs.len(), 2);
-        assert_eq!(msgs[0].role, ChatRole::User);
-        assert_eq!(msgs[1].role, ChatRole::Assistant);
-        assert!(!msgs.iter().any(|m| m.content.contains("Connection refused")));
-    }
-
-    #[test]
-    fn a_chat_turn_sends_system_prompt_trimmed_history_and_the_question() {
-        let turns: Vec<Turn> = (0..10)
-            .map(|i| Turn::user("You", format!("q{}", i)))
-            .collect();
-        let history = history_messages(&turns);
-        let msgs =
-            service_ai::build_chat_messages("Database: shop\n\nTables:\n", &history, "and now?", 4);
-
-        assert_eq!(msgs[0].role, ChatRole::System);
-        assert!(msgs[0].content.contains("Database: shop"));
-        // system + 4 kept + the new question
-        assert_eq!(msgs.len(), 6);
-        assert_eq!(msgs[1].content, "q6");
-        assert_eq!(msgs.last().unwrap().content, "and now?");
-        assert_eq!(msgs.last().unwrap().role, ChatRole::User);
-    }
-
-    // --- SQL extraction, as the transcript uses it -------------------------
-
-    #[test]
-    fn an_answer_with_a_sql_fence_offers_that_statement() {
-        let turn = Turn::assistant(
-            "Generate SQL",
-            "Here you go:\n```sql\nSELECT * FROM users LIMIT 10;\n```\nThat lists ten users.",
-        );
-        assert_eq!(turn.sql.as_deref(), Some("SELECT * FROM users LIMIT 10;"));
-    }
-
-    #[test]
-    fn the_first_of_several_sql_fences_wins() {
-        let turn = Turn::assistant(
-            "Optimize",
-            "Before:\n```sql\nSELECT a FROM t;\n```\nAfter:\n```sql\nSELECT b FROM t;\n```",
-        );
-        assert_eq!(turn.sql.as_deref(), Some("SELECT a FROM t;"));
-    }
-
-    #[test]
-    fn a_bare_statement_is_still_insertable() {
-        let turn = Turn::assistant("Fix Error", "SELECT * FROM users;");
-        assert_eq!(turn.sql.as_deref(), Some("SELECT * FROM users;"));
-    }
-
-    #[test]
-    fn a_prose_answer_offers_nothing_to_insert() {
-        let turn = Turn::assistant(
-            "Explain",
-            "This query reads every row of the users table and counts them.",
-        );
-        assert!(turn.sql.is_none());
-    }
-
-    #[test]
-    fn a_failed_turn_never_offers_sql() {
-        let turn = Turn::failure("Generate SQL", "SELECT never ran: provider unreachable");
-        assert!(turn.sql.is_none());
-        assert!(turn.failed);
-    }
-
-    // --- schema context ----------------------------------------------------
-
-    #[test]
-    fn schema_context_is_built_in_the_shape_the_prompts_expect() {
-        use dbhive_core::service_ai::{SchemaColumn, SchemaTable};
-        let tables = vec![SchemaTable {
-            schema: "public".into(),
-            table: "users".into(),
-            columns: vec![SchemaColumn {
-                name: "id".into(),
-                data_type: "integer".into(),
-            }],
-        }];
-        let context = service_ai::build_schema_context("shop", &tables);
-        assert_eq!(
-            context,
-            "Database: shop\n\nTables:\n\npublic.users:\n  - id: integer\n"
-        );
-        // And it is what the chat system prompt carries.
-        let prompt = service_ai::chat_system_prompt(&context);
-        assert!(prompt.contains("public.users"));
-        assert!(prompt.contains("DATABASE SCHEMA"));
-    }
-
-    #[test]
-    fn an_empty_schema_context_does_not_pad_the_system_prompt() {
-        assert!(!service_ai::chat_system_prompt("").contains("DATABASE SCHEMA"));
-    }
-}
+// Tests for this screen's logic live with it in
+// `dbhive_ui_model::ai_assistant`.

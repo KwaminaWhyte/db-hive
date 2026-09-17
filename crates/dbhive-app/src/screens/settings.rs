@@ -22,12 +22,17 @@
 //! read `palette.primary` directly still get the static brand honey; closing
 //! that needs `theme::Mode::palette()` to return a runtime-overridable
 //! palette, which is a change to `theme.rs`.
+//!
+//! The pure logic (sections, shortcut fields and validation, keystroke
+//! formatting, theme-mode resolution, readable text on the accent) lives in
+//! `dbhive_ui_model::settings` and is re-exported here; this file keeps the
+//! drawing, the egui adapters and the job glue.
 
-use dbhive_core::models::settings::{
-    AppSettings, ShortcutsSettings, StartupBehavior, ThemeMode,
-};
+use dbhive_core::models::settings::{AppSettings, ThemeMode};
 use dbhive_core::models::DbError;
 use dbhive_core::settings as core_settings;
+
+pub use dbhive_ui_model::settings::*;
 
 use crate::app::DbHiveApp;
 use crate::task::Job;
@@ -36,52 +41,6 @@ use crate::theme::{text, Mode, Palette};
 // ---------------------------------------------------------------------------
 // State
 // ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Section {
-    General,
-    Appearance,
-    Query,
-    Shortcuts,
-}
-
-impl Section {
-    pub const ALL: [Section; 4] = [
-        Section::General,
-        Section::Appearance,
-        Section::Query,
-        Section::Shortcuts,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Section::General => "General",
-            Section::Appearance => "Appearance",
-            Section::Query => "Query Execution",
-            Section::Shortcuts => "Keyboard Shortcuts",
-        }
-    }
-
-    fn title(self) -> &'static str {
-        match self {
-            Section::General => "General Settings",
-            Section::Appearance => "Appearance",
-            Section::Query => "Query Execution",
-            Section::Shortcuts => "Keyboard Shortcuts",
-        }
-    }
-
-    fn blurb(self) -> &'static str {
-        match self {
-            Section::General => "Configure general application behavior and preferences",
-            Section::Appearance => "Customize the look and feel of the application",
-            Section::Query => "Configure how queries are executed and displayed",
-            Section::Shortcuts => {
-                "View and customize keyboard shortcuts (click any shortcut to rebind)"
-            }
-        }
-    }
-}
 
 /// What was applied to the egui context last, so the visuals are only rebuilt
 /// when something actually changed rather than every frame.
@@ -147,8 +106,7 @@ impl Settings {
     /// Accent as RGB, falling back to the brand honey if the stored value is
     /// unparseable.
     fn accent_rgb(&self) -> (u8, u8, u8) {
-        core_settings::parse_hex_color(&self.draft.theme.accent_color)
-            .unwrap_or_else(core_settings::default_accent_rgb)
+        accent_rgb(&self.draft.theme.accent_color)
     }
 }
 
@@ -200,16 +158,21 @@ pub fn poll(app: &mut DbHiveApp) {
 
 /// Resolve the configured theme mode against the OS preference.
 pub fn resolve_mode(ctx: &egui::Context, mode: ThemeMode) -> Mode {
+    let system_dark = ctx.system_theme().map(|t| t == egui::Theme::Dark);
+    mode_from(resolve_theme_mode(mode, system_dark))
+}
+
+fn mode_from(resolved: ResolvedMode) -> Mode {
+    match resolved {
+        ResolvedMode::Light => Mode::Light,
+        ResolvedMode::Dark => Mode::Dark,
+    }
+}
+
+fn resolved_from(mode: Mode) -> ResolvedMode {
     match mode {
-        ThemeMode::Light => Mode::Light,
-        ThemeMode::Dark => Mode::Dark,
-        // Before the window manager has reported a preference, keep the
-        // shell's own default rather than flashing the other theme.
-        ThemeMode::System => match ctx.system_theme() {
-            Some(egui::Theme::Light) => Mode::Light,
-            Some(egui::Theme::Dark) => Mode::Dark,
-            None => Mode::Dark,
-        },
+        Mode::Light => ResolvedMode::Light,
+        Mode::Dark => ResolvedMode::Dark,
     }
 }
 
@@ -247,17 +210,11 @@ pub fn apply_theme(ctx: &egui::Context, mode: Mode, accent: (u8, u8, u8), font_s
     ctx.set_style(style);
 }
 
-/// Black or white, whichever stays legible on `bg`.
-///
-/// A user-chosen accent can be any colour; hard-coding the brand's dark
-/// foreground would make a navy accent unreadable.
+/// Black or white, whichever stays legible on `bg`. The decision is
+/// [`readable_on_rgb`].
 pub fn readable_on(bg: egui::Color32) -> egui::Color32 {
-    let lum = 0.2126 * bg.r() as f32 + 0.7152 * bg.g() as f32 + 0.0722 * bg.b() as f32;
-    if lum > 140.0 {
-        egui::Color32::from_rgb(9, 11, 15)
-    } else {
-        egui::Color32::from_rgb(248, 248, 248)
-    }
+    let (r, g, b) = readable_on_rgb((bg.r(), bg.g(), bg.b()));
+    egui::Color32::from_rgb(r, g, b)
 }
 
 /// Keep the egui visuals in step with the settings. Cheap; call every frame.
@@ -269,10 +226,7 @@ pub fn ensure_theme(app: &mut DbHiveApp, ctx: &egui::Context) {
     if let Some(applied) = app.screens.settings.applied {
         if app.mode != applied.mode {
             let s = &mut app.screens.settings;
-            s.draft.theme.mode = match app.mode {
-                Mode::Light => ThemeMode::Light,
-                Mode::Dark => ThemeMode::Dark,
-            };
+            s.draft.theme.mode = theme_mode_for(resolved_from(app.mode));
             s.dirty = true;
             s.applied = None;
         }
@@ -541,13 +495,7 @@ fn card<R>(
 }
 
 /// A checkbox with an optional second line of explanation.
-fn toggle(
-    ui: &mut egui::Ui,
-    palette: &Palette,
-    value: &mut bool,
-    label: &str,
-    hint: &str,
-) -> bool {
+fn toggle(ui: &mut egui::Ui, palette: &Palette, value: &mut bool, label: &str, hint: &str) -> bool {
     let changed = ui.checkbox(value, label).changed();
     if !hint.is_empty() {
         ui.horizontal(|ui| {
@@ -570,29 +518,35 @@ fn number(ui: &mut egui::Ui, value: &mut u32, range: (u32, u32), speed: f64) -> 
 fn general_section(s: &mut Settings, ui: &mut egui::Ui, palette: &Palette) {
     let mut changed = false;
 
-    card(ui, palette, "Language", "Choose your preferred language", |ui| {
-        let current = core_settings::LANGUAGES
-            .iter()
-            .find(|(code, _)| *code == s.draft.general.language)
-            .map(|(_, label)| *label)
-            .unwrap_or("English");
-        egui::ComboBox::from_id_salt("settings_language")
-            .selected_text(current)
-            .width(220.0)
-            .show_ui(ui, |ui| {
-                for (code, label) in core_settings::LANGUAGES {
-                    let selected = s.draft.general.language == *code;
-                    if ui.selectable_label(selected, *label).clicked() && !selected {
-                        s.draft.general.language = (*code).to_string();
-                        changed = true;
+    card(
+        ui,
+        palette,
+        "Language",
+        "Choose your preferred language",
+        |ui| {
+            let current = core_settings::LANGUAGES
+                .iter()
+                .find(|(code, _)| *code == s.draft.general.language)
+                .map(|(_, label)| *label)
+                .unwrap_or("English");
+            egui::ComboBox::from_id_salt("settings_language")
+                .selected_text(current)
+                .width(220.0)
+                .show_ui(ui, |ui| {
+                    for (code, label) in core_settings::LANGUAGES {
+                        let selected = s.draft.general.language == *code;
+                        if ui.selectable_label(selected, *label).clicked() && !selected {
+                            s.draft.general.language = (*code).to_string();
+                            changed = true;
+                        }
                     }
-                }
-            });
-        ui.label(text::muted(
-            palette,
-            "Stored only: there is no translated interface behind this yet.",
-        ));
-    });
+                });
+            ui.label(text::muted(
+                palette,
+                "Stored only: there is no translated interface behind this yet.",
+            ));
+        },
+    );
 
     card(
         ui,
@@ -606,7 +560,9 @@ fn general_section(s: &mut Settings, ui: &mut egui::Ui, palette: &Palette) {
                 .show_ui(ui, |ui| {
                     for option in STARTUP_BEHAVIORS {
                         let selected = s.draft.general.startup_behavior == option;
-                        if ui.selectable_label(selected, startup_label(option)).clicked()
+                        if ui
+                            .selectable_label(selected, startup_label(option))
+                            .clicked()
                             && !selected
                         {
                             s.draft.general.startup_behavior = option;
@@ -624,7 +580,10 @@ fn general_section(s: &mut Settings, ui: &mut egui::Ui, palette: &Palette) {
         "Automatically save connection profiles after testing",
         |ui| {
             changed |= ui
-                .checkbox(&mut s.draft.general.auto_save_connections, "Enable auto-save")
+                .checkbox(
+                    &mut s.draft.general.auto_save_connections,
+                    "Enable auto-save",
+                )
                 .changed();
         },
     );
@@ -655,7 +614,10 @@ fn general_section(s: &mut Settings, ui: &mut egui::Ui, palette: &Palette) {
                             1.0,
                         );
                     });
-                    ui.label(text::muted(palette, "How often to check for updates (1-168 hours)"));
+                    ui.label(text::muted(
+                        palette,
+                        "How often to check for updates (1-168 hours)",
+                    ));
                     ui.add_space(6.0);
 
                     changed |= toggle(
@@ -751,7 +713,11 @@ fn appearance_section(s: &mut Settings, ui: &mut egui::Ui, palette: &Palette) {
                         changed = true;
                     }
                 }
-                if ui.button("Reset").on_hover_text("Back to DB Hive honey").clicked() {
+                if ui
+                    .button("Reset")
+                    .on_hover_text("Back to DB Hive honey")
+                    .clicked()
+                {
                     let hex = core_settings::hex_string(core_settings::default_accent_rgb());
                     s.accent_input = hex.clone();
                     s.draft.theme.accent_color = hex;
@@ -839,7 +805,12 @@ fn query_section(s: &mut Settings, ui: &mut egui::Ui, palette: &Palette) {
         "Maximum Rows",
         "Maximum number of rows to fetch per query",
         |ui| {
-            changed |= number(ui, &mut s.draft.query.max_rows, core_settings::MAX_ROWS, 25.0);
+            changed |= number(
+                ui,
+                &mut s.draft.query.max_rows,
+                core_settings::MAX_ROWS,
+                25.0,
+            );
         },
     );
 
@@ -884,196 +855,33 @@ fn query_section(s: &mut Settings, ui: &mut egui::Ui, palette: &Palette) {
 // Keyboard shortcuts
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ShortcutField {
-    ExecuteQuery,
-    ClearEditor,
-    FormatSql,
-    SaveSnippet,
-    NewTab,
-    CloseTab,
-    ToggleSidebar,
-    Search,
-    OpenSettings,
-    ShowShortcuts,
-}
-
-pub const EDITOR_SHORTCUTS: [ShortcutField; 4] = [
-    ShortcutField::ExecuteQuery,
-    ShortcutField::ClearEditor,
-    ShortcutField::FormatSql,
-    ShortcutField::SaveSnippet,
-];
-
-pub const NAVIGATION_SHORTCUTS: [ShortcutField; 6] = [
-    ShortcutField::NewTab,
-    ShortcutField::CloseTab,
-    ShortcutField::ToggleSidebar,
-    ShortcutField::Search,
-    ShortcutField::OpenSettings,
-    ShortcutField::ShowShortcuts,
-];
-
-impl ShortcutField {
-    pub fn label(self) -> &'static str {
-        match self {
-            ShortcutField::ExecuteQuery => "Execute Query",
-            ShortcutField::ClearEditor => "Clear Editor",
-            ShortcutField::FormatSql => "Format SQL",
-            ShortcutField::SaveSnippet => "Save Snippet",
-            ShortcutField::NewTab => "New Tab",
-            ShortcutField::CloseTab => "Close Tab",
-            ShortcutField::ToggleSidebar => "Toggle Sidebar",
-            ShortcutField::Search => "Search",
-            ShortcutField::OpenSettings => "Open Settings",
-            ShortcutField::ShowShortcuts => "Show Shortcuts",
-        }
-    }
-
-    pub fn get(self, s: &ShortcutsSettings) -> &str {
-        match self {
-            ShortcutField::ExecuteQuery => &s.execute_query,
-            ShortcutField::ClearEditor => &s.clear_editor,
-            ShortcutField::FormatSql => &s.format_sql,
-            ShortcutField::SaveSnippet => &s.save_snippet,
-            ShortcutField::NewTab => &s.new_tab,
-            ShortcutField::CloseTab => &s.close_tab,
-            ShortcutField::ToggleSidebar => &s.toggle_sidebar,
-            ShortcutField::Search => &s.search,
-            ShortcutField::OpenSettings => &s.open_settings,
-            ShortcutField::ShowShortcuts => &s.show_shortcuts,
-        }
-    }
-
-    pub fn set(self, s: &mut ShortcutsSettings, value: String) {
-        let slot = match self {
-            ShortcutField::ExecuteQuery => &mut s.execute_query,
-            ShortcutField::ClearEditor => &mut s.clear_editor,
-            ShortcutField::FormatSql => &mut s.format_sql,
-            ShortcutField::SaveSnippet => &mut s.save_snippet,
-            ShortcutField::NewTab => &mut s.new_tab,
-            ShortcutField::CloseTab => &mut s.close_tab,
-            ShortcutField::ToggleSidebar => &mut s.toggle_sidebar,
-            ShortcutField::Search => &mut s.search,
-            ShortcutField::OpenSettings => &mut s.open_settings,
-            ShortcutField::ShowShortcuts => &mut s.show_shortcuts,
-        };
-        *slot = value;
-    }
-}
-
-/// Other bindings already using `value`. A warning, never a block: the web
-/// shell allowed the duplicate and so does this.
-pub fn duplicates(
-    shortcuts: &ShortcutsSettings,
-    own: ShortcutField,
-    value: &str,
-) -> Vec<&'static str> {
-    if value.is_empty() {
-        return Vec::new();
-    }
-    EDITOR_SHORTCUTS
-        .iter()
-        .chain(NAVIGATION_SHORTCUTS.iter())
-        .filter(|f| **f != own)
-        .filter(|f| f.get(shortcuts).eq_ignore_ascii_case(value))
-        .map(|f| f.label())
-        .collect()
-}
-
-/// Outcome of watching the keyboard while a binding is being recorded.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Recorded {
-    /// Nothing usable yet; keep listening.
-    Pending,
-    /// Escape: leave the binding as it was.
-    Cancel,
-    /// Backspace: unbind.
-    Clear,
-    Bind(String),
-    /// A keystroke that cannot be a binding, with the reason.
-    Invalid(String),
-}
-
 /// Format a keystroke the way `settings.json` stores it, e.g. "Ctrl+Shift+F".
 ///
-/// `is_mac` is a parameter rather than a `cfg!` so both spellings can be
-/// tested on either platform.
+/// The egui adapter for [`combo_string`]. `capture` goes through
+/// `record_keystroke` instead, so outside the tests nothing calls this yet.
+#[allow(dead_code)]
 pub fn combo_from(modifiers: egui::Modifiers, key: egui::Key, is_mac: bool) -> String {
-    // egui folds Ctrl into `command` off macOS and Cmd into it on macOS;
-    // untangle that first or every binding gains a phantom "Ctrl".
-    let (ctrl, cmd) = if is_mac {
-        (modifiers.ctrl, modifiers.mac_cmd || modifiers.command)
-    } else {
-        (modifiers.ctrl || modifiers.command, false)
-    };
+    combo_string(key_modifiers(modifiers), &key_label(key), is_mac)
+}
 
-    let mut parts: Vec<&str> = Vec::new();
-    if ctrl {
-        parts.push("Ctrl");
+fn key_modifiers(m: egui::Modifiers) -> KeyModifiers {
+    KeyModifiers {
+        alt: m.alt,
+        ctrl: m.ctrl,
+        shift: m.shift,
+        mac_cmd: m.mac_cmd,
+        command: m.command,
     }
-    if cmd {
-        parts.push("Cmd");
-    }
-    if modifiers.alt {
-        parts.push(if is_mac { "Option" } else { "Alt" });
-    }
-    if modifiers.shift {
-        parts.push("Shift");
-    }
-    let key = key_label(key);
-    parts.push(&key);
-    parts.join("+")
 }
 
 /// egui's `Key::name()` spells punctuation out ("Comma"); the stored format
 /// uses the symbol, so "Ctrl+," round-trips.
 pub fn key_label(key: egui::Key) -> String {
-    use egui::Key::*;
-    match key {
-        Comma => ",",
-        Period => ".",
-        Semicolon => ";",
-        Colon => ":",
-        Minus => "-",
-        Plus => "+",
-        Equals => "=",
-        Slash => "/",
-        Backslash => "\\",
-        Pipe => "|",
-        Questionmark => "?",
-        OpenBracket => "[",
-        CloseBracket => "]",
-        Backtick => "`",
-        Quote => "'",
-        other => return other.name().to_string(),
-    }
-    .to_string()
+    key_label_for_name(key.name())
 }
 
-/// A binding needs a real modifier unless it is a named key ("F5", "Escape")
-/// or "?": a bare letter would swallow ordinary typing.
-pub fn is_valid_shortcut(combo: &str) -> bool {
-    if combo.is_empty() {
-        return false;
-    }
-    let parts: Vec<&str> = combo.split('+').collect();
-    let last = *parts.last().unwrap_or(&"");
-    // A trailing "+" means the bound key *is* "+", e.g. "Ctrl++".
-    let last = if last.is_empty() { "+" } else { last };
-    let has_real_modifier = parts[..parts.len().saturating_sub(1)].iter().any(|m| {
-        matches!(
-            m.to_ascii_lowercase().as_str(),
-            "ctrl" | "cmd" | "meta" | "alt" | "option"
-        )
-    });
-    if !has_real_modifier && last.chars().count() == 1 && last != "?" {
-        return false;
-    }
-    true
-}
-
-/// Interpret the frame's key events while recording.
+/// Interpret the frame's key events while recording: the first pressed key
+/// decides, via [`record_keystroke`].
 pub fn capture(events: &[egui::Event], is_mac: bool) -> Recorded {
     for event in events {
         let egui::Event::Key {
@@ -1085,28 +893,7 @@ pub fn capture(events: &[egui::Event], is_mac: bool) -> Recorded {
         else {
             continue;
         };
-
-        if *key == egui::Key::Escape {
-            return Recorded::Cancel;
-        }
-        if *key == egui::Key::Backspace
-            && !modifiers.ctrl
-            && !modifiers.mac_cmd
-            && !modifiers.command
-            && !modifiers.alt
-        {
-            return Recorded::Clear;
-        }
-
-        let combo = combo_from(*modifiers, *key, is_mac);
-        return if is_valid_shortcut(&combo) {
-            Recorded::Bind(combo)
-        } else {
-            Recorded::Invalid(format!(
-                "\"{}\" needs a modifier (Ctrl, Cmd or Alt) to be a shortcut",
-                combo
-            ))
-        };
+        return record_keystroke(key_modifiers(*modifiers), &key_label(*key), is_mac);
     }
     Recorded::Pending
 }
@@ -1138,11 +925,7 @@ fn shortcuts_section(
                 field.set(&mut s.draft.shortcuts, combo.clone());
                 s.recording = None;
                 if !dupes.is_empty() {
-                    actions.push(Action::Warn(format!(
-                        "\"{}\" is already bound to: {}",
-                        combo,
-                        dupes.join(", ")
-                    )));
+                    actions.push(Action::Warn(duplicate_warning(&combo, &dupes)));
                 }
                 actions.push(Action::SaveShortcuts);
             }
@@ -1197,13 +980,7 @@ fn shortcut_row(
 ) {
     let recording = s.recording == Some(field);
     let binding = field.get(&s.draft.shortcuts).to_string();
-    let display = if recording {
-        "Press shortcut…".to_string()
-    } else if binding.is_empty() {
-        "(unbound)".to_string()
-    } else {
-        binding.clone()
-    };
+    let display = shortcut_display(recording, &binding);
 
     ui.horizontal(|ui| {
         ui.label(field.label());
@@ -1220,7 +997,11 @@ fn shortcut_row(
             }
             let button = egui::Button::new(egui::RichText::new(display).monospace())
                 .min_size(egui::vec2(140.0, 22.0))
-                .fill(if recording { palette.accent } else { palette.muted });
+                .fill(if recording {
+                    palette.accent
+                } else {
+                    palette.muted
+                });
             if ui
                 .add(button)
                 .on_hover_text(format!("Rebind {}", field.label()))
@@ -1231,22 +1012,6 @@ fn shortcut_row(
         });
     });
     ui.add_space(2.0);
-}
-
-const STARTUP_BEHAVIORS: [StartupBehavior; 4] = [
-    StartupBehavior::ShowConnectionList,
-    StartupBehavior::OpenLastConnection,
-    StartupBehavior::OpenDefaultConnection,
-    StartupBehavior::ShowQueryEditor,
-];
-
-fn startup_label(behavior: StartupBehavior) -> &'static str {
-    match behavior {
-        StartupBehavior::ShowConnectionList => "Show Connection List",
-        StartupBehavior::OpenLastConnection => "Open Last Connection",
-        StartupBehavior::OpenDefaultConnection => "Open Default Connection",
-        StartupBehavior::ShowQueryEditor => "Show Query Editor",
-    }
 }
 
 #[cfg(test)]
@@ -1339,35 +1104,6 @@ mod tests {
     }
 
     #[test]
-    fn bare_letters_are_rejected_but_named_keys_are_not() {
-        assert!(!is_valid_shortcut("K"));
-        assert!(!is_valid_shortcut("Shift+K"));
-        assert!(!is_valid_shortcut(""));
-        assert!(is_valid_shortcut("Ctrl+K"));
-        assert!(is_valid_shortcut("Cmd+Enter"));
-        assert!(is_valid_shortcut("Option+K"));
-        assert!(is_valid_shortcut("F5"));
-        assert!(is_valid_shortcut("Escape"));
-        assert!(is_valid_shortcut("?"));
-        assert!(is_valid_shortcut("Shift+?"));
-        assert!(is_valid_shortcut("Ctrl++"));
-    }
-
-    #[test]
-    fn every_default_binding_is_valid() {
-        let defaults = ShortcutsSettings::default();
-        for field in EDITOR_SHORTCUTS.iter().chain(NAVIGATION_SHORTCUTS.iter()) {
-            let binding = field.get(&defaults);
-            assert!(
-                is_valid_shortcut(binding),
-                "default binding {:?} = {:?} is rejected by the validator",
-                field.label(),
-                binding
-            );
-        }
-    }
-
-    #[test]
     fn capture_reports_cancel_clear_and_bind() {
         assert_eq!(capture(&[], false), Recorded::Pending);
         assert_eq!(
@@ -1375,7 +1111,10 @@ mod tests {
             Recorded::Cancel
         );
         assert_eq!(
-            capture(&[key_event(egui::Key::Backspace, Default::default())], false),
+            capture(
+                &[key_event(egui::Key::Backspace, Default::default())],
+                false
+            ),
             Recorded::Clear
         );
         assert_eq!(
@@ -1412,52 +1151,14 @@ mod tests {
     fn ctrl_backspace_is_a_binding_not_an_unbind() {
         assert_eq!(
             capture(
-                &[key_event(egui::Key::Backspace, mods(true, false, false, false))],
+                &[key_event(
+                    egui::Key::Backspace,
+                    mods(true, false, false, false)
+                )],
                 false
             ),
             Recorded::Bind("Ctrl+Backspace".into())
         );
-    }
-
-    #[test]
-    fn duplicates_are_found_across_both_groups_but_not_self() {
-        let mut s = ShortcutsSettings::default();
-        s.new_tab = "Ctrl+K".into(); // same as the default clearEditor
-        assert_eq!(
-            duplicates(&s, ShortcutField::NewTab, "Ctrl+K"),
-            vec!["Clear Editor"]
-        );
-        // A field never reports itself.
-        assert!(duplicates(&s, ShortcutField::ClearEditor, "Ctrl+K").contains(&"New Tab"));
-        assert!(!duplicates(&s, ShortcutField::ClearEditor, "Ctrl+K").contains(&"Clear Editor"));
-        // Case-insensitive, and an empty binding is never a duplicate.
-        assert_eq!(
-            duplicates(&s, ShortcutField::NewTab, "ctrl+k"),
-            vec!["Clear Editor"]
-        );
-        assert!(duplicates(&s, ShortcutField::NewTab, "").is_empty());
-    }
-
-    #[test]
-    fn default_bindings_have_no_duplicates() {
-        let defaults = ShortcutsSettings::default();
-        for field in EDITOR_SHORTCUTS.iter().chain(NAVIGATION_SHORTCUTS.iter()) {
-            let binding = field.get(&defaults).to_string();
-            assert!(
-                duplicates(&defaults, *field, &binding).is_empty(),
-                "{} collides out of the box",
-                field.label()
-            );
-        }
-    }
-
-    #[test]
-    fn shortcut_field_get_and_set_address_the_same_slot() {
-        let mut s = ShortcutsSettings::default();
-        for field in EDITOR_SHORTCUTS.iter().chain(NAVIGATION_SHORTCUTS.iter()) {
-            field.set(&mut s, format!("Ctrl+{}", field.label()));
-            assert_eq!(field.get(&s), format!("Ctrl+{}", field.label()));
-        }
     }
 
     #[test]
@@ -1494,24 +1195,9 @@ mod tests {
     }
 
     #[test]
-    fn sections_cover_the_four_react_tabs() {
-        let labels: Vec<&str> = Section::ALL.iter().map(|s| s.label()).collect();
-        assert_eq!(
-            labels,
-            vec![
-                "General",
-                "Appearance",
-                "Query Execution",
-                "Keyboard Shortcuts"
-            ]
-        );
-    }
-
-    #[test]
-    fn startup_labels_cover_every_variant() {
-        assert_eq!(STARTUP_BEHAVIORS.len(), 4);
-        for b in STARTUP_BEHAVIORS {
-            assert!(!startup_label(b).is_empty());
+    fn resolve_mode_adapters_round_trip() {
+        for m in [Mode::Light, Mode::Dark] {
+            assert_eq!(mode_from(resolved_from(m)), m);
         }
     }
 }

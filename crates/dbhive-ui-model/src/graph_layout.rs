@@ -200,8 +200,14 @@ fn assign_layers(nodes: &[Node], edges: &[&Edge]) -> Vec<Vec<String>> {
         in_degree.insert(n.id.as_str(), 0);
     }
     for e in edges {
-        outgoing.entry(e.from.as_str()).or_default().push(e.to.as_str());
-        incoming.entry(e.to.as_str()).or_default().push(e.from.as_str());
+        outgoing
+            .entry(e.from.as_str())
+            .or_default()
+            .push(e.to.as_str());
+        incoming
+            .entry(e.to.as_str())
+            .or_default()
+            .push(e.from.as_str());
         *in_degree.entry(e.to.as_str()).or_insert(0) += 1;
     }
 
@@ -242,11 +248,7 @@ fn assign_layers(nodes: &[Node], edges: &[&Edge]) -> Vec<Vec<String>> {
 
 /// Barycentre ordering: repeatedly pull each node towards the mean position
 /// of its neighbours in the previous (then next) layer.
-fn order_within_layers(
-    layers: &[Vec<String>],
-    edges: &[&Edge],
-    sweeps: usize,
-) -> Vec<Vec<String>> {
+fn order_within_layers(layers: &[Vec<String>], edges: &[&Edge], sweeps: usize) -> Vec<Vec<String>> {
     let mut layers: Vec<Vec<String>> = layers.to_vec();
     if layers.len() < 2 {
         return layers;
@@ -255,8 +257,14 @@ fn order_within_layers(
     let mut preds: HashMap<&str, Vec<&str>> = HashMap::new();
     let mut succs: HashMap<&str, Vec<&str>> = HashMap::new();
     for e in edges {
-        preds.entry(e.to.as_str()).or_default().push(e.from.as_str());
-        succs.entry(e.from.as_str()).or_default().push(e.to.as_str());
+        preds
+            .entry(e.to.as_str())
+            .or_default()
+            .push(e.from.as_str());
+        succs
+            .entry(e.from.as_str())
+            .or_default()
+            .push(e.to.as_str());
     }
 
     for sweep in 0..sweeps {
@@ -269,7 +277,11 @@ fn order_within_layers(
 
         for li in order {
             let reference: HashMap<&str, f32> = {
-                let ref_layer = if downward { &layers[li - 1] } else { &layers[li + 1] };
+                let ref_layer = if downward {
+                    &layers[li - 1]
+                } else {
+                    &layers[li + 1]
+                };
                 ref_layer
                     .iter()
                     .enumerate()
@@ -285,8 +297,10 @@ fn order_within_layers(
                     let bary = neighbours
                         .get(id.as_str())
                         .map(|ns| {
-                            let vals: Vec<f32> =
-                                ns.iter().filter_map(|n| reference.get(n).copied()).collect();
+                            let vals: Vec<f32> = ns
+                                .iter()
+                                .filter_map(|n| reference.get(n).copied())
+                                .collect();
                             if vals.is_empty() {
                                 // No neighbour to follow: hold position, so
                                 // unconnected nodes do not jump around.
@@ -483,8 +497,22 @@ mod tests {
     fn horizontal_and_vertical_swap_the_axes() {
         let nodes = vec![n("a"), n("b")];
         let edges = vec![e("a", "b")];
-        let h = layout(&nodes, &edges, LayoutOptions { horizontal: true, ..Default::default() });
-        let v = layout(&nodes, &edges, LayoutOptions { horizontal: false, ..Default::default() });
+        let h = layout(
+            &nodes,
+            &edges,
+            LayoutOptions {
+                horizontal: true,
+                ..Default::default()
+            },
+        );
+        let v = layout(
+            &nodes,
+            &edges,
+            LayoutOptions {
+                horizontal: false,
+                ..Default::default()
+            },
+        );
         // Laid out horizontally the second node advances in x, vertically in y.
         assert!(h.placements["b"].x > h.placements["a"].x);
         assert_eq!(h.placements["a"].y, h.placements["b"].y);

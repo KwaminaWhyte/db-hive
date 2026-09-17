@@ -254,10 +254,7 @@ pub fn paged_select_sql(
     rules: DialectRules,
     q: &DataQuery<'_>,
 ) -> String {
-    let mut sql = format!(
-        "SELECT * FROM {}",
-        qualified_name(quote, q.schema, q.table)
-    );
+    let mut sql = format!("SELECT * FROM {}", qualified_name(quote, q.schema, q.table));
 
     let where_sql = where_clause(quote, escape, rules, q.filters);
     if !where_sql.is_empty() {
@@ -432,16 +429,11 @@ pub fn indexes_result(schema: &TableSchema) -> QueryResult {
             vec![
                 serde_json::Value::String(i.name.clone()),
                 serde_json::Value::String(i.columns.join(", ")),
-                serde_json::Value::String(
-                    index_kind_label(i.is_primary, i.is_unique).to_string(),
-                ),
+                serde_json::Value::String(index_kind_label(i.is_primary, i.is_unique).to_string()),
             ]
         })
         .collect();
-    QueryResult::with_data(
-        vec!["Index".into(), "Columns".into(), "Kind".into()],
-        rows,
-    )
+    QueryResult::with_data(vec!["Index".into(), "Columns".into(), "Kind".into()], rows)
 }
 
 /// Relations touching `table`: keys it declares, and keys pointing at it.
@@ -570,10 +562,7 @@ mod tests {
     #[test]
     fn paged_select_quotes_schema_and_table() {
         let sql = paged_select_sql(&q, &esc, pg(), &query(1, 50));
-        assert_eq!(
-            sql,
-            "SELECT * FROM \"public\".\"users\" LIMIT 50 OFFSET 0"
-        );
+        assert_eq!(sql, "SELECT * FROM \"public\".\"users\" LIMIT 50 OFFSET 0");
     }
 
     #[test]
@@ -724,10 +713,19 @@ mod tests {
 
     #[test]
     fn page_range_label_describes_the_current_slice() {
-        assert_eq!(page_range_label(1, 50, 50, Some(1204)), "1-50 of 1,204 rows");
-        assert_eq!(page_range_label(2, 50, 50, Some(1204)), "51-100 of 1,204 rows");
+        assert_eq!(
+            page_range_label(1, 50, 50, Some(1204)),
+            "1-50 of 1,204 rows"
+        );
+        assert_eq!(
+            page_range_label(2, 50, 50, Some(1204)),
+            "51-100 of 1,204 rows"
+        );
         // Last page: fewer rows than the page size.
-        assert_eq!(page_range_label(25, 50, 4, Some(1204)), "1,201-1,204 of 1,204 rows");
+        assert_eq!(
+            page_range_label(25, 50, 4, Some(1204)),
+            "1,201-1,204 of 1,204 rows"
+        );
         assert_eq!(page_range_label(1, 50, 0, Some(0)), "0 of 0 rows");
         assert_eq!(page_range_label(1, 50, 10, None), "1-10");
     }
@@ -737,7 +735,7 @@ mod tests {
     #[test]
     fn incomplete_filters_are_ignored() {
         let filters = vec![
-            Filter::new("name"),                       // contains, no value
+            Filter::new("name"), // contains, no value
             Filter {
                 column: String::new(),
                 op: FilterOp::Equals,
@@ -843,7 +841,8 @@ mod tests {
 
     #[test]
     fn count_is_read_from_numbers_and_strings_alike() {
-        let numeric = QueryResult::with_data(vec!["count".into()], vec![vec![serde_json::json!(42)]]);
+        let numeric =
+            QueryResult::with_data(vec!["count".into()], vec![vec![serde_json::json!(42)]]);
         assert_eq!(parse_count(&numeric), Some(42));
         // MySQL and SQL Server drivers hand back BIGINT counts as strings.
         let text =
@@ -986,5 +985,4 @@ mod tests {
         // No declared action shows the SQL default rather than an empty cell.
         assert_eq!(r.rows[1][4], serde_json::json!("NO ACTION"));
     }
-
 }

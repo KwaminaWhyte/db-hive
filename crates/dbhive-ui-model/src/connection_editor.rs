@@ -158,7 +158,10 @@ pub fn form_from_profile(profile: &ConnectionProfile) -> ConnectionForm {
         is_favorite: profile.is_favorite,
         ssh_enabled: ssh.is_some(),
         ssh_host: ssh.as_ref().map(|s| s.host.clone()).unwrap_or_default(),
-        ssh_port: ssh.as_ref().map(|s| s.port.to_string()).unwrap_or_else(|| "22".to_string()),
+        ssh_port: ssh
+            .as_ref()
+            .map(|s| s.port.to_string())
+            .unwrap_or_else(|| "22".to_string()),
         ssh_username: ssh.as_ref().map(|s| s.username.clone()).unwrap_or_default(),
         ssh_auth_method: ssh
             .as_ref()
@@ -291,7 +294,9 @@ pub fn password_label(driver: &DbDriver) -> &'static str {
 pub fn connection_string_placeholder(driver: &DbDriver) -> &'static str {
     match driver {
         DbDriver::Postgres => "postgresql://user:password@host:5432/database",
-        DbDriver::Supabase => "postgresql://postgres:password@db.<project>.supabase.co:5432/postgres",
+        DbDriver::Supabase => {
+            "postgresql://postgres:password@db.<project>.supabase.co:5432/postgres"
+        }
         DbDriver::Neon => "postgresql://user:password@ep-<id>.neon.tech/neondb",
         DbDriver::MySql => "mysql://user:password@host:3306/database",
         DbDriver::MongoDb => "mongodb://user:password@host:27017/database",
@@ -599,7 +604,10 @@ pub fn parse_connection_string(driver: &DbDriver, raw: &str) -> Option<ParsedCon
 /// Apply a parsed connection string over the form, leaving fields the string
 /// did not mention untouched. Returns the password, if the string carried one,
 /// so the caller can put it in the (separately held) password field.
-pub fn apply_connection_string(form: &mut ConnectionForm, parsed: &ParsedConnectionString) -> Option<String> {
+pub fn apply_connection_string(
+    form: &mut ConnectionForm,
+    parsed: &ParsedConnectionString,
+) -> Option<String> {
     if let Some(h) = &parsed.host {
         form.host = h.clone();
     }
@@ -614,7 +622,6 @@ pub fn apply_connection_string(form: &mut ConnectionForm, parsed: &ParsedConnect
     }
     parsed.password.clone()
 }
-
 
 /// Parse a `#rrggbb` / `#rgb` colour tag into `(r, g, b)`. Profile colour
 /// tags are user data, not theme colours, so they are read from the profile
@@ -719,7 +726,12 @@ pub async fn dial(driver: &DbDriver, opts: ConnectionOptions) -> Result<(), DbEr
         DbDriver::Sqlite => SqliteDriver::connect(opts).await?.test_connection().await,
         DbDriver::MySql => MysqlDriver::connect(opts).await?.test_connection().await,
         DbDriver::MongoDb => MongoDbDriver::connect(opts).await?.test_connection().await,
-        DbDriver::SqlServer => SqlServerDriver::connect(opts).await?.test_connection().await,
+        DbDriver::SqlServer => {
+            SqlServerDriver::connect(opts)
+                .await?
+                .test_connection()
+                .await
+        }
         DbDriver::Turso => TursoDriver::connect(opts).await?.test_connection().await,
         DbDriver::Redis => RedisDriver::connect(opts).await?.test_connection().await,
     }
@@ -750,7 +762,10 @@ pub async fn save_profile(
     let mut warning = None;
     if !password.is_empty() {
         if let Err(e) = CredentialManager::save_password(&id, &password) {
-            warning = Some(format!("Profile saved, but the password could not be stored: {}", e));
+            warning = Some(format!(
+                "Profile saved, but the password could not be stored: {}",
+                e
+            ));
         }
     }
     if let Some(ssh) = ssh_password {
@@ -823,7 +838,10 @@ mod tests {
         assert_eq!(default_ssl_mode(&DbDriver::Supabase), SslMode::Require);
         assert_eq!(default_ssl_mode(&DbDriver::Neon), SslMode::Require);
         assert_eq!(default_ssl_mode(&DbDriver::Postgres), SslMode::Prefer);
-        assert_eq!(ConnectionForm::new_for(DbDriver::Neon).ssl_mode, SslMode::Require);
+        assert_eq!(
+            ConnectionForm::new_for(DbDriver::Neon).ssl_mode,
+            SslMode::Require
+        );
     }
 
     // --- driver-specific fields ---
@@ -856,7 +874,11 @@ mod tests {
         for driver in [DbDriver::MongoDb, DbDriver::Redis] {
             let f = driver_fields(&driver);
             assert!(f.username, "{:?} shows a username box", driver);
-            assert!(!f.username_required, "{:?} allows an empty username", driver);
+            assert!(
+                !f.username_required,
+                "{:?} allows an empty username",
+                driver
+            );
         }
         assert_eq!(database_label(&DbDriver::Redis), "Database index");
     }
@@ -965,7 +987,10 @@ mod tests {
         let mut form = ConnectionForm::new_for(DbDriver::Turso);
         form.name = "Edge".to_string();
         form.host = String::new();
-        assert_eq!(validate(&form).host.as_deref(), Some("libSQL URL is required"));
+        assert_eq!(
+            validate(&form).host.as_deref(),
+            Some("libSQL URL is required")
+        );
 
         form.host = "libsql://db-org.turso.io".to_string();
         assert!(validate(&form).is_valid());
@@ -1116,7 +1141,10 @@ mod tests {
         assert_eq!(ssh.port, 22);
         assert_eq!(ssh.username, "ubuntu");
         assert_eq!(ssh.auth_method, SshAuthMethod::Password);
-        assert!(ssh.private_key_path.is_none(), "password auth stores no key path");
+        assert!(
+            ssh.private_key_path.is_none(),
+            "password auth stores no key path"
+        );
         assert_eq!(ssh.local_port, 0);
     }
 
@@ -1186,8 +1214,11 @@ mod tests {
 
     #[test]
     fn parses_a_full_postgres_uri() {
-        let p = parse_connection_string(&DbDriver::Postgres, "postgresql://me:s3cret@db.host:6543/app")
-            .expect("parsed");
+        let p = parse_connection_string(
+            &DbDriver::Postgres,
+            "postgresql://me:s3cret@db.host:6543/app",
+        )
+        .expect("parsed");
         assert_eq!(p.username.as_deref(), Some("me"));
         assert_eq!(p.password.as_deref(), Some("s3cret"));
         assert_eq!(p.host.as_deref(), Some("db.host"));
@@ -1242,8 +1273,11 @@ mod tests {
 
     #[test]
     fn mongodb_srv_scheme_is_accepted() {
-        let p = parse_connection_string(&DbDriver::MongoDb, "mongodb+srv://u:p@cluster.mongodb.net/app")
-            .expect("parsed");
+        let p = parse_connection_string(
+            &DbDriver::MongoDb,
+            "mongodb+srv://u:p@cluster.mongodb.net/app",
+        )
+        .expect("parsed");
         assert_eq!(p.host.as_deref(), Some("cluster.mongodb.net"));
         assert_eq!(p.port, None);
     }
@@ -1255,11 +1289,15 @@ mod tests {
         form.database = "existing".to_string();
 
         let parsed =
-            parse_connection_string(&DbDriver::Postgres, "postgres://newuser@newhost:1234").unwrap();
+            parse_connection_string(&DbDriver::Postgres, "postgres://newuser@newhost:1234")
+                .unwrap();
         let password = apply_connection_string(&mut form, &parsed);
 
         assert_eq!(form.name, "Keep me", "the name is not part of a URI");
-        assert_eq!(form.database, "existing", "no database in the URI, so no change");
+        assert_eq!(
+            form.database, "existing",
+            "no database in the URI, so no change"
+        );
         assert_eq!(form.host, "newhost");
         assert_eq!(form.port, "1234");
         assert_eq!(form.username, "newuser");
@@ -1271,7 +1309,10 @@ mod tests {
         let mut form = valid_pg_form();
         let parsed =
             parse_connection_string(&DbDriver::Postgres, "postgres://u:pw@h:5432/d").unwrap();
-        assert_eq!(apply_connection_string(&mut form, &parsed).as_deref(), Some("pw"));
+        assert_eq!(
+            apply_connection_string(&mut form, &parsed).as_deref(),
+            Some("pw")
+        );
     }
 
     // --- colour tags ---

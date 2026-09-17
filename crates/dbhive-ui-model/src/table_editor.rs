@@ -161,7 +161,10 @@ impl TypeKind {
 
     /// Only integers can sensibly auto-increment.
     pub fn can_auto_increment(self) -> bool {
-        matches!(self, TypeKind::SmallInt | TypeKind::Integer | TypeKind::BigInt)
+        matches!(
+            self,
+            TypeKind::SmallInt | TypeKind::Integer | TypeKind::BigInt
+        )
     }
 }
 
@@ -275,7 +278,10 @@ pub fn validate(name: &str, columns: &[ColumnRow]) -> Vec<String> {
             errors.push(format!("Column {} needs a type name", c.name.trim()));
         }
         if c.type_kind.takes_length() && c.length == 0 {
-            errors.push(format!("Column {} needs a length above zero", c.name.trim()));
+            errors.push(format!(
+                "Column {} needs a length above zero",
+                c.name.trim()
+            ));
         }
         if c.type_kind.takes_precision() && c.scale > c.precision {
             errors.push(format!(
@@ -649,7 +655,9 @@ mod tests {
         let mut c = col("id");
         c.type_kind = TypeKind::Text;
         c.auto_increment = true;
-        assert!(validate("t", &[c]).iter().any(|e| e.contains("auto-increment")));
+        assert!(validate("t", &[c])
+            .iter()
+            .any(|e| e.contains("auto-increment")));
 
         let mut ok = col("id");
         ok.type_kind = TypeKind::BigInt;
@@ -719,9 +727,14 @@ mod tests {
         name.type_kind = TypeKind::Varchar;
         name.length = 50;
 
-        let pg = preview_sql(&DbDriver::Postgres, "public", "users", &[id.clone(), name.clone()])
-            .unwrap()
-            .join("\n");
+        let pg = preview_sql(
+            &DbDriver::Postgres,
+            "public",
+            "users",
+            &[id.clone(), name.clone()],
+        )
+        .unwrap()
+        .join("\n");
         assert!(pg.contains("users"), "{}", pg);
         assert!(pg.to_uppercase().contains("CREATE TABLE"), "{}", pg);
         assert!(pg.contains("VARCHAR(50)"), "{}", pg);
@@ -1000,7 +1013,11 @@ mod tests {
         let my = preview_alter_sql(&DbDriver::MySql, "app", "users", &loaded, &edited)
             .unwrap()
             .join("\n");
-        assert!(my.contains('`'), "MySQL should quote with backticks: {}", my);
+        assert!(
+            my.contains('`'),
+            "MySQL should quote with backticks: {}",
+            my
+        );
         assert_ne!(pg, my, "two dialects produced identical SQL");
     }
 

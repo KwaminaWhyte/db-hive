@@ -310,7 +310,11 @@ pub struct QueryTable {
 }
 
 impl QueryTable {
-    pub fn new(alias: impl Into<String>, schema: impl Into<String>, name: impl Into<String>) -> Self {
+    pub fn new(
+        alias: impl Into<String>,
+        schema: impl Into<String>,
+        name: impl Into<String>,
+    ) -> Self {
         Self {
             alias: alias.into(),
             schema: schema.into(),
@@ -787,14 +791,22 @@ fn resolved_joins(state: &BuilderState, active: &[String]) -> Vec<usize> {
 }
 
 /// `SELECT [DISTINCT] ...`, or `SELECT *` when nothing is picked.
-fn select_clause(quote: &impl Fn(&str) -> String, state: &BuilderState, active: &[String]) -> String {
+fn select_clause(
+    quote: &impl Fn(&str) -> String,
+    state: &BuilderState,
+    active: &[String],
+) -> String {
     let usable: Vec<&SelectedColumn> = state
         .columns
         .iter()
         .filter(|c| c.is_usable() && active.iter().any(|a| a == &c.table_alias))
         .collect();
 
-    let head = if state.distinct { "SELECT DISTINCT " } else { "SELECT " };
+    let head = if state.distinct {
+        "SELECT DISTINCT "
+    } else {
+        "SELECT "
+    };
     if usable.is_empty() {
         return format!("{}*", head);
     }
@@ -1055,11 +1067,7 @@ pub fn pagination_summary(limit: Option<u64>, offset: Option<u64>) -> String {
         (None, None) => "Every matching row".to_string(),
         (Some(n), None) => format!("The first {} row(s)", n),
         (None, Some(m)) => format!("Every row after the first {}", m),
-        (Some(n), Some(m)) => format!(
-            "Rows {} to {}",
-            m.saturating_add(1),
-            m.saturating_add(n)
-        ),
+        (Some(n), Some(m)) => format!("Rows {} to {}", m.saturating_add(1), m.saturating_add(n)),
     }
 }
 
@@ -1123,7 +1131,10 @@ pub fn validate(state: &BuilderState, rules: DialectRules) -> Vec<String> {
 
     for (i, join) in state.joins.iter().enumerate() {
         if !join.is_complete() {
-            out.push(format!("Join {} is missing a column and is left out.", i + 1));
+            out.push(format!(
+                "Join {} is missing a column and is left out.",
+                i + 1
+            ));
             continue;
         }
         if join.join_type == JoinType::Cross {
@@ -1381,7 +1392,9 @@ mod tests {
     #[test]
     fn a_half_typed_condition_is_left_out_rather_than_compared_to_empty() {
         let mut s = base();
-        s.filters.conditions.push(Condition::new("users", "name", ValueKind::Text));
+        s.filters
+            .conditions
+            .push(Condition::new("users", "name", ValueKind::Text));
         // No value typed yet.
         assert!(!sql(&s).contains("WHERE"));
     }
@@ -1406,7 +1419,9 @@ mod tests {
         s.tables.push(orders());
         let warnings = validate(&s, pg());
         assert!(
-            warnings.iter().any(|w| w.contains("orders") && w.contains("not joined")),
+            warnings
+                .iter()
+                .any(|w| w.contains("orders") && w.contains("not joined")),
             "{:?}",
             warnings
         );
@@ -1601,7 +1616,10 @@ mod tests {
     fn value_kinds_are_read_off_the_declared_type() {
         assert_eq!(ValueKind::from_data_type("BOOLEAN"), ValueKind::Bool);
         assert_eq!(ValueKind::from_data_type("bigint"), ValueKind::Number);
-        assert_eq!(ValueKind::from_data_type("numeric(10,2)"), ValueKind::Number);
+        assert_eq!(
+            ValueKind::from_data_type("numeric(10,2)"),
+            ValueKind::Number
+        );
         assert_eq!(ValueKind::from_data_type("varchar(255)"), ValueKind::Text);
         assert_eq!(ValueKind::from_data_type("timestamptz"), ValueKind::Text);
         assert_eq!(ValueKind::from_data_type("interval"), ValueKind::Text);
@@ -1734,7 +1752,11 @@ mod tests {
         s.joins[0].left_column.clear();
         s.joins[0].right_column.clear();
         let out = sql(&s);
-        assert!(out.contains("CROSS JOIN \"public\".\"orders\" AS \"orders\""), "{}", out);
+        assert!(
+            out.contains("CROSS JOIN \"public\".\"orders\" AS \"orders\""),
+            "{}",
+            out
+        );
         assert!(!out.contains(" ON "), "{}", out);
         assert!(validate(&s, pg())
             .iter()
@@ -2172,8 +2194,7 @@ mod tests {
         let mut s = base();
         assert_eq!(s.free_alias("orders"), "orders");
         assert_eq!(s.free_alias("users"), "users_2");
-        s.tables
-            .push(QueryTable::new("users_2", "public", "users"));
+        s.tables.push(QueryTable::new("users_2", "public", "users"));
         assert_eq!(s.free_alias("users"), "users_3");
     }
 
@@ -2186,7 +2207,9 @@ mod tests {
         b.alias = "x".into();
         s.columns.push(a);
         s.columns.push(b);
-        assert!(validate(&s, pg()).iter().any(|w| w.contains("both named x")));
+        assert!(validate(&s, pg())
+            .iter()
+            .any(|w| w.contains("both named x")));
     }
 
     #[test]

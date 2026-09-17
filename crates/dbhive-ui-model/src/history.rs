@@ -263,8 +263,7 @@ pub fn filter_snippets<'a>(
             needle.is_empty()
                 || s.name.to_lowercase().contains(&needle)
                 || s.query.to_lowercase().contains(&needle)
-                || s
-                    .description
+                || s.description
                     .as_deref()
                     .is_some_and(|d| d.to_lowercase().contains(&needle))
         })
@@ -310,8 +309,7 @@ pub fn filter_templates<'a>(
         .filter(|t| {
             needle.is_empty()
                 || t.name.to_lowercase().contains(&needle)
-                || t
-                    .description
+                || t.description
                     .as_deref()
                     .is_some_and(|d| d.to_lowercase().contains(&needle))
                 || t.tags
@@ -536,7 +534,9 @@ fn is_datetime(v: &str) -> bool {
     if b[10] != b'T' && b[10] != b' ' {
         return false;
     }
-    b[11..13].iter().all(u8::is_ascii_digit) && b[13] == b':' && b[14..16].iter().all(u8::is_ascii_digit)
+    b[11..13].iter().all(u8::is_ascii_digit)
+        && b[13] == b':'
+        && b[14..16].iter().all(u8::is_ascii_digit)
 }
 
 /// Live preview: filled parameters are formatted, unfilled ones keep their
@@ -604,20 +604,22 @@ pub fn validate_template_values(
 pub fn sync_parameters(sql: &str, existing: &[TemplateParameter]) -> Vec<TemplateParameter> {
     extract_parameter_definitions(sql)
         .into_iter()
-        .map(|(name, ty)| match existing.iter().find(|p| p.name == name) {
-            Some(prev) => TemplateParameter {
-                param_type: ty,
-                ..prev.clone()
+        .map(
+            |(name, ty)| match existing.iter().find(|p| p.name == name) {
+                Some(prev) => TemplateParameter {
+                    param_type: ty,
+                    ..prev.clone()
+                },
+                None => TemplateParameter {
+                    label: humanize(&name),
+                    name,
+                    param_type: ty,
+                    default_value: None,
+                    required: true,
+                    description: None,
+                },
             },
-            None => TemplateParameter {
-                label: humanize(&name),
-                name,
-                param_type: ty,
-                default_value: None,
-                required: true,
-                description: None,
-            },
-        })
+        )
         .collect()
 }
 
@@ -673,7 +675,11 @@ pub fn parse_tags(input: &str) -> Vec<String> {
 
 /// First line of a statement, for a one-line summary.
 pub fn first_line(sql: &str, max: usize) -> String {
-    let line = sql.lines().find(|l| !l.trim().is_empty()).unwrap_or("").trim();
+    let line = sql
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("")
+        .trim();
     if line.chars().count() > max {
         let cut: String = line.chars().take(max).collect();
         format!("{}…", cut)
@@ -725,7 +731,8 @@ pub fn import_templates_now(path: &str) -> Result<Vec<QueryTemplate>, String> {
     if path.is_empty() {
         return Err("Enter the path of a templates JSON file".to_string());
     }
-    let raw = std::fs::read_to_string(path).map_err(|e| format!("Could not read {}: {}", path, e))?;
+    let raw =
+        std::fs::read_to_string(path).map_err(|e| format!("Could not read {}: {}", path, e))?;
     serde_json::from_str::<Vec<QueryTemplate>>(&raw)
         .map_err(|e| format!("{} is not a template export: {}", path, e))
 }
@@ -803,7 +810,15 @@ mod tests {
     #[test]
     fn history_limit_truncates_to_the_newest_entries() {
         let all: Vec<QueryHistory> = (0..10)
-            .map(|i| entry(&i.to_string(), "a", "db1", &format!("2025-01-01T10:0{}:00Z", i), true))
+            .map(|i| {
+                entry(
+                    &i.to_string(),
+                    "a",
+                    "db1",
+                    &format!("2025-01-01T10:0{}:00Z", i),
+                    true,
+                )
+            })
             .collect();
         let got = filter_history(&all, Some("a"), None, 3);
         assert_eq!(got.len(), 3);
@@ -882,7 +897,12 @@ mod tests {
     #[test]
     fn snippets_search_covers_name_query_and_description() {
         let list = vec![
-            snippet("Active users", "SELECT * FROM users", Some("live only"), &["users"]),
+            snippet(
+                "Active users",
+                "SELECT * FROM users",
+                Some("live only"),
+                &["users"],
+            ),
             snippet("Orders", "SELECT * FROM orders", None, &["sales"]),
         ];
         assert_eq!(filter_snippets(&list, "active", None).len(), 1);
@@ -972,7 +992,10 @@ mod tests {
 
     #[test]
     fn sql_formatting_quotes_and_escapes() {
-        assert_eq!(format_parameter_for_sql("o'brien", ParamType::String), "'o''brien'");
+        assert_eq!(
+            format_parameter_for_sql("o'brien", ParamType::String),
+            "'o''brien'"
+        );
         assert_eq!(format_parameter_for_sql("42", ParamType::Integer), "42");
         assert_eq!(format_parameter_for_sql("1.5", ParamType::Decimal), "1.5");
         assert_eq!(format_parameter_for_sql("yes", ParamType::Boolean), "true");
@@ -1012,7 +1035,10 @@ mod tests {
         let mut values = HashMap::new();
         values.insert("b".to_string(), "oops".to_string());
         let errors = validate_template_values(&t, &values);
-        assert_eq!(errors.get("a").map(String::as_str), Some("This field is required"));
+        assert_eq!(
+            errors.get("a").map(String::as_str),
+            Some("This field is required")
+        );
         assert_eq!(
             errors.get("b").map(String::as_str),
             Some("Must be a valid integer")
@@ -1021,7 +1047,11 @@ mod tests {
 
     #[test]
     fn render_uses_defaults_for_blank_fields() {
-        let mut t = template("t", "SELECT * FROM u WHERE id = {{id:integer}} AND n = {{n}}", None);
+        let mut t = template(
+            "t",
+            "SELECT * FROM u WHERE id = {{id:integer}} AND n = {{n}}",
+            None,
+        );
         t.parameters[0].default_value = Some("7".to_string());
         let mut values = HashMap::new();
         values.insert("n".to_string(), "bob".to_string());
@@ -1146,7 +1176,10 @@ mod tests {
                 .into_iter()
                 .map(|(n, _)| n)
                 .collect();
-            assert_eq!(declared, found.iter().map(String::as_str).collect::<Vec<_>>());
+            assert_eq!(
+                declared,
+                found.iter().map(String::as_str).collect::<Vec<_>>()
+            );
         }
     }
 
