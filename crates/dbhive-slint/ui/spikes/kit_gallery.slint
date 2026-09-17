@@ -1,0 +1,114 @@
+import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Card, ClickableCard, Badge, TextField,
+    ScreenHeader, SectionLabel, Banner, EmptyState, Divider } from "../kit/kit.slint";
+
+export component KitGallery inherits Window {
+    background: Theme.background;
+    VerticalLayout {
+        padding: 24px;
+        spacing: 18px;
+
+        ScreenHeader {
+            title: "Connections";
+            subtitle: "5 connections";
+            Button { text: "Import"; variant: ButtonVariant.ghost; has-icon: true; icon: Icons.upload; }
+            Button { text: "New connection"; variant: ButtonVariant.primary; has-icon: true; icon: Icons.plus; }
+        }
+
+        HorizontalLayout {
+            spacing: 18px;
+            VerticalLayout {
+                spacing: 10px;
+                SectionLabel { text: "BUTTONS"; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Button { text: "Execute"; variant: ButtonVariant.primary; has-icon: true; icon: Icons.play; }
+                    Button { text: "Secondary"; }
+                    Button { text: "Ghost"; variant: ButtonVariant.ghost; }
+                    Button { text: "Delete"; variant: ButtonVariant.danger; has-icon: true; icon: Icons.trash-2; }
+                    Button { text: "Disabled"; variant: ButtonVariant.primary; enabled: false; }
+                    Button { has-icon: true; icon: Icons.settings; variant: ButtonVariant.ghost; }
+                }
+                SectionLabel { text: "BADGES"; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Badge { text: "Connected"; tone: Tone.success; dot: true; }
+                    Badge { text: "Production"; tone: Tone.danger; }
+                    Badge { text: "Staging"; tone: Tone.warning; }
+                    Badge { text: "12 matches"; tone: Tone.accent; }
+                    Badge { text: "Local"; }
+                }
+                SectionLabel { text: "FIELDS"; }
+                TextField { placeholder: "Search by name or host"; has-icon: true; icon: Icons.search; }
+                TextField { text: "SELECT 1"; }
+                Banner { message: "Connection failed: password authentication failed for user \"postgres\""; }
+                Banner { message: "Schema refreshed"; tone: Tone.success; }
+            }
+            VerticalLayout {
+                spacing: 10px;
+                SectionLabel { text: "CARDS"; }
+                ClickableCard {
+                    HorizontalLayout {
+                        padding: 12px;
+                        spacing: 12px;
+                        Rectangle {
+                            width: 32px;
+                            height: 32px;
+                            border-radius: Theme.radius-control;
+                            background: #3876ab40;
+                            Text { text: "PG"; color: #7fb3e0; font-size: 11px; font-weight: 700; }
+                        }
+                        VerticalLayout {
+                            spacing: 2px;
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: start;
+                                Text { text: "local pg"; color: Theme.foreground; font-size: Theme.size-body; font-weight: 600; }
+                                Badge { text: "Local"; }
+                            }
+                            Text { text: "localhost:5432"; color: Theme.muted-foreground; font-size: Theme.size-small; }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        VerticalLayout { alignment: center; Button { text: "Connect"; variant: ButtonVariant.primary; } }
+                    }
+                }
+                ClickableCard {
+                    selected: true;
+                    HorizontalLayout {
+                        padding: 12px;
+                        spacing: 12px;
+                        Rectangle {
+                            width: 32px;
+                            height: 32px;
+                            border-radius: Theme.radius-control;
+                            background: #00758f40;
+                            Text { text: "MY"; color: #5cc2d6; font-size: 11px; font-weight: 700; }
+                        }
+                        VerticalLayout {
+                            spacing: 2px;
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: start;
+                                Text { text: "Local MySQL"; color: Theme.foreground; font-size: Theme.size-body; font-weight: 600; }
+                                Badge { text: "Connected"; tone: Tone.success; dot: true; }
+                            }
+                            Text { text: "localhost:3306"; color: Theme.muted-foreground; font-size: Theme.size-small; }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        VerticalLayout { alignment: center; Button { text: "Disconnect"; variant: ButtonVariant.ghost; } }
+                    }
+                }
+                Card {
+                    height: 190px;
+                    EmptyState {
+                        icon: Icons.play;
+                        title: "No results yet";
+                        message: "Write a statement and run it.";
+                        Button { text: "Run SELECT 1"; variant: ButtonVariant.secondary; }
+                    }
+                }
+            }
+        }
+    }
+}

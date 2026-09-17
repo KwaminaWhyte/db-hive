@@ -1,0 +1,384 @@
+// DB Hive component kit.
+//
+// Every screen builds from these, so a button is a button everywhere and a
+// change here restyles the app. Colours and sizes come only from the
+// generated Theme global, never from literals, so light and dark both work.
+
+import { Theme } from "theme.slint";
+import { Icons } from "icons.slint";
+
+export { Theme, Icons }
+
+export enum Tone { neutral, accent, success, warning, danger }
+
+export enum ButtonVariant { primary, secondary, ghost, danger }
+
+// A tinted icon. Lucide icons are single-colour line art, so colorize gives
+// them any palette colour.
+export component Icon inherits Image {
+    in property <color> tint: Theme.muted-foreground;
+    colorize: root.tint;
+    width: 16px;
+    height: 16px;
+    image-fit: contain;
+}
+
+export component Button inherits Rectangle {
+    in property <string> text;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <ButtonVariant> variant: ButtonVariant.secondary;
+    in property <bool> enabled: true;
+    callback clicked;
+
+    property <color> fg: root.variant == ButtonVariant.primary ? Theme.primary-foreground
+        : root.variant == ButtonVariant.danger ? Theme.destructive
+        : Theme.foreground;
+    property <bool> hovered: touch.has-hover && root.enabled;
+    property <bool> pressed: touch.pressed && root.enabled;
+
+    min-height: 30px;
+    // Buttons keep their natural size. Without this a layout with spare
+    // room stretches them, and a header button became a slab.
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    border-radius: Theme.radius-control;
+    opacity: root.enabled ? 1 : 0.45;
+    background: root.variant == ButtonVariant.primary
+            ? (root.pressed ? Theme.primary.darker(0.12) : root.hovered ? Theme.primary.brighter(0.08) : Theme.primary)
+        : root.variant == ButtonVariant.danger
+            ? (root.hovered ? Theme.destructive-soft.brighter(0.2) : Theme.destructive-soft)
+        : root.variant == ButtonVariant.ghost
+            ? (root.pressed ? Theme.pressed : root.hovered ? Theme.hover : transparent)
+        : (root.pressed ? Theme.pressed : root.hovered ? Theme.hover : Theme.secondary);
+    border-width: root.variant == ButtonVariant.secondary || root.variant == ButtonVariant.danger ? 1px : 0;
+    border-color: root.variant == ButtonVariant.danger ? Theme.destructive.transparentize(0.6)
+        : root.hovered ? Theme.border-strong : Theme.border;
+    animate background { duration: 90ms; }
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.clicked();
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: root.text == "" ? 8px : 12px;
+        padding-right: root.text == "" ? 8px : 12px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        spacing: 6px;
+        alignment: center;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.icon;
+                tint: root.fg;
+                width: 15px;
+                height: 15px;
+            }
+        }
+        if root.text != "": Text {
+            text: root.text;
+            color: root.fg;
+            font-size: Theme.size-label;
+            font-weight: root.variant == ButtonVariant.primary ? 600 : 500;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component Card inherits Rectangle {
+    background: Theme.card;
+    border-radius: Theme.radius-card;
+    border-width: 1px;
+    border-color: Theme.border;
+}
+
+// A card the whole of which can be clicked. The touch area sits beneath the
+// content, so buttons inside the card still receive their own clicks.
+export component ClickableCard inherits Rectangle {
+    in property <bool> selected: false;
+    callback clicked;
+
+    border-radius: Theme.radius-card;
+    border-width: root.selected ? 1.5px : 1px;
+    background: root.selected ? Theme.primary-soft : touch.has-hover ? Theme.elevated : Theme.card;
+    border-color: root.selected ? Theme.primary : touch.has-hover ? Theme.border-strong : Theme.border;
+    animate background, border-color { duration: 110ms; }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    @children
+}
+
+export component Badge inherits Rectangle {
+    in property <string> text;
+    in property <Tone> tone: Tone.neutral;
+    in property <bool> dot: false;
+
+    property <color> fg: root.tone == Tone.accent ? Theme.primary
+        : root.tone == Tone.success ? Theme.success
+        : root.tone == Tone.warning ? Theme.warning
+        : root.tone == Tone.danger ? Theme.destructive
+        : Theme.muted-foreground;
+
+    background: root.tone == Tone.accent ? Theme.primary-soft
+        : root.tone == Tone.success ? Theme.success-soft
+        : root.tone == Tone.warning ? Theme.warning-soft
+        : root.tone == Tone.danger ? Theme.destructive-soft
+        : Theme.secondary;
+    border-radius: self.height / 2;
+    horizontal-stretch: 0;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        padding-top: 2px;
+        padding-bottom: 2px;
+        spacing: 5px;
+        if root.dot: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 6px;
+                height: 6px;
+                border-radius: 3px;
+                background: root.fg;
+            }
+        }
+        Text {
+            text: root.text;
+            color: root.fg;
+            font-size: Theme.size-small;
+            vertical-alignment: center;
+        }
+    }
+}
+
+export component TextField inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder;
+    in property <image> icon;
+    in property <bool> has-icon: false;
+    in property <bool> password: false;
+    in property <bool> enabled: true;
+    callback edited(string);
+    callback accepted(string);
+
+    min-height: 32px;
+    background: Theme.card;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: input.has-focus ? Theme.primary : Theme.border;
+    opacity: root.enabled ? 1 : 0.5;
+    animate border-color { duration: 110ms; }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.icon;
+                tint: Theme.dim-foreground;
+                width: 14px;
+                height: 14px;
+            }
+        }
+        Rectangle {
+            input := TextInput {
+                // Slint centres an element with no explicit position inside
+                // a plain Rectangle; pin it to the left edge.
+                width: 100%;
+                text <=> root.text;
+                enabled: root.enabled;
+                color: Theme.foreground;
+                font-size: Theme.size-body;
+                vertical-alignment: center;
+                single-line: true;
+                input-type: root.password ? InputType.password : InputType.text;
+                selection-background-color: Theme.primary.transparentize(0.65);
+                selection-foreground-color: Theme.foreground;
+                edited => { root.edited(self.text); }
+                accepted => { root.accepted(self.text); }
+            }
+            Text {
+                width: 100%;
+                horizontal-alignment: left;
+                visible: root.text == "";
+                text: root.placeholder;
+                color: Theme.dim-foreground;
+                font-size: Theme.size-body;
+                vertical-alignment: center;
+            }
+        }
+    }
+
+    public function focus-input() {
+        input.focus();
+    }
+}
+
+export component Divider inherits Rectangle {
+    height: 1px;
+    background: Theme.border;
+}
+
+// A screen or dialog title, supporting text, and trailing actions.
+export component ScreenHeader inherits VerticalLayout {
+    in property <string> title;
+    in property <string> subtitle;
+    spacing: 12px;
+    vertical-stretch: 0;
+    HorizontalLayout {
+        spacing: 12px;
+        vertical-stretch: 0;
+        VerticalLayout {
+            spacing: 2px;
+            alignment: center;
+            Text {
+                text: root.title;
+                color: Theme.foreground;
+                font-size: Theme.size-heading;
+                font-weight: 700;
+            }
+            if root.subtitle != "": Text {
+                text: root.subtitle;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+                @children
+            }
+        }
+    }
+    Divider { }
+}
+
+export component SectionLabel inherits Text {
+    // Space above, so a label reads as starting a new group rather than
+    // captioning the row it sits under.
+    vertical-alignment: bottom;
+    min-height: 28px;
+    color: Theme.muted-foreground;
+    font-size: Theme.size-small;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+}
+
+export component Banner inherits Rectangle {
+    in property <string> message;
+    in property <Tone> tone: Tone.danger;
+    in property <bool> dismissible: true;
+    callback dismissed;
+
+    property <color> fg: root.tone == Tone.success ? Theme.success
+        : root.tone == Tone.warning ? Theme.warning
+        : root.tone == Tone.accent ? Theme.primary
+        : root.tone == Tone.neutral ? Theme.muted-foreground
+        : Theme.destructive;
+
+    background: root.tone == Tone.success ? Theme.success-soft
+        : root.tone == Tone.warning ? Theme.warning-soft
+        : root.tone == Tone.accent ? Theme.primary-soft
+        : root.tone == Tone.neutral ? Theme.secondary
+        : Theme.destructive-soft;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: root.fg.transparentize(0.6);
+
+    HorizontalLayout {
+        padding: 10px;
+        padding-left: 12px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.tone == Tone.success ? Icons.circle-check
+                    : root.tone == Tone.danger || root.tone == Tone.warning ? Icons.triangle-alert
+                    : Icons.info;
+                tint: root.fg;
+            }
+        }
+        Text {
+            text: root.message;
+            color: root.fg;
+            font-size: Theme.size-label;
+            wrap: word-wrap;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+        if root.dismissible: TouchArea {
+            width: 18px;
+            mouse-cursor: pointer;
+            clicked => { root.dismissed(); }
+            Icon {
+                source: Icons.x;
+                tint: root.fg;
+                width: 14px;
+                height: 14px;
+            }
+        }
+    }
+}
+
+// The centred "nothing here yet" state, with room for a call to action.
+export component EmptyState inherits VerticalLayout {
+    in property <image> icon;
+    in property <string> title;
+    in property <string> message;
+    alignment: center;
+    spacing: 6px;
+    HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 56px;
+            height: 56px;
+            border-radius: 28px;
+            background: Theme.primary-soft;
+            Icon {
+                source: root.icon;
+                tint: Theme.primary;
+                width: 24px;
+                height: 24px;
+            }
+        }
+    }
+    Rectangle { height: 8px; }
+    Text {
+        text: root.title;
+        color: Theme.foreground;
+        font-size: Theme.size-subheading;
+        font-weight: 600;
+        horizontal-alignment: center;
+    }
+    Text {
+        text: root.message;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    Rectangle { height: 8px; }
+    HorizontalLayout {
+        alignment: center;
+        @children
+    }
+}

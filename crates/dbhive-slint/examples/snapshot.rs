@@ -39,6 +39,12 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
+        "kit-dark" | "kit-light" => {
+            let c = KitGallery::new().expect("KitGallery");
+            c.global::<Theme>().set_dark(name == "kit-dark");
+            c.show().unwrap();
+            Box::new(c)
+        }
         "sql-selection" => {
             let c = SqlEditorSpike::new().expect("SqlEditorSpike");
             c.set_text(SAMPLE_SQL.into());
