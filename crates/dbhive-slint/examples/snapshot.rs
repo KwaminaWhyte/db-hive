@@ -1,0 +1,107 @@
+//! Render a Slint component to a PNG-compatible image with no display.
+//!
+//! Uses Slint's software renderer behind a minimal platform, so screens can
+//! be inspected from CI or while the machine's display is asleep, and never
+//! captures anything else on the screen.
+//!
+//!     cargo run -p dbhive-slint --example snapshot -- <component> <out.ppm> [width height scale]
+
+use std::rc::Rc;
+
+use slint::platform::software_renderer::{MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType};
+use slint::platform::{Platform, WindowAdapter, WindowEvent};
+use slint::ComponentHandle;
+
+use dbhive_slint::*;
+
+const SAMPLE_SQL: &str = "-- Top customers by revenue\nSELECT c.id, c.name, SUM(o.total) AS revenue\n  FROM customers c\n  JOIN orders o ON o.customer_id = c.id\n\n WHERE o.status = 'paid' AND o.note <> 'it''s a test'\n   AND o.created_at >= '2026-01-01'\n/* block comment\n   across lines */\n GROUP BY c.id, c.name\nHAVING SUM(o.total) > 1000.50\n ORDER BY revenue DESC\n LIMIT 25;";
+
+struct SnapshotPlatform {
+    window: Rc<MinimalSoftwareWindow>,
+    start: std::time::Instant,
+}
+
+impl Platform for SnapshotPlatform {
+    fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
+        Ok(self.window.clone())
+    }
+    fn duration_since_start(&self) -> core::time::Duration {
+        self.start.elapsed()
+    }
+}
+
+/// Everything a snapshot can show. Each entry creates, configures and keeps
+/// its component alive for the duration of the render.
+fn instantiate(name: &str) -> Box<dyn std::any::Any> {
+    match name {
+        "app" => {
+            let c = AppWindow::new().expect("AppWindow");
+            c.show().unwrap();
+            Box::new(c)
+        }
+        "sql-selection" => {
+            let c = SqlEditorSpike::new().expect("SqlEditorSpike");
+            c.set_text(SAMPLE_SQL.into());
+            c.set_lines(dbhive_slint::sql_highlight::to_model(SAMPLE_SQL));
+            c.show().unwrap();
+            // Select "customers c" on line 3 so selection and caret both show.
+            let start = SAMPLE_SQL.find("customers c").unwrap() as i32;
+            c.invoke_select_range(start, start + "customers c".len() as i32);
+            Box::new(c)
+        }
+        "sql" | "sql-debug" => {
+            let c = SqlEditorSpike::new().expect("SqlEditorSpike");
+            let sql = SAMPLE_SQL;
+            c.set_text(sql.into());
+            c.set_lines(dbhive_slint::sql_highlight::to_model(sql));
+            c.set_debug_alignment(name == "sql-debug");
+            c.show().unwrap();
+            Box::new(c)
+        }
+        other => {
+            eprintln!("unknown component {:?}", other);
+            std::process::exit(2);
+        }
+    }
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let name = args.get(1).map(String::as_str).unwrap_or("app");
+    let out = args.get(2).map(String::as_str).unwrap_or("snapshot.ppm");
+    let width: u32 = args.get(3).and_then(|v| v.parse().ok()).unwrap_or(1200);
+    let height: u32 = args.get(4).and_then(|v| v.parse().ok()).unwrap_or(760);
+    let scale: f32 = args.get(5).and_then(|v| v.parse().ok()).unwrap_or(2.0);
+
+    let window = MinimalSoftwareWindow::new(RepaintBufferType::NewBuffer);
+    slint::platform::set_platform(Box::new(SnapshotPlatform {
+        window: window.clone(),
+        start: std::time::Instant::now(),
+    }))
+    .expect("platform");
+
+    let (pw, ph) = ((width as f32 * scale) as u32, (height as f32 * scale) as u32);
+    window.dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: scale });
+    window.set_size(slint::PhysicalSize::new(pw, ph));
+
+    let _keep = instantiate(name);
+
+    // Let bindings settle and any zero-duration timers fire before drawing.
+    for _ in 0..3 {
+        slint::platform::update_timers_and_animations();
+    }
+
+    let mut buffer = vec![PremultipliedRgbaColor::default(); (pw * ph) as usize];
+    window.request_redraw();
+    window.draw_if_needed(|renderer| {
+        renderer.render(&mut buffer, pw as usize);
+    });
+
+    let mut ppm = format!("P6\n{} {}\n255\n", pw, ph).into_bytes();
+    // Opaque window background, so premultiplied equals straight colour.
+    for px in &buffer {
+        ppm.extend_from_slice(&[px.red, px.green, px.blue]);
+    }
+    std::fs::write(out, ppm).expect("write snapshot");
+    println!("wrote {} ({}x{})", out, pw, ph);
+}

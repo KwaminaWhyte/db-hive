@@ -1,0 +1,150 @@
+// SQL editor.
+//
+// Slint cannot style spans of editable text, so this stacks two layers in one
+// Flickable (so they scroll together):
+//
+//   1. a read-only layer of coloured runs, one row per line
+//   2. a transparent TextInput on top that owns editing, selection and IME
+//
+// The input's own caret would be invisible (it takes the text colour), so the
+// caret is drawn here from `cursor-position-changed`.
+//
+// Alignment depends on the two layers placing every glyph identically.
+//
+// Vertically: each row is positioned at index * line-height, where the line
+// height comes from the input's own font metrics, so empty lines keep their
+// height too.
+//
+// Horizontally: runs are placed at column * advance, NOT laid out one after
+// another. A layout of separate Text items rounds each item's width and the
+// error accumulates along the line; the first spike drifted visibly by the
+// fifth token. The advance is measured from a 100-character string, so any
+// rounding is spread over 100 glyphs instead of landing on one.
+//
+// This relies on a monospace font and single-width characters. Wide glyphs
+// (CJK, most emoji) will misalign the colour layer; the text itself, which
+// the input draws, stays correct.
+
+export struct HighlightRun {
+    text: string,
+    color: color,
+    // Character column the run starts at, on its line.
+    col: int,
+}
+
+export struct HighlightLine {
+    runs: [HighlightRun],
+}
+
+export component SqlEditor inherits Rectangle {
+    in property <[HighlightLine]> lines;
+    in-out property <string> text;
+    // Paints the input's own glyphs semi-transparently over the colour layer.
+    // Only for verifying alignment; any offset shows as a red fringe.
+    in property <bool> debug-alignment: false;
+    in property <color> caret-color: #f8b02a;
+    in property <color> selection-color: #f8b02a44;
+    in property <color> gutter-color: #686c76;
+    in property <string> mono-family: "Menlo";
+    in property <length> mono-size: 13px;
+
+    callback edited(string);
+
+    property <length> pad: 12px;
+    property <length> gutter-width: 40px;
+    property <length> line-height: input.font-metrics.ascent - input.font-metrics.descent;
+    property <length> advance: measure.preferred-width / 100;
+    property <length> caret-x;
+    property <length> caret-y;
+
+    // Measures the monospace advance. Never visible.
+    measure := Text {
+        visible: false;
+        text: "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+        font-family: root.mono-family;
+        font-size: root.mono-size;
+    }
+
+    background: #13141a;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: #262831;
+    clip: true;
+
+    flick := Flickable {
+        viewport-width: max(self.width, root.gutter-width + input.preferred-width + 2 * root.pad);
+        viewport-height: max(self.height, input.preferred-height + 2 * root.pad);
+
+        // Line numbers.
+        for line[index] in root.lines: Text {
+            x: 0;
+            y: root.pad + index * root.line-height;
+            width: root.gutter-width - 10px;
+            height: root.line-height;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+            text: index + 1;
+            color: root.gutter-color;
+            font-family: root.mono-family;
+            font-size: root.mono-size;
+        }
+
+        // Colour layer.
+        for line[index] in root.lines: Rectangle {
+            x: root.gutter-width + root.pad;
+            y: root.pad + index * root.line-height;
+            height: root.line-height;
+            for run in line.runs: Text {
+                x: run.col * root.advance;
+                y: 0;
+                height: root.line-height;
+                text: run.text;
+                color: run.color;
+                font-family: root.mono-family;
+                font-size: root.mono-size;
+                vertical-alignment: center;
+            }
+        }
+
+        input := TextInput {
+            x: root.gutter-width + root.pad;
+            y: root.pad;
+            width: max(self.preferred-width, flick.width - self.x - root.pad);
+            height: max(self.preferred-height, flick.height - 2 * root.pad);
+            text <=> root.text;
+            single-line: false;
+            wrap: no-wrap;
+            font-family: root.mono-family;
+            font-size: root.mono-size;
+            color: root.debug-alignment ? #ff000099 : transparent;
+            selection-background-color: root.selection-color;
+            selection-foreground-color: transparent;
+            edited => {
+                root.edited(self.text);
+            }
+            cursor-position-changed(p) => {
+                root.caret-x = p.x;
+                root.caret-y = p.y;
+            }
+        }
+
+        Rectangle {
+            x: input.x + root.caret-x;
+            y: input.y + root.caret-y;
+            width: 2px;
+            height: root.line-height;
+            background: root.caret-color;
+            visible: input.has-focus;
+        }
+    }
+
+    public function focus-input() {
+        input.focus();
+    }
+
+    // Byte offsets, as TextInput uses.
+    public function select-range(anchor: int, cursor: int) {
+        input.focus();
+        input.set-selection-offsets(anchor, cursor);
+    }
+}

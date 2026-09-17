@@ -1,0 +1,25 @@
+[package]
+name = "dbhive-slint"
+version = "0.21.0"
+description = "DB Hive desktop shell (Slint)"
+edition = "2021"
+
+[[bin]]
+name = "dbhive-slint"
+path = "src/main.rs"
+
+[dependencies]
+dbhive-core = { path = "../dbhive-core" }
+# Pinned exactly: Slint 1.x still moves between minors, and upgrades should be
+# a deliberate commit, not a side effect of `cargo update`.
+# `software-renderer-systemfonts` lets the headless snapshot tool
+# (examples/snapshot.rs) render real text without a display.
+slint = { version = "=1.18.0", features = ["software-renderer-systemfonts"] }
+
+[dev-dependencies]
+# Headless backend for interaction tests: real key events, element lookup,
+# no window server. Pinned with slint; the two must move together.
+i-slint-backend-testing = "=1.18.0"
+
+[build-dependencies]
+slint-build = "=1.18.0"

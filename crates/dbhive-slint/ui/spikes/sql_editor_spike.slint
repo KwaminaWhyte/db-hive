@@ -1,0 +1,24 @@
+import { SqlEditor, HighlightLine } from "../components/sql_editor.slint";
+
+export component SqlEditorSpike inherits Window {
+    in property <[HighlightLine]> lines;
+    in-out property <string> text;
+    in property <bool> debug-alignment;
+    callback edited(string);
+    public function focus-editor() {
+        editor.focus-input();
+    }
+    public function select-range(anchor: int, cursor: int) {
+        editor.select-range(anchor, cursor);
+    }
+    background: #090a0e;
+    VerticalLayout {
+        padding: 16px;
+        editor := SqlEditor {
+            lines: root.lines;
+            text <=> root.text;
+            debug-alignment: root.debug-alignment;
+            edited(t) => { root.edited(t); }
+        }
+    }
+}
