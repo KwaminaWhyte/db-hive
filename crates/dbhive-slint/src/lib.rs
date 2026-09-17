@@ -6,4 +6,5 @@
 
 slint::include_modules!();
 
+pub mod grid_model;
 pub mod sql_highlight;

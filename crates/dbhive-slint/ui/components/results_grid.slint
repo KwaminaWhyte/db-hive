@@ -1,0 +1,109 @@
+import { ListView } from "std-widgets.slint";
+
+// Virtualised results grid.
+//
+// ListView only instantiates the rows on screen, and the Rust side supplies
+// rows through a lazy Model, so a 50,000 row result never materialises
+// 50,000 row objects. Header and body share one horizontal Flickable so
+// they scroll sideways together; the ListView owns vertical scrolling.
+
+export struct GridColumn {
+    title: string,
+    // Left edge and width, precomputed in Rust so cells do not each sum the
+    // widths of the columns before them.
+    x: length,
+    width: length,
+}
+
+export struct GridCell {
+    text: string,
+    is-null: bool,
+}
+
+export struct GridRow {
+    cells: [GridCell],
+}
+
+export component ResultsGrid inherits Rectangle {
+    in property <[GridColumn]> columns;
+    in property <[GridRow]> rows;
+    // Sum of column widths. Named total-width to stay clear of Flickable's
+    // own content-width.
+    in property <length> total-width;
+    in-out property <int> selected-row: -1;
+    in property <length> row-height: 28px;
+    in property <length> header-height: 32px;
+
+    callback row-clicked(int);
+    callback header-clicked(int);
+
+    // Exposed so tests and snapshots can scroll without a pointer.
+    in-out property <length> scroll-y <=> list.viewport-y;
+
+    background: #13141a;
+    border-radius: 10px;
+    border-width: 1px;
+    border-color: #262831;
+    clip: true;
+
+    Flickable {
+        content-width: max(self.width, root.total-width);
+        content-height: self.height;
+
+        VerticalLayout {
+            width: max(parent.width, root.total-width);
+            spacing: 0;
+
+            // Header.
+            Rectangle {
+                height: root.header-height;
+                background: #0f1015;
+                for col[index] in root.columns: TouchArea {
+                    x: col.x;
+                    width: col.width;
+                    clicked => { root.header-clicked(index); }
+                    Text {
+                        x: 12px;
+                        width: parent.width - 20px;
+                        text: col.title;
+                        color: #969aa2;
+                        font-size: 11.5px;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        overflow: elide;
+                    }
+                }
+                Rectangle {
+                    y: parent.height - 1px;
+                    height: 1px;
+                    background: #262831;
+                }
+            }
+
+            list := ListView {
+                for row[r] in root.rows: TouchArea {
+                    height: root.row-height;
+                    clicked => {
+                        root.selected-row = r;
+                        root.row-clicked(r);
+                    }
+                    Rectangle {
+                        background: r == root.selected-row
+                            ? #30271299
+                            : (mod(r, 2) == 0 ? transparent : #ffffff05);
+                        for cell[c] in row.cells: Text {
+                            x: root.columns[c].x + 12px;
+                            width: root.columns[c].width - 20px;
+                            text: cell.is-null ? "NULL" : cell.text;
+                            color: cell.is-null ? #686c76 : #f0f1f4;
+                            font-italic: cell.is-null;
+                            font-size: 13px;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

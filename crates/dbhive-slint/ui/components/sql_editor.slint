@@ -72,8 +72,8 @@ export component SqlEditor inherits Rectangle {
     clip: true;
 
     flick := Flickable {
-        viewport-width: max(self.width, root.gutter-width + input.preferred-width + 2 * root.pad);
-        viewport-height: max(self.height, input.preferred-height + 2 * root.pad);
+        content-width: max(self.width, root.gutter-width + input.preferred-width + 2 * root.pad);
+        content-height: max(self.height, input.preferred-height + 2 * root.pad);
 
         // Line numbers.
         for line[index] in root.lines: Text {

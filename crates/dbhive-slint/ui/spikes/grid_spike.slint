@@ -1,0 +1,17 @@
+import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
+
+export component GridSpike inherits Window {
+    in property <[GridColumn]> columns;
+    in property <[GridRow]> rows;
+    in property <length> total-width;
+    in-out property <length> scroll-y <=> grid.scroll-y;
+    background: #090a0e;
+    VerticalLayout {
+        padding: 16px;
+        grid := ResultsGrid {
+            columns: root.columns;
+            rows: root.rows;
+            total-width: root.total-width;
+        }
+    }
+}
