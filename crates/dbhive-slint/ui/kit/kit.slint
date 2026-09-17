@@ -172,8 +172,13 @@ export component TextField inherits Rectangle {
     in property <bool> has-icon: false;
     in property <bool> password: false;
     in property <bool> enabled: true;
+    // A second, optional icon at the trailing edge that reacts to clicks,
+    // for a password's show/hide eye without a second component.
+    in property <image> trailing-icon;
+    in property <bool> has-trailing-icon: false;
     callback edited(string);
     callback accepted(string);
+    callback trailing-clicked;
 
     min-height: 32px;
     background: Theme.card;
@@ -223,10 +228,122 @@ export component TextField inherits Rectangle {
                 vertical-alignment: center;
             }
         }
+        if root.has-trailing-icon: TouchArea {
+            width: 16px;
+            mouse-cursor: pointer;
+            clicked => { root.trailing-clicked(); }
+            Icon {
+                source: root.trailing-icon;
+                tint: Theme.dim-foreground;
+                width: 14px;
+                height: 14px;
+            }
+        }
     }
 
     public function focus-input() {
         input.focus();
+    }
+}
+
+// A field-styled picker. Options are just labels; the caller maps the
+// selected index back to whatever type it means (a driver, an enum, ...),
+// which keeps this component free of any domain type.
+export component Dropdown inherits Rectangle {
+    in property <[string]> options;
+    in property <string> value;
+    in property <bool> enabled: true;
+    callback selected(int);
+
+    min-height: 32px;
+    background: Theme.card;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: area.has-hover && root.enabled ? Theme.border-strong : Theme.border;
+    opacity: root.enabled ? 1 : 0.5;
+
+    menu := ContextMenuArea {
+        Menu {
+            for opt[i] in root.options: MenuItem {
+                title: opt;
+                activated => { root.selected(i); }
+            }
+        }
+    }
+
+    area := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { menu.show({x: 0, y: root.height}); }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 8px;
+        spacing: 6px;
+        Text {
+            text: root.value;
+            color: Theme.foreground;
+            font-size: Theme.size-body;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        VerticalLayout {
+            alignment: center;
+            Icon { source: Icons.chevron-down; tint: Theme.dim-foreground; width: 13px; height: 13px; }
+        }
+    }
+}
+
+// A labelled on/off switch, used for form flags like "favourite".
+export component Toggle inherits Rectangle {
+    in property <string> text;
+    in property <bool> checked;
+    in property <bool> enabled: true;
+    callback toggled;
+
+    height: 20px;
+    horizontal-stretch: 0;
+    opacity: root.enabled ? 1 : 0.5;
+
+    HorizontalLayout {
+        spacing: 8px;
+        TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.toggled(); }
+            width: 34px;
+            track := Rectangle {
+                height: 20px;
+                width: 34px;
+                border-radius: 10px;
+                background: root.checked ? Theme.primary : Theme.secondary;
+                border-width: root.checked ? 0 : 1px;
+                border-color: Theme.border-strong;
+                animate background { duration: 110ms; }
+                knob := Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 8px;
+                    background: Theme.primary-foreground;
+                    x: root.checked ? parent.width - self.width - 2px : 2px;
+                    y: 2px;
+                    animate x { duration: 110ms; }
+                }
+            }
+        }
+        if root.text != "": TouchArea {
+            enabled: root.enabled;
+            mouse-cursor: root.enabled ? pointer : default;
+            clicked => { root.toggled(); }
+            Text {
+                text: root.text;
+                color: Theme.foreground;
+                font-size: Theme.size-label;
+                vertical-alignment: center;
+            }
+        }
     }
 }
 

@@ -1,7 +1,10 @@
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Divider } from "kit/kit.slint";
 import { ConnectionsScreen, ConnectionItem } from "screens/connections.slint";
+import { AboutDialog } from "dialogs/about.slint";
+import { ConfirmDialog } from "dialogs/confirm.slint";
+import { ConnectionEditorDialog, ConnectionFormData } from "dialogs/connection_editor.slint";
 
-export { Theme, Icons, Tone, ConnectionItem }
+export { Theme, Icons, Tone, ConnectionItem, ConnectionFormData }
 export { SqlEditorSpike } from "spikes/sql_editor_spike.slint";
 export { GridSpike } from "spikes/grid_spike.slint";
 export { DiagramSpike } from "spikes/diagram_spike.slint";
@@ -95,6 +98,43 @@ export component AppWindow inherits Window {
     callback open-palette;
     callback toggle-theme;
     callback about;
+    in property <string> app-version;
+
+    // About dialog.
+    in-out property <bool> show-about: false;
+
+    // Confirmation dialog (currently only used for delete).
+    in-out property <bool> show-confirm: false;
+    in property <string> confirm-title;
+    in property <string> confirm-message;
+    in property <string> confirm-label: "Delete";
+    callback confirm-accepted;
+    callback confirm-cancelled;
+
+    // Connection editor dialog.
+    in-out property <bool> show-connection-editor: false;
+    in property <bool> editor-is-new;
+    in property <ConnectionFormData> editor;
+    in property <[string]> editor-errors;
+    in property <bool> editor-testing;
+    in property <string> editor-test-message;
+    in property <bool> editor-test-ok;
+    in property <bool> editor-saving;
+    callback editor-name-changed(string);
+    callback editor-driver-selected(int);
+    callback editor-host-changed(string);
+    callback editor-port-changed(string);
+    callback editor-username-changed(string);
+    callback editor-password-changed(string);
+    callback editor-toggle-password-visibility;
+    callback editor-database-changed(string);
+    callback editor-ssl-selected(int);
+    callback editor-environment-selected(int);
+    callback editor-description-changed(string);
+    callback editor-toggle-favorite;
+    callback editor-test-connection;
+    callback editor-save;
+    callback editor-cancel;
 
     MenuBar {
         Menu {
@@ -137,7 +177,10 @@ export component AppWindow inherits Window {
             title: "Help";
             MenuItem {
                 title: "About DB Hive";
-                activated => { root.about(); }
+                activated => {
+                    root.about();
+                    root.show-about = true;
+                }
             }
         }
     }
@@ -260,6 +303,87 @@ export component AppWindow inherits Window {
         for t in root.toasts: Toast {
             item: t;
             dismiss => { root.dismiss-toast(t.id); }
+        }
+    }
+
+    if root.show-about || root.show-confirm || root.show-connection-editor: Rectangle {
+        width: 100%;
+        height: 100%;
+        background: #000000a0;
+
+        TouchArea {
+            // Clicking the backdrop dismisses whichever dialog is open,
+            // except the connection editor: it can hold typed work, so it
+            // only closes through its own Cancel button.
+            clicked => {
+                root.show-about = false;
+                root.show-confirm = false;
+            }
+        }
+
+        if root.show-about: VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                AboutDialog {
+                    version: root.app-version;
+                    close => { root.show-about = false; }
+                }
+            }
+        }
+
+        if root.show-confirm: VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                ConfirmDialog {
+                    title: root.confirm-title;
+                    message: root.confirm-message;
+                    confirm-label: root.confirm-label;
+                    confirm => {
+                        root.show-confirm = false;
+                        root.confirm-accepted();
+                    }
+                    cancel => {
+                        root.show-confirm = false;
+                        root.confirm-cancelled();
+                    }
+                }
+            }
+        }
+
+        if root.show-connection-editor: VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                ConnectionEditorDialog {
+                    is-new: root.editor-is-new;
+                    form: root.editor;
+                    errors: root.editor-errors;
+                    testing: root.editor-testing;
+                    test-message: root.editor-test-message;
+                    test-ok: root.editor-test-ok;
+                    saving: root.editor-saving;
+                    name-changed(t) => { root.editor-name-changed(t); }
+                    driver-selected(i) => { root.editor-driver-selected(i); }
+                    host-changed(t) => { root.editor-host-changed(t); }
+                    port-changed(t) => { root.editor-port-changed(t); }
+                    username-changed(t) => { root.editor-username-changed(t); }
+                    password-changed(t) => { root.editor-password-changed(t); }
+                    toggle-password-visibility => { root.editor-toggle-password-visibility(); }
+                    database-changed(t) => { root.editor-database-changed(t); }
+                    ssl-selected(i) => { root.editor-ssl-selected(i); }
+                    environment-selected(i) => { root.editor-environment-selected(i); }
+                    description-changed(t) => { root.editor-description-changed(t); }
+                    toggle-favorite => { root.editor-toggle-favorite(); }
+                    test-connection => { root.editor-test-connection(); }
+                    save => { root.editor-save(); }
+                    cancel => {
+                        root.show-connection-editor = false;
+                        root.editor-cancel();
+                    }
+                }
+            }
         }
     }
 }

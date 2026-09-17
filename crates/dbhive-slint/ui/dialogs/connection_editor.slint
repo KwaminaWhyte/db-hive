@@ -1,0 +1,268 @@
+// The new/edit connection form.
+//
+// This is the dialog's *shape*: which fields show for the current driver,
+// and their labels, come from `dbhive_ui_model::connection_editor` on the
+// Rust side (`driver_fields`, `database_label`, `password_label`) so the two
+// shells cannot disagree about a driver's fields. The dialog just lays out
+// whatever the controller says is visible.
+//
+// SSH tunnelling, the colour tag and pasting a connection string are not
+// here yet; see docs/slint-migration/plan.md.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, Tone, SectionLabel, TextField, Dropdown, Toggle, Divider, Banner, Button, ButtonVariant } from "../kit/kit.slint";
+
+export struct ConnectionFormData {
+    name: string,
+    driver-label: string,
+    driver-options: [string],
+    // Which fields this driver wants, decided in Rust.
+    show-file-path: bool,
+    show-url: bool,
+    show-host-port: bool,
+    show-username: bool,
+    show-password: bool,
+    show-database: bool,
+    show-ssl: bool,
+    host: string,
+    port: string,
+    username: string,
+    password: string,
+    show-password-text: bool,
+    database: string,
+    database-label: string,
+    password-label: string,
+    ssl-label: string,
+    ssl-options: [string],
+    environment-label: string,
+    environment-options: [string],
+    description: string,
+    favorite: bool,
+}
+
+export component ConnectionEditorDialog inherits Rectangle {
+    in property <bool> is-new;
+    in property <ConnectionFormData> form;
+    in property <[string]> errors;
+    in property <bool> testing;
+    in property <string> test-message;
+    in property <bool> test-ok;
+    in property <bool> saving;
+
+    callback name-changed(string);
+    callback driver-selected(int);
+    callback host-changed(string);
+    callback port-changed(string);
+    callback username-changed(string);
+    callback password-changed(string);
+    callback toggle-password-visibility;
+    callback database-changed(string);
+    callback ssl-selected(int);
+    callback environment-selected(int);
+    callback description-changed(string);
+    callback toggle-favorite;
+    callback test-connection;
+    callback save;
+    callback cancel;
+
+    width: 480px;
+    height: 720px;
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: 32px;
+    drop-shadow-offset-y: 12px;
+    drop-shadow-color: #00000070;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 4px;
+
+        HorizontalLayout {
+            Text {
+                text: root.is-new ? "New connection" : "Edit connection";
+                color: Theme.foreground;
+                font-size: Theme.size-subheading;
+                font-weight: 700;
+                horizontal-stretch: 1;
+            }
+            TouchArea {
+                width: 16px;
+                mouse-cursor: pointer;
+                clicked => { root.cancel(); }
+                Icon { source: Icons.x; tint: Theme.dim-foreground; width: 13px; height: 13px; }
+            }
+        }
+
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                spacing: 4px;
+                // Without this, a driver with fewer fields (SQLite has no
+                // host/port/username/password) leaves the layout with slack
+                // height, and with no child stretching to take it, Slint
+                // spreads it out as extra gaps between every row instead of
+                // leaving it below the last one.
+                alignment: start;
+
+                SectionLabel { text: "Name"; }
+                TextField {
+                    text: root.form.name;
+                    placeholder: "My database";
+                    edited(t) => { root.name-changed(t); }
+                }
+
+                SectionLabel { text: "Driver"; }
+                Dropdown {
+                    value: root.form.driver-label;
+                    options: root.form.driver-options;
+                    selected(i) => { root.driver-selected(i); }
+                }
+
+                if root.form.show-file-path || root.form.show-url: SectionLabel {
+                    text: root.form.show-url ? "URL" : root.form.database-label;
+                }
+                if root.form.show-file-path || root.form.show-url: TextField {
+                    text: root.form.show-url ? root.form.host : root.form.database;
+                    placeholder: root.form.show-url ? "libsql://my-db-org.turso.io" : "/path/to/file.db";
+                    edited(t) => {
+                        if root.form.show-url {
+                            root.host-changed(t);
+                        } else {
+                            root.database-changed(t);
+                        }
+                    }
+                }
+
+                if root.form.show-host-port: HorizontalLayout {
+                    spacing: 8px;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 4px;
+                        SectionLabel { text: "Host"; }
+                        TextField {
+                            text: root.form.host;
+                            placeholder: "localhost";
+                            edited(t) => { root.host-changed(t); }
+                        }
+                    }
+                    VerticalLayout {
+                        width: 90px;
+                        spacing: 4px;
+                        SectionLabel { text: "Port"; }
+                        TextField {
+                            text: root.form.port;
+                            edited(t) => { root.port-changed(t); }
+                        }
+                    }
+                }
+
+                if root.form.show-username: SectionLabel { text: "Username"; }
+                if root.form.show-username: TextField {
+                    text: root.form.username;
+                    edited(t) => { root.username-changed(t); }
+                }
+
+                if root.form.show-password: SectionLabel { text: root.form.password-label; }
+                if root.form.show-password: TextField {
+                    text: root.form.password;
+                    password: !root.form.show-password-text;
+                    has-trailing-icon: true;
+                    trailing-icon: root.form.show-password-text ? Icons.eye-off : Icons.eye;
+                    trailing-clicked => { root.toggle-password-visibility(); }
+                    edited(t) => { root.password-changed(t); }
+                }
+
+                // SQLite's file path and Turso's URL are already "the
+                // database" for those drivers, so this generic field only
+                // shows up for the network drivers that have both.
+                if root.form.show-database && !root.form.show-file-path && !root.form.show-url: SectionLabel {
+                    text: root.form.database-label;
+                }
+                if root.form.show-database && !root.form.show-file-path && !root.form.show-url: TextField {
+                    text: root.form.database;
+                    edited(t) => { root.database-changed(t); }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    if root.form.show-ssl: VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 4px;
+                        SectionLabel { text: "SSL"; }
+                        Dropdown {
+                            value: root.form.ssl-label;
+                            options: root.form.ssl-options;
+                            selected(i) => { root.ssl-selected(i); }
+                        }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 4px;
+                        SectionLabel { text: "Environment"; }
+                        Dropdown {
+                            value: root.form.environment-label;
+                            options: root.form.environment-options;
+                            selected(i) => { root.environment-selected(i); }
+                        }
+                    }
+                }
+
+                SectionLabel { text: "Notes"; }
+                TextField {
+                    text: root.form.description;
+                    placeholder: "Optional";
+                    edited(t) => { root.description-changed(t); }
+                }
+
+                Rectangle { height: 10px; }
+                Toggle {
+                    text: "Favourite";
+                    checked: root.form.favorite;
+                    toggled => { root.toggle-favorite(); }
+                }
+
+                if root.errors.length > 0: Rectangle { height: 10px; }
+                if root.errors.length > 0: Banner {
+                    message: root.errors[0];
+                    dismissible: false;
+                }
+
+                if root.test-message != "": Rectangle { height: 10px; }
+                if root.test-message != "": Banner {
+                    message: root.test-message;
+                    tone: root.test-ok ? Tone.success : Tone.danger;
+                    dismissible: false;
+                }
+            }
+        }
+
+        Rectangle { height: 14px; }
+        Divider { }
+        Rectangle { height: 12px; }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: root.testing ? "Testing…" : "Test connection";
+                variant: ButtonVariant.secondary;
+                enabled: !root.testing && !root.saving;
+                clicked => { root.test-connection(); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "Cancel";
+                variant: ButtonVariant.secondary;
+                enabled: !root.saving;
+                clicked => { root.cancel(); }
+            }
+            Button {
+                text: root.saving ? "Saving…" : "Save";
+                variant: ButtonVariant.primary;
+                enabled: !root.saving;
+                clicked => { root.save(); }
+            }
+        }
+    }
+}

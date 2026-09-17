@@ -6,6 +6,22 @@
 use dbhive_core::models::connection::Environment;
 use dbhive_core::models::{ConnectionProfile, DbDriver};
 
+/// Display name for a driver, shown in the driver chip's tooltip and in the
+/// connection editor's driver picker.
+pub fn driver_label(driver: &DbDriver) -> &'static str {
+    match driver {
+        DbDriver::Postgres => "PostgreSQL",
+        DbDriver::MySql => "MySQL",
+        DbDriver::Sqlite => "SQLite",
+        DbDriver::MongoDb => "MongoDB",
+        DbDriver::SqlServer => "SQL Server",
+        DbDriver::Supabase => "Supabase",
+        DbDriver::Neon => "Neon",
+        DbDriver::Turso => "Turso",
+        DbDriver::Redis => "Redis",
+    }
+}
+
 /// Initials and tint for a driver's chip.
 pub fn driver_chip(driver: &DbDriver) -> (&'static str, (u8, u8, u8)) {
     match driver {

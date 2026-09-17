@@ -39,6 +39,38 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
+        "about" => {
+            let c = AppWindow::new().expect("AppWindow");
+            c.set_app_version("0.21.0".into());
+            c.set_show_about(true);
+            c.show().unwrap();
+            Box::new(c)
+        }
+        "confirm" => {
+            let c = AppWindow::new().expect("AppWindow");
+            c.set_confirm_title("Delete connection?".into());
+            c.set_confirm_message(
+                "\"Production Postgres\" will be removed. This cannot be undone.".into(),
+            );
+            c.set_confirm_label("Delete".into());
+            c.set_show_confirm(true);
+            c.show().unwrap();
+            Box::new(c)
+        }
+        "connection-editor" | "connection-editor-sqlite" => {
+            let c = AppWindow::new().expect("AppWindow");
+            let driver = if name == "connection-editor-sqlite" {
+                dbhive_ui_model::connection_editor::ALL_DRIVERS[2].clone() // Sqlite
+            } else {
+                dbhive_ui_model::connection_editor::ALL_DRIVERS[0].clone() // Postgres
+            };
+            let form = dbhive_ui_model::connection_editor::ConnectionForm::new_for(driver);
+            c.set_editor_is_new(true);
+            c.set_editor(connection_editor::form_data(&form));
+            c.set_show_connection_editor(true);
+            c.show().unwrap();
+            Box::new(c)
+        }
         "kit-dark" | "kit-light" => {
             let c = KitGallery::new().expect("KitGallery");
             c.global::<Theme>().set_dark(name == "kit-dark");

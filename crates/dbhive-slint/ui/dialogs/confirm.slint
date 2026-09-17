@@ -1,0 +1,78 @@
+// A yes/no confirmation, for actions like deleting a connection that should
+// not fire on a single misclick.
+
+import { Theme, Icons, Icon, Tone, Button, ButtonVariant } from "../kit/kit.slint";
+
+export component ConfirmDialog inherits Rectangle {
+    in property <string> title;
+    in property <string> message;
+    in property <string> confirm-label: "Delete";
+    in property <Tone> tone: Tone.danger;
+    callback confirm;
+    callback cancel;
+
+    width: 340px;
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: 32px;
+    drop-shadow-offset-y: 12px;
+    drop-shadow-color: #00000070;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 14px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 16px;
+                    background: root.tone == Tone.danger ? Theme.destructive-soft : Theme.primary-soft;
+                    Icon {
+                        source: Icons.triangle-alert;
+                        tint: root.tone == Tone.danger ? Theme.destructive : Theme.primary;
+                        width: 16px;
+                        height: 16px;
+                    }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.title;
+                    color: Theme.foreground;
+                    font-size: Theme.size-subheading;
+                    font-weight: 700;
+                }
+            }
+        }
+
+        Text {
+            text: root.message;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-label;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Button {
+                text: "Cancel";
+                variant: ButtonVariant.secondary;
+                horizontal-stretch: 1;
+                clicked => { root.cancel(); }
+            }
+            Button {
+                text: root.confirm-label;
+                variant: root.tone == Tone.danger ? ButtonVariant.danger : ButtonVariant.primary;
+                horizontal-stretch: 1;
+                clicked => { root.confirm(); }
+            }
+        }
+    }
+}

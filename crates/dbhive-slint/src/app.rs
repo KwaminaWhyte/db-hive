@@ -14,9 +14,46 @@ use dbhive_core::models::ConnectionProfile;
 use dbhive_core::state::AppState;
 use slint::{ComponentHandle, ModelRc, VecModel};
 
+use dbhive_ui_model::connection_editor::{
+    build_profile, build_profile_with, form_from_profile, save_profile, test_profile, validate,
+    ConnectionForm,
+};
+
+use crate::connection_editor as editor_view;
 use crate::connection_list::{self, EnvTone};
 use crate::runtime;
 use crate::{AppWindow, ConnectionItem, Screen, Theme, ToastItem, Tone};
+
+/// The new/edit connection dialog's state.
+///
+/// The password lives here, never in `ConnectionForm`: that struct becomes a
+/// `ConnectionProfile` that gets written to JSON, and a profile never carries
+/// a plaintext secret. See `dbhive_ui_model::connection_editor::save_profile`.
+struct Editor {
+    is_new: bool,
+    form: ConnectionForm,
+    password: String,
+    show_password: bool,
+    testing: bool,
+    test_message: String,
+    test_ok: bool,
+    saving: bool,
+}
+
+impl Default for Editor {
+    fn default() -> Self {
+        Self {
+            is_new: true,
+            form: ConnectionForm::default(),
+            password: String::new(),
+            show_password: false,
+            testing: false,
+            test_message: String::new(),
+            test_ok: false,
+            saving: false,
+        }
+    }
+}
 
 /// UI-thread session state. Shared with callbacks through `Rc<RefCell<_>>`,
 /// which is fine because Slint callbacks all run on the UI thread.
@@ -28,6 +65,9 @@ struct Session {
     error: String,
     toasts: Vec<ToastItem>,
     next_toast: i32,
+    editor: Editor,
+    /// The connection a delete confirmation is pending for: `(id, name)`.
+    pending_delete: Option<(String, String)>,
 }
 
 struct Ctx {
@@ -168,6 +208,211 @@ impl Ctx {
         );
     }
 
+    fn find_profile(&self, id: &str) -> Option<ConnectionProfile> {
+        self.state.lock().unwrap().get_profile(id).cloned()
+    }
+
+    // -- Connection editor -------------------------------------------------
+
+    fn refresh_editor(&self) {
+        let Some(w) = self.window.upgrade() else { return };
+        let s = self.session.borrow();
+        let ed = &s.editor;
+        let mut data = editor_view::form_data(&ed.form);
+        data.password = ed.password.as_str().into();
+        data.show_password_text = ed.show_password;
+        w.set_editor_is_new(ed.is_new);
+        w.set_editor(data);
+        let errors: Vec<slint::SharedString> =
+            validate(&ed.form).messages().into_iter().map(Into::into).collect();
+        w.set_editor_errors(ModelRc::new(VecModel::from(errors)));
+        w.set_editor_testing(ed.testing);
+        w.set_editor_test_message(ed.test_message.as_str().into());
+        w.set_editor_test_ok(ed.test_ok);
+        w.set_editor_saving(ed.saving);
+    }
+
+    fn open_new_connection(&self) {
+        self.session.borrow_mut().editor = Editor::default();
+        self.refresh_editor();
+        if let Some(w) = self.window.upgrade() {
+            w.set_show_connection_editor(true);
+        }
+    }
+
+    fn open_edit_connection(&self, id: &str) {
+        let Some(profile) = self.find_profile(id) else { return };
+        self.session.borrow_mut().editor = Editor {
+            is_new: false,
+            form: form_from_profile(&profile),
+            ..Editor::default()
+        };
+        self.refresh_editor();
+        if let Some(w) = self.window.upgrade() {
+            w.set_show_connection_editor(true);
+        }
+    }
+
+    fn open_duplicate_connection(&self, id: &str) {
+        let Some(profile) = self.find_profile(id) else { return };
+        let mut form = form_from_profile(&profile);
+        form.id = None;
+        form.name = format!("{} copy", form.name);
+        // A fresh profile has no history of its own yet.
+        form.created_at = None;
+        form.last_connected_at = None;
+        form.connection_count = 0;
+        self.session.borrow_mut().editor = Editor {
+            is_new: true,
+            form,
+            ..Editor::default()
+        };
+        self.refresh_editor();
+        if let Some(w) = self.window.upgrade() {
+            w.set_show_connection_editor(true);
+        }
+    }
+
+    fn close_editor(&self) {
+        if let Some(w) = self.window.upgrade() {
+            w.set_show_connection_editor(false);
+        }
+    }
+
+    /// Runs `f` on the editor's form, then re-projects it to the window.
+    /// Every field-changed callback is this one line.
+    fn edit_form(&self, f: impl FnOnce(&mut ConnectionForm)) {
+        f(&mut self.session.borrow_mut().editor.form);
+        self.refresh_editor();
+    }
+
+    fn toggle_editor_password_visibility(&self) {
+        let mut s = self.session.borrow_mut();
+        s.editor.show_password = !s.editor.show_password;
+        drop(s);
+        self.refresh_editor();
+    }
+
+    fn set_editor_password(&self, password: String) {
+        self.session.borrow_mut().editor.password = password;
+        self.refresh_editor();
+    }
+
+    fn toggle_editor_favorite(&self) {
+        self.edit_form(|f| f.is_favorite = !f.is_favorite);
+    }
+
+    fn test_editor_connection(self: &Rc<Self>) {
+        let (form, password) = {
+            let s = self.session.borrow();
+            (s.editor.form.clone(), s.editor.password.clone())
+        };
+        let profile = build_profile_with(
+            &form,
+            form.id.clone().unwrap_or_else(|| "test".to_string()),
+            now_secs(),
+        );
+        {
+            let mut s = self.session.borrow_mut();
+            s.editor.testing = true;
+            s.editor.test_message.clear();
+        }
+        self.refresh_editor();
+
+        let state = self.state.clone();
+        runtime::spawn(
+            async move { test_profile(state, profile, password, None).await },
+            move |result| with_ctx(|ctx| {
+                let mut s = ctx.session.borrow_mut();
+                s.editor.testing = false;
+                match result {
+                    Ok(()) => {
+                        s.editor.test_ok = true;
+                        s.editor.test_message = "Connected successfully.".to_string();
+                    }
+                    Err(e) => {
+                        s.editor.test_ok = false;
+                        s.editor.test_message = format!("Connection failed: {}", e);
+                    }
+                }
+                drop(s);
+                ctx.refresh_editor();
+            }),
+        );
+    }
+
+    fn save_editor(self: &Rc<Self>) {
+        let (form, password, is_new) = {
+            let s = self.session.borrow();
+            (s.editor.form.clone(), s.editor.password.clone(), s.editor.is_new)
+        };
+        if !validate(&form).is_valid() {
+            // The messages are already on screen; nothing to save yet.
+            return;
+        }
+        let profile = build_profile(&form);
+        let id = profile.id.clone();
+        let name = profile.name.clone();
+
+        self.session.borrow_mut().editor.saving = true;
+        self.refresh_editor();
+
+        let state = self.state.clone();
+        runtime::spawn(
+            async move { save_profile(state, profile, id, password, None).await },
+            move |result| with_ctx(|ctx| {
+                ctx.session.borrow_mut().editor.saving = false;
+                match result {
+                    Ok((_, warning)) => {
+                        ctx.close_editor();
+                        let verb = if is_new { "Added" } else { "Saved" };
+                        ctx.toast(format!("{} {}", verb, name), Tone::Success);
+                        if let Some(w) = warning {
+                            ctx.toast(w, Tone::Warning);
+                        }
+                        ctx.refresh_connections();
+                    }
+                    Err(e) => {
+                        ctx.refresh_editor();
+                        ctx.toast(format!("Could not save: {}", e), Tone::Danger);
+                    }
+                }
+            }),
+        );
+    }
+
+    // -- Delete confirmation -------------------------------------------------
+
+    fn confirm_delete_connection(&self, id: &str) {
+        let Some(profile) = self.find_profile(id) else { return };
+        self.session.borrow_mut().pending_delete = Some((id.to_string(), profile.name.clone()));
+        let Some(w) = self.window.upgrade() else { return };
+        w.set_confirm_title("Delete connection?".into());
+        w.set_confirm_message(
+            format!("\"{}\" will be removed. This cannot be undone.", profile.name).into(),
+        );
+        w.set_confirm_label("Delete".into());
+        w.set_show_confirm(true);
+    }
+
+    fn delete_pending_connection(self: &Rc<Self>) {
+        let Some((id, name)) = self.session.borrow_mut().pending_delete.take() else { return };
+        let result = {
+            let mut guard = self.state.lock().unwrap();
+            guard.remove_profile(&id);
+            guard.save_profiles_to_store()
+        };
+        match result {
+            Ok(()) => self.toast(format!("Deleted {}", name), Tone::Neutral),
+            Err(e) => self.toast(format!("Could not delete: {}", e), Tone::Danger),
+        }
+        self.refresh_connections();
+    }
+
+    fn cancel_pending_delete(&self) {
+        self.session.borrow_mut().pending_delete = None;
+    }
+
     fn toggle_favorite(self: &Rc<Self>, id: &str) {
         let result = {
             let mut guard = self.state.lock().unwrap();
@@ -199,6 +444,13 @@ fn with_ctx(f: impl FnOnce(&Rc<Ctx>)) {
     }
 }
 
+fn now_secs() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0)
+}
+
 pub fn run() -> Result<(), slint::PlatformError> {
     let window = AppWindow::new()?;
     let state = Arc::new(Mutex::new(AppState::new()));
@@ -215,6 +467,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
 
     window.global::<Theme>().set_dark(true);
     window.set_screen(Screen::Connections);
+    window.set_app_version(env!("CARGO_PKG_VERSION").into());
 
     {
         let ctx = ctx.clone();
@@ -254,6 +507,102 @@ pub fn run() -> Result<(), slint::PlatformError> {
                 theme.set_dark(!theme.get_dark());
             }
         });
+    }
+
+    // -- Connection editor and delete confirmation --------------------------
+    {
+        let ctx = ctx.clone();
+        window.on_new_connection(move || ctx.open_new_connection());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_edit_connection(move |id| ctx.open_edit_connection(&id));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_duplicate_connection(move |id| ctx.open_duplicate_connection(&id));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_delete_connection(move |id| ctx.confirm_delete_connection(&id));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_confirm_accepted(move || ctx.delete_pending_connection());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_confirm_cancelled(move || ctx.cancel_pending_delete());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_name_changed(move |t| ctx.edit_form(|f| f.name = t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_driver_selected(move |i| {
+            ctx.edit_form(|f| f.set_driver(editor_view::driver_at(i)))
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_host_changed(move |t| ctx.edit_form(|f| f.host = t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_port_changed(move |t| ctx.edit_form(|f| f.port = t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_username_changed(move |t| ctx.edit_form(|f| f.username = t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_password_changed(move |t| ctx.set_editor_password(t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_toggle_password_visibility(move || {
+            ctx.toggle_editor_password_visibility()
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_database_changed(move |t| ctx.edit_form(|f| f.database = t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_ssl_selected(move |i| {
+            ctx.edit_form(|f| f.ssl_mode = editor_view::ssl_mode_at(i))
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_environment_selected(move |i| {
+            ctx.edit_form(|f| f.environment = editor_view::environment_at(i))
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_description_changed(move |t| {
+            ctx.edit_form(|f| f.description = t.to_string())
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_toggle_favorite(move || ctx.toggle_editor_favorite());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_test_connection(move || ctx.test_editor_connection());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_save(move || ctx.save_editor());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_cancel(move || ctx.close_editor());
     }
 
     ctx.refresh_connections();

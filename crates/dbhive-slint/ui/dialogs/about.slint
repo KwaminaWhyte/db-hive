@@ -1,0 +1,84 @@
+// The About dialog.
+//
+// Carries `AboutSlint` per the Royalty-free 2.0 licence: a build using that
+// licence must credit Slint somewhere reachable from the UI, and this is
+// that place. See docs/slint-migration/plan.md.
+
+import { AboutSlint } from "std-widgets.slint";
+import { Theme, Icons, Icon, Divider, ButtonVariant, Button } from "../kit/kit.slint";
+
+export component AboutDialog inherits Rectangle {
+    in property <string> version;
+    callback close;
+
+    width: 360px;
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: 32px;
+    drop-shadow-offset-y: 12px;
+    drop-shadow-color: #00000070;
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 14px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 10px;
+                    background: Theme.primary-soft;
+                    Icon { source: Icons.database; tint: Theme.primary; width: 18px; height: 18px; }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                spacing: 2px;
+                Text {
+                    text: "DB Hive";
+                    color: Theme.foreground;
+                    font-size: Theme.size-heading;
+                    font-weight: 700;
+                }
+                Text {
+                    text: "Version " + root.version;
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            TouchArea {
+                width: 16px;
+                mouse-cursor: pointer;
+                clicked => { root.close(); }
+                Icon { source: Icons.x; tint: Theme.dim-foreground; width: 13px; height: 13px; }
+            }
+        }
+
+        Text {
+            text: "A cross-platform database client for PostgreSQL, MySQL, SQLite, MongoDB, Redis, SQL Server and Turso.";
+            color: Theme.muted-foreground;
+            font-size: Theme.size-label;
+            wrap: word-wrap;
+        }
+
+        Divider { }
+
+        Rectangle {
+            height: 120px;
+            AboutSlint { }
+        }
+
+        Button {
+            text: "Close";
+            variant: ButtonVariant.secondary;
+            horizontal-stretch: 1;
+            clicked => { root.close(); }
+        }
+    }
+}

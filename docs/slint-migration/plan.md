@@ -40,4 +40,7 @@ Tools this produced, kept for the rest of the migration:
 ## Status
 
 - [x] Phase 0
-- [ ] Phase 1
+- [x] Phase 1: every screen's logic lives in `dbhive-ui-model`; `dbhive-app` re-exports it and still compiles and passes its own tests unchanged
+- [~] Phase 2: theme, icons, async bridge, toasts, navigation and `MenuBar` are in; About has `AboutSlint`. The command palette itself (only its trigger) and connection editor are not yet wired to a search/run flow
+- [~] Phase 3: connections screen and the new/edit/duplicate/delete flow are done. Password prompt for a saved connection with no cached secret, the workspace and history are not started
+  - Connection editor gap: no SSH tunnel sub-form, no pasted connection string, no colour tag yet. `dbhive_ui_model::connection_editor` already has the logic for all three; only the Slint dialog needs the fields
