@@ -1,0 +1,21 @@
+import { DiagramCanvas, DiagramNode, DiagramEdge } from "../components/diagram.slint";
+
+export component DiagramSpike inherits Window {
+    in property <[DiagramNode]> nodes;
+    in property <[DiagramEdge]> edges;
+    in property <length> canvas-width;
+    in property <length> canvas-height;
+    in property <bool> shadows: true;
+    callback node-dragged(int, length, length);
+    callback node-clicked(int);
+    background: #090a0e;
+    DiagramCanvas {
+        nodes: root.nodes;
+        edges: root.edges;
+        canvas-width: root.canvas-width;
+        canvas-height: root.canvas-height;
+        shadows: root.shadows;
+        node-dragged(i, dx, dy) => { root.node-dragged(i, dx, dy); }
+        node-clicked(i) => { root.node-clicked(i); }
+    }
+}

@@ -1,0 +1,139 @@
+// Diagram canvas for the ER diagram and schema designer.
+//
+// Nodes are positioned from the model; edges are SVG path commands built in
+// Rust, so curve maths lives where it can be unit tested. Dragging reports a
+// delta and lets Rust move the node and recompute its edges; the canvas holds
+// no geometry of its own beyond pan and zoom.
+
+export struct DiagramNode {
+    title: string,
+    columns: [string],
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    selected: bool,
+}
+
+export struct DiagramEdge {
+    // SVG path commands, relative to the edge's own bounding box.
+    commands: string,
+    // Bounding box in canvas coordinates. Each path element covers only this,
+    // not the whole canvas: a full-canvas path per edge made every frame
+    // rasterise the canvas once per relationship.
+    x: length,
+    y: length,
+    width: length,
+    height: length,
+    highlighted: bool,
+}
+
+export component DiagramCanvas inherits Rectangle {
+    in property <[DiagramNode]> nodes;
+    in property <[DiagramEdge]> edges;
+    in-out property <length> pan-x: 0px;
+    in-out property <length> pan-y: 0px;
+    in property <float> zoom: 1.0;
+    // The canvas size edges are expressed in. Rust sizes this to the layout.
+    in property <length> canvas-width: 2000px;
+    in property <length> canvas-height: 1400px;
+    // Blurred shadows on every node are the most expensive thing drawn.
+    in property <bool> shadows: true;
+
+    callback node-dragged(int, length, length);
+    callback node-clicked(int);
+
+    background: #090a0e;
+    clip: true;
+
+    // Panning: dragging empty space moves the whole canvas.
+    pan := TouchArea {
+        property <length> start-x;
+        property <length> start-y;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                self.start-x = root.pan-x;
+                self.start-y = root.pan-y;
+            }
+        }
+        moved => {
+            root.pan-x = self.start-x + (self.mouse-x - self.pressed-x);
+            root.pan-y = self.start-y + (self.mouse-y - self.pressed-y);
+        }
+    }
+
+    world := Rectangle {
+        x: root.pan-x;
+        y: root.pan-y;
+        width: root.canvas-width;
+        height: root.canvas-height;
+
+        for edge in root.edges: Path {
+            x: edge.x;
+            y: edge.y;
+            width: edge.width;
+            height: edge.height;
+            // Pin the viewbox to the element's own size, or Slint scales the
+            // path to fit its bounds and curves land in the wrong place.
+            viewbox-x: 0;
+            viewbox-y: 0;
+            viewbox-width: edge.width / 1px;
+            viewbox-height: edge.height / 1px;
+            commands: edge.commands;
+            stroke: edge.highlighted ? #f8b02a : #3a3d48;
+            stroke-width: edge.highlighted ? 2px : 1.25px;
+        }
+
+        for node[i] in root.nodes: Rectangle {
+            x: node.x;
+            y: node.y;
+            width: node.width;
+            height: node.height;
+            background: #13141a;
+            border-radius: 10px;
+            border-width: node.selected ? 2px : 1px;
+            border-color: node.selected ? #f8b02a : #2a2c35;
+            // The dragged or selected table draws above its neighbours.
+            z: node.selected ? 1 : 0;
+            drop-shadow-blur: root.shadows ? 12px : 0;
+            drop-shadow-color: root.shadows ? #00000066 : transparent;
+            drop-shadow-offset-y: root.shadows ? 4px : 0;
+
+            // Header, which is also the drag handle.
+            header := TouchArea {
+                x: 0;
+                y: 0;
+                height: 30px;
+                clicked => { root.node-clicked(i); }
+                moved => {
+                    root.node-dragged(i, self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+                }
+                Rectangle {
+                    background: #1a1c23;
+                    border-top-left-radius: 10px;
+                    border-top-right-radius: 10px;
+                    Text {
+                        x: 12px;
+                        text: node.title;
+                        color: #f0f1f4;
+                        font-size: 13px;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        width: parent.width - 24px;
+                    }
+                }
+            }
+
+            for col[c] in node.columns: Text {
+                x: 12px;
+                y: 36px + c * 19px;
+                width: parent.width - 24px;
+                text: col;
+                color: c == 0 ? #f8b02a : #c6c9d1;
+                font-size: 12px;
+                overflow: elide;
+            }
+        }
+    }
+}
