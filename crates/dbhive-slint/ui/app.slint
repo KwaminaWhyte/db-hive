@@ -8,6 +8,12 @@ import { ConfirmDialog } from "dialogs/confirm.slint";
 import { ConnectionEditorDialog, ConnectionFormData } from "dialogs/connection_editor.slint";
 
 export { Theme, Icons, Tone, ConnectionItem, ConnectionFormData, TableItem, GridColumn, GridRow, TabInfo }
+
+// Table inspector (a table tab's Data and Structure views).
+import { ClipboardSink } from "kit/kit.slint";
+import { InspectorBridge, FilterRowItem, ColumnRowItem, IndexRowItem, RelationRowItem } from "screens/table_inspector.slint";
+export { InspectorBridge, FilterRowItem, ColumnRowItem, IndexRowItem, RelationRowItem }
+
 export { SqlEditorSpike } from "spikes/sql_editor_spike.slint";
 export { GridSpike } from "spikes/grid_spike.slint";
 export { DiagramSpike } from "spikes/diagram_spike.slint";
@@ -127,6 +133,11 @@ export component AppWindow inherits Window {
     callback workspace-editor-edited(string);
     callback workspace-run-query;
     callback workspace-retry;
+
+    // Puts text on the system clipboard (Slint has no call for it in Rust).
+    public function copy-to-clipboard(text: string) {
+        clipboard-sink.copy-text(text);
+    }
 
     // Shell.
     in property <[ToastItem]> toasts;
@@ -373,6 +384,9 @@ export component AppWindow inherits Window {
             retry => { root.workspace-retry(); }
         }
     }
+
+    // Never drawn; `copy-to-clipboard` fills it and copies.
+    clipboard-sink := ClipboardSink { }
 
     // Toasts, bottom right, above everything.
     VerticalLayout {

@@ -1,5 +1,5 @@
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Card, ClickableCard, ListRow, SwatchPicker, Badge, TextField,
-    ScreenHeader, SectionLabel, Banner, EmptyState, Divider } from "../kit/kit.slint";
+    ScreenHeader, SectionLabel, Banner, EmptyState, Divider, Segmented, DataRow, SidePanel, ClipboardSink } from "../kit/kit.slint";
 
 export component KitGallery inherits Window {
     background: Theme.background;
@@ -44,6 +44,48 @@ export component KitGallery inherits Window {
                 TextField { text: "SELECT 1"; }
                 Banner { message: "Connection failed: password authentication failed for user \"postgres\""; }
                 Banner { message: "Schema refreshed"; tone: Tone.success; }
+                SectionLabel { text: "SEGMENTED AND LINK BADGE"; }
+                HorizontalLayout {
+                    spacing: 12px;
+                    alignment: start;
+                    Segmented { options: ["Data", "Structure"]; selected: 1; }
+                    VerticalLayout {
+                        alignment: center;
+                        Badge { text: "FK customers(id)"; clickable: true; }
+                    }
+                }
+                SectionLabel { text: "TABLE ROWS"; }
+                Card {
+                    clip: true;
+                    VerticalLayout {
+                        DataRow {
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                spacing: 12px;
+                                Text { text: "id"; color: Theme.foreground; font-size: Theme.size-label; font-weight: 600; vertical-alignment: center; width: 200px; }
+                                Text { text: "integer"; color: Theme.foreground; font-size: Theme.size-label; vertical-alignment: center; horizontal-stretch: 1; }
+                            }
+                        }
+                        DataRow {
+                            clickable: true;
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                spacing: 12px;
+                                Text { text: "customer_id (clickable)"; color: Theme.foreground; font-size: Theme.size-label; font-weight: 600; vertical-alignment: center; width: 200px; }
+                                Text { text: "integer"; color: Theme.foreground; font-size: Theme.size-label; vertical-alignment: center; horizontal-stretch: 1; }
+                            }
+                        }
+                        DataRow {
+                            selected: true;
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                spacing: 12px;
+                                Text { text: "note (selected)"; color: Theme.foreground; font-size: Theme.size-label; font-weight: 600; vertical-alignment: center; width: 200px; }
+                                Text { text: "text"; color: Theme.foreground; font-size: Theme.size-label; vertical-alignment: center; horizontal-stretch: 1; }
+                            }
+                        }
+                    }
+                }
             }
             VerticalLayout {
                 spacing: 10px;
@@ -108,6 +150,26 @@ export component KitGallery inherits Window {
                         VerticalLayout { alignment: center; Button { text: "Disconnect"; variant: ButtonVariant.ghost; } }
                     }
                 }
+                SectionLabel { text: "SIDE PANEL AND CLIPBOARD"; }
+                Card {
+                    height: 120px;
+                    clip: true;
+                    SidePanel {
+                        title: "Row 3 · note";
+                        subtitle: "Selected row as JSON";
+                        VerticalLayout {
+                            padding: 12px;
+                            alignment: start;
+                            Button {
+                                text: "Copy";
+                                has-icon: true;
+                                icon: Icons.copy;
+                                clicked => { sink.copy-text("copied from the gallery"); }
+                            }
+                        }
+                    }
+                }
+                sink := ClipboardSink { }
                 Card {
                     height: 190px;
                     EmptyState {

@@ -24,6 +24,8 @@ use dbhive_ui_model::results_grid::visible_rows;
 use dbhive_ui_model::sql_guard;
 use dbhive_ui_model::workspace_tabs::{result_summary, TabKind, Tabs};
 
+mod inspector;
+
 use crate::connection_editor as editor_view;
 use crate::connection_list::{self, EnvTone};
 use crate::grid_model::{layout_columns, LazyRows};
@@ -33,11 +35,6 @@ use crate::sql_highlight;
 use crate::{
     AppWindow, ConnectionItem, GridRow, Screen, TabInfo, TableItem, Theme, ToastItem, Tone,
 };
-
-/// How many rows a table preview pulls. Not user-configurable yet; the
-/// egui table editor's own default (`workspace.rs:516`) is 100, this is a
-/// little more generous since the grid virtualises past what is on screen.
-const PREVIEW_ROW_LIMIT: u32 = 200;
 
 /// The connected workspace: which connection, which table, and its rows.
 #[derive(Default)]
@@ -633,6 +630,11 @@ impl Ctx {
             .into(),
         );
 
+        // A table tab's paging, filters, sort and structure.
+        if tab.inspector.is_some() {
+            inspector::project(&w, ws, tab);
+        }
+
         // The grid only has something to show once a query has actually
         // landed.
         let Some(result) = &tab.result else {
@@ -759,20 +761,21 @@ impl Ctx {
     /// first time.
     fn select_table(self: &Rc<Self>, name: &str) {
         let connection_id = self.session.borrow().workspace.connection_id.clone();
-        let Some(d) = self.open_driver(&connection_id) else {
+        if self.open_driver(&connection_id).is_none() {
             self.toast("This connection is no longer open.", Tone::Danger);
             return;
-        };
-        let sql = format!(
-            "SELECT * FROM {} LIMIT {}",
-            d.quote_identifier(name),
-            PREVIEW_ROW_LIMIT
-        );
-        let (id, created) = self.session.borrow_mut().workspace.tabs.open_table(name, sql);
+        }
+        let (id, created) = self
+            .session
+            .borrow_mut()
+            .workspace
+            .tabs
+            .open_table(name, String::new());
         self.refresh_workspace();
         if created {
-            // A preview is a SELECT the app wrote, so it skips the guard.
-            self.run_tab(id, false);
+            // The inspector writes and runs its own paged SELECTs; they are
+            // the app's, so they skip the destructive-statement guard.
+            self.inspector_open(id);
         }
     }
 
@@ -1313,6 +1316,8 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
         let ctx = ctx.clone();
         window.on_workspace_retry(move || ctx.run_active_tab());
     }
+
+    inspector::wire(&window, &ctx);
 
     ctx.refresh_connections();
     CTX.with(|c| *c.borrow_mut() = Some(ctx));
