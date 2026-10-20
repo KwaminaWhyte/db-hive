@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 ///
 /// Central configuration for all user preferences and application behavior.
 /// Settings are persisted to disk using Tauri Store and loaded on application startup.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     /// General application settings
@@ -38,7 +38,7 @@ impl Default for AppSettings {
 }
 
 /// General application settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GeneralSettings {
     /// Language code (e.g., "en", "es", "fr")
@@ -103,7 +103,7 @@ pub enum StartupBehavior {
 }
 
 /// Theme and appearance settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ThemeSettings {
     /// Theme mode (light, dark, system)
@@ -157,7 +157,7 @@ pub enum ThemeMode {
 }
 
 /// Query execution settings
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QuerySettings {
     /// Query execution timeout in seconds (0 = no timeout)
@@ -197,7 +197,7 @@ impl Default for QuerySettings {
 }
 
 /// Keyboard shortcuts configuration
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShortcutsSettings {
     /// Execute query (default: Ctrl/Cmd+Enter)
