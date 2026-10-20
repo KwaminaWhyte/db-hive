@@ -20,6 +20,11 @@ use dbhive_ui_model::connection_editor::{
     build_profile, build_profile_with, form_from_profile, paste_connection_string, save_profile,
     test_profile, validate, ConnectionForm,
 };
+use dbhive_ui_model::command_palette::{CommandId, Scope, IS_MAC};
+use dbhive_ui_model::palette_session::{
+    chord_from_input, command_for_key, status, CommandContext, Overlay, PaletteState,
+    ShortcutsState, Status,
+};
 use dbhive_ui_model::results_grid::visible_rows;
 use dbhive_ui_model::sql_guard;
 use dbhive_ui_model::workspace_tabs::{result_summary, TabKind, Tabs};
@@ -27,6 +32,7 @@ use dbhive_ui_model::workspace_tabs::{result_summary, TabKind, Tabs};
 use crate::connection_editor as editor_view;
 use crate::connection_list::{self, EnvTone};
 use crate::grid_model::{layout_columns, LazyRows};
+use crate::palette_view;
 use crate::runtime;
 use crate::workspace_model;
 use crate::sql_highlight;
@@ -124,6 +130,8 @@ struct Session {
     pending_delete: Option<(String, String)>,
     pending_action: Option<PendingAction>,
     workspace: Workspace,
+    palette: PaletteState,
+    shortcuts: ShortcutsState,
 }
 
 struct Ctx {
@@ -1024,6 +1032,227 @@ impl Ctx {
     }
 }
 
+/// What dispatching a command did.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Outcome {
+    Ran,
+    /// The command exists but cannot run now; the text says why.
+    Refused(&'static str),
+}
+
+// -- Commands ------------------------------------------------------------
+//
+// Every action a user can name (a menu item, a palette row, a key chord, a
+// button) goes through `dispatch`, by `CommandId`. What a command may do right
+// now is `palette_session::status`, so the palette greys the same rows that
+// `dispatch` refuses.
+impl Ctx {
+    fn overlay(&self) -> Overlay {
+        let Some(w) = self.window.upgrade() else { return Overlay::None };
+        if w.get_show_palette() {
+            Overlay::Palette
+        } else if w.get_show_shortcuts() {
+            Overlay::Shortcuts
+        } else if w.get_show_about() || w.get_show_confirm() || w.get_show_connection_editor() {
+            Overlay::Dialog
+        } else {
+            Overlay::None
+        }
+    }
+
+    fn command_context(&self) -> CommandContext {
+        let dialog_open = self.overlay() == Overlay::Dialog;
+        let Some(w) = self.window.upgrade() else {
+            return CommandContext::connections();
+        };
+        let s = self.session.borrow();
+        let ws = &s.workspace;
+        let tab = ws.tabs.active();
+        CommandContext {
+            screen: if w.get_screen() == Screen::Workspace {
+                Scope::Workspace
+            } else {
+                Scope::Connections
+            },
+            dark: w.global::<Theme>().get_dark(),
+            tables_loading: ws.loading_tables,
+            tab_count: ws.tabs.tabs().len(),
+            active_is_query: tab.is_some_and(|t| t.is_query()),
+            running: tab.is_some_and(|t| t.running),
+            editor_empty: tab.is_none_or(|t| t.sql.trim().is_empty()),
+            dialog_open,
+        }
+    }
+
+    /// Run a command by id. The palette and shortcuts help are transient, so
+    /// they close first (running the palette's own command from inside it
+    /// closes it, which is what its toggle key does too).
+    fn dispatch(self: &Rc<Self>, id: CommandId) -> Outcome {
+        if id == CommandId::OpenCommandPalette && self.session.borrow().palette.is_open() {
+            self.close_palette();
+            return Outcome::Ran;
+        }
+        self.close_palette();
+        self.close_shortcuts();
+
+        let ctx = self.command_context();
+        match status(id, &ctx) {
+            Status::Enabled => {}
+            other => return Outcome::Refused(other.reason()),
+        }
+        let Some(w) = self.window.upgrade() else { return Outcome::Ran };
+
+        match id {
+            // Same as the workspace's Back button.
+            CommandId::GoConnections => self.leave_workspace(),
+            // Settings is another screen's job; this only raises its callback.
+            CommandId::GoSettings => w.invoke_open_settings(),
+            CommandId::GoAbout => w.set_show_about(true),
+            CommandId::NewConnection => self.open_new_connection(),
+            CommandId::RefreshMetadata => self.load_tables(),
+            CommandId::ShowShortcuts => self.open_shortcuts(),
+            CommandId::OpenCommandPalette => self.open_palette(),
+            CommandId::Disconnect => {
+                let connection = self.session.borrow().workspace.connection_id.clone();
+                self.disconnect(connection);
+            }
+            CommandId::RunQuery => self.run_active_tab(),
+            CommandId::NewTab => self.new_query_tab(),
+            CommandId::CloseTab => {
+                let active = self.session.borrow().workspace.tabs.active_index();
+                if let Some(index) = active {
+                    self.close_tab(index);
+                }
+            }
+            CommandId::ThemeLight => self.set_dark(false),
+            CommandId::ThemeDark => self.set_dark(true),
+            CommandId::ThemeToggle => self.set_dark(!w.global::<Theme>().get_dark()),
+            // `status` only returns Enabled for the commands above.
+            _ => return Outcome::Refused("Not available yet"),
+        }
+        Outcome::Ran
+    }
+
+    fn set_dark(&self, dark: bool) {
+        if let Some(w) = self.window.upgrade() {
+            w.global::<Theme>().set_dark(dark);
+        }
+        // The editor's syntax colours are chosen per theme in Rust, so they
+        // have to be recomputed.
+        self.refresh_workspace();
+    }
+
+    /// A key nothing focused used. Returns whether it ran a shortcut.
+    fn key_chord(self: &Rc<Self>, text: &str, ctrl: bool, alt: bool, shift: bool, meta: bool) -> bool {
+        let Some(chord) = chord_from_input(text, ctrl, alt, shift, meta) else {
+            return false;
+        };
+        let screen = self.command_context().screen;
+        match command_for_key(chord, self.overlay(), screen) {
+            Some(id) => {
+                self.dispatch(id);
+                true
+            }
+            None => false,
+        }
+    }
+
+    // -- Palette -----------------------------------------------------------
+
+    fn refresh_palette(&self) {
+        let Some(w) = self.window.upgrade() else { return };
+        let ctx = self.command_context();
+        let s = self.session.borrow();
+        let view = s.palette.view(&ctx, IS_MAC);
+        palette_view::apply_palette(&w, s.palette.is_open(), s.palette.query(), &view);
+    }
+
+    fn open_palette(&self) {
+        self.session.borrow_mut().palette.open();
+        if let Some(w) = self.window.upgrade() {
+            w.set_palette_scroll(0.0);
+        }
+        self.refresh_palette();
+    }
+
+    fn close_palette(&self) {
+        if !self.session.borrow().palette.is_open() {
+            return;
+        }
+        self.session.borrow_mut().palette.close();
+        self.refresh_palette();
+    }
+
+    fn palette_edited(&self, query: &str) {
+        self.session.borrow_mut().palette.set_query(query);
+        if let Some(w) = self.window.upgrade() {
+            w.set_palette_scroll(0.0);
+        }
+        self.refresh_palette();
+    }
+
+    /// Arrow keys: move the selection (wrapping) and keep it in view.
+    fn palette_move(&self, delta: i32) {
+        let ctx = self.command_context();
+        self.session.borrow_mut().palette.move_selection(delta, &ctx);
+        self.refresh_palette();
+        let Some(w) = self.window.upgrade() else { return };
+        let view = self.session.borrow().palette.view(&ctx, IS_MAC);
+        w.set_palette_scroll(view.reveal_offset(w.get_palette_scroll()));
+    }
+
+    fn palette_hovered(&self, row: usize) {
+        let ctx = self.command_context();
+        let changed = self.session.borrow_mut().palette.select_row(row, &ctx);
+        if changed {
+            self.refresh_palette();
+        }
+    }
+
+    /// Enter: run the highlighted command, if there is one.
+    fn palette_run(self: &Rc<Self>) {
+        let ctx = self.command_context();
+        let chosen = self.session.borrow().palette.selected_id(&ctx);
+        if let Some(id) = chosen {
+            self.dispatch(id);
+        }
+    }
+
+    /// A click on a row.
+    fn palette_chosen(self: &Rc<Self>, slug: &str) {
+        if let Some(id) = CommandId::from_slug(slug) {
+            self.dispatch(id);
+        }
+    }
+
+    // -- Shortcuts help ------------------------------------------------------
+
+    fn refresh_shortcuts(&self) {
+        let Some(w) = self.window.upgrade() else { return };
+        let s = self.session.borrow();
+        let rows = s.shortcuts.view(IS_MAC);
+        palette_view::apply_shortcuts(&w, s.shortcuts.is_open(), s.shortcuts.query(), &rows);
+    }
+
+    fn open_shortcuts(&self) {
+        self.session.borrow_mut().shortcuts.open();
+        self.refresh_shortcuts();
+    }
+
+    fn close_shortcuts(&self) {
+        if !self.session.borrow().shortcuts.is_open() {
+            return;
+        }
+        self.session.borrow_mut().shortcuts.close();
+        self.refresh_shortcuts();
+    }
+
+    fn shortcuts_edited(&self, query: &str) {
+        self.session.borrow_mut().shortcuts.set_query(query);
+        self.refresh_shortcuts();
+    }
+}
+
 thread_local! {
     /// The controller lives on the UI thread. Async completions reach it
     /// through here, because `invoke_from_event_loop` needs a `Send` closure
@@ -1103,23 +1332,18 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
         window.on_dismiss_toast(move |id| ctx.dismiss_toast(id));
     }
     {
-        let weak = window.as_weak();
         let ctx = ctx.clone();
         window.on_toggle_theme(move || {
-            if let Some(w) = weak.upgrade() {
-                let theme = w.global::<Theme>();
-                theme.set_dark(!theme.get_dark());
-            }
-            // The editor's syntax colours are chosen per theme in Rust, so
-            // they have to be recomputed.
-            ctx.refresh_workspace();
+            ctx.dispatch(CommandId::ThemeToggle);
         });
     }
 
     // -- Connection editor and delete confirmation --------------------------
     {
         let ctx = ctx.clone();
-        window.on_new_connection(move || ctx.open_new_connection());
+        window.on_new_connection(move || {
+            ctx.dispatch(CommandId::NewConnection);
+        });
     }
     {
         let ctx = ctx.clone();
@@ -1275,7 +1499,9 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     }
     {
         let ctx = ctx.clone();
-        window.on_workspace_refresh_tables(move || ctx.load_tables());
+        window.on_workspace_refresh_tables(move || {
+            ctx.dispatch(CommandId::RefreshMetadata);
+        });
     }
     {
         let ctx = ctx.clone();
@@ -1299,7 +1525,9 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     }
     {
         let ctx = ctx.clone();
-        window.on_workspace_new_query(move || ctx.new_query_tab());
+        window.on_workspace_new_query(move || {
+            ctx.dispatch(CommandId::NewTab);
+        });
     }
     {
         let ctx = ctx.clone();
@@ -1307,12 +1535,69 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     }
     {
         let ctx = ctx.clone();
-        window.on_workspace_run_query(move || ctx.run_active_tab());
+        window.on_workspace_run_query(move || {
+            ctx.dispatch(CommandId::RunQuery);
+        });
     }
     {
         let ctx = ctx.clone();
         window.on_workspace_retry(move || ctx.run_active_tab());
     }
+
+    // -- Commands, palette and shortcuts help ---------------------------------
+    {
+        let ctx = ctx.clone();
+        window.on_run_command(move |slug| {
+            if let Some(id) = CommandId::from_slug(&slug) {
+                ctx.dispatch(id);
+            }
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_key_chord(move |text, ctrl, alt, shift, meta| {
+            ctx.key_chord(&text, ctrl, alt, shift, meta)
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_open_palette(move || {
+            ctx.dispatch(CommandId::OpenCommandPalette);
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_palette_edited(move |q| ctx.palette_edited(&q));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_palette_move(move |delta| ctx.palette_move(delta));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_palette_run(move || ctx.palette_run());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_palette_chosen(move |slug| ctx.palette_chosen(&slug));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_palette_hovered(move |row| ctx.palette_hovered(row.max(0) as usize));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_palette_close(move || ctx.close_palette());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_shortcuts_edited(move |q| ctx.shortcuts_edited(&q));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_shortcuts_close(move || ctx.close_shortcuts());
+    }
+    palette_view::set_metrics(&window);
 
     ctx.refresh_connections();
     CTX.with(|c| *c.borrow_mut() = Some(ctx));

@@ -1,0 +1,259 @@
+// The command palette: a search field over a grouped list of commands.
+//
+// All behaviour lives in Rust (dbhive-ui-model's palette_session). This file
+// draws the rows it is given and reports intents: the query was edited, an
+// arrow key moved the selection, Enter or a click chose a command, Escape or
+// the backdrop closed it.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, Popover, Divider, TextField, KeyCaps, KeyCap } from "../kit/kit.slint";
+
+// One row of the list: a group header or a command.
+export struct PaletteItem {
+    header: bool,
+    // The command's text id; empty for a header.
+    id: string,
+    title: string,
+    description: string,
+    keys: [string],
+    enabled: bool,
+    // Why a listed command cannot run; empty when it can.
+    reason: string,
+    selected: bool,
+}
+
+component PaletteRow inherits Rectangle {
+    in property <PaletteItem> item;
+    in property <length> row-height;
+    in property <length> header-height;
+    callback chosen;
+    callback hovered;
+
+    height: root.item.header ? root.header-height : root.row-height;
+
+    if root.item.header: VerticalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-bottom: 4px;
+        alignment: end;
+        Text {
+            text: root.item.title;
+            color: Theme.dim-foreground;
+            font-size: Theme.size-small;
+            font-weight: 600;
+            letter-spacing: 0.6px;
+        }
+    }
+
+    if !root.item.header: Rectangle {
+        x: 6px;
+        width: parent.width - 12px;
+        border-radius: Theme.radius-control;
+        background: root.item.selected ? Theme.primary-soft : transparent;
+
+        accessible-role: button;
+        accessible-label: root.item.title;
+        accessible-description: root.item.enabled ? root.item.description : root.item.reason;
+        accessible-enabled: root.item.enabled;
+        accessible-action-default => {
+            if (root.item.enabled) {
+                root.chosen();
+            }
+        }
+
+        touch := TouchArea {
+            mouse-cursor: root.item.enabled ? pointer : default;
+            clicked => {
+                if (root.item.enabled) {
+                    root.chosen();
+                }
+            }
+            // Moving over a row selects it. (Rust ignores a move within the
+            // row that is already selected, so this costs nothing.)
+            pointer-event(event) => {
+                if (event.kind == PointerEventKind.move && root.item.enabled) {
+                    root.hovered();
+                }
+            }
+        }
+
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            spacing: 10px;
+            Text {
+                text: root.item.title;
+                // A command that cannot run is dimmed, but its reason (the
+                // line next to it) stays readable: that is the useful part.
+                color: root.item.enabled ? Theme.foreground : Theme.dim-foreground;
+                font-size: Theme.size-body;
+                font-weight: root.item.selected ? 600 : 400;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 0;
+            }
+            Text {
+                text: root.item.enabled ? root.item.description : root.item.reason;
+                color: root.item.enabled ? Theme.dim-foreground : Theme.muted-foreground;
+                font-italic: !root.item.enabled;
+                font-size: Theme.size-small;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+            KeyCaps {
+                keys: root.item.keys;
+                opacity: root.item.enabled ? 1 : 0.5;
+            }
+        }
+    }
+}
+
+export component PaletteDialog inherits FocusScope {
+    in-out property <string> query;
+    in property <[PaletteItem]> rows;
+    // The list's scroll position (a ScrollView viewport-y). Rust sets it after
+    // an arrow key so the selected row stays visible.
+    in-out property <length> scroll;
+    // Height of the list area: the rows' total, capped. Rust computes it from
+    // the same row heights it passes in.
+    in property <length> list-height;
+    in property <length> row-height;
+    in property <length> header-height;
+
+    callback edited(string);
+    callback move(int);
+    callback run;
+    callback chosen(string);
+    callback hovered(int);
+    callback close;
+
+    property <length> field-height: 48px;
+    property <length> footer-height: 38px;
+    property <length> empty-height: 132px;
+    property <length> body-height: root.rows.length == 0 ? root.empty-height : root.list-height;
+
+    width: 560px;
+    height: root.field-height + 1px + root.body-height + 1px + root.footer-height;
+
+    // Capture, so the field does not take the arrows (caret) or Enter first.
+    capture-key-pressed(event) => {
+        if (event.text == Key.DownArrow) {
+            root.move(1);
+            return accept;
+        }
+        if (event.text == Key.UpArrow) {
+            root.move(-1);
+            return accept;
+        }
+        if (event.text == Key.Return) {
+            root.run();
+            return accept;
+        }
+        if (event.text == Key.Escape) {
+            root.close();
+            return accept;
+        }
+        if ((event.modifiers.control || event.modifiers.meta) && event.text == "k") {
+            root.close();
+            return accept;
+        }
+        return reject;
+    }
+
+    init => { field.focus-input(); }
+
+    Popover {
+        width: 100%;
+        height: 100%;
+
+        VerticalLayout {
+            spacing: 0;
+
+            Rectangle {
+                height: root.field-height;
+                HorizontalLayout {
+                    padding: 8px;
+                    field := TextField {
+                        has-icon: true;
+                        icon: Icons.search;
+                        placeholder: "Type a command or search…";
+                        text <=> root.query;
+                        edited(t) => { root.edited(t); }
+                    }
+                }
+            }
+
+            Divider { }
+
+            if root.rows.length == 0: VerticalLayout {
+                height: root.empty-height;
+                alignment: center;
+                spacing: 4px;
+                Text {
+                    text: "No commands match";
+                    color: Theme.foreground;
+                    font-size: Theme.size-body;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "Try a shorter search, or clear the field to see everything.";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+
+            if root.rows.length > 0: ScrollView {
+                height: root.list-height;
+                content-y <=> root.scroll;
+                VerticalLayout {
+                    // No padding: the scroll maths in Rust assumes the rows
+                    // start at the top of the content.
+                    alignment: start;
+                    for r[i] in root.rows: PaletteRow {
+                        item: r;
+                        row-height: root.row-height;
+                        header-height: root.header-height;
+                        chosen => { root.chosen(r.id); }
+                        hovered => { root.hovered(i); }
+                    }
+                }
+            }
+
+            Divider { }
+
+            Rectangle {
+                height: root.footer-height;
+                HorizontalLayout {
+                    padding-left: 16px;
+                    padding-right: 16px;
+                    spacing: 16px;
+                    alignment: start;
+                    for hint in [
+                        { keys: ["↑", "↓"], label: "Navigate" },
+                        { keys: ["Enter"], label: "Run" },
+                        { keys: ["Esc"], label: "Close" },
+                    ]: HorizontalLayout {
+                        spacing: 6px;
+                        VerticalLayout {
+                            alignment: center;
+                            HorizontalLayout {
+                                spacing: 2px;
+                                for k in hint.keys: KeyCap { text: k; }
+                            }
+                        }
+                        Text {
+                            text: hint.label;
+                            color: Theme.dim-foreground;
+                            font-size: Theme.size-small;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

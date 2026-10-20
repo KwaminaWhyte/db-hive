@@ -1,5 +1,5 @@
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Card, ClickableCard, ListRow, SwatchPicker, Badge, TextField,
-    ScreenHeader, SectionLabel, Banner, EmptyState, Divider } from "../kit/kit.slint";
+    ScreenHeader, SectionLabel, Banner, EmptyState, Divider, KeyCap, KeyCaps, Popover } from "../kit/kit.slint";
 
 export component KitGallery inherits Window {
     background: Theme.background;
@@ -55,6 +55,21 @@ export component KitGallery inherits Window {
                 SwatchPicker {
                     options: [#ef4444, #f59e0b, #22c55e, #3b82f6, #a855f7, #ec4899];
                     selected: 3;
+                }
+                SectionLabel { text: "KEY CAPS AND POPOVER"; }
+                Popover {
+                    height: 64px;
+                    HorizontalLayout {
+                        padding: 14px;
+                        spacing: 12px;
+                        VerticalLayout {
+                            alignment: center;
+                            Text { text: "New Window"; color: Theme.foreground; font-size: Theme.size-body; }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        KeyCaps { keys: ["Shift", "⌘", "N"]; }
+                        KeyCaps { keys: ["Ctrl", "Enter"]; }
+                    }
                 }
                 SectionLabel { text: "CARDS"; }
                 ClickableCard {

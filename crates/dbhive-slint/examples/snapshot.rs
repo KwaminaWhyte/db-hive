@@ -154,6 +154,15 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
+        // The command palette and shortcuts help over a real screen, drawn by
+        // the same code the app uses (palette_view). Variants:
+        //   palette, palette-workspace, palette-filtered, palette-theme,
+        //   palette-window, palette-empty, palette-bottom, palette-light,
+        //   palette-light-filtered, shortcuts, shortcuts-filtered,
+        //   shortcuts-empty, shortcuts-light.
+        _ if name.starts_with("palette") || name.starts_with("shortcuts") => {
+            command_overlay(name)
+        }
         "connections" | "connections-light" => {
             let c = AppWindow::new().expect("AppWindow");
             if name == "connections-light" {
@@ -256,6 +265,64 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             std::process::exit(2);
         }
     }
+}
+
+/// `palette*` and `shortcuts*` variants. The screen behind is the populated
+/// workspace unless the name says otherwise (`palette` alone is the connection
+/// list), so the dimmed backdrop and the contextual commands are both real.
+fn command_overlay(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_ui_model::command_palette::{Scope, IS_MAC};
+    use dbhive_ui_model::palette_session::{CommandContext, PaletteState, ShortcutsState};
+
+    let light = name.contains("light");
+    let on_connections = name == "palette" || name == "shortcuts" || name == "shortcuts-empty";
+    let backdrop = match (on_connections, light) {
+        (true, false) => "connections",
+        (true, true) => "connections-light",
+        (false, false) => "workspace-query",
+        (false, true) => "workspace-query-light",
+    };
+    let c = *instantiate(backdrop).downcast::<AppWindow>().expect("AppWindow");
+
+    let mut ctx = if on_connections {
+        CommandContext::connections()
+    } else {
+        CommandContext::workspace()
+    };
+    ctx.dark = !light;
+    ctx.tab_count = 2;
+    ctx.editor_empty = false;
+    debug_assert!(ctx.screen == Scope::Connections || ctx.screen == Scope::Workspace);
+
+    if name.starts_with("shortcuts") {
+        let mut s = ShortcutsState::default();
+        s.open();
+        match name {
+            "shortcuts-filtered" => s.set_query("tab"),
+            "shortcuts-empty" => s.set_query("zzzz"),
+            _ => {}
+        }
+        dbhive_slint::palette_view::apply_shortcuts(&c, true, s.query(), &s.view(IS_MAC));
+        return Box::new(c);
+    }
+
+    let mut p = PaletteState::default();
+    p.open();
+    match name {
+        "palette-filtered" | "palette-light-filtered" => {
+            p.set_query("tab");
+            p.move_selection(1, &ctx);
+        }
+        "palette-theme" => p.set_query("theme"),
+        "palette-window" => p.set_query("window"),
+        "palette-empty" => p.set_query("zzzz"),
+        "palette-bottom" => p.move_selection(-1, &ctx),
+        _ => {}
+    }
+    let view = p.view(&ctx, IS_MAC);
+    dbhive_slint::palette_view::apply_palette(&c, true, p.query(), &view);
+    c.set_palette_scroll(view.reveal_offset(0.0));
+    Box::new(c)
 }
 
 fn main() {

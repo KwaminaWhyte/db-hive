@@ -1,0 +1,180 @@
+// The keyboard shortcuts help: a searchable list of every binding the app
+// listens for, grouped, with each chord drawn as keycaps.
+//
+// The rows come from Rust (dbhive-ui-model's palette_session), derived from
+// the same table the key handler reads, so the list cannot document a key
+// that does nothing.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, Popover, Divider, TextField, KeyCaps, EmptyState } from "../kit/kit.slint";
+
+export struct ShortcutItem {
+    header: bool,
+    title: string,
+    description: string,
+    keys: [string],
+}
+
+export component ShortcutsDialog inherits FocusScope {
+    in-out property <string> query;
+    in property <[ShortcutItem]> rows;
+    // "macOS" or "Windows / Linux": which spelling of the chords is shown.
+    in property <string> platform;
+    // The window's height, so the dialog never outgrows it.
+    in property <length> available-height: 640px;
+
+    callback edited(string);
+    callback close;
+
+    width: 560px;
+    height: min(520px, root.available-height);
+
+    capture-key-pressed(event) => {
+        if (event.text == Key.Escape) {
+            root.close();
+            return accept;
+        }
+        return reject;
+    }
+
+    init => { field.focus-input(); }
+
+    Popover {
+        width: 100%;
+        height: 100%;
+
+        VerticalLayout {
+            padding: 0;
+            spacing: 0;
+
+            HorizontalLayout {
+                padding-left: 20px;
+                padding-right: 16px;
+                padding-top: 16px;
+                padding-bottom: 12px;
+                spacing: 10px;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 32px;
+                        height: 32px;
+                        border-radius: Theme.radius-control;
+                        background: Theme.primary-soft;
+                        Icon { source: Icons.keyboard; tint: Theme.primary; width: 16px; height: 16px; }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: "Keyboard shortcuts";
+                        color: Theme.foreground;
+                        font-size: Theme.size-subheading;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: "Every binding DB Hive listens for · " + root.platform;
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                VerticalLayout {
+                    alignment: start;
+                    TouchArea {
+                        width: 20px;
+                        height: 20px;
+                        mouse-cursor: pointer;
+                        clicked => { root.close(); }
+                        accessible-role: button;
+                        accessible-label: "Close shortcuts";
+                        Icon { source: Icons.x; tint: Theme.dim-foreground; width: 14px; height: 14px; }
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-bottom: 12px;
+                field := TextField {
+                    has-icon: true;
+                    icon: Icons.search;
+                    placeholder: "Search shortcuts";
+                    text <=> root.query;
+                    edited(t) => { root.edited(t); }
+                }
+            }
+
+            Divider { }
+
+            if root.rows.length == 0: VerticalLayout {
+                vertical-stretch: 1;
+                alignment: center;
+                spacing: 4px;
+                Text {
+                    text: "No shortcuts match";
+                    color: Theme.foreground;
+                    font-size: Theme.size-body;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "Search by action, by description or by key, for example “tab” or “N”.";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+
+            if root.rows.length > 0: ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    padding-top: 2px;
+                    padding-bottom: 10px;
+                    alignment: start;
+                    for r in root.rows: Rectangle {
+                        height: r.header ? 32px : 36px;
+                        if r.header: VerticalLayout {
+                            padding-left: 10px;
+                            padding-bottom: 4px;
+                            alignment: end;
+                            Text {
+                                text: r.title;
+                                color: Theme.dim-foreground;
+                                font-size: Theme.size-small;
+                                font-weight: 600;
+                                letter-spacing: 0.6px;
+                            }
+                        }
+                        if !r.header: HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: 12px;
+                            Text {
+                                text: r.title;
+                                color: Theme.foreground;
+                                font-size: Theme.size-body;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                horizontal-stretch: 0;
+                            }
+                            Text {
+                                text: r.description;
+                                color: Theme.dim-foreground;
+                                font-size: Theme.size-small;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                            }
+                            KeyCaps { keys: r.keys; }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
