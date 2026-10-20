@@ -2,6 +2,7 @@ import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Divider, ListRow, Banner, EmptyState, TabBar, TabInfo } from "../kit/kit.slint";
 import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
 import { SqlEditor, HighlightLine } from "../components/sql_editor.slint";
+import { TableInspectorView } from "table_inspector.slint";
 
 export struct TableItem {
     name: string,
@@ -236,7 +237,7 @@ export component WorkspaceScreen inherits VerticalLayout {
                 }
             }
 
-            if root.tabs.length > 0: VerticalLayout {
+            if root.tabs.length > 0 && root.active-is-query: VerticalLayout {
                 vertical-stretch: 1;
                 padding: 14px;
                 spacing: 10px;
@@ -364,6 +365,17 @@ export component WorkspaceScreen inherits VerticalLayout {
                 if !root.running && (root.result-message != "" || root.rows-error != ""): Rectangle {
                     vertical-stretch: 1;
                 }
+            }
+
+            // A table tab is the table inspector: Data and Structure views.
+            if root.tabs.length > 0 && !root.active-is-query: TableInspectorView {
+                vertical-stretch: 1;
+                columns: root.columns;
+                rows: root.rows;
+                grid-width: root.grid-width;
+                running: root.running;
+                rows-error: root.rows-error;
+                has-result: root.has-result;
             }
         }
     }

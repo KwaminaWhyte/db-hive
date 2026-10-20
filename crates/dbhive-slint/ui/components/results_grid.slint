@@ -1,5 +1,5 @@
 import { ListView } from "std-widgets.slint";
-import { Theme } from "../kit/kit.slint";
+import { Theme, Icon, Icons } from "../kit/kit.slint";
 
 // Virtualised results grid.
 //
@@ -35,7 +35,17 @@ export component ResultsGrid inherits Rectangle {
     in property <length> row-height: 28px;
     in property <length> header-height: 32px;
 
+    // The caller owns the selection (a table tab keeps it in Rust): clicks
+    // are reported but `selected-row` is not assigned here, so a binding to
+    // it survives. `selected-col` outlines one cell; -1 outlines none.
+    in property <bool> controlled: false;
+    in property <int> selected-col: -1;
+    // Header arrow for a sorted column; -1 for none.
+    in property <int> sort-column: -1;
+    in property <bool> sort-desc: false;
+
     callback row-clicked(int);
+    callback cell-clicked(int, int);
     callback header-clicked(int);
 
     // Exposed so tests and snapshots can scroll without a pointer.
@@ -63,15 +73,28 @@ export component ResultsGrid inherits Rectangle {
                     x: col.x;
                     width: col.width;
                     clicked => { root.header-clicked(index); }
-                    Text {
-                        x: 12px;
-                        width: parent.width - 20px;
-                        text: col.title;
-                        color: Theme.muted-foreground;
-                        font-size: Theme.size-small;
-                        font-weight: 600;
-                        vertical-alignment: center;
-                        overflow: elide;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 8px;
+                        spacing: 4px;
+                        alignment: start;
+                        Text {
+                            text: col.title;
+                            color: index == root.sort-column ? Theme.foreground : Theme.muted-foreground;
+                            font-size: Theme.size-small;
+                            font-weight: 600;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        if index == root.sort-column: VerticalLayout {
+                            alignment: center;
+                            Icon {
+                                source: root.sort-desc ? Icons.arrow-down : Icons.arrow-up;
+                                tint: Theme.primary;
+                                width: 12px;
+                                height: 12px;
+                            }
+                        }
                     }
                 }
                 Rectangle {
@@ -82,19 +105,29 @@ export component ResultsGrid inherits Rectangle {
             }
 
             list := ListView {
-                for row[r] in root.rows: TouchArea {
+                for row[r] in root.rows: Rectangle {
                     height: root.row-height;
-                    clicked => {
-                        root.selected-row = r;
-                        root.row-clicked(r);
-                    }
-                    Rectangle {
-                        background: r == root.selected-row
-                            ? Theme.primary-soft
-                            : (mod(r, 2) == 0 ? transparent : Theme.hover.transparentize(0.5));
-                        for cell[c] in row.cells: Text {
-                            x: root.columns[c].x + 12px;
-                            width: root.columns[c].width - 20px;
+                    background: r == root.selected-row
+                        ? Theme.primary-soft
+                        : (mod(r, 2) == 0 ? transparent : Theme.hover.transparentize(0.5));
+                    for cell[c] in row.cells: TouchArea {
+                        x: root.columns[c].x;
+                        width: root.columns[c].width;
+                        clicked => {
+                            if (!root.controlled) {
+                                root.selected-row = r;
+                            }
+                            root.row-clicked(r);
+                            root.cell-clicked(r, c);
+                        }
+                        // The selected cell, outlined within its selected row.
+                        Rectangle {
+                            border-width: r == root.selected-row && c == root.selected-col ? 1px : 0px;
+                            border-color: Theme.primary;
+                        }
+                        Text {
+                            x: 12px;
+                            width: parent.width - 20px;
                             text: cell.is-null ? "NULL" : cell.text;
                             color: cell.is-null ? Theme.dim-foreground : Theme.foreground;
                             font-italic: cell.is-null;

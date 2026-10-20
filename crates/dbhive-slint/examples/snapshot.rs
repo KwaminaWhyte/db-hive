@@ -154,6 +154,7 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
+        _ if name.starts_with("inspector") => inspector(name),
         "connections" | "connections-light" => {
             let c = AppWindow::new().expect("AppWindow");
             if name == "connections-light" {
@@ -448,6 +449,186 @@ fn history_panel_window(name: &str) -> Box<dyn std::any::Any> {
     c.show().unwrap();
     Box::new(c)
 }
+
+/// The table inspector (a table tab). Variants, each with an optional `-light`:
+/// inspector, -filters, -panel, -empty, -loading, -error, -deep, -long,
+/// -structure, -structure-loading, -structure-error, -structure-empty.
+fn inspector(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_slint::{ColumnRowItem, FilterRowItem, IndexRowItem, InspectorBridge, RelationRowItem};
+
+    let c = AppWindow::new().expect("AppWindow");
+    if name.ends_with("-light") {
+        c.global::<Theme>().set_dark(false);
+    }
+    let v = name.trim_end_matches("-light");
+    let structure = v.starts_with("inspector-structure");
+
+    c.set_screen(Screen::Workspace);
+    c.set_workspace_connection_name("Production Postgres".into());
+    c.set_workspace_location_label("app · public".into());
+    let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products", "refunds"]
+        .iter()
+        .enumerate()
+        .map(|(i, n)| TableItem { name: (*n).into(), row_count: format!("~{}", (i + 1) * 1240).into() })
+        .collect();
+    c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
+    c.set_workspace_selected_table("orders".into());
+    c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![
+        TabInfo { title: "Query 1".into(), query: true, busy: false },
+        TabInfo { title: "orders".into(), query: false, busy: v == "inspector-loading" },
+    ])));
+    c.set_workspace_active_tab(1);
+    c.set_workspace_active_is_query(false);
+
+    let b = c.global::<InspectorBridge>();
+    let s = |x: &str| -> slint::SharedString { x.into() };
+    let strs = |xs: &[&str]| slint::ModelRc::new(slint::VecModel::from(xs.iter().map(|x| s(x)).collect::<Vec<_>>()));
+
+    // Pager and toolbar, shared by every data variant.
+    b.set_view(if structure { 1 } else { 0 });
+    b.set_total_label(s("112 rows"));
+    b.set_elapsed_label(s("14ms"));
+    b.set_page_label(s("Page 2 of 5"));
+    b.set_range_label(s("26-50 of 112 rows"));
+    b.set_page_size_label(s("25 / page"));
+    b.set_page_size_options(strs(&["25 / page", "50 / page", "100 / page", "250 / page"]));
+    b.set_can_first(true);
+    b.set_can_prev(true);
+    b.set_can_next(true);
+    b.set_filter_columns(strs(&["id", "customer_id", "note", "total", "created_at"]));
+    b.set_filter_ops(strs(&["contains", "equals", "starts with", "is null"]));
+
+    // The page of rows.
+    let cols: Vec<String> = ["id", "customer_id", "note", "total", "created_at"].iter().map(|x| x.to_string()).collect();
+    let widths = vec![80.0f32, 140.0, 240.0, 120.0, 200.0];
+    let (columns, width) = dbhive_slint::grid_model::layout_columns(&cols, &widths);
+    let data: Vec<Vec<Option<String>>> = (26..=50)
+        .map(|i| {
+            vec![
+                Some(i.to_string()),
+                Some(((i % 5) + 1).to_string()),
+                if i == 28 { None } else if i % 10 == 0 { Some(format!("gift-{i}")) } else { Some(format!("order-{i}")) },
+                Some(format!("{}.50", i * 10)),
+                Some(format!("2026-10-{:02} 09:{:02}:00", (i % 28) + 1, i % 60)),
+            ]
+        })
+        .collect();
+    let n = data.len();
+    let long_note = "A very long note that has to be elided and not run over into the next column of the grid at all";
+
+    match v {
+        "inspector-empty" => {
+            c.set_workspace_has_result(true);
+            c.set_workspace_columns(columns);
+            c.set_workspace_grid_width(width);
+            b.set_total_label(s("0 rows"));
+            b.set_page_label(s("Page 1 of 1"));
+            b.set_range_label(s("0 of 0 rows"));
+            b.set_can_first(false);
+            b.set_can_prev(false);
+            b.set_can_next(false);
+        }
+        "inspector-loading" => {
+            c.set_workspace_running(true);
+            b.set_total_label(s("Counting rows…"));
+            b.set_page_label(s("Page 1"));
+            b.set_range_label(s("No rows"));
+            b.set_elapsed_label(s(""));
+            b.set_can_first(false);
+            b.set_can_prev(false);
+            b.set_can_next(false);
+        }
+        "inspector-error" => {
+            c.set_workspace_rows_error(
+                "Query failed: relation \"public.orders\" does not exist (position 15)".into(),
+            );
+            b.set_total_label(s(""));
+            b.set_page_label(s("Page 1"));
+            b.set_range_label(s("No rows"));
+            b.set_can_first(false);
+            b.set_can_prev(false);
+            b.set_can_next(false);
+        }
+        _ if !structure => {
+            let mut data = data;
+            if v == "inspector-long" {
+                data[2][2] = Some(long_note.to_string());
+            }
+            c.set_workspace_columns(columns);
+            c.set_workspace_grid_width(width);
+            c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(data))));
+            c.set_workspace_row_count(n as i32);
+            c.set_workspace_visible_row_count(n as i32);
+            c.set_workspace_has_result(true);
+            b.set_sort_column(3);
+            b.set_sort_desc(true);
+            if v == "inspector-deep" {
+                b.set_page_label(s("Page 4,001 of 40,000"));
+                b.set_range_label(s("100,001-100,025 of 1,000,000 rows"));
+                b.set_total_label(s("1,000,000 rows"));
+                b.set_can_next(false);
+                b.set_show_jump(true);
+                b.set_deep_blocked(true);
+            }
+            if v == "inspector-filters" || v == "inspector-panel" {
+                b.set_filters_open(v == "inspector-filters");
+                b.set_applied_filter_count(1);
+                b.set_total_label(s("13 rows match"));
+                b.set_filters_dirty(v == "inspector-filters");
+                b.set_filter_rows(slint::ModelRc::new(slint::VecModel::from(vec![
+                    FilterRowItem { column: s("note"), op: s("contains"), value: s("gift"), takes_value: true },
+                    FilterRowItem { column: s("created_at"), op: s("is null"), value: s(""), takes_value: false },
+                ])));
+            }
+            if v == "inspector-panel" {
+                b.set_selected_row(2);
+                b.set_selected_col(2);
+                b.set_panel_open(true);
+                b.set_panel_title(s("Row 3 · note"));
+                b.set_panel_json(s("{\n  \"id\": 28,\n  \"customer_id\": 4,\n  \"note\": null,\n  \"total\": 280.5,\n  \"created_at\": \"2026-10-01 09:28:00\",\n  \"meta\": {\n    \"source\": \"web\",\n    \"tags\": [\n      \"gift\",\n      \"rush\"\n    ]\n  }\n}"));
+            }
+        }
+        _ => {
+            // Structure variants.
+            match v {
+                "inspector-structure-loading" => b.set_meta_loading(true),
+                "inspector-structure-error" => b.set_meta_error(s("Could not read the schema: permission denied for table orders")),
+                "inspector-structure-empty" => {}
+                _ => {
+                    let col = |name: &str, ty: &str, nullable: bool, def: &str, pk: bool, auto: bool, fk: &str, fk_table: &str| ColumnRowItem {
+                        name: s(name),
+                        data_type: s(ty),
+                        nullable,
+                        default_value: s(def),
+                        primary: pk,
+                        auto,
+                        foreign: s(fk),
+                        foreign_table: s(fk_table),
+                    };
+                    b.set_struct_columns(slint::ModelRc::new(slint::VecModel::from(vec![
+                        col("id", "integer", false, "nextval('orders_id_seq')", true, true, "", ""),
+                        col("customer_id", "integer", false, "(none)", false, false, "customers(id)", "customers"),
+                        col("note", "text", true, "(none)", false, false, "", ""),
+                        col("total", "numeric(10,2)", false, "0", false, false, "", ""),
+                        col("created_at", "timestamp with time zone", true, "now()", false, false, "", ""),
+                    ])));
+                    b.set_struct_indexes(slint::ModelRc::new(slint::VecModel::from(vec![
+                        IndexRowItem { name: s("orders_pkey"), columns: s("id"), kind: s("PRIMARY") },
+                        IndexRowItem { name: s("ix_orders_customer"), columns: s("customer_id, created_at"), kind: s("INDEX") },
+                        IndexRowItem { name: s("uq_orders_ref"), columns: s("note"), kind: s("UNIQUE") },
+                    ])));
+                    b.set_struct_relations(slint::ModelRc::new(slint::VecModel::from(vec![
+                        RelationRowItem { constraint: s("orders_customer_id_fkey"), outgoing: true, from: s("orders(customer_id)"), to: s("customers(id)"), actions: s("CASCADE / NO ACTION"), other_table: s("customers") },
+                        RelationRowItem { constraint: s("order_items_order_id_fkey"), outgoing: false, from: s("order_items(order_id)"), to: s("orders(id)"), actions: s("CASCADE / NO ACTION"), other_table: s("order_items") },
+                    ])));
+                }
+            }
+        }
+    }
+    c.show().unwrap();
+    Box::new(c)
+}
+
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

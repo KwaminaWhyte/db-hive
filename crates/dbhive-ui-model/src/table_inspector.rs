@@ -247,12 +247,32 @@ pub fn total_pages(total: u64, page_size: usize) -> usize {
     (((total + per - 1) / per).max(1)) as usize
 }
 
+/// A user-chosen sort: column name and whether it is descending.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SortSpec {
+    pub column: String,
+    pub descending: bool,
+}
+
 /// `SELECT * FROM schema.table [WHERE ...] [ORDER BY ...] LIMIT n OFFSET n`.
 pub fn paged_select_sql(
     quote: &impl Fn(&str) -> String,
     escape: &impl Fn(&str) -> String,
     rules: DialectRules,
     q: &DataQuery<'_>,
+) -> String {
+    paged_select_sql_sorted(quote, escape, rules, q, None)
+}
+
+/// As [`paged_select_sql`], with an optional user sort in front of the stable
+/// key. The primary key columns stay in the ORDER BY after the user's column,
+/// so rows that tie on the sorted value still page without repeats or gaps.
+pub fn paged_select_sql_sorted(
+    quote: &impl Fn(&str) -> String,
+    escape: &impl Fn(&str) -> String,
+    rules: DialectRules,
+    q: &DataQuery<'_>,
+    sort: Option<&SortSpec>,
 ) -> String {
     let mut sql = format!("SELECT * FROM {}", qualified_name(quote, q.schema, q.table));
 
@@ -262,10 +282,23 @@ pub fn paged_select_sql(
         sql.push_str(&where_sql);
     }
 
-    if !q.order_by.is_empty() {
-        let cols: Vec<String> = q.order_by.iter().map(|c| quote(c)).collect();
+    let mut order: Vec<String> = Vec::new();
+    if let Some(s) = sort {
+        order.push(format!(
+            "{} {}",
+            quote(&s.column),
+            if s.descending { "DESC" } else { "ASC" }
+        ));
+    }
+    for c in q.order_by {
+        // A column already sorted on must not appear twice.
+        if sort.map(|s| s.column != *c).unwrap_or(true) {
+            order.push(quote(c));
+        }
+    }
+    if !order.is_empty() {
         sql.push_str(" ORDER BY ");
-        sql.push_str(&cols.join(", "));
+        sql.push_str(&order.join(", "));
     }
 
     sql.push_str(&format!(

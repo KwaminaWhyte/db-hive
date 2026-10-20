@@ -1,0 +1,722 @@
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Badge, TextField, Dropdown, Divider, SectionLabel, Banner, EmptyState, Segmented, DataRow, SidePanel } from "../kit/kit.slint";
+import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
+
+// The table inspector: what a table tab shows. Two views, Data (a paged,
+// filterable, sortable grid with a single-row JSON panel) and Structure
+// (columns, indexes, foreign keys). Rust owns all state; this file draws it
+// from `InspectorBridge` and reports intents back through its callbacks.
+
+export struct FilterRowItem {
+    column: string,
+    op: string,
+    value: string,
+    takes-value: bool,
+}
+
+export struct ColumnRowItem {
+    name: string,
+    data-type: string,
+    nullable: bool,
+    default-value: string,
+    primary: bool,
+    auto: bool,
+    // "customers(id)", empty when the column is not a foreign key.
+    foreign: string,
+    foreign-table: string,
+}
+
+export struct IndexRowItem {
+    name: string,
+    columns: string,
+    kind: string,
+}
+
+export struct RelationRowItem {
+    constraint: string,
+    outgoing: bool,
+    from: string,
+    to: string,
+    actions: string,
+    other-table: string,
+}
+
+export global InspectorBridge {
+    // 0 = Data, 1 = Structure.
+    in property <int> view;
+    // "1,204 rows", "3 rows match", "Counting rows…".
+    in property <string> total-label;
+    in property <string> elapsed-label;
+
+    // Data view.
+    in property <bool> filters-open;
+    in property <int> applied-filter-count;
+    in property <bool> filters-dirty;
+    in property <[FilterRowItem]> filter-rows;
+    in property <[string]> filter-columns;
+    in property <[string]> filter-ops;
+    in property <int> sort-column: -1;
+    in property <bool> sort-desc;
+    in property <string> page-label;
+    in property <string> range-label;
+    in property <string> page-size-label;
+    in property <[string]> page-size-options;
+    in property <bool> can-first;
+    in property <bool> can-prev;
+    in property <bool> can-next;
+    in property <bool> show-jump;
+    in property <bool> deep-blocked;
+    in property <int> selected-row: -1;
+    in property <int> selected-col: -1;
+    in property <bool> panel-open;
+    in property <string> panel-title;
+    in property <string> panel-json;
+
+    // Structure view.
+    in property <bool> meta-loading;
+    in property <string> meta-error;
+    in property <[ColumnRowItem]> struct-columns;
+    in property <[IndexRowItem]> struct-indexes;
+    in property <[RelationRowItem]> struct-relations;
+
+    callback set-view(int);
+    callback refresh;
+    callback toggle-filters;
+    callback add-filter;
+    callback remove-filter(int);
+    callback filter-column-picked(int, int);
+    callback filter-op-picked(int, int);
+    callback filter-value-edited(int, string);
+    callback apply-filters;
+    callback clear-filters;
+    callback sort-by(int);
+    callback go-first;
+    callback go-prev;
+    callback go-next;
+    callback jump-safe;
+    callback page-size-picked(int);
+    callback cell-clicked(int, int);
+    callback close-panel;
+    callback copy-cell;
+    callback copy-row;
+    callback copy-column;
+    callback copy-json;
+    callback open-table(string);
+    callback retry-structure;
+}
+
+// One cell of a Structure table: shares the row's width by weight, so the
+// columns line up from row to row whatever the text inside them.
+component Cell inherits Rectangle {
+    in property <float> weight: 1;
+    horizontal-stretch: root.weight;
+    preferred-width: 0px;
+    min-width: 0px;
+    @children
+}
+
+component HeadCell inherits Cell {
+    in property <string> text;
+    HorizontalLayout {
+        Text {
+            text: root.text;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            font-weight: 600;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+component BodyCell inherits Cell {
+    in property <string> text;
+    in property <bool> dim: false;
+    HorizontalLayout {
+        Text {
+            text: root.text;
+            color: root.dim ? Theme.dim-foreground : Theme.foreground;
+            font-size: Theme.size-label;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+component StructureHead inherits Rectangle {
+    height: 30px;
+    background: Theme.sidebar;
+    @children
+}
+
+component Section inherits VerticalLayout {
+    in property <string> title;
+    in property <string> empty-message;
+    in property <bool> empty: false;
+    spacing: 6px;
+    alignment: start;
+    SectionLabel { text: root.title; }
+    Rectangle {
+        background: Theme.card;
+        border-radius: Theme.radius-card;
+        border-width: 1px;
+        border-color: Theme.border;
+        clip: true;
+        VerticalLayout {
+            alignment: start;
+            spacing: 0;
+            if root.empty: Text {
+                text: root.empty-message;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+                height: 44px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            @children
+        }
+    }
+}
+
+component StructureView inherits VerticalLayout {
+    spacing: 0;
+
+    if InspectorBridge.meta-loading: Text {
+        vertical-stretch: 1;
+        text: "Loading structure…";
+        color: Theme.muted-foreground;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    if !InspectorBridge.meta-loading && InspectorBridge.meta-error != "": VerticalLayout {
+        vertical-stretch: 1;
+        alignment: start;
+        padding: 14px;
+        spacing: 8px;
+        Banner {
+            message: InspectorBridge.meta-error;
+            dismissible: false;
+        }
+        HorizontalLayout {
+            alignment: start;
+            Button {
+                text: "Retry";
+                has-icon: true;
+                icon: Icons.refresh-cw;
+                clicked => { InspectorBridge.retry-structure(); }
+            }
+        }
+    }
+
+    if !InspectorBridge.meta-loading && InspectorBridge.meta-error == "": ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            padding: 14px;
+            spacing: 14px;
+            alignment: start;
+
+            Section {
+                title: "COLUMNS (" + InspectorBridge.struct-columns.length + ")";
+                empty: InspectorBridge.struct-columns.length == 0;
+                empty-message: "This table has no columns.";
+                StructureHead {
+                    visible: InspectorBridge.struct-columns.length > 0;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 12px;
+                        HeadCell { text: "Column"; weight: 3; }
+                        HeadCell { text: "Type"; weight: 2; }
+                        HeadCell { text: "Nullable"; weight: 1; }
+                        HeadCell { text: "Default"; weight: 2; }
+                        HeadCell { text: "Keys"; weight: 3; }
+                    }
+                }
+                for c in InspectorBridge.struct-columns: DataRow {
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 12px;
+                        Cell {
+                            weight: 3;
+                            HorizontalLayout {
+                                Text {
+                                    text: c.name;
+                                    color: Theme.foreground;
+                                    font-size: Theme.size-label;
+                                    font-weight: 600;
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                            }
+                        }
+                        BodyCell { text: c.data-type; weight: 2; }
+                        BodyCell { text: c.nullable ? "YES" : "NO"; weight: 1; dim: !c.nullable; }
+                        BodyCell { text: c.default-value; weight: 2; dim: c.default-value == "(none)"; }
+                        Cell {
+                            weight: 3;
+                            HorizontalLayout {
+                                spacing: 6px;
+                                alignment: start;
+                                if c.primary: VerticalLayout {
+                                    alignment: center;
+                                    Badge { text: "PK"; tone: Tone.accent; }
+                                }
+                                if c.auto: VerticalLayout {
+                                    alignment: center;
+                                    Badge { text: "auto"; }
+                                }
+                                if c.foreign != "": VerticalLayout {
+                                    alignment: center;
+                                    Badge {
+                                        text: "FK " + c.foreign;
+                                        clickable: true;
+                                        clicked => { InspectorBridge.open-table(c.foreign-table); }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Section {
+                title: "INDEXES (" + InspectorBridge.struct-indexes.length + ")";
+                empty: InspectorBridge.struct-indexes.length == 0;
+                empty-message: "No indexes on this table.";
+                StructureHead {
+                    visible: InspectorBridge.struct-indexes.length > 0;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 12px;
+                        HeadCell { text: "Index"; weight: 3; }
+                        HeadCell { text: "Columns"; weight: 4; }
+                        HeadCell { text: "Kind"; weight: 1; }
+                    }
+                }
+                for ix in InspectorBridge.struct-indexes: DataRow {
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 12px;
+                        BodyCell { text: ix.name; weight: 3; }
+                        BodyCell { text: ix.columns; weight: 4; }
+                        Cell {
+                            weight: 1;
+                            HorizontalLayout {
+                                alignment: start;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Badge {
+                                        text: ix.kind;
+                                        tone: ix.kind == "PRIMARY" ? Tone.accent : Tone.neutral;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Section {
+                title: "FOREIGN KEYS (" + InspectorBridge.struct-relations.length + ")";
+                empty: InspectorBridge.struct-relations.length == 0;
+                empty-message: "No foreign keys touch this table.";
+                StructureHead {
+                    visible: InspectorBridge.struct-relations.length > 0;
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 12px;
+                        HeadCell { text: "Constraint"; weight: 3; }
+                        HeadCell { text: "Direction"; weight: 2; }
+                        HeadCell { text: "From"; weight: 3; }
+                        HeadCell { text: "To"; weight: 3; }
+                        HeadCell { text: "On delete / update"; weight: 3; }
+                    }
+                }
+                for r in InspectorBridge.struct-relations: DataRow {
+                    clickable: true;
+                    accessible-role: button;
+                    accessible-label: "Open " + r.other-table;
+                    clicked => { InspectorBridge.open-table(r.other-table); }
+                    HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        spacing: 12px;
+                        BodyCell { text: r.constraint; weight: 3; }
+                        Cell {
+                            weight: 2;
+                            HorizontalLayout {
+                                alignment: start;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Badge {
+                                        text: r.outgoing ? "references" : "referenced by";
+                                        tone: r.outgoing ? Tone.neutral : Tone.accent;
+                                    }
+                                }
+                            }
+                        }
+                        BodyCell { text: r.from; weight: 3; }
+                        BodyCell { text: r.to; weight: 3; }
+                        BodyCell { text: r.actions; weight: 3; dim: true; }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component FilterBar inherits Rectangle {
+    background: Theme.sidebar;
+    VerticalLayout {
+        padding: 12px;
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 8px;
+        for f[i] in InspectorBridge.filter-rows: HorizontalLayout {
+            spacing: 8px;
+            Dropdown {
+                width: 180px;
+                options: InspectorBridge.filter-columns;
+                value: f.column;
+                selected(k) => { InspectorBridge.filter-column-picked(i, k); }
+            }
+            Dropdown {
+                width: 150px;
+                options: InspectorBridge.filter-ops;
+                value: f.op;
+                selected(k) => { InspectorBridge.filter-op-picked(i, k); }
+            }
+            TextField {
+                horizontal-stretch: 1;
+                placeholder: f.takes-value ? "Value" : "No value needed";
+                enabled: f.takes-value;
+                text: f.value;
+                edited(t) => { InspectorBridge.filter-value-edited(i, t); }
+                accepted(t) => {
+                    InspectorBridge.filter-value-edited(i, t);
+                    InspectorBridge.apply-filters();
+                }
+            }
+            Button {
+                has-icon: true;
+                icon: Icons.x;
+                variant: ButtonVariant.ghost;
+                accessible-label: "Remove filter";
+                clicked => { InspectorBridge.remove-filter(i); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            Button {
+                text: "Add filter";
+                has-icon: true;
+                icon: Icons.plus;
+                variant: ButtonVariant.ghost;
+                clicked => { InspectorBridge.add-filter(); }
+            }
+            Button {
+                text: "Apply";
+                variant: ButtonVariant.primary;
+                enabled: InspectorBridge.filters-dirty;
+                clicked => { InspectorBridge.apply-filters(); }
+            }
+            Button {
+                text: "Clear";
+                variant: ButtonVariant.ghost;
+                enabled: InspectorBridge.filter-rows.length > 0;
+                clicked => { InspectorBridge.clear-filters(); }
+            }
+        }
+    }
+    Divider { y: parent.height - 1px; }
+}
+
+component Pager inherits Rectangle {
+    in property <bool> busy;
+    height: 46px;
+    background: Theme.sidebar;
+    Divider { y: 0; }
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            Button {
+                text: "First";
+                enabled: InspectorBridge.can-first && !root.busy;
+                clicked => { InspectorBridge.go-first(); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Button {
+                has-icon: true;
+                icon: Icons.chevron-left;
+                text: "Prev";
+                enabled: InspectorBridge.can-prev && !root.busy;
+                clicked => { InspectorBridge.go-prev(); }
+            }
+        }
+        Text {
+            text: InspectorBridge.page-label;
+            color: Theme.foreground;
+            font-size: Theme.size-label;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+            Button {
+                text: "Next";
+                enabled: InspectorBridge.can-next && !root.busy;
+                clicked => { InspectorBridge.go-next(); }
+            }
+        }
+        if InspectorBridge.show-jump: VerticalLayout {
+            alignment: center;
+            Button {
+                text: "Jump to last safe page";
+                variant: ButtonVariant.ghost;
+                clicked => { InspectorBridge.jump-safe(); }
+            }
+        }
+        Rectangle { width: 4px; }
+        Text {
+            text: InspectorBridge.range-label;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if InspectorBridge.elapsed-label != "": Text {
+            text: InspectorBridge.elapsed-label;
+            color: Theme.dim-foreground;
+            font-size: Theme.size-small;
+            vertical-alignment: center;
+        }
+        Rectangle { horizontal-stretch: 1; }
+        VerticalLayout {
+            alignment: center;
+            Dropdown {
+                width: 120px;
+                min-height: 30px;
+                options: InspectorBridge.page-size-options;
+                value: InspectorBridge.page-size-label;
+                selected(k) => { InspectorBridge.page-size-picked(k); }
+            }
+        }
+    }
+}
+
+// A copy action that shares its row's width equally with its neighbour.
+component CopyButton inherits Rectangle {
+    in property <string> text;
+    callback clicked;
+    horizontal-stretch: 1;
+    preferred-width: 0px;
+    min-width: 0px;
+    height: 32px;
+    Button {
+        width: 100%;
+        height: 100%;
+        text: root.text;
+        has-icon: true;
+        icon: Icons.copy;
+        clicked => { root.clicked(); }
+    }
+}
+
+component RowPanel inherits SidePanel {
+    title: InspectorBridge.panel-title;
+    subtitle: "Selected row as JSON";
+    close => { InspectorBridge.close-panel(); }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 10px;
+        VerticalLayout {
+            spacing: 6px;
+            HorizontalLayout {
+                spacing: 6px;
+                CopyButton { text: "Cell"; clicked => { InspectorBridge.copy-cell(); } }
+                CopyButton { text: "Row"; clicked => { InspectorBridge.copy-row(); } }
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                CopyButton { text: "Column"; clicked => { InspectorBridge.copy-column(); } }
+                CopyButton { text: "JSON"; clicked => { InspectorBridge.copy-json(); } }
+            }
+        }
+        Divider { }
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                alignment: start;
+                Text {
+                    text: InspectorBridge.panel-json;
+                    color: Theme.foreground;
+                    font-family: "Menlo";
+                    font-size: Theme.size-mono;
+                    wrap: char-wrap;
+                }
+            }
+        }
+    }
+}
+
+export component TableInspectorView inherits VerticalLayout {
+    // The page of rows, projected by the workspace like any other result.
+    in property <[GridColumn]> columns;
+    in property <[GridRow]> rows;
+    in property <length> grid-width;
+    in property <bool> running;
+    in property <string> rows-error;
+    in property <bool> has-result;
+
+    spacing: 0;
+
+    // Toolbar.
+    Rectangle {
+        height: 48px;
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            spacing: 12px;
+            VerticalLayout {
+                alignment: center;
+                Segmented {
+                    options: ["Data", "Structure"];
+                    selected: InspectorBridge.view;
+                    picked(i) => { InspectorBridge.set-view(i); }
+                }
+            }
+            Text {
+                text: InspectorBridge.total-label;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if InspectorBridge.view == 0: VerticalLayout {
+                alignment: center;
+                Button {
+                    text: InspectorBridge.applied-filter-count > 0
+                        ? "Filters (" + InspectorBridge.applied-filter-count + ")"
+                        : "Filters";
+                    has-icon: true;
+                    icon: Icons.filter;
+                    variant: InspectorBridge.filters-open ? ButtonVariant.secondary : ButtonVariant.ghost;
+                    clicked => { InspectorBridge.toggle-filters(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    has-icon: true;
+                    icon: Icons.refresh-cw;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Reload";
+                    clicked => { InspectorBridge.refresh(); }
+                }
+            }
+        }
+        Divider { y: parent.height - 1px; }
+    }
+
+    if InspectorBridge.view == 1: StructureView {
+        vertical-stretch: 1;
+    }
+
+    if InspectorBridge.view == 0 && InspectorBridge.filters-open: FilterBar { }
+
+    if InspectorBridge.view == 0: HorizontalLayout {
+        vertical-stretch: 1;
+        spacing: 0;
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            padding: 14px;
+            spacing: 8px;
+
+            if root.rows-error != "": VerticalLayout {
+                alignment: start;
+                spacing: 8px;
+                Banner {
+                    message: root.rows-error;
+                    dismissible: false;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        text: "Retry";
+                        has-icon: true;
+                        icon: Icons.refresh-cw;
+                        clicked => { InspectorBridge.refresh(); }
+                    }
+                }
+            }
+
+            if InspectorBridge.deep-blocked && root.rows-error == "": Banner {
+                message: "That page is too deep to read cheaply; showing the deepest page that is.";
+                tone: Tone.warning;
+                dismissible: false;
+            }
+
+            if root.running && !root.has-result: Text {
+                vertical-stretch: 1;
+                text: "Loading rows…";
+                color: Theme.muted-foreground;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            if !root.running && root.rows-error == "" && root.has-result && root.rows.length == 0: EmptyState {
+                vertical-stretch: 1;
+                icon: Icons.table;
+                title: InspectorBridge.applied-filter-count > 0 ? "No matching rows" : "This table is empty";
+                message: InspectorBridge.applied-filter-count > 0
+                    ? "No row satisfies the filters on this table."
+                    : "There are no rows to show yet.";
+                if InspectorBridge.applied-filter-count > 0: Button {
+                    text: "Clear filters";
+                    clicked => { InspectorBridge.clear-filters(); }
+                }
+            }
+
+            if root.rows-error == "" && root.has-result && root.rows.length > 0: ResultsGrid {
+                vertical-stretch: 1;
+                columns: root.columns;
+                rows: root.rows;
+                total-width: root.grid-width;
+                controlled: true;
+                selected-row: InspectorBridge.selected-row;
+                selected-col: InspectorBridge.selected-col;
+                sort-column: InspectorBridge.sort-column;
+                sort-desc: InspectorBridge.sort-desc;
+                header-clicked(i) => { InspectorBridge.sort-by(i); }
+                cell-clicked(r, c) => { InspectorBridge.cell-clicked(r, c); }
+            }
+
+            // A failed or empty page still needs something to claim the
+            // height, or the layout spreads its slack between the children.
+            if root.rows-error != "" || (!root.running && !root.has-result): Rectangle {
+                vertical-stretch: 1;
+            }
+        }
+
+        if InspectorBridge.panel-open && InspectorBridge.selected-row >= 0: RowPanel {
+            width: 320px;
+        }
+    }
+
+    if InspectorBridge.view == 0: Pager {
+        busy: root.running;
+    }
+}
