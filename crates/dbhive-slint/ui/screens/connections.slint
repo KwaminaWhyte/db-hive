@@ -2,14 +2,19 @@
 //
 // Rust supplies the list already filtered and sorted; this file only draws it
 // and reports intents. It holds no state of its own beyond the search text.
+//
+// Layout follows the Tauri welcome screen: a brand panel on the left, the
+// connection list on the right. The brand panel drops out of narrow windows so
+// the list keeps its room.
 
 import { ScrollView } from "std-widgets.slint";
-import { Theme, Icons, Tone, ButtonVariant, Icon, Button, ClickableCard, Badge, TextField,
-    ScreenHeader, Banner, EmptyState } from "../kit/kit.slint";
+import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Badge, TextField, BrandMark,
+    Divider, Banner, EmptyState } from "../kit/kit.slint";
 
 export struct ConnectionItem {
     id: string,
     name: string,
+    // Preformatted "PostgreSQL • host:5432".
     host: string,
     // Two letters and a tint for the driver chip.
     initials: string,
@@ -24,21 +29,24 @@ export struct ConnectionItem {
 component DriverChip inherits Rectangle {
     in property <string> initials;
     in property <color> tint;
-    width: 32px;
-    height: 32px;
-    border-radius: Theme.radius-control;
+    width: 38px;
+    height: 38px;
+    border-radius: Theme.radius-card;
     background: root.tint.transparentize(0.78);
     border-width: 1px;
     border-color: root.tint.transparentize(0.5);
     Text {
         text: root.initials;
         color: Theme.dark ? root.tint.brighter(0.6) : root.tint.darker(0.2);
-        font-size: 11px;
+        font-size: Theme.size-small;
         font-weight: 700;
     }
 }
 
-component ConnectionRow inherits ClickableCard {
+// A flat row, like a list in a file manager: the fill appears on hover, the
+// whole row connects, and the menu button is the only control. No card, no
+// per-row primary button.
+component ConnectionRow inherits Rectangle {
     in property <ConnectionItem> item;
     callback connect;
     callback disconnect;
@@ -47,19 +55,32 @@ component ConnectionRow inherits ClickableCard {
     callback toggle-favorite;
     callback delete;
 
-    selected: root.item.connected;
-    clicked => {
+    height: 64px;
+    border-radius: Theme.radius-card;
+    background: touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: 90ms; }
+
+    accessible-role: button;
+    accessible-label: root.item.name;
+    accessible-action-default => {
         if (!root.item.connected && !root.item.connecting) {
             root.connect();
         }
     }
 
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            if (!root.item.connected && !root.item.connecting) {
+                root.connect();
+            }
+        }
+    }
+
     HorizontalLayout {
-        padding-left: 14px;
-        padding-right: 10px;
-        padding-top: 12px;
-        padding-bottom: 12px;
-        spacing: 12px;
+        padding-left: 12px;
+        padding-right: 8px;
+        spacing: 14px;
 
         VerticalLayout {
             alignment: center;
@@ -81,6 +102,7 @@ component ConnectionRow inherits ClickableCard {
                     font-size: Theme.size-body;
                     font-weight: 600;
                     vertical-alignment: center;
+                    overflow: elide;
                 }
                 if root.item.favorite: VerticalLayout {
                     alignment: center;
@@ -100,6 +122,7 @@ component ConnectionRow inherits ClickableCard {
                 text: root.item.host;
                 color: Theme.muted-foreground;
                 font-size: Theme.size-small;
+                overflow: elide;
             }
         }
 
@@ -108,7 +131,7 @@ component ConnectionRow inherits ClickableCard {
         VerticalLayout {
             alignment: center;
             HorizontalLayout {
-                spacing: 6px;
+                spacing: 4px;
                 if root.item.connecting: Text {
                     text: "Connecting…";
                     color: Theme.muted-foreground;
@@ -119,11 +142,6 @@ component ConnectionRow inherits ClickableCard {
                     text: "Disconnect";
                     variant: ButtonVariant.ghost;
                     clicked => { root.disconnect(); }
-                }
-                if !root.item.connecting && !root.item.connected: Button {
-                    text: "Connect";
-                    variant: ButtonVariant.primary;
-                    clicked => { root.connect(); }
                 }
                 menu := ContextMenuArea {
                     Menu {
@@ -152,6 +170,7 @@ export component ConnectionsScreen inherits Rectangle {
     in property <[ConnectionItem]> items;
     in property <int> total;
     in property <string> error;
+    in property <string> version;
     in-out property <string> search;
 
     callback search-changed(string);
@@ -166,79 +185,126 @@ export component ConnectionsScreen inherits Rectangle {
 
     background: Theme.background;
 
-    VerticalLayout {
-        padding: 24px;
-        padding-top: 20px;
-        spacing: 16px;
+    HorizontalLayout {
+        spacing: 0;
 
-        ScreenHeader {
-            title: "Connections";
-            subtitle: root.total == 0 ? "No saved connections yet"
-                : root.total == 1 ? "1 connection"
-                : root.total + " connections";
-            Button {
-                text: "New connection";
-                variant: ButtonVariant.primary;
+        if root.width >= 860px: Rectangle {
+            width: max(300px, root.width * 0.38);
+            background: Theme.sidebar;
+            BrandMark {
+                tagline: "The modern database desktop app";
+            }
+            Rectangle {
+                x: parent.width - 1px;
+                width: 1px;
+                background: Theme.border;
+            }
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            padding-left: 32px;
+            padding-right: 32px;
+            padding-top: 28px;
+            padding-bottom: 12px;
+            spacing: 16px;
+
+            HorizontalLayout {
+                spacing: 12px;
+                VerticalLayout {
+                    spacing: 2px;
+                    alignment: center;
+                    Text {
+                        text: "Saved Connections";
+                        color: Theme.foreground;
+                        font-size: Theme.size-display;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: root.total == 0 ? "No saved connections yet"
+                            : root.total == 1 ? "1 connection"
+                            : root.total + " connections";
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: "New";
+                        variant: ButtonVariant.primary;
+                        has-icon: true;
+                        icon: Icons.plus;
+                        clicked => { root.new-connection(); }
+                    }
+                }
+            }
+
+            if root.total > 0: TextField {
+                height: 38px;
+                text <=> root.search;
+                placeholder: "Search connections…";
                 has-icon: true;
-                icon: Icons.plus;
-                clicked => { root.new-connection(); }
+                icon: Icons.search;
+                edited(t) => { root.search-changed(t); }
             }
-        }
 
-        if root.total > 0: TextField {
-            text <=> root.search;
-            placeholder: "Search by name or host";
-            has-icon: true;
-            icon: Icons.search;
-            edited(t) => { root.search-changed(t); }
-        }
-
-        if root.error != "": Banner {
-            message: root.error;
-            dismissed => { root.dismiss-error(); }
-        }
-
-        if root.total == 0: EmptyState {
-            vertical-stretch: 1;
-            icon: Icons.database;
-            title: "No connections yet";
-            message: "Add a database and it will appear here.";
-            Button {
-                text: "Add your first connection";
-                variant: ButtonVariant.primary;
-                clicked => { root.new-connection(); }
+            if root.error != "": Banner {
+                message: root.error;
+                dismissed => { root.dismiss-error(); }
             }
-        }
 
-        if root.total > 0 && root.items.length == 0: EmptyState {
-            vertical-stretch: 1;
-            icon: Icons.search;
-            title: "No matches";
-            message: "No saved connection matches that search.";
-            Button {
-                text: "Clear search";
-                variant: ButtonVariant.ghost;
-                clicked => {
-                    root.search = "";
-                    root.search-changed("");
+            if root.total == 0: EmptyState {
+                vertical-stretch: 1;
+                icon: Icons.database;
+                title: "No connections yet";
+                message: "Add a database and it will appear here.";
+                Button {
+                    text: "Add your first connection";
+                    variant: ButtonVariant.primary;
+                    clicked => { root.new-connection(); }
                 }
             }
-        }
 
-        if root.items.length > 0: ScrollView {
-            vertical-stretch: 1;
-            VerticalLayout {
-                spacing: 8px;
-                alignment: start;
-                for item in root.items: ConnectionRow {
-                    item: item;
-                    connect => { root.connect(item.id); }
-                    disconnect => { root.disconnect(item.id); }
-                    edit => { root.edit(item.id); }
-                    duplicate => { root.duplicate(item.id); }
-                    toggle-favorite => { root.toggle-favorite(item.id); }
-                    delete => { root.delete(item.id); }
+            if root.total > 0 && root.items.length == 0: EmptyState {
+                vertical-stretch: 1;
+                icon: Icons.search;
+                title: "No matches";
+                message: "No saved connection matches that search.";
+                Button {
+                    text: "Clear search";
+                    variant: ButtonVariant.ghost;
+                    clicked => {
+                        root.search = "";
+                        root.search-changed("");
+                    }
                 }
+            }
+
+            if root.items.length > 0: ScrollView {
+                vertical-stretch: 1;
+                VerticalLayout {
+                    spacing: 2px;
+                    alignment: start;
+                    for item in root.items: ConnectionRow {
+                        item: item;
+                        connect => { root.connect(item.id); }
+                        disconnect => { root.disconnect(item.id); }
+                        edit => { root.edit(item.id); }
+                        duplicate => { root.duplicate(item.id); }
+                        toggle-favorite => { root.toggle-favorite(item.id); }
+                        delete => { root.delete(item.id); }
+                    }
+                }
+            }
+
+            Divider { }
+            Text {
+                text: root.version == "" ? "" : "Version " + root.version;
+                color: Theme.dim-foreground;
+                font-size: Theme.size-small;
+                horizontal-alignment: center;
             }
         }
     }

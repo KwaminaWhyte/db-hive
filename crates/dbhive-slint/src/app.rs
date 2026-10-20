@@ -147,7 +147,7 @@ impl Ctx {
                 ConnectionItem {
                     id: p.id.as_str().into(),
                     name: p.name.as_str().into(),
-                    host: connection_list::address(p).into(),
+                    host: connection_list::subtitle(p).into(),
                     initials: initials.into(),
                     tint: slint::Color::from_rgb_u8(r, g, b),
                     env_label: env_label.into(),

@@ -83,9 +83,27 @@ pub fn address(p: &ConnectionProfile) -> String {
     }
 }
 
+/// The row's second line: "PostgreSQL • host:5432".
+pub fn subtitle(p: &ConnectionProfile) -> String {
+    format!("{} • {}", driver_label(&p.driver), address(p))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn subtitle_names_the_driver_then_the_address() {
+        let p = ConnectionProfile::new(
+            "x".to_string(),
+            "x".to_string(),
+            DbDriver::Postgres,
+            "db.internal".to_string(),
+            5432,
+            String::new(),
+        );
+        assert_eq!(subtitle(&p), "PostgreSQL • db.internal:5432");
+    }
 
     fn profile(name: &str, host: &str, fav: bool) -> ConnectionProfile {
         let mut p = ConnectionProfile::new(

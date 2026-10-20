@@ -97,6 +97,35 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
+        "connections" | "connections-light" => {
+            let c = AppWindow::new().expect("AppWindow");
+            if name == "connections-light" {
+                c.global::<Theme>().set_dark(false);
+            }
+            c.set_app_version("0.21.0".into());
+            let item = |id: &str, n: &str, host: &str, ini: &str, rgb: (u8, u8, u8), env: &str, tone: Tone, fav: bool, connected: bool| ConnectionItem {
+                id: id.into(),
+                name: n.into(),
+                host: host.into(),
+                initials: ini.into(),
+                tint: slint::Color::from_rgb_u8(rgb.0, rgb.1, rgb.2),
+                env_label: env.into(),
+                env_tone: tone,
+                favorite: fav,
+                connected,
+                connecting: false,
+            };
+            let items = vec![
+                item("1", "Production Postgres", "PostgreSQL • db.prod.internal:5432", "PG", (56, 118, 171), "Production", Tone::Danger, true, true),
+                item("2", "Local MySQL", "MySQL • localhost:3306", "MY", (0, 117, 143), "Local", Tone::Neutral, false, false),
+                item("3", "Analytics SQLite", "SQLite • /data/analytics.db", "SL", (0, 121, 168), "", Tone::Neutral, false, false),
+                item("4", "Staging Mongo", "MongoDB • staging.example.com:27017", "MG", (77, 179, 61), "Staging", Tone::Warning, false, false),
+            ];
+            c.set_connection_total(items.len() as i32);
+            c.set_connections(slint::ModelRc::new(slint::VecModel::from(items)));
+            c.show().unwrap();
+            Box::new(c)
+        }
         "about" => {
             let c = AppWindow::new().expect("AppWindow");
             c.set_app_version("0.21.0".into());

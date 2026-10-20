@@ -306,6 +306,7 @@ export component AppWindow inherits Window {
             items: root.connections;
             total: root.connection-total;
             error: root.connection-error;
+            version: root.app-version;
             search <=> root.connection-search;
             search-changed(t) => { root.connection-search-changed(t); }
             new-connection => { root.new-connection(); }

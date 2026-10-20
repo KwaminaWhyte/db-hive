@@ -218,6 +218,63 @@ export component SwatchPicker inherits Rectangle {
     }
 }
 
+// The DB Hive brand block: app icon, wordmark with the "Hive" pill, tagline.
+// The icon is a PNG with rounded, transparent corners baked in, so it reads
+// the same on any background and under either renderer.
+export component BrandMark inherits VerticalLayout {
+    in property <length> icon-size: 120px;
+    in property <string> tagline;
+    alignment: center;
+    spacing: 18px;
+
+    HorizontalLayout {
+        alignment: center;
+        Image {
+            source: @image-url("../assets/hive-mark.png");
+            width: root.icon-size;
+            height: root.icon-size;
+        }
+    }
+    HorizontalLayout {
+        alignment: center;
+        spacing: 8px;
+        Text {
+            text: "DB";
+            color: Theme.foreground;
+            font-size: Theme.size-display * 1.5;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                background: Theme.foreground;
+                border-radius: Theme.radius-control;
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    padding-top: 2px;
+                    padding-bottom: 2px;
+                    Text {
+                        text: "Hive";
+                        color: Theme.background;
+                        font-size: Theme.size-display * 1.2;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+    if root.tagline != "": Text {
+        text: root.tagline;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-body;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+}
+
 export component Badge inherits Rectangle {
     in property <string> text;
     in property <Tone> tone: Tone.neutral;
