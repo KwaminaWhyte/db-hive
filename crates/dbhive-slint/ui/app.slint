@@ -6,12 +6,14 @@ import { GridColumn, GridRow } from "components/results_grid.slint";
 import { AboutDialog } from "dialogs/about.slint";
 import { ConfirmDialog } from "dialogs/confirm.slint";
 import { ConnectionEditorDialog, ConnectionFormData } from "dialogs/connection_editor.slint";
+import { HistoryState, HistoryOverlay } from "screens/history_panel.slint";
 
 export { Theme, Icons, Tone, ConnectionItem, ConnectionFormData, TableItem, GridColumn, GridRow, TabInfo }
 export { SqlEditorSpike } from "spikes/sql_editor_spike.slint";
 export { GridSpike } from "spikes/grid_spike.slint";
 export { DiagramSpike } from "spikes/diagram_spike.slint";
 export { KitGallery } from "spikes/kit_gallery.slint";
+export { HistoryState, PanelRow, RunParam, FormParam, PanelMode } from "screens/history_panel.slint";
 
 export enum Screen { connections, workspace }
 
@@ -217,6 +219,11 @@ export component AppWindow inherits Window {
                 shortcut: @keys(Control + K);
                 activated => { root.open-palette(); }
             }
+            MenuItem {
+                title: "History and Snippets";
+                shortcut: @keys(Control + Shift + H);
+                activated => { HistoryState.open-requested(); }
+            }
             MenuSeparator { }
             MenuItem {
                 title: Theme.dark ? "Light Theme" : "Dark Theme";
@@ -371,6 +378,7 @@ export component AppWindow inherits Window {
             editor-edited(t) => { root.workspace-editor-edited(t); }
             run-query => { root.workspace-run-query(); }
             retry => { root.workspace-retry(); }
+            open-history => { HistoryState.open-requested(); }
         }
     }
 
@@ -386,6 +394,10 @@ export component AppWindow inherits Window {
             dismiss => { root.dismiss-toast(t.id); }
         }
     }
+
+    // History, snippets and templates. Below the dialogs, so a confirmation
+    // raised from the panel (clear history, delete a snippet) shows above it.
+    if HistoryState.visible: HistoryOverlay { }
 
     if root.show-about || root.show-confirm || root.show-connection-editor: Rectangle {
         width: 100%;

@@ -58,6 +58,7 @@ export component WorkspaceScreen inherits VerticalLayout {
     callback editor-edited(string);
     callback run-query;
     callback retry;
+    callback open-history;
 
     spacing: 0;
 
@@ -98,6 +99,17 @@ export component WorkspaceScreen inherits VerticalLayout {
                 }
             }
             Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "History";
+                    has-icon: true;
+                    icon: Icons.history;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "History, snippets and templates";
+                    clicked => { root.open-history(); }
+                }
+            }
             VerticalLayout {
                 alignment: center;
                 Button {

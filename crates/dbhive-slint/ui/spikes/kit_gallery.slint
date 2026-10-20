@@ -1,5 +1,5 @@
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Card, ClickableCard, ListRow, SwatchPicker, Badge, TextField,
-    ScreenHeader, SectionLabel, Banner, EmptyState, Divider } from "../kit/kit.slint";
+    ScreenHeader, SectionLabel, Banner, EmptyState, Divider, DetailRow, UnderlineTabs, FilterChip } from "../kit/kit.slint";
 
 export component KitGallery inherits Window {
     background: Theme.background;
@@ -44,6 +44,38 @@ export component KitGallery inherits Window {
                 TextField { text: "SELECT 1"; }
                 Banner { message: "Connection failed: password authentication failed for user \"postgres\""; }
                 Banner { message: "Schema refreshed"; tone: Tone.success; }
+                SectionLabel { text: "TABS, CHIPS, DETAIL ROWS"; }
+                UnderlineTabs { labels: ["History", "Snippets (4)", "Templates (3)"]; active: 1; }
+                HorizontalLayout {
+                    spacing: 6px;
+                    alignment: start;
+                    FilterChip { text: "All"; selected: true; }
+                    FilterChip { text: "maintenance"; }
+                    FilterChip { text: "reports"; }
+                }
+                DetailRow {
+                    title: "SELECT id, name FROM customers WHERE plan = 'pro'";
+                    subtitle: "5m ago · Production / app · 12ms · 1,204 rows";
+                    mono-title: true;
+                    has-status: true;
+                    Button { text: "Re-run"; has-icon: true; icon: Icons.play; }
+                }
+                DetailRow {
+                    title: "SELECT * FROM order_itemz";
+                    subtitle: "55m ago · Production / app · 3ms";
+                    note: "relation \"order_itemz\" does not exist";
+                    mono-title: true;
+                    has-status: true;
+                    status-tone: Tone.danger;
+                    Button { text: "Re-run"; has-icon: true; icon: Icons.play; }
+                }
+                DetailRow {
+                    title: "Active users this week";
+                    subtitle: "Users seen in the last seven days";
+                    tags: ["reports", "weekly"];
+                    selected: true;
+                    Button { has-icon: true; icon: Icons.pencil; variant: ButtonVariant.ghost; }
+                }
             }
             VerticalLayout {
                 spacing: 10px;

@@ -783,3 +783,194 @@ export component EmptyState inherits VerticalLayout {
         @children
     }
 }
+
+// -- History / snippets / templates panel additions ---------------------------
+
+// A flat two-line list row for records that need more than a label: a title,
+// a dimmer line of facts under it, an optional error note, optional tag
+// badges, an optional status dot, and trailing actions as children. Hover and
+// selected fills, no border, like ListRow. A touch area sits beneath the
+// content, so buttons placed as children still get their own clicks.
+export component DetailRow inherits Rectangle {
+    in property <string> title;
+    in property <string> subtitle;
+    // Shown under the subtitle in the danger colour (an error message).
+    in property <string> note;
+    in property <[string]> tags;
+    // A leading status dot: set `has-status`, then `status-tone`.
+    in property <bool> has-status: false;
+    in property <Tone> status-tone: Tone.success;
+    // Titles that are code (a SQL statement) use the monospace face.
+    in property <bool> mono-title: false;
+    in property <bool> selected: false;
+    callback clicked;
+    callback double-clicked;
+
+    min-height: 46px;
+    border-radius: Theme.radius-control;
+    background: root.selected ? Theme.primary-soft : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: 90ms; }
+
+    accessible-role: button;
+    accessible-label: root.title;
+    accessible-description: root.subtitle;
+    accessible-action-default => { root.clicked(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+        double-clicked => { root.double-clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 8px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        spacing: 10px;
+        if root.has-status: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                border-radius: 4px;
+                background: root.status-tone == Tone.danger ? Theme.destructive
+                    : root.status-tone == Tone.warning ? Theme.warning
+                    : root.status-tone == Tone.accent ? Theme.primary
+                    : root.status-tone == Tone.neutral ? Theme.dim-foreground
+                    : Theme.success;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            alignment: center;
+            spacing: 2px;
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: root.title;
+                    color: Theme.foreground;
+                    font-size: root.mono-title ? Theme.size-mono : Theme.size-label;
+                    font-family: root.mono-title ? "Menlo" : "";
+                    font-weight: root.selected ? 600 : 400;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+                for tag in root.tags: VerticalLayout {
+                    alignment: center;
+                    Badge { text: tag; }
+                }
+            }
+            if root.subtitle != "": Text {
+                text: root.subtitle;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+                overflow: elide;
+            }
+            // An error message can be long: wrap to two lines, then elide.
+            if root.note != "": Text {
+                text: root.note;
+                color: Theme.destructive;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+                overflow: elide;
+                max-height: 2 * Theme.size-small * 1.3;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: 4px;
+                @children
+            }
+        }
+    }
+}
+
+// Underlined text tabs, for switching between the panes of one panel. Unlike
+// TabBar (document tabs with a close button) these are plain labels.
+export component UnderlineTabs inherits Rectangle {
+    in property <[string]> labels;
+    in property <int> active: 0;
+    callback selected(int);
+
+    height: 36px;
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 4px;
+        for label[i] in root.labels: Rectangle {
+            property <bool> on: i == root.active;
+            width: tab-text.preferred-width + 24px;
+            background: tab-touch.has-hover && !self.on ? Theme.hover : transparent;
+            border-radius: Theme.radius-control;
+            animate background { duration: 90ms; }
+
+            accessible-role: tab;
+            accessible-label: label;
+            accessible-action-default => { root.selected(i); }
+
+            tab-touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.selected(i); }
+            }
+            tab-text := Text {
+                text: label;
+                color: parent.on ? Theme.foreground : Theme.muted-foreground;
+                font-size: Theme.size-label;
+                font-weight: parent.on ? 600 : 400;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            Rectangle {
+                x: 12px;
+                y: parent.height - 2px;
+                width: parent.width - 24px;
+                height: 2px;
+                background: parent.on ? Theme.primary : transparent;
+            }
+        }
+    }
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.border;
+    }
+}
+
+// A small selectable pill, for filtering a list by tag or category.
+export component FilterChip inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected: false;
+    callback clicked;
+
+    height: 24px;
+    width: label.preferred-width + 20px;
+    horizontal-stretch: 0;
+    border-radius: 12px;
+    background: root.selected ? Theme.primary-soft : touch.has-hover ? Theme.hover : Theme.secondary;
+    border-width: 1px;
+    border-color: root.selected ? Theme.primary.transparentize(0.5) : Theme.border;
+    animate background { duration: 90ms; }
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+    accessible-action-default => { root.clicked(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    label := Text {
+        text: root.text;
+        color: root.selected ? Theme.primary : Theme.muted-foreground;
+        font-size: Theme.size-small;
+        font-weight: root.selected ? 600 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}

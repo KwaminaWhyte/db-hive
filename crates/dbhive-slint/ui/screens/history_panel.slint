@@ -1,0 +1,893 @@
+// The History / Snippets / Templates panel, opened over the workspace.
+//
+// All of the panel's data and intents live in the `HistoryState` global, so
+// `app.slint` only has to mount `HistoryOverlay` and the controller reaches
+// the panel through `window.global::<HistoryState>()`. Rust decides what every
+// row says (`dbhive_ui_model::history_panel`); this file lays it out.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, Tone, ButtonVariant, Button, TextField, Dropdown, Toggle, Divider, Banner, EmptyState, DetailRow, UnderlineTabs, FilterChip, SectionLabel, Badge } from "../kit/kit.slint";
+import { SqlEditor, HighlightLine } from "../components/sql_editor.slint";
+
+// One row of any list. `ok` only matters when `has-status` is set.
+export struct PanelRow {
+    id: string,
+    title: string,
+    subtitle: string,
+    note: string,
+    tags: [string],
+    has-status: bool,
+    ok: bool,
+}
+
+// One input of the template run form.
+export struct RunParam {
+    label: string,
+    description: string,
+    type-label: string,
+    required: bool,
+    // 0 free text, 1 true/false.
+    kind: int,
+    placeholder: string,
+    initial: string,
+}
+
+// One parameter row of the template editor. Names and types come from the
+// placeholders in the SQL; only these two settings are edited here.
+export struct FormParam {
+    name: string,
+    type-label: string,
+    required: bool,
+    default-value: string,
+}
+
+// What the panel is showing besides its three lists.
+export enum PanelMode { lists, snippet-form, template-form, template-run, template-import }
+
+export global HistoryState {
+    in-out property <bool> visible: false;
+    in-out property <int> tab: 0;
+    in property <[string]> tab-labels: ["History", "Snippets", "Templates"];
+    in property <PanelMode> mode: PanelMode.lists;
+    // The list being shown is being loaded.
+    in property <bool> loading: false;
+    // The last failure for the tab being shown, with a way to retry.
+    in property <string> error;
+    in property <bool> error-retry: false;
+    // "Production Postgres / app", blank when no connection is open.
+    in property <string> scope-label;
+
+    // History.
+    in-out property <bool> scoped: true;
+    in property <[string]> limit-options: ["25", "50", "100", "500"];
+    in property <string> limit-value: "50";
+    in property <[PanelRow]> history;
+    in property <string> history-summary;
+
+    // Snippets.
+    in-out property <string> snippet-search;
+    in property <[string]> snippet-tags;
+    in property <int> snippet-tag: -1;
+    in property <[PanelRow]> snippets;
+    in property <string> snippet-summary;
+
+    // Templates.
+    in-out property <string> template-search;
+    in property <[string]> template-categories;
+    in property <int> template-category: -1;
+    in property <[PanelRow]> templates;
+    in property <string> template-summary;
+
+    // Snippet and template editor.
+    in property <bool> form-is-new: true;
+    in property <string> form-error;
+    in-out property <string> form-name;
+    in-out property <string> form-description;
+    in-out property <string> form-category;
+    in-out property <string> form-tags;
+    in-out property <string> form-sql;
+    in property <[HighlightLine]> form-lines;
+    in property <[FormParam]> form-params;
+
+    // Template run form.
+    in property <string> run-title;
+    in property <[RunParam]> run-params;
+    in property <[string]> run-errors;
+    in property <string> run-preview;
+
+    // Template import.
+    in-out property <string> import-path;
+    in property <string> import-error;
+
+    // The workspace header button or the View menu asked for the panel; the
+    // controller fills it and sets `visible`.
+    callback open-requested;
+    callback close;
+    callback retry;
+    callback tab-selected(int);
+
+    callback refresh;
+    callback scope-toggled;
+    callback limit-selected(int);
+    callback history-open(string);
+    callback history-rerun(string);
+    callback history-clear;
+
+    callback snippet-search-edited(string);
+    callback snippet-tag-picked(int);
+    callback snippet-insert(string);
+    callback snippet-new;
+    callback snippet-edit(string);
+    callback snippet-delete(string);
+
+    callback template-search-edited(string);
+    callback template-category-picked(int);
+    callback template-run(string);
+    callback template-new;
+    callback template-edit(string);
+    callback template-duplicate(string);
+    callback template-delete(string);
+    callback template-export;
+    callback template-import-open;
+    callback template-import(string);
+
+    callback form-save;
+    callback form-cancel;
+    callback form-sql-edited(string);
+    callback form-param-required(int);
+    callback form-param-default(int, string);
+
+    callback run-edited(int, string);
+    callback run-open;
+    callback run-submit;
+    callback run-cancel;
+}
+
+component RunField inherits VerticalLayout {
+    in property <RunParam> p;
+    in property <string> error;
+    callback edited(string);
+
+    property <string> bool-text: root.p.initial;
+    spacing: 4px;
+
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        Text {
+            text: root.p.label;
+            color: Theme.foreground;
+            font-size: Theme.size-label;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        if root.p.required: Text {
+            text: "*";
+            color: Theme.destructive;
+            font-size: Theme.size-label;
+            vertical-alignment: center;
+        }
+        VerticalLayout {
+            alignment: center;
+            Badge { text: root.p.type-label; }
+        }
+    }
+    if root.p.description != "": Text {
+        text: root.p.description;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+    if root.p.kind == 1: HorizontalLayout {
+        alignment: start;
+        Dropdown {
+            width: 160px;
+            options: ["true", "false"];
+            value: root.bool-text == "" ? "Select…" : root.bool-text;
+            selected(i) => {
+                root.bool-text = i == 0 ? "true" : "false";
+                root.edited(root.bool-text);
+            }
+        }
+    }
+    if root.p.kind != 1: TextField {
+        text: root.p.initial;
+        placeholder: root.p.placeholder;
+        edited(t) => { root.edited(t); }
+    }
+    if root.error != "": Text {
+        text: root.error;
+        color: Theme.destructive;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+}
+
+// Tab pane: the list of past runs.
+component HistoryPane inherits VerticalLayout {
+    spacing: 10px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            Toggle {
+                text: HistoryState.scope-label == "" ? "This connection only" : "Only " + HistoryState.scope-label;
+                checked: HistoryState.scoped;
+                enabled: HistoryState.scope-label != "";
+                toggled => { HistoryState.scope-toggled(); }
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: "Show";
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+            }
+        }
+        Dropdown {
+            width: 84px;
+            options: HistoryState.limit-options;
+            value: HistoryState.limit-value;
+            selected(i) => { HistoryState.limit-selected(i); }
+        }
+        Button {
+            has-icon: true;
+            icon: Icons.refresh-cw;
+            variant: ButtonVariant.ghost;
+            accessible-label: "Refresh history";
+            enabled: !HistoryState.loading;
+            clicked => { HistoryState.refresh(); }
+        }
+        Button {
+            text: "Clear all";
+            has-icon: true;
+            icon: Icons.trash-2;
+            variant: ButtonVariant.danger;
+            enabled: HistoryState.history.length > 0;
+            clicked => { HistoryState.history-clear(); }
+        }
+    }
+
+    if HistoryState.error != "": VerticalLayout {
+        spacing: 8px;
+        Banner { message: HistoryState.error; dismissible: false; }
+        if HistoryState.error-retry: HorizontalLayout {
+            alignment: start;
+            Button {
+                text: "Retry";
+                has-icon: true;
+                icon: Icons.refresh-cw;
+                clicked => { HistoryState.retry(); }
+            }
+        }
+    }
+
+    if HistoryState.loading: Text {
+        vertical-stretch: 1;
+        text: "Loading history…";
+        color: Theme.muted-foreground;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    if !HistoryState.loading && HistoryState.history.length == 0: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.history;
+        title: "No queries yet";
+        message: HistoryState.scoped && HistoryState.scope-label != ""
+            ? "Queries you run on this connection will show up here. Turn off the filter to see every connection."
+            : "Queries you run will show up here.";
+    }
+
+    if !HistoryState.loading && HistoryState.history.length > 0: ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 2px;
+            padding-right: 14px;
+            for row in HistoryState.history: DetailRow {
+                title: row.title;
+                subtitle: row.subtitle;
+                note: row.note;
+                mono-title: true;
+                has-status: true;
+                status-tone: row.ok ? Tone.success : Tone.danger;
+                clicked => { }
+                double-clicked => { HistoryState.history-open(row.id); }
+                Button {
+                    text: "Open";
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Open in a new tab";
+                    clicked => { HistoryState.history-open(row.id); }
+                }
+                Button {
+                    text: "Re-run";
+                    has-icon: true;
+                    icon: Icons.play;
+                    accessible-label: "Re-run in a new tab";
+                    clicked => { HistoryState.history-rerun(row.id); }
+                }
+            }
+        }
+    }
+
+    if !HistoryState.loading && HistoryState.history.length > 0: Text {
+        text: HistoryState.history-summary;
+        color: Theme.dim-foreground;
+        font-size: Theme.size-small;
+    }
+}
+
+component SnippetsPane inherits VerticalLayout {
+    spacing: 10px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        TextField {
+            horizontal-stretch: 1;
+            has-icon: true;
+            icon: Icons.search;
+            placeholder: "Search snippets";
+            text <=> HistoryState.snippet-search;
+            edited(t) => { HistoryState.snippet-search-edited(t); }
+        }
+        Button {
+            text: "New snippet";
+            variant: ButtonVariant.primary;
+            has-icon: true;
+            icon: Icons.plus;
+            clicked => { HistoryState.snippet-new(); }
+        }
+    }
+
+    if HistoryState.snippet-tags.length > 0: HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        FilterChip {
+            text: "All";
+            selected: HistoryState.snippet-tag == -1;
+            clicked => { HistoryState.snippet-tag-picked(-1); }
+        }
+        for tag[i] in HistoryState.snippet-tags: FilterChip {
+            text: tag;
+            selected: HistoryState.snippet-tag == i;
+            clicked => { HistoryState.snippet-tag-picked(i); }
+        }
+    }
+
+    if HistoryState.error != "": Banner { message: HistoryState.error; dismissible: false; }
+
+    if HistoryState.loading: Text {
+        vertical-stretch: 1;
+        text: "Loading snippets…";
+        color: Theme.muted-foreground;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    if !HistoryState.loading && HistoryState.snippets.length == 0: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.file-text;
+        title: HistoryState.snippet-search != "" || HistoryState.snippet-tag != -1 ? "No matching snippets" : "No snippets yet";
+        message: HistoryState.snippet-search != "" || HistoryState.snippet-tag != -1
+            ? "Try a different search or clear the tag filter."
+            : "Save SQL you reuse and insert it into any query tab.";
+    }
+
+    if !HistoryState.loading && HistoryState.snippets.length > 0: ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 2px;
+            padding-right: 14px;
+            for row in HistoryState.snippets: DetailRow {
+                title: row.title;
+                subtitle: row.subtitle;
+                tags: row.tags;
+                clicked => { }
+                double-clicked => { HistoryState.snippet-insert(row.id); }
+                Button {
+                    text: "Insert";
+                    has-icon: true;
+                    icon: Icons.plus;
+                    accessible-label: "Insert into the active query tab";
+                    clicked => { HistoryState.snippet-insert(row.id); }
+                }
+                Button {
+                    has-icon: true;
+                    icon: Icons.pencil;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Edit snippet";
+                    clicked => { HistoryState.snippet-edit(row.id); }
+                }
+                Button {
+                    has-icon: true;
+                    icon: Icons.trash-2;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Delete snippet";
+                    clicked => { HistoryState.snippet-delete(row.id); }
+                }
+            }
+        }
+    }
+
+    if !HistoryState.loading && HistoryState.snippets.length > 0: Text {
+        text: HistoryState.snippet-summary;
+        color: Theme.dim-foreground;
+        font-size: Theme.size-small;
+    }
+}
+
+component TemplatesPane inherits VerticalLayout {
+    spacing: 10px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        TextField {
+            horizontal-stretch: 1;
+            has-icon: true;
+            icon: Icons.search;
+            placeholder: "Search templates";
+            text <=> HistoryState.template-search;
+            edited(t) => { HistoryState.template-search-edited(t); }
+        }
+        Button {
+            text: "Import";
+            has-icon: true;
+            icon: Icons.upload;
+            variant: ButtonVariant.ghost;
+            clicked => { HistoryState.template-import-open(); }
+        }
+        Button {
+            text: "Export";
+            has-icon: true;
+            icon: Icons.download;
+            variant: ButtonVariant.ghost;
+            enabled: HistoryState.templates.length > 0;
+            clicked => { HistoryState.template-export(); }
+        }
+        Button {
+            text: "New template";
+            variant: ButtonVariant.primary;
+            has-icon: true;
+            icon: Icons.plus;
+            clicked => { HistoryState.template-new(); }
+        }
+    }
+
+    if HistoryState.template-categories.length > 0: HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        FilterChip {
+            text: "All";
+            selected: HistoryState.template-category == -1;
+            clicked => { HistoryState.template-category-picked(-1); }
+        }
+        for c[i] in HistoryState.template-categories: FilterChip {
+            text: c;
+            selected: HistoryState.template-category == i;
+            clicked => { HistoryState.template-category-picked(i); }
+        }
+    }
+
+    if HistoryState.error != "": VerticalLayout {
+        spacing: 8px;
+        Banner { message: HistoryState.error; dismissible: false; }
+        if HistoryState.error-retry: HorizontalLayout {
+            alignment: start;
+            Button {
+                text: "Retry";
+                has-icon: true;
+                icon: Icons.refresh-cw;
+                clicked => { HistoryState.retry(); }
+            }
+        }
+    }
+
+    if HistoryState.loading: Text {
+        vertical-stretch: 1;
+        text: "Loading templates…";
+        color: Theme.muted-foreground;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    if !HistoryState.loading && HistoryState.templates.length == 0 && HistoryState.error == "": EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.workflow;
+        title: HistoryState.template-search != "" || HistoryState.template-category != -1 ? "No matching templates" : "No templates yet";
+        message: HistoryState.template-search != "" || HistoryState.template-category != -1
+            ? "Try a different search or clear the category filter."
+            : "Write SQL with {{name}} or {{name:type}} placeholders, then fill them in each time you run it.";
+    }
+
+    // A failed load with nothing to list: take the leftover height, or the
+    // toolbar and banner above swell to fill it.
+    if !HistoryState.loading && HistoryState.templates.length == 0 && HistoryState.error != "": Rectangle {
+        vertical-stretch: 1;
+    }
+
+    if !HistoryState.loading && HistoryState.templates.length > 0: ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 2px;
+            padding-right: 14px;
+            for row in HistoryState.templates: DetailRow {
+                title: row.title;
+                subtitle: row.subtitle;
+                tags: row.tags;
+                clicked => { }
+                double-clicked => { HistoryState.template-run(row.id); }
+                Button {
+                    text: "Run";
+                    has-icon: true;
+                    icon: Icons.play;
+                    accessible-label: "Run template";
+                    clicked => { HistoryState.template-run(row.id); }
+                }
+                Button {
+                    has-icon: true;
+                    icon: Icons.pencil;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Edit template";
+                    clicked => { HistoryState.template-edit(row.id); }
+                }
+                Button {
+                    has-icon: true;
+                    icon: Icons.copy;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Duplicate template";
+                    clicked => { HistoryState.template-duplicate(row.id); }
+                }
+                Button {
+                    has-icon: true;
+                    icon: Icons.trash-2;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Delete template";
+                    clicked => { HistoryState.template-delete(row.id); }
+                }
+            }
+        }
+    }
+
+    if !HistoryState.loading && HistoryState.templates.length > 0: Text {
+        text: HistoryState.template-summary;
+        color: Theme.dim-foreground;
+        font-size: Theme.size-small;
+    }
+}
+
+component SnippetForm inherits VerticalLayout {
+    spacing: 10px;
+
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 4px;
+            padding-right: 14px;
+            SectionLabel { text: "Name"; }
+            TextField {
+                text <=> HistoryState.form-name;
+                placeholder: "Active users this week";
+            }
+            SectionLabel { text: "Description"; }
+            TextField {
+                text <=> HistoryState.form-description;
+                placeholder: "Optional";
+            }
+            SectionLabel { text: "Tags"; }
+            TextField {
+                text <=> HistoryState.form-tags;
+                placeholder: "Comma separated, e.g. reports, weekly";
+            }
+            SectionLabel { text: "SQL"; }
+            Rectangle {
+                height: 200px;
+                SqlEditor {
+                    text <=> HistoryState.form-sql;
+                    lines: HistoryState.form-lines;
+                    edited(t) => { HistoryState.form-sql-edited(t); }
+                }
+            }
+        }
+    }
+
+    if HistoryState.form-error != "": Banner { message: HistoryState.form-error; dismissible: false; }
+
+    Divider { }
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: end;
+        Button { text: "Cancel"; clicked => { HistoryState.form-cancel(); } }
+        Button {
+            text: HistoryState.form-is-new ? "Save snippet" : "Save changes";
+            variant: ButtonVariant.primary;
+            clicked => { HistoryState.form-save(); }
+        }
+    }
+}
+
+component TemplateForm inherits VerticalLayout {
+    spacing: 10px;
+
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 4px;
+            padding-right: 14px;
+            SectionLabel { text: "Name"; }
+            TextField {
+                text <=> HistoryState.form-name;
+                placeholder: "Find users by status";
+            }
+            SectionLabel { text: "Description"; }
+            TextField {
+                text <=> HistoryState.form-description;
+                placeholder: "Optional";
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 4px;
+                    SectionLabel { text: "Category"; }
+                    TextField { text <=> HistoryState.form-category; placeholder: "Optional"; }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 4px;
+                    SectionLabel { text: "Tags"; }
+                    TextField { text <=> HistoryState.form-tags; placeholder: "Comma separated"; }
+                }
+            }
+            SectionLabel { text: "SQL with {{name}} or {{name:type}} placeholders"; }
+            Rectangle {
+                height: 120px;
+                SqlEditor {
+                    text <=> HistoryState.form-sql;
+                    lines: HistoryState.form-lines;
+                    edited(t) => { HistoryState.form-sql-edited(t); }
+                }
+            }
+            SectionLabel { text: "Parameters"; }
+            if HistoryState.form-params.length == 0: Text {
+                text: "No parameters yet. Add a placeholder such as {{status}} to the SQL.";
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+            }
+            for p[i] in HistoryState.form-params: HorizontalLayout {
+                height: 36px;
+                spacing: 10px;
+                Text {
+                    width: 130px;
+                    text: p.name;
+                    color: Theme.foreground;
+                    font-size: Theme.size-mono;
+                    font-family: "Menlo";
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    width: 74px;
+                    Badge { text: p.type-label; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    width: 110px;
+                    Toggle {
+                        text: "Required";
+                        checked: p.required;
+                        toggled => { HistoryState.form-param-required(i); }
+                    }
+                }
+                TextField {
+                    horizontal-stretch: 1;
+                    text: p.default-value;
+                    placeholder: "Default value";
+                    edited(t) => { HistoryState.form-param-default(i, t); }
+                }
+            }
+        }
+    }
+
+    if HistoryState.form-error != "": Banner { message: HistoryState.form-error; dismissible: false; }
+
+    Divider { }
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: end;
+        Button { text: "Cancel"; clicked => { HistoryState.form-cancel(); } }
+        Button {
+            text: HistoryState.form-is-new ? "Save template" : "Save changes";
+            variant: ButtonVariant.primary;
+            clicked => { HistoryState.form-save(); }
+        }
+    }
+}
+
+component TemplateRunForm inherits VerticalLayout {
+    spacing: 10px;
+
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 12px;
+            padding-top: 8px;
+            padding-right: 14px;
+            for p[i] in HistoryState.run-params: RunField {
+                p: p;
+                error: i < HistoryState.run-errors.length ? HistoryState.run-errors[i] : "";
+                edited(t) => { HistoryState.run-edited(i, t); }
+            }
+            SectionLabel { text: "Preview"; }
+            Rectangle {
+                background: Theme.card;
+                border-radius: Theme.radius-control;
+                border-width: 1px;
+                border-color: Theme.border;
+                VerticalLayout {
+                    padding: 10px;
+                    Text {
+                        text: HistoryState.run-preview;
+                        color: Theme.foreground;
+                        font-size: Theme.size-mono;
+                        font-family: "Menlo";
+                        wrap: word-wrap;
+                    }
+                }
+            }
+        }
+    }
+
+    if HistoryState.form-error != "": Banner { message: HistoryState.form-error; dismissible: false; }
+
+    Divider { }
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: end;
+        Button { text: "Cancel"; clicked => { HistoryState.run-cancel(); } }
+        Button { text: "Open in new tab"; clicked => { HistoryState.run-open(); } }
+        Button {
+            text: "Run";
+            variant: ButtonVariant.primary;
+            has-icon: true;
+            icon: Icons.play;
+            clicked => { HistoryState.run-submit(); }
+        }
+    }
+}
+
+component TemplateImportForm inherits VerticalLayout {
+    spacing: 10px;
+
+    SectionLabel { text: "Templates JSON file"; }
+    TextField {
+        text <=> HistoryState.import-path;
+        placeholder: "/path/to/query-templates.json";
+        has-icon: true;
+        icon: Icons.file-text;
+        accepted(t) => { HistoryState.template-import(t); }
+    }
+    Text {
+        text: "Templates whose name you already have are skipped. Exports are written to the DB Hive data folder.";
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+    if HistoryState.import-error != "": Banner { message: HistoryState.import-error; dismissible: false; }
+    Rectangle { vertical-stretch: 1; }
+    Divider { }
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: end;
+        Button { text: "Cancel"; clicked => { HistoryState.form-cancel(); } }
+        Button {
+            text: "Import";
+            variant: ButtonVariant.primary;
+            has-icon: true;
+            icon: Icons.upload;
+            enabled: HistoryState.import-path != "";
+            clicked => { HistoryState.template-import(HistoryState.import-path); }
+        }
+    }
+}
+
+export component HistoryPanel inherits Rectangle {
+    // Set by the window so the footer buttons never fall off a short window.
+    in property <length> available-height: 640px;
+
+    width: 840px;
+    height: min(640px, root.available-height);
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    clip: true;
+
+    // Swallows clicks on the panel's own background, so they do not reach the
+    // overlay's backdrop and close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: 20px;
+        padding-top: 16px;
+        spacing: 10px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: HistoryState.mode == PanelMode.snippet-form
+                            ? (HistoryState.form-is-new ? "New snippet" : "Edit snippet")
+                        : HistoryState.mode == PanelMode.template-form
+                            ? (HistoryState.form-is-new ? "New template" : "Edit template")
+                        : HistoryState.mode == PanelMode.template-run ? HistoryState.run-title
+                        : HistoryState.mode == PanelMode.template-import ? "Import templates"
+                        : "History and snippets";
+                    color: Theme.foreground;
+                    font-size: Theme.size-subheading;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                has-icon: true;
+                icon: Icons.x;
+                variant: ButtonVariant.ghost;
+                accessible-label: "Close";
+                clicked => { HistoryState.close(); }
+            }
+        }
+
+        if HistoryState.mode == PanelMode.lists: UnderlineTabs {
+            labels: HistoryState.tab-labels;
+            active: HistoryState.tab;
+            selected(i) => { HistoryState.tab-selected(i); }
+        }
+
+        if HistoryState.mode == PanelMode.lists && HistoryState.tab == 0: HistoryPane { vertical-stretch: 1; }
+        if HistoryState.mode == PanelMode.lists && HistoryState.tab == 1: SnippetsPane { vertical-stretch: 1; }
+        if HistoryState.mode == PanelMode.lists && HistoryState.tab == 2: TemplatesPane { vertical-stretch: 1; }
+        if HistoryState.mode == PanelMode.snippet-form: SnippetForm { vertical-stretch: 1; }
+        if HistoryState.mode == PanelMode.template-form: TemplateForm { vertical-stretch: 1; }
+        if HistoryState.mode == PanelMode.template-run: TemplateRunForm { vertical-stretch: 1; }
+        if HistoryState.mode == PanelMode.template-import: TemplateImportForm { vertical-stretch: 1; }
+    }
+}
+
+// The panel over a dimmed workspace. A click on the backdrop closes it, but
+// only from the lists: a form can hold typed work.
+export component HistoryOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Theme.background.transparentize(0.25);
+
+    TouchArea {
+        clicked => {
+            if (HistoryState.mode == PanelMode.lists) {
+                HistoryState.close();
+            }
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            HistoryPanel {
+                available-height: root.height - 48px;
+            }
+        }
+    }
+}

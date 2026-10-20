@@ -251,11 +251,202 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
+        _ if name.starts_with("history") || name.starts_with("snippets") || name.starts_with("templates") => {
+            history_panel_window(name)
+        }
         other => {
             eprintln!("unknown component {:?}", other);
             std::process::exit(2);
         }
     }
+}
+
+// -- History / snippets / templates panel ------------------------------------
+//
+// Variants: history, history-light, history-empty, history-loading,
+// history-error, history-long; snippets, snippets-light, snippets-empty,
+// snippets-loading, snippets-error, snippets-form; templates,
+// templates-light, templates-empty, templates-loading, templates-error,
+// templates-run, templates-run-errors, templates-form, templates-import.
+// The workspace sits behind the panel, as it does in the app.
+
+fn history_panel_window(name: &str) -> Box<dyn std::any::Any> {
+    // "-light" only changes the theme; every other check uses the base name.
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+    use dbhive_core::models::{QueryHistory, QuerySnippet};
+    use dbhive_slint::history_view::{form_params, rows_model, run_params, strings_model};
+    use dbhive_ui_model::history::{sync_parameters, QueryTemplate};
+    use dbhive_ui_model::history_panel as hp;
+
+    let c = AppWindow::new().expect("AppWindow");
+    if light {
+        c.global::<Theme>().set_dark(false);
+    }
+    // The workspace behind the dimmed panel.
+    c.set_screen(Screen::Workspace);
+    c.set_workspace_connection_name("Production Postgres".into());
+    c.set_workspace_location_label("app · public".into());
+    let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products"]
+        .iter()
+        .map(|n| TableItem { name: (*n).into(), row_count: "~1240".into() })
+        .collect();
+    c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
+    c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![TabInfo {
+        title: "Query 1".into(),
+        query: true,
+        busy: false,
+    }])));
+    c.set_workspace_active_tab(0);
+    c.set_workspace_active_is_query(true);
+
+    let h = c.global::<HistoryState>();
+    h.set_visible(true);
+    let now = chrono::Utc::now();
+    let ago = |mins: i64| (now - chrono::Duration::minutes(mins)).to_rfc3339();
+
+    let tab = if name.starts_with("snippets") { 1 } else if name.starts_with("templates") { 2 } else { 0 };
+    h.set_tab(tab);
+    h.set_scope_label("Production Postgres / app".into());
+    h.set_tab_labels(strings_model(&[
+        "History".into(),
+        if name == "snippets-empty" { "Snippets".into() } else { "Snippets (4)".into() },
+        if name == "templates-empty" { "Templates".into() } else { "Templates (3)".into() },
+    ]));
+
+    // History.
+    let q = |sql: &str, mins: i64, ms: u64, rows: u64| {
+        QueryHistory::new("c1".into(), "Production Postgres".into(), "app".into(), sql.into(), ago(mins))
+            .with_success(ms, Some(rows))
+    };
+    let mut entries = vec![
+        q("SELECT c.id, c.name, SUM(o.total) AS revenue\n  FROM customers c JOIN orders o ON o.customer_id = c.id", 2, 38, 25),
+        q("UPDATE orders SET status = 'shipped' WHERE id = 1042", 14, 4, 1),
+        QueryHistory::new("c1".into(), "Production Postgres".into(), "app".into(),
+            "SELECT * FROM order_itemz WHERE order_id = 7".into(), ago(55))
+            .with_error("relation \"order_itemz\" does not exist".into(), Some(3)),
+        q("SELECT COUNT(*) FROM events WHERE created_at > now() - interval '1 day'", 60 * 5, 1840, 1),
+        q("SELECT * FROM customers ORDER BY created_at DESC LIMIT 100", 60 * 27, 12, 100),
+        q("SELECT a_column_with_a_very_long_name_that_must_be_elided_rather_than_overflow_the_row, another_long_column_name_here, and_one_more FROM a_table_with_a_very_long_name WHERE x = 1", 60 * 24 * 3, 9, 1204),
+    ];
+    if name == "history-long" {
+        entries[2].error_message = Some("ERROR: relation \"order_itemz\" does not exist at character 15; HINT: Perhaps you meant to reference the table \"order_items\". The statement was rolled back and no rows were changed.".into());
+    }
+    if name != "history-empty" {
+        h.set_history(rows_model(hp::history_rows(&entries, now)));
+        h.set_history_summary(format!("{} queries, newest first", entries.len()).into());
+    }
+    h.set_scoped(true);
+    if name == "history-loading" {
+        h.set_loading(true);
+    }
+    if name == "history-error" {
+        h.set_error("Cleared, but the change could not be saved: Permission denied (os error 13)".into());
+    }
+
+    // Snippets.
+    let snippets = vec![
+        QuerySnippet::new("Active users this week".into(), "SELECT id, email FROM users WHERE last_seen > now() - interval '7 days'".into(), Some("Users seen in the last seven days".into()), Some(vec!["reports".into(), "weekly".into()])),
+        QuerySnippet::new("Table sizes".into(), "SELECT relname, pg_size_pretty(pg_total_relation_size(relid)) FROM pg_catalog.pg_statio_user_tables ORDER BY 2 DESC".into(), None, Some(vec!["maintenance".into()])),
+        QuerySnippet::new("Blocked queries".into(), "SELECT pid, query FROM pg_stat_activity WHERE wait_event_type = 'Lock'".into(), Some("Who is waiting on a lock".into()), Some(vec!["maintenance".into()])),
+        QuerySnippet::new("Top customers by revenue".into(), "SELECT c.name, SUM(o.total) FROM customers c JOIN orders o ON o.customer_id = c.id GROUP BY 1 ORDER BY 2 DESC LIMIT 10".into(), None, None),
+    ];
+    let tags = dbhive_ui_model::history::snippet_tags(&snippets);
+    if name != "snippets-empty" {
+        let picked = (name == "snippets").then_some("reports");
+        let rows = hp::snippet_rows(&snippets, "", picked);
+        h.set_snippet_summary(format!("{} of 4 snippets", rows.len()).into());
+        h.set_snippets(rows_model(rows));
+        h.set_snippet_tags(strings_model(&tags));
+        if picked.is_some() {
+            h.set_snippet_tag(1);
+        }
+    }
+    if name == "snippets-loading" {
+        h.set_loading(true);
+    }
+    if name == "snippets-error" {
+        h.set_error("Could not save snippets: No space left on device (os error 28)".into());
+    }
+
+    // Templates.
+    let mk = |n: &str, d: Option<&str>, sql: &str, cat: Option<&str>, tags: &[&str]| {
+        QueryTemplate::new(n.into(), d.map(Into::into), sql.into(), sync_parameters(sql, &[]), cat.map(Into::into),
+            (!tags.is_empty()).then(|| tags.iter().map(|t| t.to_string()).collect()))
+    };
+    let templates = vec![
+        mk("Orders by status and date", Some("Filter orders for a day"), "SELECT * FROM orders WHERE status = {{status}} AND created_at >= {{since:date}} AND total > {{min_total:decimal}}", Some("Reports"), &["orders"]),
+        mk("Find user by email", None, "SELECT * FROM users WHERE email = {{email}}", Some("Support"), &[]),
+        mk("Recent signups", Some("New users in the last N days"), "SELECT * FROM users WHERE created_at > now() - ({{days:integer}} * interval '1 day') AND active = {{active:boolean}}", Some("Reports"), &["users", "growth"]),
+    ];
+    let cats = dbhive_ui_model::history::template_categories(&templates);
+    if name != "templates-empty" && name != "templates-error" {
+        h.set_templates(rows_model(hp::template_rows(&templates, "", None)));
+        h.set_template_categories(strings_model(&cats));
+        h.set_template_summary("3 of 3 templates".into());
+    }
+    if name == "templates-loading" {
+        h.set_loading(true);
+    }
+    if name == "templates-error" {
+        h.set_error("templates.json could not be read: expected value at line 1 column 1".into());
+        h.set_error_retry(true);
+    }
+
+    // Forms.
+    let dark = c.global::<Theme>().get_dark();
+    if name == "snippets-form" {
+        h.set_mode(PanelMode::SnippetForm);
+        h.set_form_is_new(false);
+        h.set_form_name("Active users this week".into());
+        h.set_form_description("Users seen in the last seven days".into());
+        h.set_form_tags("reports, weekly".into());
+        let sql = "SELECT id, email\n  FROM users\n WHERE last_seen > now() - interval '7 days';";
+        h.set_form_sql(sql.into());
+        h.set_form_lines(dbhive_slint::sql_highlight::to_model_for(sql, dark));
+    }
+    if name == "templates-form" {
+        h.set_mode(PanelMode::TemplateForm);
+        h.set_form_is_new(false);
+        h.set_form_name("Orders by status and date".into());
+        h.set_form_description("Filter orders for a day".into());
+        h.set_form_category("Reports".into());
+        h.set_form_tags("orders".into());
+        let sql = &templates[0].sql;
+        h.set_form_sql(sql.as_str().into());
+        h.set_form_lines(dbhive_slint::sql_highlight::to_model_for(sql, dark));
+        let mut params = templates[0].parameters.clone();
+        params[1].default_value = Some("2025-01-01".into());
+        params[2].required = false;
+        h.set_form_params(form_params(&params));
+        if name == "templates-form" {
+            h.set_form_error("".into());
+        }
+    }
+    if name == "templates-run" || name == "templates-run-errors" {
+        h.set_mode(PanelMode::TemplateRun);
+        let mut run = hp::TemplateRun::new(&templates[0]);
+        run.set_value(0, "paid");
+        if name == "templates-run-errors" {
+            run.set_value(1, "last tuesday");
+            let _ = run.submit();
+            h.set_form_error("Fix the highlighted fields first.".into());
+        } else {
+            run.set_value(1, "2025-01-01");
+            run.set_value(2, "99.50");
+        }
+        h.set_run_title("Run: Orders by status and date".into());
+        h.set_run_params(run_params(run.fields()));
+        h.set_run_errors(strings_model(&run.errors()));
+        h.set_run_preview(run.preview().into());
+    }
+    if name == "templates-import" {
+        h.set_mode(PanelMode::TemplateImport);
+        h.set_import_path("/Users/me/Downloads/query-templates.json".into());
+        h.set_import_error("Could not read /Users/me/Downloads/query-templates.json: No such file or directory (os error 2)".into());
+    }
+    c.show().unwrap();
+    Box::new(c)
 }
 
 fn main() {

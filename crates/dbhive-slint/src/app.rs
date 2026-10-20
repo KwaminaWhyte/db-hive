@@ -34,6 +34,9 @@ use crate::{
     AppWindow, ConnectionItem, GridRow, Screen, TabInfo, TableItem, Theme, ToastItem, Tone,
 };
 
+// The History / Snippets / Templates panel's controller half.
+mod history_glue;
+
 /// How many rows a table preview pulls. Not user-configurable yet; the
 /// egui table editor's own default (`workspace.rs:516`) is 100, this is a
 /// little more generous since the grid virtualises past what is on screen.
@@ -65,6 +68,8 @@ enum PendingAction {
     CloseTab(u64),
     /// Run a statement the destructive-query guard flagged.
     RunAnyway(u64),
+    /// Clear history, or delete a snippet or template.
+    History(history_glue::Pending),
 }
 
 /// The new/edit connection dialog's state.
@@ -124,6 +129,7 @@ struct Session {
     pending_delete: Option<(String, String)>,
     pending_action: Option<PendingAction>,
     workspace: Workspace,
+    history: history_glue::PanelSession,
 }
 
 struct Ctx {
@@ -694,6 +700,7 @@ impl Ctx {
     }
 
     fn leave_workspace(&self) {
+        self.hide_history_panel();
         self.session.borrow_mut().workspace = Workspace::default();
         if let Some(w) = self.window.upgrade() {
             w.set_screen(Screen::Connections);
@@ -980,6 +987,7 @@ impl Ctx {
                 self.refresh_workspace();
             }
             Some(PendingAction::RunAnyway(id)) => self.run_tab(id, false),
+            Some(PendingAction::History(pending)) => self.history_confirmed(pending),
             None => self.delete_pending_connection(),
         }
     }
@@ -1113,6 +1121,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
             // The editor's syntax colours are chosen per theme in Rust, so
             // they have to be recomputed.
             ctx.refresh_workspace();
+            ctx.refresh_history_panel();
         });
     }
 
@@ -1313,6 +1322,8 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
         let ctx = ctx.clone();
         window.on_workspace_retry(move || ctx.run_active_tab());
     }
+
+    history_glue::wire(&window, &ctx);
 
     ctx.refresh_connections();
     CTX.with(|c| *c.borrow_mut() = Some(ctx));
