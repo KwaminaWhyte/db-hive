@@ -122,6 +122,61 @@ export component ClickableCard inherits Rectangle {
     @children
 }
 
+// A flat list row: hover and selected fills, no border. Icon, label and the
+// optional trailing detail share one vertical centre.
+export component ListRow inherits Rectangle {
+    in property <string> text;
+    in property <string> detail;
+    in property <image> icon;
+    in property <bool> has-icon: true;
+    in property <bool> selected: false;
+    callback clicked;
+
+    min-height: 30px;
+    border-radius: Theme.radius-control;
+    background: root.selected ? Theme.primary-soft : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: 90ms; }
+
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => { root.clicked(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        if root.has-icon: VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.icon;
+                tint: root.selected ? Theme.primary : Theme.muted-foreground;
+                width: 14px;
+                height: 14px;
+            }
+        }
+        Text {
+            text: root.text;
+            color: Theme.foreground;
+            font-size: Theme.size-label;
+            font-weight: root.selected ? 600 : 400;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        if root.detail != "": Text {
+            text: root.detail;
+            color: Theme.dim-foreground;
+            font-size: Theme.size-small;
+            vertical-alignment: center;
+        }
+    }
+}
+
 export component Badge inherits Rectangle {
     in property <string> text;
     in property <Tone> tone: Tone.neutral;

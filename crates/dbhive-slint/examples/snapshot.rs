@@ -39,13 +39,21 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
-        "workspace" | "workspace-empty" | "workspace-loading" => {
+        "workspace" | "workspace-light" | "workspace-long" | "workspace-empty" | "workspace-loading"
+        | "workspace-error" => {
             let c = AppWindow::new().expect("AppWindow");
+            if name == "workspace-light" {
+                c.global::<Theme>().set_dark(false);
+            }
             c.set_screen(Screen::Workspace);
             c.set_workspace_connection_name("Production Postgres".into());
             c.set_workspace_location_label("app · public".into());
 
-            let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products", "refunds"]
+            let mut names = vec!["customers", "orders", "order_items", "products", "refunds"];
+            if name == "workspace-long" {
+                names.push("a_table_with_a_very_long_name_that_must_be_elided_not_overflow_0001");
+            }
+            let tables: Vec<TableItem> = names
                 .iter()
                 .enumerate()
                 .map(|(i, name)| TableItem {
@@ -53,11 +61,17 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                     row_count: format!("~{}", (i + 1) * 1240).into(),
                 })
                 .collect();
-            c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
+            if name == "workspace-error" {
+                c.set_workspace_tables_error(
+                    "connection to server at \"db.internal\" failed: timeout expired".into(),
+                );
+            } else if name != "workspace-empty" {
+                c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
+            }
 
             if name == "workspace-loading" {
                 c.set_workspace_loading_tables(true);
-            } else if name == "workspace" {
+            } else if name == "workspace" || name == "workspace-light" || name == "workspace-long" {
                 c.set_workspace_selected_table("customers".into());
                 let cols = vec!["id".to_string(), "name".to_string(), "email".to_string(), "plan".to_string()];
                 let widths = vec![80.0f32, 220.0, 260.0, 140.0];

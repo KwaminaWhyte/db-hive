@@ -1,5 +1,5 @@
 import { ScrollView } from "std-widgets.slint";
-import { Theme, Icons, Icon, ButtonVariant, Button, TextField, Divider, ClickableCard, Banner, EmptyState } from "../kit/kit.slint";
+import { Theme, Icons, ButtonVariant, Button, TextField, Divider, ListRow, Banner, EmptyState } from "../kit/kit.slint";
 import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
 
 export struct TableItem {
@@ -108,9 +108,26 @@ export component WorkspaceScreen inherits VerticalLayout {
                     letter-spacing: 0.6px;
                 }
 
-                if root.tables-error != "": Banner {
-                    message: root.tables-error;
-                    dismissible: false;
+                // Claims the leftover height itself and packs its children at
+                // the top; otherwise the Banner is the only stretchable child
+                // and swells to fill the whole sidebar.
+                if root.tables-error != "": VerticalLayout {
+                    vertical-stretch: 1;
+                    alignment: start;
+                    spacing: 8px;
+                    Banner {
+                        message: root.tables-error;
+                        dismissible: false;
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        Button {
+                            text: "Retry";
+                            has-icon: true;
+                            icon: Icons.refresh-cw;
+                            clicked => { root.refresh-tables(); }
+                        }
+                    }
                 }
 
                 // Exactly one of these branches is active at a time, and
@@ -136,36 +153,15 @@ export component WorkspaceScreen inherits VerticalLayout {
                 if !root.loading-tables && root.tables.length > 0: ScrollView {
                     vertical-stretch: 1;
                     VerticalLayout {
+                        alignment: start;
                         spacing: 2px;
-                        for t in root.tables: ClickableCard {
-                            height: 32px;
+                        for t in root.tables: ListRow {
+                            height: 30px;
+                            icon: Icons.table;
+                            text: t.name;
+                            detail: t.row-count;
                             selected: t.name == root.selected-table;
                             clicked => { root.select-table(t.name); }
-                            HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 8px;
-                                spacing: 8px;
-                                Icon {
-                                    source: Icons.table;
-                                    tint: t.name == root.selected-table ? Theme.primary : Theme.muted-foreground;
-                                    width: 13px;
-                                    height: 13px;
-                                }
-                                Text {
-                                    text: t.name;
-                                    color: Theme.foreground;
-                                    font-size: Theme.size-label;
-                                    vertical-alignment: center;
-                                    horizontal-stretch: 1;
-                                    overflow: elide;
-                                }
-                                if t.row-count != "": Text {
-                                    text: t.row-count;
-                                    color: Theme.dim-foreground;
-                                    font-size: Theme.size-small;
-                                    vertical-alignment: center;
-                                }
-                            }
                         }
                     }
                 }
