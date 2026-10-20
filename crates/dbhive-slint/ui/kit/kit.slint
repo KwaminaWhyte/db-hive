@@ -177,6 +177,47 @@ export component ListRow inherits Rectangle {
     }
 }
 
+// A row of colour swatches, one of which can be selected. The colours are
+// user data (a profile's colour tag), not theme tokens, so the caller supplies
+// them. `picked` sends the swatch index; picking the selected one again sends
+// -1, which callers read as "no colour".
+export component SwatchPicker inherits Rectangle {
+    in property <[color]> options;
+    in property <int> selected: -1;
+    callback picked(int);
+
+    height: 26px;
+    horizontal-stretch: 1;
+
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: start;
+        for c[i] in root.options: Rectangle {
+            width: 24px;
+            height: 24px;
+            y: 1px;
+            border-radius: 12px;
+            background: c;
+            border-width: touch.has-hover ? 2px : 0;
+            border-color: Theme.foreground;
+            accessible-role: button;
+            accessible-label: "Colour " + (i + 1);
+            accessible-action-default => { root.picked(i == root.selected ? -1 : i); }
+
+            touch := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.picked(i == root.selected ? -1 : i); }
+            }
+            if i == root.selected: Icon {
+                source: Icons.check;
+                tint: Theme.primary-foreground;
+                width: 14px;
+                height: 14px;
+            }
+        }
+    }
+}
+
 export component Badge inherits Rectangle {
     in property <string> text;
     in property <Tone> tone: Tone.neutral;
@@ -392,10 +433,14 @@ export component Toggle inherits Rectangle {
             enabled: root.enabled;
             mouse-cursor: root.enabled ? pointer : default;
             clicked => { root.toggled(); }
+            // A child of a TouchArea (not a layout) is centred at its implicit
+            // size unless told otherwise; fill the area and left-align.
             Text {
+                width: 100%;
                 text: root.text;
                 color: Theme.foreground;
                 font-size: Theme.size-label;
+                horizontal-alignment: left;
                 vertical-alignment: center;
             }
         }

@@ -17,8 +17,8 @@ use dbhive_core::state::AppState;
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use dbhive_ui_model::connection_editor::{
-    build_profile, build_profile_with, form_from_profile, save_profile, test_profile, validate,
-    ConnectionForm,
+    build_profile, build_profile_with, form_from_profile, paste_connection_string, save_profile,
+    test_profile, validate, ConnectionForm,
 };
 use dbhive_ui_model::results_grid::{visible_rows, GridState};
 
@@ -67,6 +67,13 @@ struct Editor {
     form: ConnectionForm,
     password: String,
     show_password: bool,
+    /// Text in the "paste a connection string" box, and why the last attempt
+    /// to apply it failed. Neither is part of the saved profile.
+    connection_string: String,
+    connection_string_error: String,
+    /// Like `password`: held here so the secret never enters the profile.
+    ssh_password: String,
+    show_ssh_password: bool,
     testing: bool,
     test_message: String,
     test_ok: bool,
@@ -80,6 +87,10 @@ impl Default for Editor {
             form: ConnectionForm::default(),
             password: String::new(),
             show_password: false,
+            connection_string: String::new(),
+            connection_string_error: String::new(),
+            ssh_password: String::new(),
+            show_ssh_password: false,
             testing: false,
             test_message: String::new(),
             test_ok: false,
@@ -265,6 +276,10 @@ impl Ctx {
         let mut data = editor_view::form_data(&ed.form);
         data.password = ed.password.as_str().into();
         data.show_password_text = ed.show_password;
+        data.connection_string = ed.connection_string.as_str().into();
+        data.connection_string_error = ed.connection_string_error.as_str().into();
+        data.ssh_password = ed.ssh_password.as_str().into();
+        data.show_ssh_password_text = ed.show_ssh_password;
         w.set_editor_is_new(ed.is_new);
         w.set_editor(data);
         let errors: Vec<slint::SharedString> =
@@ -346,6 +361,59 @@ impl Ctx {
         self.edit_form(|f| f.is_favorite = !f.is_favorite);
     }
 
+    fn set_editor_connection_string(&self, text: String) {
+        {
+            let mut s = self.session.borrow_mut();
+            s.editor.connection_string = text;
+            s.editor.connection_string_error.clear();
+        }
+        self.refresh_editor();
+    }
+
+    /// Fill the form from the pasted string. On success the box is cleared and
+    /// the password (if the string had one) goes to the password field; on
+    /// failure the text stays so it can be corrected.
+    fn apply_editor_connection_string(&self) {
+        {
+            let mut s = self.session.borrow_mut();
+            let raw = s.editor.connection_string.clone();
+            match paste_connection_string(&mut s.editor.form, &raw) {
+                Ok(pasted) => {
+                    if let Some(p) = pasted.password {
+                        s.editor.password = p;
+                    }
+                    s.editor.connection_string.clear();
+                    s.editor.connection_string_error.clear();
+                }
+                Err(message) => s.editor.connection_string_error = message,
+            }
+        }
+        self.refresh_editor();
+    }
+
+    fn set_editor_ssh_password(&self, password: String) {
+        self.session.borrow_mut().editor.ssh_password = password;
+        self.refresh_editor();
+    }
+
+    fn toggle_editor_ssh_password_visibility(&self) {
+        let mut s = self.session.borrow_mut();
+        s.editor.show_ssh_password = !s.editor.show_ssh_password;
+        drop(s);
+        self.refresh_editor();
+    }
+
+    /// The SSH password to hand the tunnel: only when tunnelling is on with
+    /// password auth and one was typed.
+    fn editor_ssh_password(&self) -> Option<String> {
+        let s = self.session.borrow();
+        let f = &s.editor.form;
+        let wanted = f.ssh_enabled
+            && f.ssh_auth_method == dbhive_core::models::connection::SshAuthMethod::Password
+            && !s.editor.ssh_password.is_empty();
+        wanted.then(|| s.editor.ssh_password.clone())
+    }
+
     fn test_editor_connection(self: &Rc<Self>) {
         let (form, password) = {
             let s = self.session.borrow();
@@ -363,9 +431,10 @@ impl Ctx {
         }
         self.refresh_editor();
 
+        let ssh_password = self.editor_ssh_password();
         let state = self.state.clone();
         runtime::spawn(
-            async move { test_profile(state, profile, password, None).await },
+            async move { test_profile(state, profile, password, ssh_password).await },
             move |result| with_ctx(|ctx| {
                 let mut s = ctx.session.borrow_mut();
                 s.editor.testing = false;
@@ -401,9 +470,10 @@ impl Ctx {
         self.session.borrow_mut().editor.saving = true;
         self.refresh_editor();
 
+        let ssh_password = self.editor_ssh_password();
         let state = self.state.clone();
         runtime::spawn(
-            async move { save_profile(state, profile, id, password, None).await },
+            async move { save_profile(state, profile, id, password, ssh_password).await },
             move |result| with_ctx(|ctx| {
                 ctx.session.borrow_mut().editor.saving = false;
                 match result {
@@ -860,6 +930,62 @@ pub fn run() -> Result<(), slint::PlatformError> {
     {
         let ctx = ctx.clone();
         window.on_editor_toggle_favorite(move || ctx.toggle_editor_favorite());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_connection_string_changed(move |t| {
+            ctx.set_editor_connection_string(t.to_string())
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_apply_connection_string(move || ctx.apply_editor_connection_string());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_toggle_ssh(move || ctx.edit_form(|f| f.ssh_enabled = !f.ssh_enabled));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_ssh_host_changed(move |t| ctx.edit_form(|f| f.ssh_host = t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_ssh_port_changed(move |t| ctx.edit_form(|f| f.ssh_port = t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_ssh_username_changed(move |t| {
+            ctx.edit_form(|f| f.ssh_username = t.to_string())
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_ssh_auth_selected(move |i| {
+            ctx.edit_form(|f| f.ssh_auth_method = editor_view::ssh_auth_at(i))
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_ssh_key_path_changed(move |t| {
+            ctx.edit_form(|f| f.ssh_private_key_path = t.to_string())
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_ssh_password_changed(move |t| ctx.set_editor_ssh_password(t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_toggle_ssh_password_visibility(move || {
+            ctx.toggle_editor_ssh_password_visibility()
+        });
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_editor_color_picked(move |i| {
+            ctx.edit_form(|f| f.color = editor_view::color_at(i))
+        });
     }
     {
         let ctx = ctx.clone();

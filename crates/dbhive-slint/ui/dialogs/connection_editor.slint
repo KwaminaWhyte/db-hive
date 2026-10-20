@@ -6,11 +6,11 @@
 // shells cannot disagree about a driver's fields. The dialog just lays out
 // whatever the controller says is visible.
 //
-// SSH tunnelling, the colour tag and pasting a connection string are not
-// here yet; see docs/slint-migration/plan.md.
+// The SSH sub-form, colour tag and pasted connection string follow the same
+// rule: Rust decides what shows, this file only lays it out.
 
 import { ScrollView } from "std-widgets.slint";
-import { Theme, Icons, Icon, Tone, SectionLabel, TextField, Dropdown, Toggle, Divider, Banner, Button, ButtonVariant } from "../kit/kit.slint";
+import { Theme, Icons, Icon, Tone, SectionLabel, TextField, Dropdown, Toggle, SwatchPicker, Divider, Banner, Button, ButtonVariant } from "../kit/kit.slint";
 
 export struct ConnectionFormData {
     name: string,
@@ -38,6 +38,26 @@ export struct ConnectionFormData {
     environment-options: [string],
     description: string,
     favorite: bool,
+    // Pasting a connection string fills host, port, user, password, database.
+    show-connection-string: bool,
+    connection-string: string,
+    connection-string-placeholder: string,
+    connection-string-error: string,
+    // SSH tunnel sub-form. Only drivers that can tunnel set `show-ssh`.
+    show-ssh: bool,
+    ssh-enabled: bool,
+    ssh-host: string,
+    ssh-port: string,
+    ssh-username: string,
+    ssh-auth-label: string,
+    ssh-auth-options: [string],
+    ssh-show-key: bool,
+    ssh-key-path: string,
+    ssh-password: string,
+    show-ssh-password-text: bool,
+    // Colour tag swatches; `color-index` is -1 for none.
+    color-options: [color],
+    color-index: int,
 }
 
 export component ConnectionEditorDialog inherits Rectangle {
@@ -61,12 +81,26 @@ export component ConnectionEditorDialog inherits Rectangle {
     callback environment-selected(int);
     callback description-changed(string);
     callback toggle-favorite;
+    callback connection-string-changed(string);
+    callback apply-connection-string;
+    callback toggle-ssh;
+    callback ssh-host-changed(string);
+    callback ssh-port-changed(string);
+    callback ssh-username-changed(string);
+    callback ssh-auth-selected(int);
+    callback ssh-key-path-changed(string);
+    callback ssh-password-changed(string);
+    callback toggle-ssh-password-visibility;
+    callback color-picked(int);
     callback test-connection;
     callback save;
     callback cancel;
 
+    // Set by the window so the footer buttons never fall off a short window.
+    in property <length> available-height: 960px;
+
     width: 480px;
-    height: 720px;
+    height: min(960px, root.available-height);
     background: Theme.popover;
     border-radius: Theme.radius-window;
     border-width: 1px;
@@ -99,6 +133,8 @@ export component ConnectionEditorDialog inherits Rectangle {
             vertical-stretch: 1;
             VerticalLayout {
                 spacing: 4px;
+                // Keeps fields clear of the scrollbar drawn over the right edge.
+                padding-right: 14px;
                 // Without this, a driver with fewer fields (SQLite has no
                 // host/port/username/password) leaves the layout with slack
                 // height, and with no child stretching to take it, Slint
@@ -118,6 +154,31 @@ export component ConnectionEditorDialog inherits Rectangle {
                     value: root.form.driver-label;
                     options: root.form.driver-options;
                     selected(i) => { root.driver-selected(i); }
+                }
+
+                if root.form.show-connection-string: SectionLabel { text: "Connection string"; }
+                if root.form.show-connection-string: HorizontalLayout {
+                    spacing: 8px;
+                    TextField {
+                        horizontal-stretch: 1;
+                        text: root.form.connection-string;
+                        placeholder: root.form.connection-string-placeholder;
+                        has-icon: true;
+                        icon: Icons.link;
+                        edited(t) => { root.connection-string-changed(t); }
+                        accepted(t) => { root.apply-connection-string(); }
+                    }
+                    Button {
+                        text: "Fill fields";
+                        enabled: root.form.connection-string != "";
+                        clicked => { root.apply-connection-string(); }
+                    }
+                }
+                if root.form.show-connection-string && root.form.connection-string-error != "": Text {
+                    text: root.form.connection-string-error;
+                    color: Theme.destructive;
+                    font-size: Theme.size-small;
+                    wrap: word-wrap;
                 }
 
                 if root.form.show-file-path || root.form.show-url: SectionLabel {
@@ -207,6 +268,68 @@ export component ConnectionEditorDialog inherits Rectangle {
                             selected(i) => { root.environment-selected(i); }
                         }
                     }
+                }
+
+                if root.form.show-ssh: Rectangle { height: 10px; }
+                if root.form.show-ssh: Toggle {
+                    text: "Connect through an SSH tunnel";
+                    checked: root.form.ssh-enabled;
+                    toggled => { root.toggle-ssh(); }
+                }
+                if root.form.show-ssh && root.form.ssh-enabled: HorizontalLayout {
+                    spacing: 8px;
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 4px;
+                        SectionLabel { text: "SSH host"; }
+                        TextField {
+                            text: root.form.ssh-host;
+                            placeholder: "bastion.example.com";
+                            edited(t) => { root.ssh-host-changed(t); }
+                        }
+                    }
+                    VerticalLayout {
+                        width: 90px;
+                        spacing: 4px;
+                        SectionLabel { text: "Port"; }
+                        TextField {
+                            text: root.form.ssh-port;
+                            edited(t) => { root.ssh-port-changed(t); }
+                        }
+                    }
+                }
+                if root.form.show-ssh && root.form.ssh-enabled: SectionLabel { text: "SSH username"; }
+                if root.form.show-ssh && root.form.ssh-enabled: TextField {
+                    text: root.form.ssh-username;
+                    edited(t) => { root.ssh-username-changed(t); }
+                }
+                if root.form.show-ssh && root.form.ssh-enabled: SectionLabel { text: "SSH authentication"; }
+                if root.form.show-ssh && root.form.ssh-enabled: Dropdown {
+                    value: root.form.ssh-auth-label;
+                    options: root.form.ssh-auth-options;
+                    selected(i) => { root.ssh-auth-selected(i); }
+                }
+                if root.form.show-ssh && root.form.ssh-enabled && root.form.ssh-show-key: SectionLabel { text: "Private key path"; }
+                if root.form.show-ssh && root.form.ssh-enabled && root.form.ssh-show-key: TextField {
+                    text: root.form.ssh-key-path;
+                    placeholder: "~/.ssh/id_ed25519";
+                    edited(t) => { root.ssh-key-path-changed(t); }
+                }
+                if root.form.show-ssh && root.form.ssh-enabled && !root.form.ssh-show-key: SectionLabel { text: "SSH password"; }
+                if root.form.show-ssh && root.form.ssh-enabled && !root.form.ssh-show-key: TextField {
+                    text: root.form.ssh-password;
+                    password: !root.form.show-ssh-password-text;
+                    has-trailing-icon: true;
+                    trailing-icon: root.form.show-ssh-password-text ? Icons.eye-off : Icons.eye;
+                    trailing-clicked => { root.toggle-ssh-password-visibility(); }
+                    edited(t) => { root.ssh-password-changed(t); }
+                }
+
+                SectionLabel { text: "Colour tag"; }
+                SwatchPicker {
+                    options: root.form.color-options;
+                    selected: root.form.color-index;
+                    picked(i) => { root.color-picked(i); }
                 }
 
                 SectionLabel { text: "Notes"; }

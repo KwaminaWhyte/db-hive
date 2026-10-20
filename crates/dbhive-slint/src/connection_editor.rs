@@ -6,11 +6,12 @@
 //! compile here. Everything a picker needs (its options, and which index the
 //! current value is) is computed on this side.
 
-use dbhive_core::models::connection::Environment;
+use dbhive_core::models::connection::{Environment, SshAuthMethod};
 use dbhive_core::models::{DbDriver, SslMode};
 use dbhive_ui_model::connection_editor::{
-    database_label, driver_fields, environment_label, password_label, ssl_mode_label,
-    ConnectionForm, ALL_DRIVERS,
+    color_preset_index, connection_string_placeholder, database_label, driver_fields,
+    environment_label, parse_hex_color, password_label, ssl_mode_label, ConnectionForm,
+    ALL_DRIVERS, COLOR_PRESETS,
 };
 
 use crate::connection_list::driver_label;
@@ -27,6 +28,45 @@ pub const ENVIRONMENTS: [Option<Environment>; 4] = [
     Some(Environment::Staging),
     Some(Environment::Production),
 ];
+
+/// SSH auth methods in picker order.
+pub const SSH_AUTH_METHODS: [SshAuthMethod; 2] = [SshAuthMethod::Password, SshAuthMethod::PrivateKey];
+
+pub fn ssh_auth_label(method: &SshAuthMethod) -> &'static str {
+    match method {
+        SshAuthMethod::Password => "Password",
+        SshAuthMethod::PrivateKey => "Private key",
+    }
+}
+
+pub fn ssh_auth_options() -> Vec<slint::SharedString> {
+    SSH_AUTH_METHODS.iter().map(|m| ssh_auth_label(m).into()).collect()
+}
+
+pub fn ssh_auth_at(index: i32) -> SshAuthMethod {
+    SSH_AUTH_METHODS
+        .get(index as usize)
+        .cloned()
+        .unwrap_or(SshAuthMethod::Password)
+}
+
+/// The colour-tag swatches, in `COLOR_PRESETS` order.
+pub fn color_options() -> Vec<slint::Color> {
+    COLOR_PRESETS
+        .iter()
+        .filter_map(|hex| parse_hex_color(hex))
+        .map(|(r, g, b)| slint::Color::from_rgb_u8(r, g, b))
+        .collect()
+}
+
+/// The hex a swatch index means; empty for "no tag" (`-1`), which is also what
+/// clicking the selected swatch again sends.
+pub fn color_at(index: i32) -> String {
+    COLOR_PRESETS
+        .get(index as usize)
+        .map(|s| (*s).to_string())
+        .unwrap_or_default()
+}
 
 /// Every driver's display name, in `ALL_DRIVERS` order.
 pub fn driver_options() -> Vec<slint::SharedString> {
@@ -93,6 +133,26 @@ pub fn form_data(form: &ConnectionForm) -> ConnectionFormData {
         environment_options: slint::ModelRc::new(slint::VecModel::from(environment_options())),
         description: form.description.as_str().into(),
         favorite: form.is_favorite,
+        show_connection_string: fields.host_port,
+        // The pasted text and its error belong to the controller, like the
+        // password; `Editor` fills them in after this call.
+        connection_string: "".into(),
+        connection_string_error: "".into(),
+        show_ssh_password_text: false,
+        connection_string_placeholder: connection_string_placeholder(&form.driver).into(),
+        show_ssh: fields.ssh,
+        ssh_enabled: form.ssh_enabled,
+        ssh_host: form.ssh_host.as_str().into(),
+        ssh_port: form.ssh_port.as_str().into(),
+        ssh_username: form.ssh_username.as_str().into(),
+        ssh_auth_label: ssh_auth_label(&form.ssh_auth_method).into(),
+        ssh_auth_options: slint::ModelRc::new(slint::VecModel::from(ssh_auth_options())),
+        ssh_show_key: form.ssh_auth_method == SshAuthMethod::PrivateKey,
+        ssh_key_path: form.ssh_private_key_path.as_str().into(),
+        // Like `password`, held by the controller, not the profile.
+        ssh_password: "".into(),
+        color_options: slint::ModelRc::new(slint::VecModel::from(color_options())),
+        color_index: color_preset_index(&form.color).map_or(-1, |i| i as i32),
     }
 }
 
@@ -123,6 +183,44 @@ mod tests {
     fn environment_at_round_trips_including_none() {
         for (i, e) in ENVIRONMENTS.iter().enumerate() {
             assert_eq!(&environment_at(i as i32), e);
+        }
+    }
+
+    #[test]
+    fn ssh_auth_at_round_trips() {
+        for (i, m) in SSH_AUTH_METHODS.iter().enumerate() {
+            assert_eq!(&ssh_auth_at(i as i32), m);
+        }
+    }
+
+    #[test]
+    fn color_swatches_line_up_with_presets_and_minus_one_means_none() {
+        assert_eq!(color_options().len(), COLOR_PRESETS.len());
+        for (i, hex) in COLOR_PRESETS.iter().enumerate() {
+            assert_eq!(color_at(i as i32), *hex);
+        }
+        assert_eq!(color_at(-1), "");
+    }
+
+    #[test]
+    fn form_data_reports_the_selected_swatch_and_ssh_state() {
+        let mut form = ConnectionForm::new_for(DbDriver::Postgres);
+        assert_eq!(form_data(&form).color_index, -1);
+        form.color = COLOR_PRESETS[3].to_string();
+        form.ssh_enabled = true;
+        form.ssh_auth_method = SshAuthMethod::PrivateKey;
+        let data = form_data(&form);
+        assert_eq!(data.color_index, 3);
+        assert!(data.show_ssh && data.ssh_enabled && data.ssh_show_key);
+        assert!(data.show_connection_string);
+    }
+
+    #[test]
+    fn sqlite_and_turso_offer_neither_ssh_nor_a_connection_string() {
+        for driver in [DbDriver::Sqlite, DbDriver::Turso] {
+            let data = form_data(&ConnectionForm::new_for(driver));
+            assert!(!data.show_ssh);
+            assert!(!data.show_connection_string);
         }
     }
 

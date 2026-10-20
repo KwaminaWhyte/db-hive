@@ -115,16 +115,27 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
-        "connection-editor" | "connection-editor-sqlite" => {
+        "connection-editor" | "connection-editor-sqlite" | "connection-editor-ssh" => {
             let c = AppWindow::new().expect("AppWindow");
             let driver = if name == "connection-editor-sqlite" {
                 dbhive_ui_model::connection_editor::ALL_DRIVERS[2].clone() // Sqlite
             } else {
                 dbhive_ui_model::connection_editor::ALL_DRIVERS[0].clone() // Postgres
             };
-            let form = dbhive_ui_model::connection_editor::ConnectionForm::new_for(driver);
+            let mut form = dbhive_ui_model::connection_editor::ConnectionForm::new_for(driver);
+            let mut data = connection_editor::form_data(&form);
+            if name == "connection-editor-ssh" {
+                form.ssh_enabled = true;
+                form.ssh_host = "bastion.example.com".into();
+                form.ssh_username = "deploy".into();
+                form.color = dbhive_ui_model::connection_editor::COLOR_PRESETS[3].into();
+                data = connection_editor::form_data(&form);
+                data.connection_string = "mysql://u:p@h:3306/d".into();
+                data.connection_string_error =
+                    "Not a connection string for this driver. Expected e.g. postgresql://user:password@host:5432/database".into();
+            }
             c.set_editor_is_new(true);
-            c.set_editor(connection_editor::form_data(&form));
+            c.set_editor(data);
             c.set_show_connection_editor(true);
             c.show().unwrap();
             Box::new(c)

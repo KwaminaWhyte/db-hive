@@ -155,6 +155,17 @@ export component AppWindow inherits Window {
     callback editor-environment-selected(int);
     callback editor-description-changed(string);
     callback editor-toggle-favorite;
+    callback editor-connection-string-changed(string);
+    callback editor-apply-connection-string;
+    callback editor-toggle-ssh;
+    callback editor-ssh-host-changed(string);
+    callback editor-ssh-port-changed(string);
+    callback editor-ssh-username-changed(string);
+    callback editor-ssh-auth-selected(int);
+    callback editor-ssh-key-path-changed(string);
+    callback editor-ssh-password-changed(string);
+    callback editor-toggle-ssh-password-visibility;
+    callback editor-color-picked(int);
     callback editor-test-connection;
     callback editor-save;
     callback editor-cancel;
@@ -395,6 +406,7 @@ export component AppWindow inherits Window {
             HorizontalLayout {
                 alignment: center;
                 ConnectionEditorDialog {
+                    available-height: root.height - 48px;
                     is-new: root.editor-is-new;
                     form: root.editor;
                     errors: root.editor-errors;
@@ -414,6 +426,17 @@ export component AppWindow inherits Window {
                     environment-selected(i) => { root.editor-environment-selected(i); }
                     description-changed(t) => { root.editor-description-changed(t); }
                     toggle-favorite => { root.editor-toggle-favorite(); }
+                    connection-string-changed(t) => { root.editor-connection-string-changed(t); }
+                    apply-connection-string => { root.editor-apply-connection-string(); }
+                    toggle-ssh => { root.editor-toggle-ssh(); }
+                    ssh-host-changed(t) => { root.editor-ssh-host-changed(t); }
+                    ssh-port-changed(t) => { root.editor-ssh-port-changed(t); }
+                    ssh-username-changed(t) => { root.editor-ssh-username-changed(t); }
+                    ssh-auth-selected(i) => { root.editor-ssh-auth-selected(i); }
+                    ssh-key-path-changed(t) => { root.editor-ssh-key-path-changed(t); }
+                    ssh-password-changed(t) => { root.editor-ssh-password-changed(t); }
+                    toggle-ssh-password-visibility => { root.editor-toggle-ssh-password-visibility(); }
+                    color-picked(i) => { root.editor-color-picked(i); }
                     test-connection => { root.editor-test-connection(); }
                     save => { root.editor-save(); }
                     cancel => {

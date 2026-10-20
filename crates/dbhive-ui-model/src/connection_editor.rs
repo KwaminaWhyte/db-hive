@@ -623,6 +623,40 @@ pub fn apply_connection_string(
     parsed.password.clone()
 }
 
+/// Result of pasting a connection string into the editor.
+pub struct PastedConnection {
+    /// The password the string carried, for the separately held password field.
+    pub password: Option<String>,
+}
+
+/// Fill the form from a pasted connection string.
+///
+/// `Err` carries the message to show: the string is not a URI, or its scheme
+/// belongs to another driver (e.g. `mysql://` pasted into a Postgres form).
+pub fn paste_connection_string(
+    form: &mut ConnectionForm,
+    raw: &str,
+) -> Result<PastedConnection, String> {
+    let Some(parsed) = parse_connection_string(&form.driver, raw) else {
+        let hint = connection_string_placeholder(&form.driver);
+        return Err(format!("Not a connection string for this driver. Expected e.g. {hint}"));
+    };
+    let password = apply_connection_string(form, &parsed);
+    Ok(PastedConnection { password })
+}
+
+/// Colour tags offered in the editor. A tag is user data stored on the profile
+/// as hex, so these are not theme tokens.
+pub const COLOR_PRESETS: [&str; 6] = [
+    "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#a855f7", "#ec4899",
+];
+
+/// Which preset a profile's colour is, or `None` for no tag or a custom hex.
+pub fn color_preset_index(color: &str) -> Option<usize> {
+    let c = color.trim();
+    COLOR_PRESETS.iter().position(|p| p.eq_ignore_ascii_case(c))
+}
+
 /// Parse a `#rrggbb` / `#rgb` colour tag into `(r, g, b)`. Profile colour
 /// tags are user data, not theme colours, so they are read from the profile
 /// rather than the palette.
@@ -1325,5 +1359,45 @@ mod tests {
         assert_eq!(parse_hex_color(""), None);
         assert_eq!(parse_hex_color("#zzzzzz"), None);
         assert_eq!(parse_hex_color("#12345"), None);
+    }
+
+    #[test]
+    fn every_colour_preset_parses_and_round_trips_its_index() {
+        for (i, p) in COLOR_PRESETS.iter().enumerate() {
+            assert!(parse_hex_color(p).is_some(), "{p}");
+            assert_eq!(color_preset_index(p), Some(i));
+        }
+        assert_eq!(color_preset_index(&COLOR_PRESETS[2].to_uppercase()), Some(2));
+        assert_eq!(color_preset_index(""), None);
+        assert_eq!(color_preset_index("#123456"), None);
+    }
+
+    // --- pasting a connection string ---
+
+    #[test]
+    fn pasting_fills_the_form_and_returns_the_password() {
+        let mut form = ConnectionForm::new_for(DbDriver::Postgres);
+        let pasted =
+            paste_connection_string(&mut form, "postgresql://app:s3cret@db.example.com:6543/shop")
+                .unwrap();
+        assert_eq!(form.host, "db.example.com");
+        assert_eq!(form.port, "6543");
+        assert_eq!(form.username, "app");
+        assert_eq!(form.database, "shop");
+        assert_eq!(pasted.password.as_deref(), Some("s3cret"));
+    }
+
+    #[test]
+    fn pasting_another_drivers_string_is_an_error_and_leaves_the_form_alone() {
+        let mut form = ConnectionForm::new_for(DbDriver::Postgres);
+        let before = form.clone();
+        let err = match paste_connection_string(&mut form, "mysql://u:p@h:3306/d") {
+            Err(e) => e,
+            Ok(_) => panic!("a mysql:// string should not fill a Postgres form"),
+        };
+        assert!(err.contains("postgresql://"), "{err}");
+        assert_eq!(form, before);
+        assert!(paste_connection_string(&mut form, "not a uri").is_err());
+        assert!(paste_connection_string(&mut form, "   ").is_err());
     }
 }
