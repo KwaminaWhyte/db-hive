@@ -12,5 +12,6 @@ pub mod connection_list;
 pub mod diagram_model;
 pub mod grid_model;
 pub mod runtime;
+pub mod settings_view;
 pub mod sql_highlight;
 pub mod workspace_model;

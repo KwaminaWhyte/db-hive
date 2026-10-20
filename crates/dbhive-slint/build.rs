@@ -27,14 +27,38 @@ fn generate_theme() -> String {
          export global Theme {\n\
          \x20   in-out property <bool> dark: true;\n\n",
     );
+    // The user's accent colour (Settings > Appearance) replaces the three
+    // primary tokens when set. Everything in the kit reads `Theme.primary`,
+    // so one override restyles the whole app. The editor preferences ride
+    // along so the SQL editor can read them without a prop chain through
+    // every screen.
+    s.push_str(
+        "    // Runtime preferences, set from Rust (Settings).\n\
+         \x20   in-out property <bool> accent-custom: false;\n\
+         \x20   in-out property <color> accent-custom-color: transparent;\n\
+         \x20   in-out property <color> accent-custom-foreground: transparent;\n\
+         \x20   in-out property <length> editor-font-size: 13px;\n\
+         \x20   in-out property <bool> editor-line-numbers: true;\n\n\
+         \x20   // Drop shadow under dialogs.\n\
+         \x20   out property <color> shadow: #00000070;\n\
+         \x20   // Dims what sits behind a dialog stacked on another dialog.\n\
+         \x20   out property <color> scrim: #00000080;\n\n",
+    );
     for ((name, d), (_, l)) in dark.iter().zip(light.iter()) {
-        let _ = writeln!(
-            s,
-            "    out property <color> {}: root.dark ? {} : {};",
-            kebab(name),
-            d.hex(),
-            l.hex()
-        );
+        let per_mode = format!("root.dark ? {} : {}", d.hex(), l.hex());
+        let expr = match *name {
+            "primary" => format!("root.accent-custom ? root.accent-custom-color : ({})", per_mode),
+            "primary_foreground" => format!(
+                "root.accent-custom ? root.accent-custom-foreground : ({})",
+                per_mode
+            ),
+            "primary_soft" => format!(
+                "root.accent-custom ? root.accent-custom-color.transparentize(0.85) : ({})",
+                per_mode
+            ),
+            _ => per_mode,
+        };
+        let _ = writeln!(s, "    out property <color> {}: {};", kebab(name), expr);
     }
     s.push('\n');
     for (name, v) in [

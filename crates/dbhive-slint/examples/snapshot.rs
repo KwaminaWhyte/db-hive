@@ -226,6 +226,98 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
+        // settings[-appearance|-query|-shortcuts][-light] plus a state:
+        // -dirty, -accent, -errors, -recording, -duplicate, -unbound,
+        // -loading, -error, -confirm.
+        _ if name.starts_with("settings") => {
+            use dbhive_core::models::settings::AppSettings;
+            use dbhive_ui_model::settings::{KeyModifiers, Section, ShortcutField};
+            use dbhive_ui_model::settings_editor::SettingsEditor;
+            use dbhive_slint::settings_view::{self, Banner, Load, View};
+
+            let c = AppWindow::new().expect("AppWindow");
+            c.set_app_version("0.21.0".into());
+            let has = |t: &str| name.split('-').any(|p| p == t);
+            let mut ed = SettingsEditor::new(AppSettings::default());
+            let mut view = View::default();
+            if has("appearance") {
+                ed.set_section(Section::Appearance);
+            } else if has("query") {
+                ed.set_section(Section::Query);
+            } else if has("shortcuts") {
+                ed.set_section(Section::Shortcuts);
+            }
+            if has("dirty") {
+                ed.edit(|s| {
+                    s.general.auto_save_connections = false;
+                    s.query.confirm_destructive = false;
+                });
+            }
+            if has("accent") {
+                ed.pick_accent_preset(1);
+            }
+            if has("errors") {
+                ed.set_number_text(dbhive_ui_model::settings_editor::NumberField::EditorFontSize, "40");
+                ed.set_number_text(dbhive_ui_model::settings_editor::NumberField::QueryTimeout, "soon");
+                ed.set_number_text(dbhive_ui_model::settings_editor::NumberField::MaxRows, "5");
+                ed.set_accent_text("#12");
+                ed.set_auto_check(true);
+                ed.set_number_text(dbhive_ui_model::settings_editor::NumberField::UpdateInterval, "0");
+            }
+            if has("recording") {
+                ed.start_recording_index(1);
+            }
+            if has("duplicate") {
+                let ctrl = KeyModifiers { ctrl: true, command: true, ..Default::default() };
+                ed.start_recording(ShortcutField::NewTab);
+                if let dbhive_ui_model::settings_editor::RecordOutcome::Bound { warning: Some(message), .. } =
+                    ed.record(ctrl, "W", false)
+                {
+                    view.banner = Some(Banner { message, tone: Tone::Warning });
+                }
+            }
+            if has("unbound") {
+                for f in dbhive_ui_model::settings_editor::shortcut_fields() {
+                    ed.clear_shortcut(f);
+                }
+            }
+            if has("loading") {
+                view.load = Load::Loading;
+            }
+            if has("error") {
+                view.load = Load::Failed(
+                    "settings.json is not valid JSON: expected value at line 1 column 1. Refusing to overwrite it.".into(),
+                );
+            }
+            if has("saving") {
+                view.saving = true;
+            }
+
+            // The same live effects the controller applies.
+            let a = ed.appearance(Some(!has("light")));
+            let theme = c.global::<Theme>();
+            theme.set_dark(a.mode == dbhive_ui_model::settings::ResolvedMode::Dark);
+            theme.set_accent_custom(a.accent.is_some());
+            if let Some((r, g, b)) = a.accent {
+                theme.set_accent_custom_color(slint::Color::from_rgb_u8(r, g, b));
+                let (fr, fg, fb) = a.accent_foreground;
+                theme.set_accent_custom_foreground(slint::Color::from_rgb_u8(fr, fg, fb));
+            }
+            theme.set_editor_font_size(a.editor_font_size as f32);
+
+            c.set_settings(settings_view::data(&ed, &view));
+            c.set_show_settings(true);
+            if has("confirm") {
+                c.set_confirm_title("Reset all settings to defaults?".into());
+                c.set_confirm_message(
+                    "This restores every setting, not only shortcuts, to its default value. It cannot be undone.".into(),
+                );
+                c.set_confirm_label("Reset".into());
+                c.set_show_confirm(true);
+            }
+            c.show().unwrap();
+            Box::new(c)
+        }
         "kit-dark" | "kit-light" => {
             let c = KitGallery::new().expect("KitGallery");
             c.global::<Theme>().set_dark(name == "kit-dark");
