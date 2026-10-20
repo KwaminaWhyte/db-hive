@@ -17,6 +17,7 @@ pub mod er_diagram;
 pub mod format;
 pub mod graph_layout;
 pub mod history;
+pub mod history_panel;
 pub mod import_export;
 pub mod migrations;
 pub mod plugins;
