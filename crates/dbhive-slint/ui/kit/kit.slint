@@ -402,6 +402,58 @@ export component BrandMark inherits VerticalLayout {
     }
 }
 
+// One key as printed on a keycap: "Ctrl", "Shift", "N", "Esc". Used for
+// shortcut hints in the palette and the shortcuts help.
+export component KeyCap inherits Rectangle {
+    in property <string> text;
+
+    height: 22px;
+    min-width: 22px;
+    horizontal-stretch: 0;
+    background: Theme.secondary;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 6px;
+        Text {
+            text: root.text;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// A chord as a row of keycaps, packed to the right edge of its space.
+export component KeyCaps inherits HorizontalLayout {
+    in property <[string]> keys;
+    spacing: 4px;
+    alignment: end;
+    for k in root.keys: VerticalLayout {
+        alignment: center;
+        KeyCap { text: k; }
+    }
+}
+
+// The surface of a floating panel (command palette, shortcuts help): popover
+// fill, strong border and a soft shadow. The shadow colour is derived from the
+// theme background so it is dark in both themes without a literal.
+export component Popover inherits Rectangle {
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: 32px;
+    drop-shadow-offset-y: 12px;
+    drop-shadow-color: Theme.background.darker(8).transparentize(0.3);
+    @children
+}
+
 export component Badge inherits Rectangle {
     in property <string> text;
     in property <Tone> tone: Tone.neutral;

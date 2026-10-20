@@ -20,6 +20,7 @@ pub mod history;
 pub mod history_panel;
 pub mod import_export;
 pub mod migrations;
+pub mod palette_session;
 pub mod plugins;
 pub mod procedures;
 pub mod query_builder;

@@ -7,8 +7,11 @@ import { AboutDialog } from "dialogs/about.slint";
 import { ConfirmDialog } from "dialogs/confirm.slint";
 import { ConnectionEditorDialog, ConnectionFormData } from "dialogs/connection_editor.slint";
 import { HistoryState, HistoryOverlay } from "screens/history_panel.slint";
+import { PaletteDialog, PaletteItem } from "dialogs/command_palette.slint";
+import { ShortcutsDialog, ShortcutItem } from "dialogs/shortcuts.slint";
 
 export { Theme, Icons, Tone, ConnectionItem, ConnectionFormData, TableItem, GridColumn, GridRow, TabInfo }
+export { PaletteItem, ShortcutItem }
 
 // Table inspector (a table tab's Data and Structure views).
 import { ClipboardSink } from "kit/kit.slint";
@@ -145,12 +148,42 @@ export component AppWindow inherits Window {
     in property <[ToastItem]> toasts;
     callback dismiss-toast(int);
     callback new-connection;
-    callback new-window;
     callback open-settings;
     callback open-palette;
     callback toggle-theme;
     callback about;
     in property <string> app-version;
+
+    // Commands. Every menu item, the palette and the key handler name a
+    // command by its text id (dbhive-ui-model palette_session) and Rust runs it.
+    callback run-command(string);
+    // A key press nothing else handled: text, ctrl, alt, shift, meta. Returns
+    // whether it was a shortcut and was run.
+    callback key-chord(string, bool, bool, bool, bool) -> bool;
+
+    // Command palette.
+    in property <bool> show-palette: false;
+    in-out property <string> palette-query;
+    in property <[PaletteItem]> palette-rows;
+    in-out property <length> palette-scroll;
+    in property <length> palette-list-height;
+    // Row heights come from Rust so the scroll maths and the drawing agree.
+    in property <length> palette-row-height;
+    in property <length> palette-header-height;
+    callback palette-edited(string);
+    callback palette-move(int);
+    callback palette-run;
+    callback palette-chosen(string);
+    callback palette-hovered(int);
+    callback palette-close;
+
+    // Keyboard shortcuts help.
+    in property <bool> show-shortcuts: false;
+    in-out property <string> shortcuts-query;
+    in property <[ShortcutItem]> shortcuts-rows;
+    in property <string> shortcuts-platform;
+    callback shortcuts-edited(string);
+    callback shortcuts-close;
 
     // About dialog.
     in-out property <bool> show-about: false;
@@ -207,11 +240,9 @@ export component AppWindow inherits Window {
                 shortcut: @keys(Control + N);
                 activated => { root.new-connection(); }
             }
-            MenuItem {
-                title: "New Window";
-                shortcut: @keys(Control + Shift + N);
-                activated => { root.new-window(); }
-            }
+            // No "New Window" item: the controller owns one window's state
+            // and a second window would share it. The command stays in the
+            // palette, greyed, with that reason.
             MenuSeparator { }
             MenuItem {
                 title: "Settings…";
@@ -223,7 +254,7 @@ export component AppWindow inherits Window {
             title: "View";
             MenuItem {
                 title: "Connections";
-                activated => { root.screen = Screen.connections; }
+                activated => { root.run-command("go-connections"); }
             }
             MenuItem {
                 title: "Command Palette";
@@ -244,16 +275,42 @@ export component AppWindow inherits Window {
         Menu {
             title: "Help";
             MenuItem {
+                title: "Keyboard Shortcuts";
+                activated => { root.run-command("show-shortcuts"); }
+            }
+            MenuSeparator { }
+            MenuItem {
                 title: "About DB Hive";
-                activated => {
-                    root.about();
-                    root.show-about = true;
-                }
+                activated => { root.run-command("go-about"); }
             }
         }
     }
 
     VerticalLayout {
+        spacing: 0;
+
+    // Global shortcuts. A key press goes to the focused element first (a text
+    // field takes its own characters, so "?" typed into one never reaches
+    // here) and bubbles up to this scope when nothing used it. Rust decides
+    // whether it is a shortcut. The body below is deliberately not
+    // re-indented so the diff stays small.
+    // A Rectangle between the layout and the scope: a scope sized from the
+    // layout inside it makes the window's size depend on itself.
+    Rectangle {
+    vertical-stretch: 1;
+    fs := FocusScope {
+    width: parent.width;
+    height: parent.height;
+    key-pressed(event) => {
+        if (root.key-chord(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.shift, event.modifiers.meta)) {
+            return accept;
+        }
+        return reject;
+    }
+
+    VerticalLayout {
+        width: parent.width;
+        height: parent.height;
         spacing: 0;
 
         // Top bar.
@@ -392,6 +449,21 @@ export component AppWindow inherits Window {
             open-history => { HistoryState.open-requested(); }
         }
     }
+    }
+    }
+    }
+
+    // Keep the shortcut scope focused: at start, and whenever a dialog that
+    // held focus goes away (its focused element is destroyed with it).
+    property <bool> any-palette-overlay: root.show-palette || root.show-shortcuts;
+    property <bool> any-overlay: root.show-about || root.show-confirm || root.show-connection-editor
+        || root.any-palette-overlay;
+    init => { fs.focus(); }
+    changed any-overlay => {
+        if (!root.any-overlay) {
+            fs.focus();
+        }
+    }
 
     // Never drawn; `copy-to-clipboard` fills it and copies.
     clipboard-sink := ClipboardSink { }
@@ -413,7 +485,7 @@ export component AppWindow inherits Window {
     // raised from the panel (clear history, delete a snippet) shows above it.
     if HistoryState.visible: HistoryOverlay { }
 
-    if root.show-about || root.show-confirm || root.show-connection-editor: Rectangle {
+    if root.show-about || root.show-confirm || root.show-connection-editor || root.any-palette-overlay: Rectangle {
         width: 100%;
         height: 100%;
         background: #000000a0;
@@ -425,6 +497,12 @@ export component AppWindow inherits Window {
             clicked => {
                 root.show-about = false;
                 root.show-confirm = false;
+                if (root.show-palette) {
+                    root.palette-close();
+                }
+                if (root.show-shortcuts) {
+                    root.shortcuts-close();
+                }
             }
         }
 
@@ -501,6 +579,44 @@ export component AppWindow inherits Window {
                         root.show-connection-editor = false;
                         root.editor-cancel();
                     }
+                }
+            }
+        }
+
+        // Command palette, near the top like a launcher.
+        if root.show-palette: VerticalLayout {
+            padding-top: max(48px, root.height * 0.12);
+            alignment: start;
+            HorizontalLayout {
+                alignment: center;
+                PaletteDialog {
+                    query <=> root.palette-query;
+                    rows: root.palette-rows;
+                    scroll <=> root.palette-scroll;
+                    list-height: root.palette-list-height;
+                    row-height: root.palette-row-height;
+                    header-height: root.palette-header-height;
+                    edited(t) => { root.palette-edited(t); }
+                    move(delta) => { root.palette-move(delta); }
+                    run => { root.palette-run(); }
+                    chosen(id) => { root.palette-chosen(id); }
+                    hovered(i) => { root.palette-hovered(i); }
+                    close => { root.palette-close(); }
+                }
+            }
+        }
+
+        if root.show-shortcuts: VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                ShortcutsDialog {
+                    query <=> root.shortcuts-query;
+                    rows: root.shortcuts-rows;
+                    platform: root.shortcuts-platform;
+                    available-height: root.height - 64px;
+                    edited(t) => { root.shortcuts-edited(t); }
+                    close => { root.shortcuts-close(); }
                 }
             }
         }
