@@ -48,16 +48,22 @@ working. Partial = counts half. Nothing here was verified by clicking through th
 | Connections (21) | 15 | 4 | 2 |
 | Titlebar / shell (10) | 1 | 5 | 4 |
 | Cross-cutting (14) | 2 | 7 | 5 |
-| SQL editor (12) | 0 | 1 | 11 |
+| SQL editor (12) | 4 | 3 | 5 |
 | Results grid (16) | 0 | 4 | 12 |
 | Schema browser (10) | 0 | 4 | 6 |
 | Settings (6) | 0 | 1 | 5 |
 | Multi-window, ER diagram, schema designer, table dialogs, query builder, migrations, backup, import/export, activity, plugins, AI, palette, shortcuts, history, snippets, templates (78) | 0 | 0 | 78 |
-| **Total (167)** | **18** | **26** | **123** |
+| **Total (167)** | **22** | **28** | **117** |
 
-- **Feature coverage: about 19%** ((18 + 26/2) / 167).
-- **Ready for real work: about 5%, a judgement.** You can add a connection, connect, and read the
-  first 200 rows of a table. You cannot run a query, which is the app's main job.
+Re-measured after the SQL editor and query tabs landed (was 18 / 26 / 123).
+
+- **Feature coverage: about 22%** ((22 + 28/2) / 167).
+- **Ready for real work: about 25%, a judgement.** You can add a connection, connect, open table
+  previews and query tabs, write SQL with highlighting, run it (Cmd/Ctrl+Enter), get a guard on
+  destructive statements, and have each run recorded in history and the activity log. The
+  controller path is covered by `tests/workspace_controller.rs`. You still cannot: edit data in the
+  grid, autocomplete, export, browse history or snippets, open settings, or save tabs across
+  restarts.
 - **Dead controls (defects):** the gear button, the search/command box, and the File > Settings,
   File > New Window and View > Command Palette items have no Rust handler. They look live and do
   nothing.

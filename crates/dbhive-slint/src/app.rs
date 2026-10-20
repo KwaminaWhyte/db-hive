@@ -20,14 +20,19 @@ use dbhive_ui_model::connection_editor::{
     build_profile, build_profile_with, form_from_profile, paste_connection_string, save_profile,
     test_profile, validate, ConnectionForm,
 };
-use dbhive_ui_model::results_grid::{visible_rows, GridState};
+use dbhive_ui_model::results_grid::visible_rows;
+use dbhive_ui_model::sql_guard;
+use dbhive_ui_model::workspace_tabs::{result_summary, TabKind, Tabs};
 
 use crate::connection_editor as editor_view;
 use crate::connection_list::{self, EnvTone};
 use crate::grid_model::{layout_columns, LazyRows};
 use crate::runtime;
 use crate::workspace_model;
-use crate::{AppWindow, ConnectionItem, GridRow, Screen, TableItem, Theme, ToastItem, Tone};
+use crate::sql_highlight;
+use crate::{
+    AppWindow, ConnectionItem, GridRow, Screen, TabInfo, TableItem, Theme, ToastItem, Tone,
+};
 
 /// How many rows a table preview pulls. Not user-configurable yet; the
 /// egui table editor's own default (`workspace.rs:516`) is 100, this is a
@@ -43,18 +48,23 @@ struct Workspace {
     database: Option<String>,
     schema: Option<String>,
     tables: Vec<TableInfo>,
-    selected_table: Option<String>,
     loading_tables: bool,
-    loading_rows: bool,
     tables_error: String,
-    rows_error: String,
-    /// The last query's full result. Filtering and sorting read this and
-    /// project a subset every refresh, rather than mutating it in place, so
-    /// "reset the filter" never needs to remember the original order.
-    result: Option<dbhive_core::drivers::QueryResult>,
-    grid: GridState,
     tables_latest: runtime::Latest,
-    rows_latest: runtime::Latest,
+    /// Query and table-preview tabs. Each tab keeps its own full result;
+    /// filtering and sorting read it and project a subset every refresh
+    /// rather than mutating it, so "reset the filter" never needs to
+    /// remember the original order.
+    tabs: Tabs,
+}
+
+/// What a confirmation dialog, once accepted, should do. Deleting a
+/// connection has its own slot (`Session::pending_delete`).
+enum PendingAction {
+    /// Close a query tab that still has SQL in it.
+    CloseTab(u64),
+    /// Run a statement the destructive-query guard flagged.
+    RunAnyway(u64),
 }
 
 /// The new/edit connection dialog's state.
@@ -112,6 +122,7 @@ struct Session {
     editor: Editor,
     /// The connection a delete confirmation is pending for: `(id, name)`.
     pending_delete: Option<(String, String)>,
+    pending_action: Option<PendingAction>,
     workspace: Workspace,
 }
 
@@ -563,29 +574,93 @@ impl Ctx {
             })
             .collect();
         w.set_workspace_tables(ModelRc::new(VecModel::from(items)));
-        w.set_workspace_selected_table(ws.selected_table.as_deref().unwrap_or("").into());
+        w.set_workspace_selected_table(ws.tabs.selected_table().unwrap_or("").into());
         w.set_workspace_loading_tables(ws.loading_tables);
-        w.set_workspace_loading_rows(ws.loading_rows);
         w.set_workspace_tables_error(ws.tables_error.as_str().into());
-        w.set_workspace_rows_error(ws.rows_error.as_str().into());
 
-        // The grid only has something to show once a query has actually
-        // landed.
-        let Some(result) = &ws.result else {
+        let infos: Vec<TabInfo> = ws
+            .tabs
+            .tabs()
+            .iter()
+            .map(|t| TabInfo {
+                title: t.title.as_str().into(),
+                query: t.is_query(),
+                busy: t.running,
+            })
+            .collect();
+        w.set_workspace_tabs(ModelRc::new(VecModel::from(infos)));
+        w.set_workspace_active_tab(ws.tabs.active_index().map_or(-1, |i| i as i32));
+
+        let empty_grid = || {
             w.set_workspace_columns(ModelRc::new(VecModel::from(Vec::<crate::GridColumn>::new())));
             w.set_workspace_rows(ModelRc::new(VecModel::from(Vec::<GridRow>::new())));
             w.set_workspace_grid_width(0.0);
             w.set_workspace_row_count(0);
             w.set_workspace_visible_row_count(0);
+            w.set_workspace_has_result(false);
+            w.set_workspace_result_summary("".into());
+            w.set_workspace_result_message("".into());
+        };
+
+        let Some(tab) = ws.tabs.active() else {
+            w.set_workspace_active_is_query(false);
+            if !w.get_workspace_editor_text().is_empty() {
+                w.set_workspace_editor_text("".into());
+            }
+            w.set_workspace_editor_lines(ModelRc::new(VecModel::from(Vec::<crate::HighlightLine>::new())));
+            w.set_workspace_running(false);
+            w.set_workspace_rows_error("".into());
+            w.set_workspace_result_title("".into());
+            empty_grid();
             return;
         };
+
+        w.set_workspace_active_is_query(tab.is_query());
+        // Only write the text when it differs: the editor's own typing already
+        // updated the property, and rewriting it would move the caret.
+        if w.get_workspace_editor_text() != tab.sql.as_str() {
+            w.set_workspace_editor_text(tab.sql.as_str().into());
+        }
+        let dark = w.global::<Theme>().get_dark();
+        w.set_workspace_editor_lines(sql_highlight::to_model_for(&tab.sql, dark));
+        w.set_workspace_running(tab.running);
+        w.set_workspace_rows_error(tab.error.as_deref().unwrap_or("").into());
+        w.set_workspace_result_title(
+            match &tab.kind {
+                TabKind::Query => "Results",
+                TabKind::Table(name) => name.as_str(),
+            }
+            .into(),
+        );
+
+        // The grid only has something to show once a query has actually
+        // landed.
+        let Some(result) = &tab.result else {
+            empty_grid();
+            return;
+        };
+
+        let summary = result_summary(result, tab.elapsed_ms);
+        w.set_workspace_has_result(true);
+        w.set_workspace_result_summary(summary.as_str().into());
+        // A statement that returned no columns changed data (or ran DDL):
+        // say so, instead of showing an empty grid.
+        let message = if result.columns.is_empty() {
+            match result.rows_affected {
+                Some(_) => summary.clone(),
+                None => "Statement executed successfully.".to_string(),
+            }
+        } else {
+            String::new()
+        };
+        w.set_workspace_result_message(message.as_str().into());
 
         let widths = vec![workspace_model::DEFAULT_COLUMN_WIDTH; result.columns.len()];
         let (columns, total_width) = layout_columns(&result.columns, &widths);
         w.set_workspace_columns(columns);
         w.set_workspace_grid_width(total_width);
 
-        let order = visible_rows(result, &ws.grid);
+        let order = visible_rows(result, &tab.grid);
         let visible = dbhive_core::drivers::QueryResult {
             columns: result.columns.clone(),
             rows: order.iter().map(|&i| result.rows[i].clone()).collect(),
@@ -608,6 +683,8 @@ impl Ctx {
                 loading_tables: true,
                 ..Workspace::default()
             };
+            // Land on an empty query, ready to type into.
+            s.workspace.tabs.open_query("");
         }
         if let Some(w) = self.window.upgrade() {
             w.set_screen(Screen::Workspace);
@@ -678,77 +755,254 @@ impl Ctx {
         );
     }
 
+    /// Open (or focus) the preview tab for a table, running its query the
+    /// first time.
     fn select_table(self: &Rc<Self>, name: &str) {
-        {
-            let mut s = self.session.borrow_mut();
-            let ws = &mut s.workspace;
-            ws.selected_table = Some(name.to_string());
-            ws.grid = GridState::default();
-            ws.result = None;
-            ws.rows_error.clear();
-        }
+        let connection_id = self.session.borrow().workspace.connection_id.clone();
+        let Some(d) = self.open_driver(&connection_id) else {
+            self.toast("This connection is no longer open.", Tone::Danger);
+            return;
+        };
+        let sql = format!(
+            "SELECT * FROM {} LIMIT {}",
+            d.quote_identifier(name),
+            PREVIEW_ROW_LIMIT
+        );
+        let (id, created) = self.session.borrow_mut().workspace.tabs.open_table(name, sql);
         self.refresh_workspace();
-        self.load_rows();
+        if created {
+            // A preview is a SELECT the app wrote, so it skips the guard.
+            self.run_tab(id, false);
+        }
     }
 
-    fn load_rows(self: &Rc<Self>) {
-        let (connection_id, table) = {
+    fn new_query_tab(&self) {
+        self.session.borrow_mut().workspace.tabs.open_query("");
+        self.refresh_workspace();
+    }
+
+    fn select_tab(&self, index: usize) {
+        {
+            let mut s = self.session.borrow_mut();
+            let tabs = &mut s.workspace.tabs;
+            if let Some(id) = tabs.id_at(index) {
+                tabs.select(id);
+            }
+        }
+        self.refresh_workspace();
+    }
+
+    /// Close a tab, asking first when it is a query with SQL in it.
+    fn close_tab(&self, index: usize) {
+        let (id, ask, title) = {
             let s = self.session.borrow();
-            (s.workspace.connection_id.clone(), s.workspace.selected_table.clone())
+            let tabs = &s.workspace.tabs;
+            let Some(id) = tabs.id_at(index) else { return };
+            (
+                id,
+                tabs.needs_close_confirmation(id),
+                tabs.get(id).map(|t| t.title.clone()).unwrap_or_default(),
+            )
         };
-        let Some(table) = table else { return };
+        if !ask {
+            self.session.borrow_mut().workspace.tabs.close(id);
+            self.refresh_workspace();
+            return;
+        }
+        self.session.borrow_mut().pending_action = Some(PendingAction::CloseTab(id));
+        self.show_confirm(
+            "Close this tab?",
+            &format!("\"{title}\" has SQL in it that is not saved anywhere."),
+            "Close tab",
+        );
+    }
+
+    fn edit_active_sql(&self, text: String) {
+        if let Some(tab) = self.session.borrow_mut().workspace.tabs.active_mut() {
+            tab.sql = text;
+        }
+        self.refresh_workspace();
+    }
+
+    fn run_active_tab(self: &Rc<Self>) {
+        let id = self.session.borrow().workspace.tabs.active().map(|t| t.id);
+        if let Some(id) = id {
+            self.run_tab(id, true);
+        }
+    }
+
+    /// Run a tab's SQL. With `guard`, a statement that can destroy data asks
+    /// for confirmation first.
+    fn run_tab(self: &Rc<Self>, id: u64, guard: bool) {
+        let (connection_id, connection_name, database, sql) = {
+            let s = self.session.borrow();
+            let ws = &s.workspace;
+            let Some(tab) = ws.tabs.get(id) else { return };
+            (
+                ws.connection_id.clone(),
+                ws.connection_name.clone(),
+                ws.database.clone().unwrap_or_default(),
+                tab.sql.clone(),
+            )
+        };
+        if sql.trim().is_empty() {
+            return;
+        }
+
+        if guard {
+            let warnings = sql_guard::warnings(&sql);
+            if !warnings.is_empty() {
+                let mut lines: Vec<String> =
+                    warnings.iter().take(3).map(|w| format!("• {}", w.description)).collect();
+                if warnings.len() > 3 {
+                    lines.push(format!("• and {} more", warnings.len() - 3));
+                }
+                self.session.borrow_mut().pending_action = Some(PendingAction::RunAnyway(id));
+                self.show_confirm("Run this statement?", &lines.join("\n"), "Run anyway");
+                return;
+            }
+        }
+
         let Some(d) = self.open_driver(&connection_id) else {
-            self.session.borrow_mut().workspace.rows_error =
-                "This connection is no longer open.".to_string();
+            if let Some(tab) = self.session.borrow_mut().workspace.tabs.get_mut(id) {
+                tab.error = Some("This connection is no longer open.".to_string());
+            }
             self.refresh_workspace();
             return;
         };
+        let Some(seq) = self.session.borrow_mut().workspace.tabs.begin_run(id) else {
+            return;
+        };
 
-        let ticket = self.session.borrow_mut().workspace.rows_latest.begin();
-        {
-            let mut s = self.session.borrow_mut();
-            s.workspace.loading_rows = true;
-            s.workspace.rows_error.clear();
-        }
+        // The activity log is separate from query history: the activity
+        // monitor reads it.
+        let log = dbhive_core::models::QueryLog::new(
+            uuid::Uuid::new_v4().to_string(),
+            connection_id.clone(),
+            connection_name.clone(),
+            (!database.is_empty()).then(|| database.clone()),
+            sql.clone(),
+        );
+        let log_id = log.id.clone();
+        dbhive_core::service_monitoring::record_query_start(&self.state, log);
         self.refresh_workspace();
 
-        let sql = format!(
-            "SELECT * FROM {} LIMIT {}",
-            d.quote_identifier(&table),
-            PREVIEW_ROW_LIMIT
-        );
+        let run_sql = sql.clone();
         runtime::spawn(
-            async move { d.execute_query(&sql).await },
-            move |result| with_ctx(|ctx| {
-                if !ticket.is_current() {
-                    return;
+            async move {
+                let started = std::time::Instant::now();
+                let out = d.execute_query(&run_sql).await;
+                (out, started.elapsed().as_millis() as u64)
+            },
+            move |(out, elapsed)| with_ctx(|ctx| {
+                let outcome = out.map_err(|e| e.to_string());
+                ctx.record_run(&connection_id, &connection_name, &database, &sql, &log_id, &outcome, elapsed);
+                {
+                    let mut s = ctx.session.borrow_mut();
+                    s.workspace.tabs.finish_run(id, seq, outcome, elapsed);
                 }
-                let mut s = ctx.session.borrow_mut();
-                let ws = &mut s.workspace;
-                ws.loading_rows = false;
-                match result {
-                    Ok(r) => ws.result = Some(r),
-                    Err(e) => ws.rows_error = format!("Could not load rows: {}", e),
-                }
-                drop(s);
                 ctx.refresh_workspace();
             }),
         );
     }
 
+    /// Write a finished run to the activity log and to query history. Done
+    /// even if the tab was closed meanwhile: the query did run.
+    #[allow(clippy::too_many_arguments)]
+    fn record_run(
+        &self,
+        connection_id: &str,
+        connection_name: &str,
+        database: &str,
+        sql: &str,
+        log_id: &str,
+        outcome: &Result<dbhive_core::drivers::QueryResult, String>,
+        elapsed_ms: u64,
+    ) {
+        let entry = dbhive_core::models::QueryHistory::new(
+            connection_id.to_string(),
+            connection_name.to_string(),
+            database.to_string(),
+            sql.to_string(),
+            chrono::Utc::now().to_rfc3339(),
+        );
+        let entry = match outcome {
+            Ok(r) => {
+                dbhive_core::service_monitoring::record_query_complete(
+                    &self.state,
+                    log_id,
+                    elapsed_ms,
+                    Some(r.rows.len() as u64),
+                );
+                entry.with_success(elapsed_ms, Some(r.rows.len() as u64))
+            }
+            Err(e) => {
+                dbhive_core::service_monitoring::record_query_error(
+                    &self.state,
+                    log_id,
+                    elapsed_ms,
+                    e.clone(),
+                );
+                entry.with_error(e.clone(), Some(elapsed_ms))
+            }
+        };
+        let snapshot = {
+            let mut guard = self.state.lock().unwrap();
+            guard.add_history(entry);
+            guard.get_all_history()
+        };
+        // Persisting history never delays showing the result, and a failed
+        // write is not worth interrupting the user for.
+        runtime::spawn(
+            async move { AppState::save_history_to_store(&snapshot) },
+            |saved| {
+                if let Err(e) = saved {
+                    eprintln!("Warning: failed to persist query history: {}", e);
+                }
+            },
+        );
+    }
+
+    fn show_confirm(&self, title: &str, message: &str, label: &str) {
+        let Some(w) = self.window.upgrade() else { return };
+        w.set_confirm_title(title.into());
+        w.set_confirm_message(message.into());
+        w.set_confirm_label(label.into());
+        w.set_show_confirm(true);
+    }
+
+    /// The confirmation dialog was accepted: do whichever action it was for.
+    fn confirm_accepted(self: &Rc<Self>) {
+        let action = self.session.borrow_mut().pending_action.take();
+        match action {
+            Some(PendingAction::CloseTab(id)) => {
+                self.session.borrow_mut().workspace.tabs.close(id);
+                self.refresh_workspace();
+            }
+            Some(PendingAction::RunAnyway(id)) => self.run_tab(id, false),
+            None => self.delete_pending_connection(),
+        }
+    }
+
+    fn confirm_cancelled(&self) {
+        self.session.borrow_mut().pending_action = None;
+        self.cancel_pending_delete();
+    }
+
     fn set_workspace_filter(&self, filter: String) {
-        self.session.borrow_mut().workspace.grid.filter = filter;
+        if let Some(tab) = self.session.borrow_mut().workspace.tabs.active_mut() {
+            tab.grid.filter = filter;
+        }
         self.refresh_workspace();
     }
 
     fn sort_workspace_by(&self, column: usize) {
-        let mut s = self.session.borrow_mut();
-        let ws = &mut s.workspace;
-        ws.grid.sort = match ws.grid.sort {
-            Some((c, desc)) if c == column => Some((c, !desc)),
-            _ => Some((column, false)),
-        };
-        drop(s);
+        if let Some(tab) = self.session.borrow_mut().workspace.tabs.active_mut() {
+            tab.grid.sort = match tab.grid.sort {
+                Some((c, desc)) if c == column => Some((c, !desc)),
+                _ => Some((column, false)),
+            };
+        }
         self.refresh_workspace();
     }
 
@@ -791,6 +1045,16 @@ fn now_secs() -> i64 {
 }
 
 pub fn run() -> Result<(), slint::PlatformError> {
+    let window = build()?;
+    let result = window.run();
+    CTX.with(|c| c.borrow_mut().take());
+    result
+}
+
+/// Build the window with every handler wired, without running it. `run`
+/// blocks on it; tests drive the returned window directly, with the same
+/// controller behind it.
+pub fn build() -> Result<AppWindow, slint::PlatformError> {
     let window = AppWindow::new()?;
     let state = Arc::new(Mutex::new(AppState::new()));
 
@@ -840,11 +1104,15 @@ pub fn run() -> Result<(), slint::PlatformError> {
     }
     {
         let weak = window.as_weak();
+        let ctx = ctx.clone();
         window.on_toggle_theme(move || {
             if let Some(w) = weak.upgrade() {
                 let theme = w.global::<Theme>();
                 theme.set_dark(!theme.get_dark());
             }
+            // The editor's syntax colours are chosen per theme in Rust, so
+            // they have to be recomputed.
+            ctx.refresh_workspace();
         });
     }
 
@@ -867,11 +1135,11 @@ pub fn run() -> Result<(), slint::PlatformError> {
     }
     {
         let ctx = ctx.clone();
-        window.on_confirm_accepted(move || ctx.delete_pending_connection());
+        window.on_confirm_accepted(move || ctx.confirm_accepted());
     }
     {
         let ctx = ctx.clone();
-        window.on_confirm_cancelled(move || ctx.cancel_pending_delete());
+        window.on_confirm_cancelled(move || ctx.confirm_cancelled());
     }
     {
         let ctx = ctx.clone();
@@ -1021,10 +1289,32 @@ pub fn run() -> Result<(), slint::PlatformError> {
         let ctx = ctx.clone();
         window.on_workspace_header_clicked(move |i| ctx.sort_workspace_by(i as usize));
     }
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_tab_selected(move |i| ctx.select_tab(i as usize));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_tab_closed(move |i| ctx.close_tab(i as usize));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_new_query(move || ctx.new_query_tab());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_editor_edited(move |t| ctx.edit_active_sql(t.to_string()));
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_run_query(move || ctx.run_active_tab());
+    }
+    {
+        let ctx = ctx.clone();
+        window.on_workspace_retry(move || ctx.run_active_tab());
+    }
 
     ctx.refresh_connections();
     CTX.with(|c| *c.borrow_mut() = Some(ctx));
-    let result = window.run();
-    CTX.with(|c| c.borrow_mut().take());
-    result
+    Ok(window)
 }

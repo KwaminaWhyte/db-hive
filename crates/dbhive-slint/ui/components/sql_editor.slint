@@ -25,6 +25,8 @@
 // (CJK, most emoji) will misalign the colour layer; the text itself, which
 // the input draws, stays correct.
 
+import { Theme } from "../kit/kit.slint";
+
 export struct HighlightRun {
     text: string,
     color: color,
@@ -42,9 +44,9 @@ export component SqlEditor inherits Rectangle {
     // Paints the input's own glyphs semi-transparently over the colour layer.
     // Only for verifying alignment; any offset shows as a red fringe.
     in property <bool> debug-alignment: false;
-    in property <color> caret-color: #f8b02a;
-    in property <color> selection-color: #f8b02a44;
-    in property <color> gutter-color: #686c76;
+    in property <color> caret-color: Theme.primary;
+    in property <color> selection-color: Theme.primary.transparentize(0.73);
+    in property <color> gutter-color: Theme.dim-foreground;
     in property <string> mono-family: "Menlo";
     in property <length> mono-size: 13px;
 
@@ -65,10 +67,13 @@ export component SqlEditor inherits Rectangle {
         font-size: root.mono-size;
     }
 
-    background: #13141a;
-    border-radius: 10px;
+    // The hidden 100-character measuring text above would otherwise give this
+    // component an implicit minimum width of ~800px and push its layout wide.
+    min-width: 0px;
+    background: Theme.card;
+    border-radius: Theme.radius-card;
     border-width: 1px;
-    border-color: #262831;
+    border-color: Theme.border;
     clip: true;
 
     flick := Flickable {
@@ -116,7 +121,7 @@ export component SqlEditor inherits Rectangle {
             wrap: no-wrap;
             font-family: root.mono-family;
             font-size: root.mono-size;
-            color: root.debug-alignment ? #ff000099 : transparent;
+            color: root.debug-alignment ? Theme.destructive.transparentize(0.4) : transparent;
             selection-background-color: root.selection-color;
             selection-foreground-color: transparent;
             edited => {

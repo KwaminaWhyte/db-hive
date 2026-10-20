@@ -39,10 +39,12 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
-        "workspace" | "workspace-light" | "workspace-long" | "workspace-empty" | "workspace-loading"
-        | "workspace-error" => {
+        // workspace, workspace-light, -long, -empty, -loading, -error, plus the
+        // query-tab states: -query, -query-light, -query-error, -query-running,
+        // -query-dml, -query-blank, -query-confirm.
+        _ if name.starts_with("workspace") => {
             let c = AppWindow::new().expect("AppWindow");
-            if name == "workspace-light" {
+            if name == "workspace-light" || name.ends_with("-light") {
                 c.global::<Theme>().set_dark(false);
             }
             c.set_screen(Screen::Workspace);
@@ -71,7 +73,62 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
 
             if name == "workspace-loading" {
                 c.set_workspace_loading_tables(true);
+            } else if name.starts_with("workspace-query") {
+                let dark = c.global::<Theme>().get_dark();
+                let tab = |title: &str, query: bool| TabInfo { title: title.into(), query, busy: name == "workspace-query-running" && query };
+                c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![
+                    tab("Query 1", true),
+                    tab("customers", false),
+                ])));
+                c.set_workspace_active_tab(0);
+                c.set_workspace_active_is_query(true);
+                if name != "workspace-query-blank" {
+                    c.set_workspace_editor_text(SAMPLE_SQL.into());
+                    c.set_workspace_editor_lines(dbhive_slint::sql_highlight::to_model_for(SAMPLE_SQL, dark));
+                }
+                c.set_workspace_result_title("Results".into());
+                match name {
+                    "workspace-query-running" => c.set_workspace_running(true),
+                    "workspace-query-error" => c.set_workspace_rows_error(
+                        "syntax error at or near \"FORM\" (position 31). Did you mean FROM?".into(),
+                    ),
+                    "workspace-query-dml" => {
+                        c.set_workspace_has_result(true);
+                        c.set_workspace_result_summary("3 rows affected · 4ms".into());
+                        c.set_workspace_result_message("3 rows affected · 4ms".into());
+                    }
+                    "workspace-query-blank" => {}
+                    _ => {
+                        let cols = vec!["id".to_string(), "name".to_string(), "revenue".to_string()];
+                        let widths = vec![80.0f32, 240.0, 160.0];
+                        let (columns, width) = dbhive_slint::grid_model::layout_columns(&cols, &widths);
+                        c.set_workspace_columns(columns);
+                        c.set_workspace_grid_width(width);
+                        let rows: Vec<Vec<Option<String>>> = (1..=6)
+                            .map(|i| vec![Some(i.to_string()), Some(format!("Customer {i}")), Some(format!("{}.50", 4200 - i * 310))])
+                            .collect();
+                        c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(rows))));
+                        c.set_workspace_row_count(6);
+                        c.set_workspace_visible_row_count(6);
+                        c.set_workspace_has_result(true);
+                        c.set_workspace_result_summary("6 rows · 12ms".into());
+                    }
+                }
+                if name == "workspace-query-confirm" {
+                    c.set_confirm_title("Run this statement?".into());
+                    c.set_confirm_message("• DELETE without WHERE removes every row of orders".into());
+                    c.set_confirm_label("Run anyway".into());
+                    c.set_show_confirm(true);
+                }
             } else if name == "workspace" || name == "workspace-light" || name == "workspace-long" {
+                c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![
+                    TabInfo { title: "customers".into(), query: false, busy: false },
+                    TabInfo { title: "Query 1".into(), query: true, busy: false },
+                ])));
+                c.set_workspace_active_tab(0);
+                c.set_workspace_result_title("customers".into());
+                c.set_workspace_has_result(true);
+                c.set_workspace_result_summary("8 rows · 12ms".into());
                 c.set_workspace_selected_table("customers".into());
                 let cols = vec!["id".to_string(), "name".to_string(), "email".to_string(), "plan".to_string()];
                 let widths = vec![80.0f32, 220.0, 260.0, 140.0];

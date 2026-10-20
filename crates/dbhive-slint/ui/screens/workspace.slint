@@ -1,6 +1,7 @@
 import { ScrollView } from "std-widgets.slint";
-import { Theme, Icons, ButtonVariant, Button, TextField, Divider, ListRow, Banner, EmptyState } from "../kit/kit.slint";
+import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Divider, ListRow, Banner, EmptyState, TabBar, TabInfo } from "../kit/kit.slint";
 import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
+import { SqlEditor, HighlightLine } from "../components/sql_editor.slint";
 
 export struct TableItem {
     name: string,
@@ -8,19 +9,36 @@ export struct TableItem {
     row-count: string,
 }
 
-// The connected workspace: a table list down the side, that table's rows on
-// the right. One connection, one schema, at a time; switching either is a
-// callback out to the controller, which re-populates these properties.
+// The connected workspace: a table list down the side, and on the right a row
+// of tabs. A tab is either a query (editor above its results) or a preview of
+// one table. Rust owns every tab's state; this file draws the active one and
+// reports intents.
 export component WorkspaceScreen inherits VerticalLayout {
     in property <string> connection-name;
     // e.g. "app · public", blank on a driver with no separate database.
     in property <string> location-label;
     in property <[TableItem]> tables;
+    // The table whose preview tab is active, for highlighting it in the list.
     in property <string> selected-table;
     in property <bool> loading-tables;
-    in property <bool> loading-rows;
     in property <string> tables-error;
+
+    in property <[TabInfo]> tabs;
+    in property <int> active-tab: -1;
+    in property <bool> active-is-query;
+    in-out property <string> editor-text;
+    in property <[HighlightLine]> editor-lines;
+    // The active tab has a query in flight.
+    in property <bool> running;
     in property <string> rows-error;
+    // "Results" for a query tab, the table's name for a table tab.
+    in property <string> result-title;
+    // "8 rows · 12ms".
+    in property <string> result-summary;
+    // Set instead of a grid when a statement changed data rather than
+    // returning rows ("3 rows affected").
+    in property <string> result-message;
+    in property <bool> has-result;
     in-out property <string> filter;
 
     in property <[GridColumn]> columns;
@@ -34,6 +52,12 @@ export component WorkspaceScreen inherits VerticalLayout {
     callback select-table(string);
     callback filter-changed(string);
     callback header-clicked(int);
+    callback tab-selected(int);
+    callback tab-closed(int);
+    callback new-query;
+    callback editor-edited(string);
+    callback run-query;
+    callback retry;
 
     spacing: 0;
 
@@ -176,63 +200,158 @@ export component WorkspaceScreen inherits VerticalLayout {
 
         VerticalLayout {
             horizontal-stretch: 1;
-            padding: 14px;
-            spacing: 10px;
+            spacing: 0;
 
-            HorizontalLayout {
-                spacing: 10px;
-                Text {
-                    text: root.selected-table == "" ? "No table selected" : root.selected-table;
-                    color: Theme.foreground;
-                    font-size: Theme.size-subheading;
-                    font-weight: 700;
-                    vertical-alignment: center;
-                    horizontal-stretch: 1;
-                }
-                if root.selected-table != "" && root.row-count >= 0: Text {
-                    text: root.visible-row-count == root.row-count
-                        ? root.row-count + " rows"
-                        : root.visible-row-count + " of " + root.row-count + " rows";
-                    color: Theme.muted-foreground;
-                    font-size: Theme.size-small;
-                    vertical-alignment: center;
-                }
-                if root.selected-table != "": TextField {
-                    width: 220px;
+            TabBar {
+                tabs: root.tabs;
+                active: root.active-tab;
+                selected(i) => { root.tab-selected(i); }
+                closed(i) => { root.tab-closed(i); }
+                add => { root.new-query(); }
+            }
+
+            if root.tabs.length == 0: EmptyState {
+                vertical-stretch: 1;
+                icon: Icons.code;
+                title: "Nothing open";
+                message: "Pick a table to preview it, or start a new query.";
+                Button {
+                    text: "New query";
+                    variant: ButtonVariant.primary;
                     has-icon: true;
-                    icon: Icons.search;
-                    placeholder: "Filter rows";
-                    text <=> root.filter;
-                    edited(t) => { root.filter-changed(t); }
+                    icon: Icons.plus;
+                    clicked => { root.new-query(); }
                 }
             }
 
-            if root.rows-error != "": Banner {
-                message: root.rows-error;
-                dismissible: false;
-            }
-
-            if root.selected-table == "": EmptyState {
+            if root.tabs.length > 0: VerticalLayout {
                 vertical-stretch: 1;
-                icon: Icons.table;
-                title: "Pick a table";
-                message: "Choose a table from the list to view its rows.";
-            }
+                padding: 14px;
+                spacing: 10px;
 
-            if root.selected-table != "" && root.loading-rows: Text {
-                vertical-stretch: 1;
-                text: "Loading rows…";
-                color: Theme.muted-foreground;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-            }
+                if root.active-is-query: Rectangle {
+                    height: 220px;
+                    min-width: 0px;
+                    FocusScope {
+                        // Cmd+Enter on macOS, Ctrl+Enter elsewhere. Slint maps
+                        // the two differently per platform, so accept both.
+                        capture-key-pressed(event) => {
+                            if ((event.modifiers.control || event.modifiers.meta) && event.text == Key.Return) {
+                                root.run-query();
+                                return accept;
+                            }
+                            return reject;
+                        }
+                        SqlEditor {
+                            text <=> root.editor-text;
+                            lines: root.editor-lines;
+                            edited(t) => { root.editor-edited(t); }
+                        }
+                    }
+                }
 
-            if root.selected-table != "" && !root.loading-rows && root.rows-error == "": ResultsGrid {
-                vertical-stretch: 1;
-                columns: root.columns;
-                rows: root.rows;
-                total-width: root.grid-width;
-                header-clicked(i) => { root.header-clicked(i); }
+                if root.active-is-query: HorizontalLayout {
+                    spacing: 10px;
+                    Button {
+                        text: root.running ? "Running…" : "Run";
+                        variant: ButtonVariant.primary;
+                        has-icon: true;
+                        icon: Icons.play;
+                        enabled: !root.running && root.editor-text != "";
+                        clicked => { root.run-query(); }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: "⌘/Ctrl + Enter";
+                            color: Theme.dim-foreground;
+                            font-size: Theme.size-small;
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                }
+
+                HorizontalLayout {
+                    spacing: 10px;
+                    Text {
+                        text: root.result-title;
+                        color: Theme.foreground;
+                        font-size: Theme.size-subheading;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                    if root.has-result && root.result-summary != "" && root.result-message == "": Text {
+                        text: root.visible-row-count == root.row-count
+                            ? root.result-summary
+                            : root.visible-row-count + " of " + root.result-summary;
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        vertical-alignment: center;
+                    }
+                    if root.has-result && root.result-message == "": TextField {
+                        width: 220px;
+                        has-icon: true;
+                        icon: Icons.search;
+                        placeholder: "Filter rows";
+                        text <=> root.filter;
+                        edited(t) => { root.filter-changed(t); }
+                    }
+                }
+
+                if root.rows-error != "": VerticalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Banner {
+                        message: root.rows-error;
+                        dismissible: false;
+                    }
+                    if !root.active-is-query: HorizontalLayout {
+                        alignment: start;
+                        Button {
+                            text: "Retry";
+                            has-icon: true;
+                            icon: Icons.refresh-cw;
+                            clicked => { root.retry(); }
+                        }
+                    }
+                }
+
+                if root.running: Text {
+                    vertical-stretch: 1;
+                    text: "Running…";
+                    color: Theme.muted-foreground;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                if !root.running && root.rows-error == "" && !root.has-result && root.active-is-query: EmptyState {
+                    vertical-stretch: 1;
+                    icon: Icons.play;
+                    title: "Run a query";
+                    message: "Write SQL above and press Run to see results here.";
+                }
+
+                if !root.running && root.result-message != "": Banner {
+                    message: root.result-message;
+                    tone: Tone.success;
+                    dismissible: false;
+                }
+
+                if !root.running && root.rows-error == "" && root.has-result && root.result-message == "": ResultsGrid {
+                    vertical-stretch: 1;
+                    columns: root.columns;
+                    rows: root.rows;
+                    total-width: root.grid-width;
+                    header-clicked(i) => { root.header-clicked(i); }
+                }
+
+                // A tab with a Banner or message but no grid would otherwise
+                // let the layout spread its slack as gaps; this takes it.
+                if !root.running && (root.result-message != "" || root.rows-error != ""): Rectangle {
+                    vertical-stretch: 1;
+                }
             }
         }
     }

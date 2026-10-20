@@ -2064,6 +2064,7 @@ dependencies = [
 name = "dbhive-slint"
 version = "0.21.0"
 dependencies = [
+ "chrono",
  "dbhive-core",
  "dbhive-ui-model",
  "i-slint-backend-testing",
@@ -2072,6 +2073,7 @@ dependencies = [
  "slint",
  "slint-build",
  "tokio",
+ "uuid",
 ]
 
 [[package]]

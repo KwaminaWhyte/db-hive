@@ -231,18 +231,37 @@ mod tests {
 
 /// Colour for each token kind, dark palette.
 pub fn colour(kind: Kind) -> slint::Color {
-    match kind {
-        Kind::Keyword => slint::Color::from_rgb_u8(248, 176, 42),
-        Kind::String => slint::Color::from_rgb_u8(126, 211, 142),
-        Kind::Number => slint::Color::from_rgb_u8(240, 144, 110),
-        Kind::Comment => slint::Color::from_rgb_u8(104, 108, 118),
-        Kind::Operator => slint::Color::from_rgb_u8(150, 153, 162),
-        Kind::Identifier | Kind::Whitespace => slint::Color::from_rgb_u8(240, 241, 244),
-    }
+    colour_for(kind, true)
 }
 
-/// Build the editor's colour layer for `sql`.
+/// Colour for each token kind on a dark or light editor background. The
+/// light palette is the dark one darkened until text stays readable on a
+/// white card.
+pub fn colour_for(kind: Kind, dark: bool) -> slint::Color {
+    let (r, g, b) = match (kind, dark) {
+        (Kind::Keyword, true) => (248, 176, 42),
+        (Kind::String, true) => (126, 211, 142),
+        (Kind::Number, true) => (240, 144, 110),
+        (Kind::Comment, true) => (104, 108, 118),
+        (Kind::Operator, true) => (150, 153, 162),
+        (Kind::Identifier | Kind::Whitespace, true) => (240, 241, 244),
+        (Kind::Keyword, false) => (160, 82, 0),
+        (Kind::String, false) => (22, 112, 54),
+        (Kind::Number, false) => (176, 62, 16),
+        (Kind::Comment, false) => (104, 110, 122),
+        (Kind::Operator, false) => (84, 88, 98),
+        (Kind::Identifier | Kind::Whitespace, false) => (24, 26, 32),
+    };
+    slint::Color::from_rgb_u8(r, g, b)
+}
+
+/// Build the editor's colour layer for `sql`, dark palette.
 pub fn to_model(sql: &str) -> slint::ModelRc<crate::HighlightLine> {
+    to_model_for(sql, true)
+}
+
+/// Build the editor's colour layer for `sql` for the given theme.
+pub fn to_model_for(sql: &str, dark: bool) -> slint::ModelRc<crate::HighlightLine> {
     use slint::{ModelRc, VecModel};
     let lines: Vec<crate::HighlightLine> = highlight(sql)
         .into_iter()
@@ -253,7 +272,7 @@ pub fn to_model(sql: &str) -> slint::ModelRc<crate::HighlightLine> {
                 .map(|r| {
                     let run = crate::HighlightRun {
                         col,
-                        color: colour(r.kind).into(),
+                        color: colour_for(r.kind, dark).into(),
                         text: r.text.as_str().into(),
                     };
                     // Columns count characters, not bytes: the layer is
@@ -268,4 +287,45 @@ pub fn to_model(sql: &str) -> slint::ModelRc<crate::HighlightLine> {
         })
         .collect();
     ModelRc::new(VecModel::from(lines))
+}
+
+#[cfg(test)]
+mod contrast_tests {
+    use super::*;
+    use dbhive_ui_model::tokens::{DARK, LIGHT};
+
+    fn lum(r: u8, g: u8, b: u8) -> f64 {
+        let f = |c: u8| {
+            let c = c as f64 / 255.0;
+            if c <= 0.03928 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+        };
+        0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+    }
+
+    fn ratio(fg: slint::Color, bg: (u8, u8, u8)) -> f64 {
+        let a = lum(fg.red(), fg.green(), fg.blue());
+        let b = lum(bg.0, bg.1, bg.2);
+        let (hi, lo) = if a > b { (a, b) } else { (b, a) };
+        (hi + 0.05) / (lo + 0.05)
+    }
+
+    #[test]
+    fn every_token_kind_is_readable_on_the_card_in_both_themes() {
+        let kinds = [
+            Kind::Keyword,
+            Kind::String,
+            Kind::Number,
+            Kind::Comment,
+            Kind::Operator,
+            Kind::Identifier,
+        ];
+        for (dark, card) in [(true, DARK.card), (false, LIGHT.card)] {
+            for kind in kinds {
+                // Comments are meant to recede, so they only need to be legible.
+                let floor = if kind == Kind::Comment { 3.0 } else { 4.5 };
+                let r = ratio(colour_for(kind, dark), (card.0, card.1, card.2));
+                assert!(r >= floor, "{kind:?} dark={dark}: {r:.2} < {floor}");
+            }
+        }
+    }
 }

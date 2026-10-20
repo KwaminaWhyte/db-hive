@@ -26,6 +26,8 @@ pub mod results_grid;
 pub mod schema_designer;
 pub mod settings;
 pub mod sql_completion;
+pub mod sql_guard;
 pub mod table_editor;
 pub mod table_inspector;
 pub mod tokens;
+pub mod workspace_tabs;

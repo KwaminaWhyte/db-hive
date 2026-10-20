@@ -177,6 +177,133 @@ export component ListRow inherits Rectangle {
     }
 }
 
+export struct TabInfo {
+    title: string,
+    // A query tab shows the code icon, a table tab the table icon.
+    query: bool,
+    // The tab has a query in flight.
+    busy: bool,
+}
+
+component TabChip inherits Rectangle {
+    in property <TabInfo> info;
+    in property <bool> active;
+    callback selected;
+    callback closed;
+
+    width: 168px;
+    background: root.active ? Theme.background : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: 90ms; }
+
+    accessible-role: tab;
+    accessible-label: root.info.title;
+    accessible-action-default => { root.selected(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.selected(); }
+    }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 6px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.info.query ? Icons.code : Icons.table;
+                tint: root.active ? Theme.primary : Theme.muted-foreground;
+                width: 14px;
+                height: 14px;
+            }
+        }
+        Text {
+            text: root.info.title;
+            color: root.active ? Theme.foreground : Theme.muted-foreground;
+            font-size: Theme.size-label;
+            font-weight: root.active ? 600 : 400;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        if root.info.busy: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 6px;
+                height: 6px;
+                border-radius: 3px;
+                background: Theme.primary;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            close := TouchArea {
+                width: 20px;
+                height: 20px;
+                mouse-cursor: pointer;
+                clicked => { root.closed(); }
+                accessible-role: button;
+                accessible-label: "Close " + root.info.title;
+                Rectangle {
+                    background: close.has-hover ? Theme.pressed : transparent;
+                    border-radius: Theme.radius-control;
+                    Icon {
+                        source: Icons.x;
+                        tint: Theme.dim-foreground;
+                        width: 12px;
+                        height: 12px;
+                    }
+                }
+            }
+        }
+    }
+    // The active tab is marked with the accent along its top edge.
+    Rectangle {
+        y: 0;
+        height: 2px;
+        background: root.active ? Theme.primary : transparent;
+    }
+}
+
+// The row of open tabs, with a "+" at the end for a new one.
+export component TabBar inherits Rectangle {
+    in property <[TabInfo]> tabs;
+    in property <int> active: -1;
+    callback selected(int);
+    callback closed(int);
+    callback add;
+
+    height: 38px;
+    background: Theme.sidebar;
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 0;
+        for t[i] in root.tabs: TabChip {
+            info: t;
+            active: i == root.active;
+            selected => { root.selected(i); }
+            closed => { root.closed(i); }
+        }
+        VerticalLayout {
+            alignment: center;
+            padding-left: 6px;
+            Button {
+                has-icon: true;
+                icon: Icons.plus;
+                variant: ButtonVariant.ghost;
+                accessible-label: "New query";
+                clicked => { root.add(); }
+            }
+        }
+    }
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.border;
+    }
+}
+
 // A row of colour swatches, one of which can be selected. The colours are
 // user data (a profile's colour tag), not theme tokens, so the caller supplies
 // them. `picked` sends the swatch index; picking the selected one again sends
