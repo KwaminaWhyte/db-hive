@@ -19,6 +19,7 @@ pub mod graph_layout;
 pub mod history;
 pub mod import_export;
 pub mod migrations;
+pub mod palette_session;
 pub mod plugins;
 pub mod procedures;
 pub mod query_builder;
