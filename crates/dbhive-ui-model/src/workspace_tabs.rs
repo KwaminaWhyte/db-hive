@@ -11,6 +11,7 @@ use dbhive_core::drivers::QueryResult;
 
 use crate::format::thousands;
 use crate::results_grid::GridState;
+use crate::table_view::TableView;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TabKind {
@@ -31,6 +32,8 @@ pub struct Tab {
     pub elapsed_ms: Option<u64>,
     /// Incremented by every `begin_run`; see the module docs.
     pub run_seq: u64,
+    /// Paging, filters, sort and structure for a table tab; `None` on a query tab.
+    pub inspector: Option<TableView>,
 }
 
 impl Tab {
@@ -71,6 +74,7 @@ impl Tabs {
             running: false,
             elapsed_ms: None,
             run_seq: 0,
+            inspector: None,
         });
         self.active = Some(id);
         id
@@ -95,7 +99,11 @@ impl Tabs {
             self.active = Some(id);
             return (id, false);
         }
-        (self.push(TabKind::Table(name.to_string()), name.to_string(), sql), true)
+        let id = self.push(TabKind::Table(name.to_string()), name.to_string(), sql);
+        if let Some(t) = self.get_mut(id) {
+            t.inspector = Some(TableView::default());
+        }
+        (id, true)
     }
 
     pub fn select(&mut self, id: u64) -> bool {
@@ -172,6 +180,18 @@ impl Tabs {
         if t.running {
             return None;
         }
+        t.running = true;
+        t.error = None;
+        t.run_seq += 1;
+        Some(t.run_seq)
+    }
+
+    /// Start a run that supersedes any run in flight, returning its sequence
+    /// number. A table tab uses this: turning a page or changing a filter
+    /// while the last page is still loading must win, not be refused. The
+    /// superseded run's result is then refused by `finish_run`.
+    pub fn restart_run(&mut self, id: u64) -> Option<u64> {
+        let t = self.get_mut(id)?;
         t.running = true;
         t.error = None;
         t.run_seq += 1;
@@ -385,6 +405,30 @@ mod tests {
         assert!(!t.finish_run(id, seq, Ok(rows(1)), 1));
         assert_eq!(t.get(id).unwrap().sql, "SELECT 1");
         assert!(!t.get(id).unwrap().running);
+    }
+
+    #[test]
+    fn only_table_tabs_carry_an_inspector() {
+        let mut t = Tabs::default();
+        let q = t.open_query("");
+        let (tbl, _) = t.open_table("users", String::new());
+        assert!(t.get(q).unwrap().inspector.is_none());
+        assert!(t.get(tbl).unwrap().inspector.is_some());
+    }
+
+    #[test]
+    fn restarting_a_run_supersedes_the_one_in_flight() {
+        let mut t = Tabs::default();
+        let (id, _) = t.open_table("users", String::new());
+        let first = t.restart_run(id).unwrap();
+        // begin_run refuses while a run is in flight; restart does not.
+        assert!(t.begin_run(id).is_none());
+        let second = t.restart_run(id).unwrap();
+        assert!(!t.finish_run(id, first, Ok(rows(1)), 1), "the superseded page must not land");
+        assert!(t.get(id).unwrap().running);
+        assert!(t.finish_run(id, second, Ok(rows(2)), 1));
+        assert_eq!(t.get(id).unwrap().result.as_ref().unwrap().rows.len(), 2);
+        assert!(t.restart_run(999).is_none());
     }
 
     #[test]

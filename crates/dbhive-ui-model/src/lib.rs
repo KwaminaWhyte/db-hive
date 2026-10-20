@@ -29,5 +29,6 @@ pub mod sql_completion;
 pub mod sql_guard;
 pub mod table_editor;
 pub mod table_inspector;
+pub mod table_view;
 pub mod tokens;
 pub mod workspace_tabs;
