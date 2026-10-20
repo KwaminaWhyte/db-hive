@@ -37,6 +37,37 @@ Tools this produced, kept for the rest of the migration:
 6. **Plugins, multi-window, updater.**
 7. **Cut over.** Interaction tests, smoke tests, memory, a human walkthrough of every screen, then delete `dbhive-app` and update docs, CI and packaging.
 
+## Parity (measured 2026-10-20)
+
+Yardstick: the 167-item flat checklist in `docs/rust-ui-migration/01-frontend-inventory.md`
+section 4. Method: read the Slint code and snapshots, item by item. Done = built, wired and
+working. Partial = counts half. Nothing here was verified by clicking through the real window.
+
+| | Done | Partial | Missing |
+| --- | --- | --- | --- |
+| Connections (21) | 15 | 4 | 2 |
+| Titlebar / shell (10) | 1 | 5 | 4 |
+| Cross-cutting (14) | 2 | 7 | 5 |
+| SQL editor (12) | 0 | 1 | 11 |
+| Results grid (16) | 0 | 4 | 12 |
+| Schema browser (10) | 0 | 4 | 6 |
+| Settings (6) | 0 | 1 | 5 |
+| Multi-window, ER diagram, schema designer, table dialogs, query builder, migrations, backup, import/export, activity, plugins, AI, palette, shortcuts, history, snippets, templates (78) | 0 | 0 | 78 |
+| **Total (167)** | **18** | **26** | **123** |
+
+- **Feature coverage: about 19%** ((18 + 26/2) / 167).
+- **Ready for real work: about 5%, a judgement.** You can add a connection, connect, and read the
+  first 200 rows of a table. You cannot run a query, which is the app's main job.
+- **Dead controls (defects):** the gear button, the search/command box, and the File > Settings,
+  File > New Window and View > Command Palette items have no Rust handler. They look live and do
+  nothing.
+- **What makes this faster than it looks:** `dbhive-ui-model` already holds the logic for most
+  missing areas (phase 1). The ER diagram, SQL editor and grid exist as proven components. The
+  missing work is mostly screens, not logic.
+- **Order that gets to real work soonest:** SQL editor screen with tabs, run and history; then
+  settings and the command palette (they unblock the dead controls); then table editing; then
+  the rest.
+
 ## Status
 
 - [x] Phase 0
