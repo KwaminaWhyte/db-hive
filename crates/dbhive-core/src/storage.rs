@@ -26,12 +26,23 @@ use crate::models::DbError;
 /// derived.
 pub const APP_IDENTIFIER: &str = "com.kwamina.db-hive";
 
+/// Environment variable that points every store at another directory. Unset
+/// in normal use. Tests that run real operations (connect saves the profile
+/// store, history saves the history store) set it to a temp dir so they never
+/// overwrite the developer's own saved connections.
+pub const DATA_DIR_ENV: &str = "DBHIVE_DATA_DIR";
+
 /// Directory the stores live in, created if absent.
 pub fn app_data_dir() -> Result<PathBuf, DbError> {
-    let base = dirs::data_dir().ok_or_else(|| {
-        DbError::InternalError("Could not resolve the platform data directory".into())
-    })?;
-    let dir = base.join(APP_IDENTIFIER);
+    let dir = match std::env::var_os(DATA_DIR_ENV) {
+        Some(over) if !over.is_empty() => PathBuf::from(over),
+        _ => {
+            let base = dirs::data_dir().ok_or_else(|| {
+                DbError::InternalError("Could not resolve the platform data directory".into())
+            })?;
+            base.join(APP_IDENTIFIER)
+        }
+    };
     if !dir.exists() {
         fs::create_dir_all(&dir).map_err(|e| {
             DbError::InternalError(format!("Failed to create {}: {}", dir.display(), e))

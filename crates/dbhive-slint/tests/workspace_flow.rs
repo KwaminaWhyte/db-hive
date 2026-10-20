@@ -21,6 +21,12 @@ async fn connect_list_tables_and_read_rows_from_a_real_sqlite_file() {
     let path = temp_db_path("workspace-flow");
     let _ = std::fs::remove_file(&path);
 
+    // `service::connect` saves the profile store. Without this the test
+    // overwrites the developer's real profiles.json with its one profile.
+    let data_dir = std::env::temp_dir().join(format!("dbhive-slint-data-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&data_dir);
+    std::env::set_var(dbhive_core::storage::DATA_DIR_ENV, &data_dir);
+
     // Seed a database the way a user's own file would look: one table, one
     // NULL to prove it survives the round trip distinct from the word NULL.
     {
@@ -85,5 +91,10 @@ async fn connect_list_tables_and_read_rows_from_a_real_sqlite_file() {
     );
 
     dbhive_core::service::disconnect(&state, &conn_id).await.unwrap();
+    assert!(
+        data_dir.join("profiles.json").exists(),
+        "connect saved its profile store under DBHIVE_DATA_DIR, not the real data dir"
+    );
     let _ = std::fs::remove_file(&path);
+    let _ = std::fs::remove_dir_all(&data_dir);
 }
