@@ -2,11 +2,29 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## READ FIRST: which UI is current
+
+The UI stack has changed twice (Tauri+React, then egui, then Slint). This
+file's architecture sections below still describe the **egui shell**
+(`crates/dbhive-app`), which is the feature-complete app until the Slint
+cutover. The **Slint shell** (`crates/dbhive-slint`, branch `slint-ui`, plan in
+`docs/slint-migration/plan.md`) is the target and is partly built (Phase 3 of
+7: connections screen and a read-only table preview; no SQL editor screen,
+inspector or diagram wired yet).
+
+- **Do not change UI toolkit again.** The toolkit was never the cause of the
+  "looks bad" problem. Read `docs/ui-guidelines.md` section 1 before proposing it.
+- **All UI work (any toolkit) follows `docs/ui-guidelines.md` and `AGENTS.md`.**
+  The loop is: change, render a screenshot, LOOK at it, fix, repeat.
+- New screens go in `crates/dbhive-slint`, built only from `ui/kit/kit.slint`,
+  with logic in `crates/dbhive-ui-model` (no UI types) and `dbhive-core`.
+  Do not add screens to `dbhive-app` unless fixing a bug there.
+
 ## Project Overview
 
 DB Hive is a cross-platform database client: a **native Rust desktop app**
-built on egui/eframe, supporting PostgreSQL, MySQL, SQLite, MongoDB, Redis,
-SQL Server and Turso.
+(egui today, Slint in progress), supporting PostgreSQL, MySQL, SQLite, MongoDB,
+Redis, SQL Server and Turso.
 
 It was originally Tauri 2.0 + React 19 and was migrated to a single native
 binary. The reason was measured, not aesthetic: the Tauri build ran four
