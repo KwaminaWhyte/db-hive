@@ -12,6 +12,11 @@ use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
 
+/// A name as a quoted SQLite identifier: `"x""y"` escapes a double quote.
+fn dq(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
+}
+
 /// SQLite database driver
 ///
 /// Manages connections to SQLite database files and provides query execution
@@ -348,7 +353,7 @@ impl DatabaseDriver for SqliteDriver {
         self.run_blocking(move |conn| {
             // Get column information using PRAGMA table_info
             let mut stmt = conn
-                .prepare(&format!("PRAGMA table_info(\"{}\")", table))
+                .prepare(&format!("PRAGMA table_info({})", dq(&table)))
                 .map_err(|e| DbError::QueryError(format!("Failed to get table info: {}", e)))?;
 
             let column_iter = stmt
@@ -384,7 +389,7 @@ impl DatabaseDriver for SqliteDriver {
 
             // Get index information using PRAGMA index_list
             let mut index_stmt = conn
-                .prepare(&format!("PRAGMA index_list(\"{}\")", table))
+                .prepare(&format!("PRAGMA index_list({})", dq(&table)))
                 .map_err(|e| DbError::QueryError(format!("Failed to get index list: {}", e)))?;
 
             let index_list_iter = index_stmt
@@ -404,7 +409,7 @@ impl DatabaseDriver for SqliteDriver {
 
                 // Get columns for this index using PRAGMA index_info
                 let mut col_stmt = conn
-                    .prepare(&format!("PRAGMA index_info(\"{}\")", index_name))
+                    .prepare(&format!("PRAGMA index_info({})", dq(&index_name)))
                     .map_err(|e| DbError::QueryError(format!("Failed to get index info: {}", e)))?;
 
                 let index_columns: Result<Vec<String>, rusqlite::Error> = col_stmt
@@ -428,7 +433,7 @@ impl DatabaseDriver for SqliteDriver {
 
             // Get row count
             let row_count = conn
-                .query_row(&format!("SELECT COUNT(*) FROM \"{}\"", table), [], |row| {
+                .query_row(&format!("SELECT COUNT(*) FROM {}", dq(&table)), [], |row| {
                     row.get::<_, i64>(0)
                 })
                 .ok()
@@ -671,6 +676,27 @@ mod transaction_tests {
             .await
             .unwrap();
         (driver, path)
+    }
+
+    #[tokio::test]
+    async fn schema_of_a_table_whose_name_contains_a_quote_is_read_not_injected() {
+        let (d, path) = fresh("quote").await;
+        d.execute_query("CREATE TABLE \"we\"\"ird\" (id INTEGER PRIMARY KEY, v TEXT)")
+            .await
+            .unwrap();
+        d.execute_query("CREATE INDEX \"ix\"\"v\" ON \"we\"\"ird\"(v)").await.unwrap();
+        d.execute_query("INSERT INTO \"we\"\"ird\" (v) VALUES ('a'), ('b')").await.unwrap();
+
+        let s = d.get_table_schema("main", "we\"ird").await.unwrap();
+        let cols: Vec<_> = s.columns.iter().map(|c| c.name.as_str()).collect();
+        assert_eq!(cols, vec!["id", "v"]);
+        assert_eq!(s.indexes.len(), 1);
+        assert_eq!(s.indexes[0].name, "ix\"v");
+        // A name built to break out of the quoting finds no table and changes nothing.
+        let hostile = d.get_table_schema("main", "t\"); DROP TABLE t; --").await;
+        assert!(hostile.map(|s| s.columns.is_empty()).unwrap_or(true));
+        assert_eq!(count(&d).await, 2);
+        let _ = std::fs::remove_file(path);
     }
 
     async fn count(d: &SqliteDriver) -> i64 {
