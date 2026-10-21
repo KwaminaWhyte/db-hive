@@ -92,23 +92,30 @@ partial (core installs only bundled plugins); AI 4 done and generate/explain/opt
   and restore, watch activity, edit rows in the grid with a reviewed atomic commit, autocomplete
   SQL, manage plugins, use the AI assistant, and use settings, history, snippets and templates.
   You cannot yet: open a second window, multi-select rows, export or chart results, or browse
-  schemas as a tree. Editing and the Postgres/MySQL transaction paths have been run on SQLite and
-  one scratch Postgres database only.
-- **Everything below was verified on SQLite only** (Postgres and MySQL paths are unit tested, not
-  run), and none of it has been clicked through in the real GPU window.
+  schemas as a tree.
+- **What ran against a real server.** SQLite is covered by the headless controller tests for every
+  screen. Beyond that, `#[ignore]` live tests (run with `-- --ignored`, each in its own scratch
+  database, dropped afterwards) cover: PostgreSQL transactions, the PostgreSQL DDL generator, the
+  inspector, filter, sort, typed row edits, add, delete and a rejected commit on a table with
+  serial, numeric, boolean, timestamptz, uuid, jsonb and array columns, and the activity monitor's
+  server tab; MySQL transactions and its DDL generator; and string and identifier quoting
+  round trips on SQLite, PostgreSQL and MySQL. Not run against a server: the import, export and
+  backup tools on Postgres or MySQL, the query builder and the ER diagram on a non-default schema,
+  row editing on MySQL, SQL Server, MongoDB, Redis and Turso. None of it has been clicked through
+  in the real GPU window.
 - **Known defects and risks:**
-  - Settings stored but not consumed: language, startup, update checks, max rows, editor font
-    family, minimap, word wrap. Shortcut rebinding saves but is not dispatched.
+  - Settings stored but not consumed: language, startup, update checks, editor font family,
+    minimap, word wrap. Shortcut rebinding saves but is not dispatched. (Max rows now applies to
+    query results.)
   - Table-inspector page loads are not written to history or the activity log.
-  - SQLite `get_table_schema` does not escape quotes in a table name (core).
-  - Postgres and MySQL migration transactions go through `execute_query("BEGIN")` on a pool and
-    work only because sequential use reuses one connection (core).
+  - MySQL commits implicitly before DDL, so a migration's rollback there covers only the
+    statements since the last DDL statement (the server's rule, now noted in core).
   - The ER canvas node rendering was rewritten; its 120 fps figure has not been re-measured.
   - Foreign key targets in generated DDL are unqualified, so a non-default Postgres schema
     relies on the search path.
 - **Remaining work, in order:** multi-window; then the partial items (schema browser tree and
-  context menus, results export and charts, multi-row select and bulk actions, update checks,
-  connection folders, a Connection Lost screen), then clicking everything through in the real GPU
+  context menus, results export and charts, update checks, connection folders, a Connection Lost
+  screen), then clicking everything through in the real GPU
   window, which has never been done.
 
 ## Status
