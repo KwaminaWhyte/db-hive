@@ -312,8 +312,17 @@ impl Quoter {
         }
     }
 
+    /// Quote one identifier. A closing quote inside the name is doubled, the
+    /// escape every supported dialect uses (`""`, ` `` `, `]]`), so a name like
+    /// `t"; DROP TABLE users; --` stays inside the quotes.
     fn ident(&self, name: &str) -> String {
-        format!("{}{}{}", self.open, name, self.close)
+        let doubled = format!("{0}{0}", self.close);
+        format!(
+            "{}{}{}",
+            self.open,
+            name.replace(self.close, &doubled),
+            self.close
+        )
     }
 
     fn qualified(&self, schema: &str, name: &str) -> String {
@@ -354,6 +363,25 @@ mod tests {
         let sql = generate_migration_sql(&d, &DbDriver::Postgres).unwrap();
         assert!(sql[0].contains("CREATE TABLE"));
         assert!(sql[0].contains("users"));
+    }
+
+    #[test]
+    fn a_hostile_table_name_cannot_escape_its_quotes_in_any_dialect() {
+        let evil = |close: char| format!("t{close}; DROP TABLE users; --");
+        for (driver, close) in [
+            (DbDriver::Postgres, '"'),
+            (DbDriver::Sqlite, '"'),
+            (DbDriver::MySql, '`'),
+            (DbDriver::SqlServer, ']'),
+        ] {
+            let tgt = vec![tbl(&evil(close), vec![])];
+            let d = compute_diff(&[], &tgt);
+            let sql = generate_migration_sql(&d, &driver).unwrap();
+            let drop = sql.iter().find(|s| s.starts_with("DROP TABLE")).unwrap();
+            // The quote inside the name is doubled, so it never closes early.
+            let doubled = format!("t{close}{close}; DROP TABLE users; --");
+            assert!(drop.contains(&doubled), "{driver:?}: {drop}");
+        }
     }
 
     #[test]
