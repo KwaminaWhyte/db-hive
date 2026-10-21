@@ -35,6 +35,7 @@ pub mod plugins_panel;
 pub mod procedures;
 pub mod query_builder;
 pub mod results_grid;
+pub mod routine_list;
 pub mod row_edits;
 pub mod schema_designer;
 pub mod schema_tree;

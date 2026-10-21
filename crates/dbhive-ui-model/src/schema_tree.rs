@@ -969,6 +969,67 @@ impl DropDialog {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Creating a database
+// ---------------------------------------------------------------------------
+
+/// The "Create Database" dialog: a name, the statement it would run, and the
+/// server's answer if it refused.
+#[derive(Debug, Clone)]
+pub struct CreateDatabaseDialog {
+    pub driver: DbDriver,
+    pub name: String,
+    pub running: bool,
+    /// What the server said when it refused.
+    pub server_error: String,
+}
+
+impl CreateDatabaseDialog {
+    pub fn new(driver: &DbDriver) -> Self {
+        Self {
+            driver: driver.clone(),
+            name: String::new(),
+            running: false,
+            server_error: String::new(),
+        }
+    }
+
+    /// Why the name is not acceptable, in the core's own words. Empty while
+    /// the box is still empty: that is a prompt, not a complaint.
+    pub fn name_error(&self) -> String {
+        crate::table_editor::database_name_errors(&self.name)
+            .into_iter()
+            .next()
+            .unwrap_or_default()
+    }
+
+    /// The validation message, or else the server's refusal.
+    pub fn error(&self) -> String {
+        let local = self.name_error();
+        if local.is_empty() {
+            self.server_error.clone()
+        } else {
+            local
+        }
+    }
+
+    pub fn can_create(&self) -> bool {
+        !self.running && !self.name.trim().is_empty() && self.name_error().is_empty()
+    }
+
+    /// The statement the dialog would run, or nothing while the name is empty
+    /// or invalid.
+    pub fn sql(&self) -> String {
+        if self.name.trim().is_empty() || !self.name_error().is_empty() {
+            return String::new();
+        }
+        crate::table_editor::preview_create_database_sql(&self.driver, &self.name)
+            .ok()
+            .and_then(|v| v.into_iter().next())
+            .unwrap_or_default()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1441,6 +1502,59 @@ mod tests {
         assert!(lite.ddl && !lite.switch_database && !lite.create_database);
         let redis = Caps::for_driver(&DbDriver::Redis);
         assert!(!redis.ddl);
+    }
+
+    // -- Create database ---------------------------------------------------------------------
+
+    #[test]
+    fn a_new_database_needs_a_valid_name() {
+        let mut d = CreateDatabaseDialog::new(&DbDriver::Postgres);
+        assert!(!d.can_create(), "empty is not creatable");
+        assert_eq!(d.error(), "", "empty is a prompt, not an error");
+        d.name = "1bad".into();
+        assert!(!d.can_create());
+        assert!(d.error().contains("start with a"), "{}", d.error());
+        d.name = "my db".into();
+        assert!(!d.can_create());
+        d.name = "analytics_2026".into();
+        assert!(d.can_create());
+        assert_eq!(d.error(), "");
+    }
+
+    #[test]
+    fn the_statement_is_quoted_by_the_dialect() {
+        let mut d = CreateDatabaseDialog::new(&DbDriver::Postgres);
+        d.name = "my-db".into();
+        assert_eq!(d.sql(), "CREATE DATABASE \"my-db\"");
+        let mut m = CreateDatabaseDialog::new(&DbDriver::MySql);
+        m.name = "my-db".into();
+        assert_eq!(m.sql(), "CREATE DATABASE `my-db`");
+    }
+
+    #[test]
+    fn no_statement_is_shown_for_a_name_that_cannot_be_created() {
+        let mut d = CreateDatabaseDialog::new(&DbDriver::Postgres);
+        d.name = "x; DROP DATABASE app".into();
+        assert_eq!(d.sql(), "");
+        assert!(!d.can_create());
+    }
+
+    #[test]
+    fn a_server_refusal_shows_until_the_name_becomes_invalid() {
+        let mut d = CreateDatabaseDialog::new(&DbDriver::Postgres);
+        d.name = "app".into();
+        d.server_error = "database \"app\" already exists".into();
+        assert!(d.error().contains("already exists"));
+        d.name = "9".into();
+        assert!(d.error().contains("start with a"), "a local problem outranks a stale refusal");
+    }
+
+    #[test]
+    fn nothing_is_created_twice() {
+        let mut d = CreateDatabaseDialog::new(&DbDriver::Postgres);
+        d.name = "fresh".into();
+        d.running = true;
+        assert!(!d.can_create());
     }
 
     // -- Drop dialog ----------------------------------------------------------------------------
