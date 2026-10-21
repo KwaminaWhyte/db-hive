@@ -29,7 +29,7 @@ use dbhive_ui_model::results_grid::visible_rows;
 use dbhive_ui_model::settings_editor::{
     destructive_warnings, query_timeout, timeout_message, trim_history,
 };
-use dbhive_ui_model::workspace_tabs::{result_summary, TabKind, Tabs};
+use dbhive_ui_model::workspace_tabs::{capped_result_summary, result_summary, TabKind, Tabs};
 
 mod builder;
 mod completion;
@@ -709,7 +709,10 @@ impl Ctx {
             return;
         };
 
-        let summary = result_summary(result, tab.elapsed_ms);
+        let summary = match tab.capped_at {
+            Some(limit) => capped_result_summary(limit, tab.elapsed_ms),
+            None => result_summary(result, tab.elapsed_ms),
+        };
         w.set_workspace_has_result(true);
         w.set_workspace_result_summary(summary.as_str().into());
         // A statement that returned no columns changed data (or ran DDL):
@@ -1001,6 +1004,8 @@ impl Ctx {
 
         let run_sql = sql.clone();
         let query_settings = self.app_settings().query;
+        // Settings > Max rows: the grid keeps at most this many.
+        let max_rows = query_settings.max_rows as usize;
         runtime::spawn(
             async move {
                 let started = std::time::Instant::now();
@@ -1022,7 +1027,7 @@ impl Ctx {
                 ctx.record_run(&connection_id, &connection_name, &database, &sql, &log_id, &outcome, elapsed);
                 {
                     let mut s = ctx.session.borrow_mut();
-                    s.workspace.tabs.finish_run(id, seq, outcome, elapsed);
+                    s.workspace.tabs.finish_run_capped(id, seq, outcome, elapsed, max_rows);
                 }
                 ctx.refresh_workspace();
             }),

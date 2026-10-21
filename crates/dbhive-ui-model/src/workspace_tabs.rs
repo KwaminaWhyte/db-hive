@@ -7,7 +7,7 @@
 //! (the tab was re-run, or closed) is refused, so a slow query can never
 //! overwrite a newer one or resurrect a closed tab.
 
-use dbhive_core::drivers::QueryResult;
+use dbhive_core::drivers::{QueryResult, MAX_RESULT_ROWS};
 
 use crate::format::thousands;
 use crate::results_grid::GridState;
@@ -34,6 +34,8 @@ pub struct Tab {
     pub run_seq: u64,
     /// Paging, filters, sort and structure for a table tab; `None` on a query tab.
     pub inspector: Option<TableView>,
+    /// Set when the last result had more rows than this limit and was cut.
+    pub capped_at: Option<usize>,
 }
 
 impl Tab {
@@ -75,6 +77,7 @@ impl Tabs {
             elapsed_ms: None,
             run_seq: 0,
             inspector: None,
+            capped_at: None,
         });
         self.active = Some(id);
         id
@@ -203,7 +206,8 @@ impl Tabs {
     }
 
     /// Land a result. `false` means it was stale or the tab is gone, and
-    /// nothing changed.
+    /// nothing changed. Rows past the drivers' hard cap (the one-row overflow
+    /// sentinel a driver leaves) are dropped.
     pub fn finish_run(
         &mut self,
         id: u64,
@@ -211,6 +215,21 @@ impl Tabs {
         outcome: Result<QueryResult, String>,
         elapsed_ms: u64,
     ) -> bool {
+        self.finish_run_capped(id, seq, outcome, elapsed_ms, MAX_RESULT_ROWS)
+    }
+
+    /// `finish_run`, keeping at most `max_rows` rows (Settings > Max rows, never
+    /// more than the drivers' own cap). When rows are dropped the tab records
+    /// the limit in `capped_at`, so the summary can say the result is partial.
+    pub fn finish_run_capped(
+        &mut self,
+        id: u64,
+        seq: u64,
+        outcome: Result<QueryResult, String>,
+        elapsed_ms: u64,
+        max_rows: usize,
+    ) -> bool {
+        let limit = max_rows.clamp(1, MAX_RESULT_ROWS);
         let Some(t) = self.get_mut(id) else {
             return false;
         };
@@ -220,8 +239,13 @@ impl Tabs {
         t.running = false;
         t.elapsed_ms = Some(elapsed_ms);
         t.grid = GridState::default();
+        t.capped_at = None;
         match outcome {
-            Ok(r) => {
+            Ok(mut r) => {
+                if r.rows.len() > limit {
+                    r.rows.truncate(limit);
+                    t.capped_at = Some(limit);
+                }
                 t.result = Some(r);
                 t.error = None;
             }
@@ -263,6 +287,19 @@ pub fn result_summary(result: &QueryResult, elapsed_ms: Option<u64>) -> String {
     }
 }
 
+/// The summary of a result that was cut at `limit` rows: the rows shown are
+/// not all of them, and the line says how to get the rest.
+pub fn capped_result_summary(limit: usize, elapsed_ms: Option<u64>) -> String {
+    let head = format!(
+        "First {} rows (more exist; add a LIMIT or raise Max rows in Settings)",
+        thousands(limit)
+    );
+    match elapsed_ms.map(elapsed_label) {
+        Some(t) => format!("{head} · {t}"),
+        None => head,
+    }
+}
+
 /// "0ms", "12ms", "1.25s". Unlike the history formatter, a fast query shows
 /// "0ms" rather than "N/A".
 fn elapsed_label(ms: u64) -> String {
@@ -284,6 +321,41 @@ fn plural(n: usize, word: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_result_over_max_rows_is_cut_and_says_so() {
+        let mut t = Tabs::default();
+        let id = t.open_query("SELECT 1");
+        let seq = t.begin_run(id).unwrap();
+        assert!(t.finish_run_capped(id, seq, Ok(rows(1500)), 3, 1000));
+        let tab = t.get(id).unwrap();
+        assert_eq!(tab.result.as_ref().unwrap().rows.len(), 1000);
+        assert_eq!(tab.capped_at, Some(1000));
+        assert!(capped_result_summary(1000, Some(3)).starts_with("First 1,000 rows"));
+
+        // Exactly the limit is not cut, and a later run clears the note.
+        let seq = t.begin_run(id).unwrap();
+        assert!(t.finish_run_capped(id, seq, Ok(rows(1000)), 3, 1000));
+        let tab = t.get(id).unwrap();
+        assert_eq!(tab.result.as_ref().unwrap().rows.len(), 1000);
+        assert_eq!(tab.capped_at, None);
+    }
+
+    #[test]
+    fn the_drivers_overflow_sentinel_row_never_reaches_the_grid() {
+        let mut t = Tabs::default();
+        let id = t.open_query("SELECT 1");
+        let seq = t.begin_run(id).unwrap();
+        // A driver stops at its cap plus one so the caller can tell it was cut.
+        assert!(t.finish_run(id, seq, Ok(rows(MAX_RESULT_ROWS + 1)), 9));
+        let tab = t.get(id).unwrap();
+        assert_eq!(tab.result.as_ref().unwrap().rows.len(), MAX_RESULT_ROWS);
+        assert_eq!(tab.capped_at, Some(MAX_RESULT_ROWS));
+        // A setting above the drivers' cap cannot raise it.
+        let seq = t.begin_run(id).unwrap();
+        assert!(t.finish_run_capped(id, seq, Ok(rows(MAX_RESULT_ROWS + 1)), 9, 10 * MAX_RESULT_ROWS));
+        assert_eq!(t.get(id).unwrap().result.as_ref().unwrap().rows.len(), MAX_RESULT_ROWS);
+    }
 
     fn rows(n: usize) -> QueryResult {
         QueryResult {
