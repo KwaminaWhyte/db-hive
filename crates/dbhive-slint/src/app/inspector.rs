@@ -47,7 +47,9 @@ impl Ctx {
             return None;
         };
         let driver = ws.driver.clone()?;
-        let schema_arg = ws.schema.clone().unwrap_or_default();
+        // A tab opened from the schema browser may live outside the
+        // workspace's current schema.
+        let schema_arg = tab.schema.clone().or_else(|| ws.schema.clone()).unwrap_or_default();
         Some(Target {
             connection_id: ws.connection_id.clone(),
             qualifier: sql_qualifier(&driver, &schema_arg),
@@ -537,7 +539,7 @@ pub(super) fn project(w: &AppWindow, ws: &Workspace, tab: &Tab) {
     b.set_meta_error(v.meta_error().unwrap_or("").into());
     match &v.meta {
         Meta::Ready(m) => {
-            let schema_name = ws.schema.as_deref().unwrap_or("");
+            let schema_name = tab.schema.as_deref().or(ws.schema.as_deref()).unwrap_or("");
             let table = &m.schema.table.name;
             b.set_struct_columns(model(
                 column_rows(&m.schema, &m.foreign_keys, schema_name)

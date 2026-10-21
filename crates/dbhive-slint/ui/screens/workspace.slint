@@ -7,6 +7,7 @@ import { BuilderState } from "query_builder.slint";
 import { TableDialogState } from "table_dialog.slint";
 import { PluginsState, PluginToolbarHost } from "plugins_panel.slint";
 import { AiState, AiDock } from "ai_assistant.slint";
+import { SchemaTreePanel } from "schema_tree.slint";
 
 export struct TableItem {
     name: string,
@@ -220,98 +221,10 @@ export component WorkspaceScreen inherits VerticalLayout {
         vertical-stretch: 1;
         spacing: 0;
 
-        Rectangle {
-            width: 220px;
-            background: Theme.background;
-
-            VerticalLayout {
-                padding: 10px;
-                spacing: 6px;
-
-                HorizontalLayout {
-                    spacing: 4px;
-                    Text {
-                        text: "TABLES" + (root.tables.length > 0 ? " (" + root.tables.length + ")" : "");
-                        color: Theme.muted-foreground;
-                        font-size: Theme.size-small;
-                        font-weight: 600;
-                        letter-spacing: 0.6px;
-                        vertical-alignment: center;
-                        horizontal-stretch: 1;
-                    }
-                    Button {
-                        has-icon: true;
-                        icon: Icons.plus;
-                        variant: ButtonVariant.ghost;
-                        accessible-label: "New table";
-                        clicked => { TableDialogState.open-create(); }
-                    }
-                }
-
-                // Claims the leftover height itself and packs its children at
-                // the top; otherwise the Banner is the only stretchable child
-                // and swells to fill the whole sidebar.
-                if root.tables-error != "": VerticalLayout {
-                    vertical-stretch: 1;
-                    alignment: start;
-                    spacing: 8px;
-                    Banner {
-                        message: root.tables-error;
-                        dismissible: false;
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        Button {
-                            text: "Retry";
-                            has-icon: true;
-                            icon: Icons.refresh-cw;
-                            clicked => { root.refresh-tables(); }
-                        }
-                    }
-                }
-
-                // Exactly one of these branches is active at a time, and
-                // each claims the layout's leftover height with
-                // vertical-stretch. Without a stretch child, Slint spreads
-                // slack space as gaps between every row instead of below the
-                // last one (see connection_editor.slint's ScrollView for the
-                // same layout, fixed the other way: alignment: start).
-                if root.loading-tables: Text {
-                    vertical-stretch: 1;
-                    text: "Loading tables…";
-                    color: Theme.muted-foreground;
-                    font-size: Theme.size-label;
-                }
-
-                if !root.loading-tables && root.tables-error == "" && root.tables.length == 0: EmptyState {
-                    vertical-stretch: 1;
-                    icon: Icons.table;
-                    title: "No tables";
-                    message: "This schema has no tables yet.";
-                }
-
-                if !root.loading-tables && root.tables.length > 0: ScrollView {
-                    vertical-stretch: 1;
-                    VerticalLayout {
-                        alignment: start;
-                        spacing: 2px;
-                        for t in root.tables: ListRow {
-                            height: 30px;
-                            icon: Icons.table;
-                            text: t.name;
-                            detail: t.row-count;
-                            selected: t.name == root.selected-table;
-                            clicked => { root.select-table(t.name); }
-                        }
-                    }
-                }
-            }
-
-            Rectangle {
-                x: parent.width - 1px;
-                width: 1px;
-                background: Theme.border;
-            }
+        // The schema browser: databases, schemas and tables. Its state is
+        // `TreeState`, so this screen passes it nothing.
+        SchemaTreePanel {
+            width: 264px;
         }
 
         VerticalLayout {

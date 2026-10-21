@@ -2413,3 +2413,257 @@ export component AiBusyRow inherits HorizontalLayout {
         vertical-alignment: center;
     }
 }
+
+// -- Schema browser: tree rows and a context menu ---------------------------------
+// (name prefixes Tree and Ctx)
+
+export enum TreeRowKind { database, schema, table, view, loading, error, empty }
+
+// One visible row of the schema tree. Rust flattens the tree (what is
+// expanded, what a search left standing) and hands over rows with a depth.
+export struct TreeNode {
+    kind: TreeRowKind,
+    depth: int,
+    label: string,
+    // A table's row count, a schema's table count, or a note's action word.
+    detail: string,
+    expandable: bool,
+    expanded: bool,
+    // The connection's database, or the schema other tools act on.
+    active: bool,
+    // A server's own bookkeeping, drawn quieter.
+    dim: bool,
+    busy: bool,
+}
+
+// A flat tree row: an indent, a chevron, an icon, a label and a trailing
+// detail on one vertical centre. `cursor` is the highlighted row; `ring` adds
+// the focus outline when the tree owns the keyboard.
+export component TreeRowView inherits Rectangle {
+    in property <TreeNode> node;
+    in property <bool> cursor: false;
+    in property <bool> ring: false;
+    callback clicked;
+    callback double-clicked;
+    // The chevron.
+    callback toggled;
+    // A right click, in window coordinates.
+    callback context(length, length);
+
+    property <bool> is-note: root.node.kind == TreeRowKind.loading
+        || root.node.kind == TreeRowKind.error || root.node.kind == TreeRowKind.empty;
+    property <image> glyph: root.node.kind == TreeRowKind.database ? Icons.database
+        : root.node.kind == TreeRowKind.schema ? Icons.folder
+        : root.node.kind == TreeRowKind.table ? Icons.table
+        : root.node.kind == TreeRowKind.view ? Icons.eye
+        : root.node.kind == TreeRowKind.error ? Icons.triangle-alert
+        : root.node.kind == TreeRowKind.empty ? Icons.plus
+        : Icons.refresh-cw;
+    property <color> glyph-tint: root.node.kind == TreeRowKind.error ? Theme.destructive
+        : root.node.active ? Theme.primary
+        : root.node.dim ? Theme.dim-foreground
+        : Theme.muted-foreground;
+    property <color> label-color: root.node.kind == TreeRowKind.error ? Theme.destructive
+        : root.is-note ? Theme.muted-foreground
+        : root.node.dim ? Theme.dim-foreground
+        : Theme.foreground;
+
+    height: 28px;
+    border-radius: Theme.radius-control;
+    background: root.cursor ? Theme.primary-soft : touch.has-hover ? Theme.hover : transparent;
+    border-width: root.cursor && root.ring ? 2px : 0px;
+    border-color: Theme.primary;
+    animate background { duration: 90ms; }
+
+    accessible-role: list-item;
+    accessible-label: root.node.label;
+    accessible-description: root.node.detail;
+    accessible-expandable: root.node.expandable;
+    accessible-expanded: root.node.expanded;
+    accessible-item-selected: root.cursor;
+    accessible-action-default => { root.double-clicked(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+        double-clicked => { root.double-clicked(); }
+        pointer-event(e) => {
+            if (e.button == PointerEventButton.right && e.kind == PointerEventKind.up) {
+                root.context(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            }
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 4px + root.node.depth * 12px;
+        padding-right: 8px;
+        spacing: 4px;
+        Rectangle {
+            width: 18px;
+            if root.node.expandable: TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.toggled(); }
+                Icon {
+                    source: root.node.expanded ? Icons.chevron-down : Icons.chevron-right;
+                    tint: Theme.dim-foreground;
+                    width: 14px;
+                    height: 14px;
+                }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.glyph;
+                tint: root.glyph-tint;
+                width: 14px;
+                height: 14px;
+            }
+        }
+        Text {
+            text: root.node.label;
+            color: root.label-color;
+            font-size: Theme.size-label;
+            font-weight: root.node.active ? 600 : 400;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            overflow: elide;
+        }
+        if root.node.active: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 6px;
+                height: 6px;
+                border-radius: 3px;
+                background: root.node.kind == TreeRowKind.database ? Theme.success : Theme.primary;
+            }
+        }
+        if root.node.busy: Text {
+            text: "…";
+            color: Theme.dim-foreground;
+            font-size: Theme.size-small;
+            vertical-alignment: center;
+        }
+        if root.node.detail != "" && !root.node.busy: Text {
+            text: root.node.detail;
+            color: root.node.kind == TreeRowKind.error || root.node.kind == TreeRowKind.empty
+                ? Theme.primary : Theme.dim-foreground;
+            font-size: Theme.size-small;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// One entry of a context menu. `icon` names a kit icon; the menu maps it.
+export struct CtxItem {
+    label: string,
+    icon: string,
+    enabled: bool,
+    danger: bool,
+    // A rule above this entry, to group the destructive ones apart.
+    divider: bool,
+}
+
+// The surface and entries of a right-click menu. The caller places it (an
+// overlay at the pointer) and decides what an entry does; this draws the
+// entries, tracks the keyboard highlight and reports a pick or Escape.
+export component CtxMenu inherits Popover {
+    in property <[CtxItem]> items;
+    in-out property <int> highlighted: -1;
+    callback chosen(int);
+    callback dismissed;
+
+    function glyph(name: string) -> image {
+        return name == "table" ? Icons.table
+            : name == "code" ? Icons.code
+            : name == "copy" ? Icons.copy
+            : name == "pencil" ? Icons.pencil
+            : name == "refresh-cw" ? Icons.refresh-cw
+            : name == "trash-2" ? Icons.trash-2
+            : name == "plus" ? Icons.plus
+            : name == "database" ? Icons.database
+            : Icons.circle;
+    }
+
+    width: 208px;
+    height: col.preferred-height;
+
+    accessible-role: list;
+    accessible-label: "Actions";
+
+    scope := FocusScope {
+        init => { self.focus(); }
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                root.dismissed();
+                return accept;
+            }
+            if (e.text == Key.DownArrow) {
+                root.highlighted = min(root.highlighted + 1, root.items.length - 1);
+                return accept;
+            }
+            if (e.text == Key.UpArrow) {
+                root.highlighted = max(root.highlighted - 1, 0);
+                return accept;
+            }
+            if (e.text == Key.Return) {
+                if (root.highlighted >= 0 && root.items[root.highlighted].enabled) {
+                    root.chosen(root.highlighted);
+                }
+                return accept;
+            }
+            return reject;
+        }
+
+        col := VerticalLayout {
+            padding: 4px;
+            for it[i] in root.items: VerticalLayout {
+                if it.divider: Rectangle {
+                    height: 9px;
+                    Divider { y: 4px; }
+                }
+                Rectangle {
+                    height: 30px;
+                    border-radius: Theme.radius-control;
+                    background: it.enabled && (item-touch.has-hover || root.highlighted == i) ? Theme.hover : transparent;
+                    opacity: it.enabled ? 1 : 0.45;
+
+                    accessible-role: button;
+                    accessible-label: it.label;
+                    accessible-action-default => {
+                        if (it.enabled) {
+                            root.chosen(i);
+                        }
+                    }
+
+                    item-touch := TouchArea {
+                        enabled: it.enabled;
+                        mouse-cursor: it.enabled ? pointer : default;
+                        clicked => { root.chosen(i); }
+                    }
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            Icon {
+                                source: root.glyph(it.icon);
+                                tint: it.danger ? Theme.destructive : Theme.muted-foreground;
+                                width: 14px;
+                                height: 14px;
+                            }
+                        }
+                        Text {
+                            text: it.label;
+                            color: it.danger ? Theme.destructive : Theme.foreground;
+                            font-size: Theme.size-label;
+                            vertical-alignment: center;
+                            horizontal-stretch: 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

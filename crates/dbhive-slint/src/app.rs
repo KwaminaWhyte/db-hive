@@ -37,6 +37,7 @@ mod designer;
 mod erd;
 mod inspector;
 mod row_edit;
+mod schema_tree;
 mod settings;
 mod table_dialog;
 
@@ -179,6 +180,7 @@ struct Session {
     migrations: migrations_glue::MigrationSession,
     builder: builder::BuilderSession,
     table_dialog: table_dialog::DialogSession,
+    tree: schema_tree::TreeSession,
     erd: erd::ErdSession,
     designer: designer::DesignerSession,
     completion: completion::CompletionSession,
@@ -745,6 +747,7 @@ impl Ctx {
     }
 
     fn open_workspace(self: &Rc<Self>, profile: ConnectionProfile) {
+        self.tree_open(&profile.driver);
         {
             let mut s = self.session.borrow_mut();
             s.workspace = Workspace {
@@ -778,6 +781,7 @@ impl Ctx {
         self.invalidate_erd();
         self.session.borrow_mut().designer = designer::DesignerSession::default();
         self.completion_reset();
+        self.tree_close();
         self.session.borrow_mut().workspace = Workspace::default();
         if let Some(w) = self.window.upgrade() {
             w.set_screen(Screen::Connections);
@@ -786,16 +790,22 @@ impl Ctx {
     }
 
     fn load_tables(self: &Rc<Self>) {
-        let (connection_id, driver, database) = {
+        let (connection_id, driver, database, wanted_schema) = {
             let s = self.session.borrow();
             let ws = &s.workspace;
-            (ws.connection_id.clone(), ws.driver.clone(), ws.database.clone())
+            (
+                ws.connection_id.clone(),
+                ws.driver.clone(),
+                ws.database.clone(),
+                ws.schema.clone(),
+            )
         };
         let Some(driver_kind) = driver else { return };
         let Some(d) = self.open_driver(&connection_id) else {
             self.session.borrow_mut().workspace.tables_error =
                 "This connection is no longer open.".to_string();
             self.refresh_workspace();
+            self.tree_listing_failed("This connection is no longer open.");
             return;
         };
 
@@ -803,40 +813,59 @@ impl Ctx {
         self.session.borrow_mut().workspace.loading_tables = true;
         self.session.borrow_mut().workspace.tables_error.clear();
         self.refresh_workspace();
+        self.tree_listing_begin();
 
         runtime::spawn(
             async move {
-                let databases = d.get_databases().await.unwrap_or_default();
-                let database = database
-                    .or_else(|| databases.first().map(|db| db.name.clone()))
-                    .unwrap_or_default();
-                let schemas = if driver_kind.is_postgres_compatible() {
-                    d.get_schemas(&database).await.unwrap_or_default()
-                } else {
-                    Vec::new()
-                };
-                let schema_arg =
-                    workspace_model::tables_schema_arg(&driver_kind, &database, None, &schemas);
+                // The schema browser's overview: databases, and for Postgres
+                // the schemas of this one. A refresh keeps the schema the user
+                // had chosen rather than falling back to "public".
+                let overview = dbhive_core::service_schema::load_overview(
+                    &*d,
+                    &driver_kind,
+                    database.as_deref(),
+                )
+                .await;
+                let schemas: Vec<_> = overview
+                    .schemas
+                    .iter()
+                    .map(|n| {
+                        dbhive_core::models::SchemaInfo::new(n.clone(), overview.database.clone())
+                    })
+                    .collect();
+                let schema_arg = workspace_model::tables_schema_arg(
+                    &driver_kind,
+                    &overview.database,
+                    wanted_schema.as_deref(),
+                    &schemas,
+                );
                 let tables = d.get_tables(&schema_arg).await;
-                (database, schema_arg, tables)
+                (overview, schema_arg, tables)
             },
-            move |(database, schema, tables)| with_ctx(|ctx| {
+            move |(overview, schema, tables)| with_ctx(|ctx| {
                 if !ticket.is_current() {
                     return;
                 }
                 let mut s = ctx.session.borrow_mut();
                 let ws = &mut s.workspace;
                 ws.loading_tables = false;
-                ws.database = Some(database);
-                ws.schema = Some(schema);
-                match tables {
-                    Ok(t) => ws.tables = t,
-                    Err(e) => ws.tables_error = format!("Could not list tables: {}", e),
-                }
+                ws.database = Some(overview.database.clone());
+                ws.schema = Some(schema.clone());
+                let for_tree = match tables {
+                    Ok(t) => {
+                        ws.tables = t.clone();
+                        Ok(t)
+                    }
+                    Err(e) => {
+                        ws.tables_error = format!("Could not list tables: {}", e);
+                        Err(e.to_string())
+                    }
+                };
                 drop(s);
                 // A reloaded schema means column lists may have changed.
                 ctx.completion_reset();
                 ctx.refresh_workspace();
+                ctx.tree_seed(overview, &schema, for_tree);
             }),
         );
     }
@@ -1687,6 +1716,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     designer::wire(&window, &ctx);
     completion::wire(&window, &ctx);
     row_edit::wire(&window, &ctx);
+    schema_tree::wire(&window, &ctx);
     plugins_glue::wire(&window, &ctx);
     ai_glue::wire(&window, &ctx);
 

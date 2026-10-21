@@ -1,0 +1,394 @@
+// The schema browser: databases, schemas and tables as a tree down the side
+// of the workspace, with a live filter, a right-click menu and a typed
+// confirmation before a table is dropped.
+//
+// Rust owns the tree (`dbhive_ui_model::schema_tree`): it flattens what is
+// expanded into rows, applies the filter and runs the keyboard rules. This
+// file draws the rows and reports intents through `TreeState`.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Divider, Banner, EmptyState, Icon, Popover, CheckBox, CodeBlock, TreeNode, TreeRowView, CtxItem, CtxMenu } from "../kit/kit.slint";
+
+export enum TreeStatus { populated, empty, no-matches, loading, error }
+
+export global TreeState {
+    in property <[TreeNode]> rows;
+    in property <TreeStatus> status: TreeStatus.loading;
+    in property <string> error;
+    // Index of the highlighted row, -1 for none.
+    in property <int> cursor: -1;
+    in property <int> table-count;
+    in-out property <string> filter;
+    // Rust bumps this to hand the keyboard back to the tree (after a menu is
+    // dismissed), since only the panel can name its focus scope.
+    in property <int> focus-tick;
+    // Whether the tool can create tables here (the empty state's button).
+    in property <bool> can-create: true;
+
+    // The right-click menu: where, and what.
+    in-out property <bool> menu-visible;
+    in property <length> menu-x;
+    in property <length> menu-y;
+    in property <[CtxItem]> menu-items;
+
+    // The drop-table confirmation.
+    in-out property <bool> drop-visible;
+    in property <string> drop-table;
+    in property <string> drop-warning;
+    in property <bool> drop-checking;
+    in property <bool> drop-offers-cascade;
+    in property <bool> drop-cascade;
+    in property <string> drop-sql;
+    in property <string> drop-hint;
+    in-out property <string> drop-typed;
+    in property <string> drop-error;
+    in property <bool> drop-running;
+    in property <bool> drop-can-drop;
+
+    callback clicked(int);
+    callback double-clicked(int);
+    callback toggled(int);
+    // Row, then window x and y.
+    callback context(int, length, length);
+    // 0 up, 1 down, 2 home, 3 end, 4 left, 5 right, 6 enter.
+    // The menu key, with where to put the menu (under the highlighted row).
+    callback context-key(length, length);
+    callback nav(int);
+    callback filter-edited(string);
+    callback clear-filter;
+    callback refresh;
+    callback retry;
+    callback create-table;
+    callback menu-chosen(int);
+    callback menu-dismissed;
+    callback drop-typed-edited(string);
+    callback drop-cascade-toggled;
+    callback drop-confirm;
+    callback drop-cancel;
+}
+
+export component SchemaTreePanel inherits Rectangle {
+    // Row height plus the layout spacing, for scrolling the cursor into view.
+    property <length> pitch: 30px;
+    property <int> cursor: TreeState.cursor;
+    property <int> focus-tick: TreeState.focus-tick;
+
+    background: Theme.background;
+    accessible-role: tree;
+    accessible-label: "Schema browser";
+
+    changed focus-tick => { scope.focus(); }
+
+    changed cursor => {
+        if (root.cursor < 0) {
+            return;
+        }
+        let top = root.cursor * root.pitch;
+        if (top < -list.content-y) {
+            list.content-y = -top;
+        } else if (top + root.pitch > -list.content-y + list.visible-height) {
+            list.content-y = -(top + root.pitch - list.visible-height);
+        }
+    }
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 8px;
+
+        HorizontalLayout {
+            spacing: 4px;
+            Text {
+                text: "SCHEMA" + (TreeState.table-count > 0 ? " (" + TreeState.table-count + ")" : "");
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+                font-weight: 600;
+                letter-spacing: 0.6px;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Button {
+                has-icon: true;
+                icon: Icons.refresh-cw;
+                variant: ButtonVariant.ghost;
+                accessible-label: "Refresh schema";
+                clicked => { TreeState.refresh(); }
+            }
+            Button {
+                has-icon: true;
+                icon: Icons.plus;
+                variant: ButtonVariant.ghost;
+                enabled: TreeState.can-create;
+                accessible-label: "New table";
+                clicked => { TreeState.create-table(); }
+            }
+        }
+
+        TextField {
+            has-icon: true;
+            icon: Icons.search;
+            placeholder: "Filter tables";
+            text <=> TreeState.filter;
+            edited(t) => { TreeState.filter-edited(t); }
+        }
+
+        Rectangle {
+            vertical-stretch: 1;
+
+            scope := FocusScope {
+                enabled: TreeState.status != TreeStatus.loading && TreeState.status != TreeStatus.error;
+                key-pressed(e) => {
+                    if (e.modifiers.control || e.modifiers.meta || e.modifiers.alt) {
+                        return reject;
+                    }
+                    if (e.text == Key.UpArrow) { TreeState.nav(0); return accept; }
+                    if (e.text == Key.DownArrow) { TreeState.nav(1); return accept; }
+                    if (e.text == Key.Home) { TreeState.nav(2); return accept; }
+                    if (e.text == Key.End) { TreeState.nav(3); return accept; }
+                    if (e.text == Key.LeftArrow) { TreeState.nav(4); return accept; }
+                    if (e.text == Key.RightArrow) { TreeState.nav(5); return accept; }
+                    if (e.text == Key.Return || e.text == " ") { TreeState.nav(6); return accept; }
+                    if (e.text == Key.Menu || (e.modifiers.shift && e.text == Key.F10)) {
+                        TreeState.context-key(list.absolute-position.x + 48px, list.absolute-position.y + list.content-y + (TreeState.cursor + 1) * root.pitch);
+                        return accept;
+                    }
+                    return reject;
+                }
+
+                list := ScrollView {
+                    VerticalLayout {
+                        alignment: start;
+                        spacing: 2px;
+                        for n[i] in TreeState.rows: TreeRowView {
+                            node: n;
+                            cursor: i == TreeState.cursor;
+                            ring: scope.has-focus;
+                            clicked => {
+                                scope.focus();
+                                TreeState.clicked(i);
+                            }
+                            double-clicked => { TreeState.double-clicked(i); }
+                            toggled => {
+                                scope.focus();
+                                TreeState.toggled(i);
+                            }
+                            context(x, y) => {
+                                scope.focus();
+                                TreeState.context(i, x, y);
+                            }
+                        }
+
+                        if TreeState.status == TreeStatus.empty: EmptyState {
+                            height: 200px;
+                            icon: Icons.table;
+                            title: "No tables";
+                            message: "This schema has no tables yet.";
+                            Button {
+                                text: "Create Table";
+                                variant: ButtonVariant.primary;
+                                has-icon: true;
+                                icon: Icons.plus;
+                                enabled: TreeState.can-create;
+                                clicked => { TreeState.create-table(); }
+                            }
+                        }
+
+                        if TreeState.status == TreeStatus.no-matches: EmptyState {
+                            height: 200px;
+                            icon: Icons.search;
+                            title: "No matches";
+                            message: "Nothing here matches \"" + TreeState.filter + "\".";
+                            Button {
+                                text: "Clear search";
+                                has-icon: true;
+                                icon: Icons.x;
+                                clicked => { TreeState.clear-filter(); }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Drawn after the list so their buttons get the clicks.
+            if TreeState.status == TreeStatus.loading: Text {
+                text: "Loading…";
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            if TreeState.status == TreeStatus.error: VerticalLayout {
+                alignment: start;
+                spacing: 8px;
+                Banner {
+                    message: TreeState.error;
+                    dismissible: false;
+                }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        text: "Retry";
+                        has-icon: true;
+                        icon: Icons.refresh-cw;
+                        clicked => { TreeState.retry(); }
+                    }
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        background: Theme.border;
+    }
+}
+
+// The right-click menu, over the whole window so it can sit on top of the
+// editor and results. A press anywhere outside it closes it.
+export component TreeContextOverlay inherits Rectangle {
+    TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                TreeState.menu-visible = false;
+                TreeState.menu-dismissed();
+            }
+        }
+    }
+
+    menu := CtxMenu {
+        x: max(8px, min(TreeState.menu-x, root.width - self.width - 8px));
+        y: max(8px, min(TreeState.menu-y, root.height - self.height - 8px));
+        items: TreeState.menu-items;
+        highlighted: 0;
+        chosen(i) => {
+            TreeState.menu-visible = false;
+            TreeState.menu-chosen(i);
+        }
+        dismissed => {
+            TreeState.menu-visible = false;
+            TreeState.menu-dismissed();
+        }
+    }
+}
+
+// "Drop Table": the table's name has to be typed, the tables that point at it
+// are listed first, and CASCADE appears only once that warning is on screen.
+export component TreeDropOverlay inherits Rectangle {
+    background: Theme.scrim;
+
+    TouchArea { }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            Popover {
+                width: 440px;
+
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 12px;
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 32px;
+                                height: 32px;
+                                border-radius: 16px;
+                                background: Theme.destructive-soft;
+                                Icon {
+                                    source: Icons.trash-2;
+                                    tint: Theme.destructive;
+                                    width: 16px;
+                                    height: 16px;
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "Drop table";
+                                color: Theme.foreground;
+                                font-size: Theme.size-subheading;
+                                font-weight: 700;
+                            }
+                            Text {
+                                text: TreeState.drop-table;
+                                color: Theme.muted-foreground;
+                                font-size: Theme.size-small;
+                                overflow: elide;
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "This permanently deletes the table and every row in it. It cannot be undone.";
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-label;
+                        wrap: word-wrap;
+                    }
+
+                    if TreeState.drop-checking: Text {
+                        text: "Checking which tables depend on this one…";
+                        color: Theme.dim-foreground;
+                        font-size: Theme.size-small;
+                    }
+
+                    if TreeState.drop-warning != "": Banner {
+                        message: TreeState.drop-warning;
+                        tone: Tone.warning;
+                        dismissible: false;
+                    }
+
+                    if TreeState.drop-offers-cascade: CheckBox {
+                        text: "Also drop dependent foreign keys and views (CASCADE)";
+                        checked: TreeState.drop-cascade;
+                        toggled => { TreeState.drop-cascade-toggled(); }
+                    }
+
+                    CodeBlock {
+                        text: TreeState.drop-sql;
+                        max-lines: 3;
+                    }
+
+                    drop-field := TextField {
+                        placeholder: TreeState.drop-hint;
+                        text <=> TreeState.drop-typed;
+                        enabled: !TreeState.drop-running;
+                        edited(t) => { TreeState.drop-typed-edited(t); }
+                        accepted(t) => {
+                            if (TreeState.drop-can-drop) {
+                                TreeState.drop-confirm();
+                            }
+                        }
+                        init => { self.focus-input(); }
+                    }
+
+                    if TreeState.drop-error != "": Banner {
+                        message: TreeState.drop-error;
+                        dismissible: false;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: end;
+                        Button {
+                            text: "Cancel";
+                            enabled: !TreeState.drop-running;
+                            clicked => { TreeState.drop-cancel(); }
+                        }
+                        Button {
+                            text: TreeState.drop-running ? "Dropping…" : "Drop table";
+                            variant: ButtonVariant.danger;
+                            enabled: TreeState.drop-can-drop;
+                            clicked => { TreeState.drop-confirm(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

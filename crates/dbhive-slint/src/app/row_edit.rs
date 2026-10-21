@@ -249,7 +249,7 @@ impl Ctx {
             return None;
         };
         let driver = ws.driver.clone()?;
-        let schema_arg = ws.schema.clone().unwrap_or_default();
+        let schema_arg = tab.schema.clone().or_else(|| ws.schema.clone()).unwrap_or_default();
         Some((
             tab.id,
             ws.connection_id.clone(),
