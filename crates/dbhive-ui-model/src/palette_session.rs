@@ -179,11 +179,11 @@ pub fn support(id: CommandId) -> Support {
     match id {
         GoConnections | GoSettings | GoAbout | NewConnection | RefreshMetadata | ShowShortcuts
         | OpenCommandPalette | Disconnect | RunQuery | NewTab | CloseTab | ThemeLight
-        | ThemeDark | ThemeToggle => Support::Live,
+        | ThemeDark | ThemeToggle | GoErDiagram | GoSchemaDesigner => Support::Live,
 
         NewWindow => Support::Unsupported("Multiple windows are not supported yet"),
 
-        GoQueryEditor | GoVisualQueryBuilder | GoSchemaDesigner | GoErDiagram
+        GoQueryEditor | GoVisualQueryBuilder
         | GoTableInspector | GoActivityMonitor | GoHistory | GoAiAssistant | GoImportExport
         | GoBackup | GoMigrations | GoPlugins | NewTable | ToggleSidebar | Connect
         | ConnectionsBack | WindowMinimize | WindowMaximizeToggle | WindowClose => Support::Hidden,
@@ -818,13 +818,33 @@ mod tests {
             );
         }
         // Still hidden, still unsupported: the reason that matters wins.
-        assert_eq!(status(CommandId::GoErDiagram, &c), Status::Hidden);
+        assert_eq!(status(CommandId::GoMigrations, &c), Status::Hidden);
+    }
+
+    #[test]
+    fn the_diagram_and_designer_are_live_in_a_workspace_and_refused_elsewhere() {
+        for id in [CommandId::GoErDiagram, CommandId::GoSchemaDesigner] {
+            assert_eq!(status(id, &ws()), Status::Enabled, "{:?}", id);
+            assert_eq!(status(id, &conns()).reason(), "Open a connection first", "{:?}", id);
+            let mut c = ws();
+            c.dialog_open = true;
+            assert_eq!(status(id, &c).reason(), "Close the open dialog first", "{:?}", id);
+        }
+        // Offered in the workspace palette, not on the connection list.
+        let mut p = PaletteState::default();
+        p.open();
+        let titles = |ctx: &CommandContext| -> Vec<String> {
+            p.view(ctx, false).rows.iter().map(|r| r.title.clone()).collect()
+        };
+        assert!(titles(&ws()).contains(&"Go to ER Diagram".to_string()));
+        assert!(titles(&ws()).contains(&"Go to Schema Designer".to_string()));
+        assert!(!titles(&conns()).iter().any(|x| x.contains("ER Diagram")));
     }
 
     #[test]
     fn unbuilt_screens_are_hidden_and_new_window_is_unsupported_with_a_reason() {
         for id in [
-            CommandId::GoErDiagram,
+            CommandId::GoBackup,
             CommandId::GoMigrations,
             CommandId::GoPlugins,
             CommandId::ToggleSidebar,
@@ -1091,11 +1111,11 @@ mod tests {
         p.open();
         p.set_query("tab");
         let ctx = ws();
-        // "New Connection" (description: "database") is drawn first, in the
-        // Actions group; "New Tab" is the real answer.
+        // "Go to Schema Designer" (description: "tables") is drawn first, in
+        // the Navigation group; "New Tab" is the real answer.
         let v = p.view(&ctx, false);
         let first_command = v.rows.iter().find(|r| !r.header).unwrap();
-        assert_eq!(first_command.slug, "new-connection");
+        assert_eq!(first_command.slug, "go-schema-designer");
         assert_eq!(p.selected_id(&ctx), Some(CommandId::NewTab));
         assert!(v.rows.iter().find(|r| r.selected).unwrap().slug == "new-tab");
 

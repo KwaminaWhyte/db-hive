@@ -423,17 +423,23 @@ pub const COMMANDS: &[Command] = &[
         "Build queries without writing SQL",
         Group::Navigation,
     ),
-    cmd(
-        CommandId::GoSchemaDesigner,
-        "Go to Schema Designer",
-        "Design tables and relationships visually",
-        Group::Navigation,
+    scoped(
+        cmd(
+            CommandId::GoSchemaDesigner,
+            "Go to Schema Designer",
+            "Design tables and relationships visually",
+            Group::Navigation,
+        ),
+        Scope::Workspace,
     ),
-    cmd(
-        CommandId::GoErDiagram,
-        "Go to ER Diagram",
-        "Entity-relationship diagram for the current schema",
-        Group::Navigation,
+    scoped(
+        cmd(
+            CommandId::GoErDiagram,
+            "Go to ER Diagram",
+            "Entity-relationship diagram for the current schema",
+            Group::Navigation,
+        ),
+        Scope::Workspace,
     ),
     cmd(
         CommandId::GoTableInspector,
