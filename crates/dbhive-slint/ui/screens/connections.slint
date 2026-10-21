@@ -10,6 +10,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Badge, TextField, BrandMark,
     Divider, Banner, EmptyState } from "../kit/kit.slint";
+import { PluginsState, PluginToolbarHost } from "plugins_panel.slint";
 
 export struct ConnectionItem {
     id: string,
@@ -229,6 +230,17 @@ export component ConnectionsScreen inherits Rectangle {
                     }
                 }
                 Rectangle { horizontal-stretch: 1; }
+                PluginToolbarHost { }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        has-icon: true;
+                        icon: Icons.plug;
+                        variant: ButtonVariant.ghost;
+                        accessible-label: "Plugins";
+                        clicked => { PluginsState.open-requested(); }
+                    }
+                }
                 VerticalLayout {
                     alignment: center;
                     Button {

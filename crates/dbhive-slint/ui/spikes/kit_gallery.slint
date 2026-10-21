@@ -2,7 +2,8 @@ import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Card, ClickableCard, L
     ScreenHeader, SectionLabel, Banner, EmptyState, Divider, DetailRow, UnderlineTabs, FilterChip,
     Segmented, DataRow, SidePanel, ClipboardSink, KeyCap, KeyCaps, Popover, SettingRow, Toggle,
     StepBar, ProgressBar, CodeBlock, FormField, FactRow, Stepper, StatTile, MeterRow, LineChart,
-    CollapseHeader, CheckBox, StepTabs, ChipStrip, PropField, KeyTag, Dropdown } from "../kit/kit.slint";
+    CollapseHeader, CheckBox, StepTabs, ChipStrip, PropField, KeyTag, Dropdown,
+    PluginMarketRow, PluginTableRow, PluginPermissionRow, PluginTextArea } from "../kit/kit.slint";
 
 export component KitGallery inherits Window {
     background: Theme.background;
@@ -352,6 +353,33 @@ export component KitGallery inherits Window {
                     FilterChip { text: "a_column_that_runs_past_the_edge"; selected: false; }
                     FilterChip { text: "and_another_one"; selected: false; }
                 }
+                SectionLabel { text: "PLUGINS"; }
+                PluginMarketRow {
+                    name: "Advanced CSV Exporter";
+                    byline: "v1.0.0 · DB Hive Team";
+                    description: "Export query results to CSV with advanced formatting options";
+                    meta: "15.2K downloads · 4.8 rating · 44.6 KB";
+                    category: "Export Formats";
+                    keywords: ["csv", "export"];
+                    requests: "Requests: Execute Queries, Write Files";
+                    sensitive: true;
+                    verified: true;
+                    state: 0;
+                }
+                PluginMarketRow {
+                    name: "Dark Theme Plus";
+                    byline: "v2.1.0 · Theme Designer";
+                    description: "Enhanced dark theme";
+                    meta: "28.5K downloads · 4.9 rating";
+                    category: "Themes";
+                    state: 3;
+                    note: "Dark Theme Plus is not bundled with this build.";
+                }
+                PluginPermissionRow { label: "Write Files"; detail: "Write files inside this plugin's own data folder."; sensitive: true; }
+                PluginPermissionRow { label: "Show Notifications"; detail: "Raise a toast notification."; }
+                PluginTableRow { cells: ["File", "Rows", "When"]; head: true; }
+                PluginTableRow { cells: ["orders.csv", "1204", "2 days ago"]; }
+                PluginTextArea { text: ""; placeholder: "A multi-line plugin input"; }
             }
         }
     }

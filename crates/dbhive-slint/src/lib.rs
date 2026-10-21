@@ -20,6 +20,7 @@ pub mod history_view;
 pub mod import_export_view;
 pub mod migrations_view;
 pub mod palette_view;
+pub mod plugins_view;
 pub mod runtime;
 pub mod settings_view;
 pub mod sql_highlight;

@@ -58,6 +58,8 @@ mod import_export;
 // The Activity Monitor and Schema Migrations panels' controller halves.
 mod activity_glue;
 mod migrations_glue;
+// The Plugins panel's controller half.
+mod plugins_glue;
 
 /// The connected workspace: which connection, which table, and its rows.
 #[derive(Default)]
@@ -101,6 +103,8 @@ enum PendingAction {
     ApplyMigration,
     /// Run the edit-table dialog's ALTER statements, which drop columns.
     ApplyTableDialog,
+    /// Uninstall a plugin.
+    Plugins(plugins_glue::Pending),
 }
 
 /// The new/edit connection dialog's state.
@@ -172,6 +176,7 @@ struct Session {
     table_dialog: table_dialog::DialogSession,
     erd: erd::ErdSession,
     designer: designer::DesignerSession,
+    plugins: plugins_glue::PluginSession,
 }
 
 struct Ctx {
@@ -1072,6 +1077,7 @@ impl Ctx {
             Some(PendingAction::KillProcess(pid)) => self.monitor_kill_confirmed(pid),
             Some(PendingAction::ApplyMigration) => self.migration_apply_confirmed(),
             Some(PendingAction::ApplyTableDialog) => self.table_dialog_apply_confirmed(),
+            Some(PendingAction::Plugins(pending)) => self.plugins_confirmed(pending),
             None => self.delete_pending_connection(),
         }
     }
@@ -1146,6 +1152,7 @@ impl Ctx {
             || w.global::<crate::MigrationsState>().get_visible()
             || self.builder_open_now()
             || self.table_dialog_open_now()
+            || self.plugins_open_now()
         {
             Overlay::Dialog
         } else {
@@ -1210,6 +1217,7 @@ impl Ctx {
             CommandId::ShowShortcuts => self.open_shortcuts(),
             CommandId::GoActivityMonitor => self.open_activity_monitor(),
             CommandId::GoMigrations => self.open_migrations(),
+            CommandId::GoPlugins => self.open_plugins(),
             CommandId::OpenCommandPalette => self.open_palette(),
             CommandId::Disconnect => {
                 let connection = self.session.borrow().workspace.connection_id.clone();
@@ -1647,6 +1655,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     table_dialog::wire(&window, &ctx);
     erd::wire(&window, &ctx);
     designer::wire(&window, &ctx);
+    plugins_glue::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {
