@@ -19,10 +19,19 @@ export struct GridColumn {
 export struct GridCell {
     text: string,
     is-null: bool,
+    // The cell holds a pending, uncommitted edit.
+    modified: bool,
+    // A new row's column the user has not filled in: shown dim, as a hint,
+    // because the database default will be used.
+    placeholder: bool,
 }
 
 export struct GridRow {
     cells: [GridCell],
+    // Marked for deletion, not yet committed.
+    deleted: bool,
+    // A new row, not yet inserted.
+    added: bool,
 }
 
 export component ResultsGrid inherits Rectangle {
@@ -44,8 +53,18 @@ export component ResultsGrid inherits Rectangle {
     in property <int> sort-column: -1;
     in property <bool> sort-desc: false;
 
+    // Editing: the caller says which cell has a text box (-1 for none) and what
+    // it starts with. Enter or leaving the box reports the text; Escape
+    // cancels. The caller owns the state, as with the selection.
+    in property <int> editing-row: -1;
+    in property <int> editing-col: -1;
+    in property <string> edit-initial;
+
     callback row-clicked(int);
     callback cell-clicked(int, int);
+    callback cell-double-clicked(int, int);
+    callback edit-accepted(string);
+    callback edit-cancelled;
     callback header-clicked(int);
 
     // Exposed so tests and snapshots can scroll without a pointer.
@@ -107,8 +126,11 @@ export component ResultsGrid inherits Rectangle {
             list := ListView {
                 for row[r] in root.rows: Rectangle {
                     height: root.row-height;
-                    background: r == root.selected-row
-                        ? Theme.primary-soft
+                    // A deleted row keeps its red even while selected, so the
+                    // pending delete is never mistaken for plain selection.
+                    background: row.deleted ? Theme.destructive-soft
+                        : r == root.selected-row ? Theme.primary-soft
+                        : row.added ? Theme.success-soft
                         : (mod(r, 2) == 0 ? transparent : Theme.hover.transparentize(0.5));
                     for cell[c] in row.cells: TouchArea {
                         x: root.columns[c].x;
@@ -120,20 +142,70 @@ export component ResultsGrid inherits Rectangle {
                             root.row-clicked(r);
                             root.cell-clicked(r, c);
                         }
+                        double-clicked => { root.cell-double-clicked(r, c); }
+                        // A pending edit is tinted so it cannot be missed.
+                        Rectangle {
+                            background: cell.modified ? Theme.warning-soft : transparent;
+                        }
                         // The selected cell, outlined within its selected row.
                         Rectangle {
                             border-width: r == root.selected-row && c == root.selected-col ? 1px : 0px;
                             border-color: Theme.primary;
                         }
-                        Text {
+                        if !(r == root.editing-row && c == root.editing-col): Text {
                             x: 12px;
                             width: parent.width - 20px;
                             text: cell.is-null ? "NULL" : cell.text;
-                            color: cell.is-null ? Theme.dim-foreground : Theme.foreground;
-                            font-italic: cell.is-null;
+                            color: cell.is-null || cell.placeholder || row.deleted ? Theme.dim-foreground : Theme.foreground;
+                            font-italic: cell.is-null || cell.placeholder;
                             font-size: Theme.size-body;
                             vertical-alignment: center;
                             overflow: elide;
+                        }
+                        // The cell being edited: a text box over it. Enter or
+                        // leaving the box commits the text to the pending
+                        // changes; Escape drops it.
+                        if r == root.editing-row && c == root.editing-col: edit-scope := FocusScope {
+                            property <bool> finished: false;
+                            capture-key-pressed(event) => {
+                                if (event.text == Key.Escape) {
+                                    self.finished = true;
+                                    root.edit-cancelled();
+                                    return accept;
+                                }
+                                return reject;
+                            }
+                            Rectangle {
+                                background: Theme.card;
+                                border-width: 2px;
+                                border-color: Theme.primary;
+                                edit-input := TextInput {
+                                    x: 10px;
+                                    width: parent.width - 20px;
+                                    text: root.edit-initial;
+                                    font-size: Theme.size-body;
+                                    color: Theme.foreground;
+                                    vertical-alignment: center;
+                                    single-line: true;
+                                    selection-background-color: Theme.primary.transparentize(0.65);
+                                    selection-foreground-color: Theme.foreground;
+                                    accessible-label: "Cell value";
+                                    init => {
+                                        self.focus();
+                                        self.select-all();
+                                    }
+                                    accepted => {
+                                        edit-scope.finished = true;
+                                        root.edit-accepted(self.text);
+                                    }
+                                    changed has-focus => {
+                                        if (!self.has-focus && !edit-scope.finished) {
+                                            edit-scope.finished = true;
+                                            root.edit-accepted(self.text);
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

@@ -65,6 +65,8 @@ pub struct TableView {
     pub selection: Option<CellRef>,
     pub panel_open: bool,
     pub filters_open: bool,
+    /// Row editing: pending changes, the cell being typed in, the review page.
+    pub edit: crate::row_edits::EditUi,
     meta_seq: u64,
     count_seq: u64,
 }
@@ -85,6 +87,7 @@ impl Default for TableView {
             selection: None,
             panel_open: false,
             filters_open: false,
+            edit: crate::row_edits::EditUi::default(),
             meta_seq: 0,
             count_seq: 0,
         }

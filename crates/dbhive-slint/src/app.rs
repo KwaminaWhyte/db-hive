@@ -36,6 +36,7 @@ mod completion;
 mod designer;
 mod erd;
 mod inspector;
+mod row_edit;
 mod settings;
 mod table_dialog;
 
@@ -722,7 +723,12 @@ impl Ctx {
             rows_affected: None,
         };
         let ordered = workspace_model::to_grid_rows(&visible);
-        w.set_workspace_rows(ModelRc::new(LazyRows::new(std::rc::Rc::new(ordered))));
+        // A table tab with pending edits draws the page with them applied.
+        let rows_model = match row_edit::overlay(tab) {
+            Some((rows, marks)) => LazyRows::with_marks(std::rc::Rc::new(rows), std::rc::Rc::new(marks)),
+            None => LazyRows::new(std::rc::Rc::new(ordered)),
+        };
+        w.set_workspace_rows(ModelRc::new(rows_model));
         w.set_workspace_row_count(result.rows.len() as i32);
         w.set_workspace_visible_row_count(order.len() as i32);
     }
@@ -866,14 +872,16 @@ impl Ctx {
     /// Close a tab, asking first when it is a query with SQL in it.
     fn close_tab(&self, index: usize) {
         self.completion_clear();
-        let (id, ask, title) = {
+        let (id, ask, title, pending) = {
             let s = self.session.borrow();
             let tabs = &s.workspace.tabs;
             let Some(id) = tabs.id_at(index) else { return };
+            let t = tabs.get(id);
             (
                 id,
                 tabs.needs_close_confirmation(id),
-                tabs.get(id).map(|t| t.title.clone()).unwrap_or_default(),
+                t.map(|t| t.title.clone()).unwrap_or_default(),
+                t.and_then(|t| t.inspector.as_ref()).map_or(0, |v| v.edit.pending_count()),
             )
         };
         if !ask {
@@ -884,7 +892,12 @@ impl Ctx {
         self.session.borrow_mut().pending_action = Some(PendingAction::CloseTab(id));
         self.show_confirm(
             "Close this tab?",
-            &format!("\"{title}\" has SQL in it that is not saved anywhere."),
+            &if pending > 0 {
+                let noun = if pending == 1 { "change" } else { "changes" };
+                format!("\"{title}\" has {pending} unsaved row {noun} that will be lost.")
+            } else {
+                format!("\"{title}\" has SQL in it that is not saved anywhere.")
+            },
             "Close tab",
         );
     }
@@ -1657,6 +1670,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     erd::wire(&window, &ctx);
     designer::wire(&window, &ctx);
     completion::wire(&window, &ctx);
+    row_edit::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {

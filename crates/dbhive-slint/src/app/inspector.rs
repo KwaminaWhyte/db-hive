@@ -512,13 +512,16 @@ pub(super) fn project(w: &AppWindow, ws: &Workspace, tab: &Tab) {
 
     // Selection and the row panel. A selection that no longer points at a
     // row (the page changed under it) shows nothing.
+    let new_rows = v.edit.session.as_ref().map_or(0, |s| s.new_rows().len());
     let selected = v
         .selection
-        .filter(|c| page.is_some_and(|r| c.row < r.rows.len() && c.col < r.columns.len()));
+        .filter(|c| page.is_some_and(|r| c.row < r.rows.len() + new_rows && c.col < r.columns.len()));
     b.set_selected_row(selected.map_or(-1, |c| c.row as i32));
     b.set_selected_col(selected.map_or(-1, |c| c.col as i32));
-    b.set_panel_open(v.panel_open && selected.is_some());
-    match (selected, page) {
+    // A new, unsaved row has no stored JSON to show.
+    let on_page = selected.filter(|c| page.is_some_and(|r| c.row < r.rows.len()));
+    b.set_panel_open(v.panel_open && on_page.is_some());
+    match (on_page, page) {
         (Some(c), Some(r)) => {
             b.set_panel_title(selection_label(r, c).into());
             b.set_panel_json(row_json(r, c.row).unwrap_or_default().into());
@@ -581,4 +584,6 @@ pub(super) fn project(w: &AppWindow, ws: &Workspace, tab: &Tab) {
             b.set_struct_relations(model(Vec::new()));
         }
     }
+
+    super::row_edit::project(w, ws, tab);
 }

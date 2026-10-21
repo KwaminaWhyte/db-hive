@@ -688,9 +688,85 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
             }
             c.set_workspace_columns(columns);
             c.set_workspace_grid_width(width);
-            c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(data))));
-            c.set_workspace_row_count(n as i32);
-            c.set_workspace_visible_row_count(n as i32);
+            let editing = v.starts_with("inspector-edit") || v.starts_with("inspector-review");
+            if editing {
+                // Pending changes: an edited note, a row marked for deletion
+                // and a new row at the bottom.
+                use dbhive_slint::grid_model::RowMark;
+                data[1][2] = Some("order-27 (rush)".to_string());
+                data.push(vec![
+                    Some("auto".into()),
+                    Some("3".into()),
+                    Some("Gift wrap".into()),
+                    Some("default".into()),
+                    Some("default".into()),
+                ]);
+                let mut marks: Vec<RowMark> = data
+                    .iter()
+                    .map(|r| RowMark {
+                        deleted: false,
+                        added: false,
+                        modified: vec![false; r.len()],
+                        placeholder: vec![false; r.len()],
+                    })
+                    .collect();
+                marks[1].modified[2] = true;
+                marks[4].deleted = true;
+                let last = marks.len() - 1;
+                marks[last].added = true;
+                marks[last].placeholder = vec![true, false, false, true, true];
+                let rows = data.len() as i32;
+                c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::with_marks(
+                    std::rc::Rc::new(data),
+                    std::rc::Rc::new(marks),
+                )));
+                c.set_workspace_row_count(rows);
+                c.set_workspace_visible_row_count(rows);
+                b.set_editable(true);
+                b.set_pending_count(3);
+                b.set_selected_row(4);
+                b.set_selected_col(1);
+                b.set_selected_deleted(true);
+                if v == "inspector-edit-editing" {
+                    b.set_editing_row(1);
+                    b.set_editing_col(2);
+                    b.set_edit_initial(s("order-27 (rush)"));
+                }
+                if v == "inspector-edit-error" {
+                    b.set_edit_message(s("Not saved: total must be a number, got \"ten\""));
+                }
+                if v.starts_with("inspector-review") {
+                    b.set_review_open(true);
+                    if v == "inspector-review-failed" {
+                        b.set_edit_message(s("Nothing was changed. Change 3 of 3 failed (insert into orders): UNIQUE constraint failed: orders.code"));
+                    }
+                    b.set_review_items(slint::ModelRc::new(slint::VecModel::from(vec![
+                        dbhive_slint::ReviewItem {
+                            summary: s("Change note on order 27"),
+                            sql: s("UPDATE \"orders\" SET \"note\" = 'order-27 (rush)' WHERE \"id\" = 27"),
+                            kind: s("update"),
+                        },
+                        dbhive_slint::ReviewItem {
+                            summary: s("Delete order 30"),
+                            sql: s("DELETE FROM \"orders\" WHERE \"id\" = 30"),
+                            kind: s("delete"),
+                        },
+                        dbhive_slint::ReviewItem {
+                            summary: s("Add a row to orders"),
+                            sql: s("INSERT INTO \"orders\" (\"customer_id\", \"note\") VALUES (3, 'Gift wrap')"),
+                            kind: s("insert"),
+                        },
+                    ])));
+                }
+            } else {
+                c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(data))));
+                c.set_workspace_row_count(n as i32);
+                c.set_workspace_visible_row_count(n as i32);
+                b.set_editable(v != "inspector-readonly");
+                if v == "inspector-readonly" {
+                    b.set_edit_note(s("This kind of connection cannot save edits safely, so the grid is read-only."));
+                }
+            }
             c.set_workspace_has_result(true);
             b.set_sort_column(3);
             b.set_sort_desc(true);

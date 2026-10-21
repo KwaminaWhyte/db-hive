@@ -1,5 +1,5 @@
 import { ScrollView } from "std-widgets.slint";
-import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Badge, TextField, Dropdown, Divider, SectionLabel, Banner, EmptyState, Segmented, DataRow, SidePanel } from "../kit/kit.slint";
+import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Badge, TextField, Dropdown, Divider, SectionLabel, Banner, EmptyState, Segmented, DataRow, SidePanel, Card } from "../kit/kit.slint";
 import { TableDialogState } from "table_dialog.slint";
 import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
 
@@ -42,7 +42,39 @@ export struct RelationRowItem {
     other-table: string,
 }
 
+// One statement on the review page: what it does in words, the SQL itself,
+// and its kind ("update", "delete", "insert").
+export struct ReviewItem {
+    summary: string,
+    sql: string,
+    kind: string,
+}
+
 export global InspectorBridge {
+    // Row editing. `editable` is false for a table without a primary key or a
+    // driver that cannot run a transaction; `edit-note` says why.
+    in property <bool> editable;
+    in property <string> edit-note;
+    in property <int> editing-row: -1;
+    in property <int> editing-col: -1;
+    in property <string> edit-initial;
+    // Why the last entry or the last commit was refused.
+    in property <string> edit-message;
+    in property <int> pending-count;
+    in property <bool> selected-deleted;
+    in property <bool> review-open;
+    in property <bool> committing;
+    in property <[ReviewItem]> review-items;
+    callback cell-double-clicked(int, int);
+    callback edit-accepted(string);
+    callback edit-cancelled;
+    callback add-row;
+    callback delete-selected;
+    callback discard-edits;
+    callback open-review;
+    callback close-review;
+    callback commit-edits;
+
     // 0 = Data, 1 = Structure.
     in property <int> view;
     // "1,204 rows", "3 rows match", "Counting rows…".
@@ -572,6 +604,86 @@ component RowPanel inherits SidePanel {
     }
 }
 
+// The last stop before the database changes: every statement the pending edits
+// become, in the order they run, with a single Commit.
+component ReviewPage inherits VerticalLayout {
+    padding: 14px;
+    spacing: 10px;
+
+    Text {
+        text: "Review changes";
+        color: Theme.foreground;
+        font-size: Theme.size-subheading;
+        font-weight: 700;
+    }
+    Text {
+        text: "These run together in one transaction. If any statement fails, none of them are applied.";
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+    if InspectorBridge.edit-message != "": Banner {
+        message: InspectorBridge.edit-message;
+        dismissible: false;
+    }
+    Card {
+        vertical-stretch: 1;
+        clip: true;
+        ScrollView {
+            VerticalLayout {
+                alignment: start;
+                for item in InspectorBridge.review-items: Rectangle {
+                    VerticalLayout {
+                        padding: 10px;
+                        spacing: 4px;
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+                            Badge {
+                                text: item.kind == "update" ? "UPDATE" : item.kind == "delete" ? "DELETE" : "INSERT";
+                                tone: item.kind == "update" ? Tone.warning : item.kind == "delete" ? Tone.danger : Tone.success;
+                            }
+                            Text {
+                                text: item.summary;
+                                color: Theme.foreground;
+                                font-size: Theme.size-label;
+                                font-weight: 600;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
+                        }
+                        Text {
+                            text: item.sql;
+                            color: Theme.muted-foreground;
+                            font-family: "Menlo";
+                            font-size: Theme.size-mono;
+                            wrap: char-wrap;
+                        }
+                    }
+                    Divider { y: parent.height - 1px; }
+                }
+            }
+        }
+    }
+    HorizontalLayout {
+        spacing: 8px;
+        Button {
+            text: "Back to editing";
+            enabled: !InspectorBridge.committing;
+            clicked => { InspectorBridge.close-review(); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Button {
+            text: InspectorBridge.committing
+                ? "Committing…"
+                : "Commit " + InspectorBridge.pending-count + (InspectorBridge.pending-count == 1 ? " change" : " changes");
+            variant: ButtonVariant.primary;
+            enabled: !InspectorBridge.committing && InspectorBridge.review-items.length > 0;
+            clicked => { InspectorBridge.commit-edits(); }
+        }
+    }
+}
+
 export component TableInspectorView inherits VerticalLayout {
     // The page of rows, projected by the workspace like any other result.
     in property <[GridColumn]> columns;
@@ -604,7 +716,34 @@ export component TableInspectorView inherits VerticalLayout {
                 font-size: Theme.size-small;
                 vertical-alignment: center;
             }
+            if !InspectorBridge.editable && InspectorBridge.view == 0: VerticalLayout {
+                alignment: center;
+                Badge {
+                    text: "Read-only";
+                    accessible-description: InspectorBridge.edit-note;
+                }
+            }
             Rectangle { horizontal-stretch: 1; }
+            if InspectorBridge.view == 0 && InspectorBridge.editable && !InspectorBridge.review-open: VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "Add row";
+                    has-icon: true;
+                    icon: Icons.plus;
+                    variant: ButtonVariant.ghost;
+                    clicked => { InspectorBridge.add-row(); }
+                }
+            }
+            if InspectorBridge.view == 0 && InspectorBridge.editable && !InspectorBridge.review-open && InspectorBridge.selected-row >= 0: VerticalLayout {
+                alignment: center;
+                Button {
+                    text: InspectorBridge.selected-deleted ? "Undo delete" : "Delete row";
+                    has-icon: true;
+                    icon: Icons.trash-2;
+                    variant: ButtonVariant.ghost;
+                    clicked => { InspectorBridge.delete-selected(); }
+                }
+            }
             if InspectorBridge.view == 0: VerticalLayout {
                 alignment: center;
                 Button {
@@ -646,9 +785,15 @@ export component TableInspectorView inherits VerticalLayout {
         vertical-stretch: 1;
     }
 
-    if InspectorBridge.view == 0 && InspectorBridge.filters-open: FilterBar { }
+    if InspectorBridge.view == 0 && InspectorBridge.filters-open && !InspectorBridge.review-open: FilterBar { }
 
-    if InspectorBridge.view == 0: HorizontalLayout {
+    // The review page stands in for the grid until the changes are committed
+    // or the user goes back.
+    if InspectorBridge.view == 0 && InspectorBridge.review-open: ReviewPage {
+        vertical-stretch: 1;
+    }
+
+    if InspectorBridge.view == 0 && !InspectorBridge.review-open: HorizontalLayout {
         vertical-stretch: 1;
         spacing: 0;
 
@@ -656,6 +801,52 @@ export component TableInspectorView inherits VerticalLayout {
             horizontal-stretch: 1;
             padding: 14px;
             spacing: 8px;
+
+            // Edits that are not in the database yet. Nothing is written until
+            // the user reviews and commits.
+            if InspectorBridge.pending-count > 0: Rectangle {
+                height: 44px;
+                background: Theme.warning-soft;
+                border-radius: Theme.radius-control;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 8px;
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: InspectorBridge.pending-count == 1
+                                ? "1 pending change, not saved yet"
+                                : InspectorBridge.pending-count + " pending changes, not saved yet";
+                            color: Theme.foreground;
+                            font-size: Theme.size-label;
+                            font-weight: 600;
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Discard";
+                            variant: ButtonVariant.ghost;
+                            clicked => { InspectorBridge.discard-edits(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Review and commit";
+                            variant: ButtonVariant.primary;
+                            clicked => { InspectorBridge.open-review(); }
+                        }
+                    }
+                }
+            }
+
+            if InspectorBridge.edit-message != "": Banner {
+                message: InspectorBridge.edit-message;
+                dismissible: false;
+            }
 
             if root.rows-error != "": VerticalLayout {
                 alignment: start;
@@ -700,6 +891,12 @@ export component TableInspectorView inherits VerticalLayout {
                     text: "Clear filters";
                     clicked => { InspectorBridge.clear-filters(); }
                 }
+                if InspectorBridge.applied-filter-count == 0 && InspectorBridge.editable: Button {
+                    text: "Add row";
+                    has-icon: true;
+                    icon: Icons.plus;
+                    clicked => { InspectorBridge.add-row(); }
+                }
             }
 
             if root.rows-error == "" && root.has-result && root.rows.length > 0: ResultsGrid {
@@ -712,8 +909,14 @@ export component TableInspectorView inherits VerticalLayout {
                 selected-col: InspectorBridge.selected-col;
                 sort-column: InspectorBridge.sort-column;
                 sort-desc: InspectorBridge.sort-desc;
+                editing-row: InspectorBridge.editing-row;
+                editing-col: InspectorBridge.editing-col;
+                edit-initial: InspectorBridge.edit-initial;
                 header-clicked(i) => { InspectorBridge.sort-by(i); }
                 cell-clicked(r, c) => { InspectorBridge.cell-clicked(r, c); }
+                cell-double-clicked(r, c) => { InspectorBridge.cell-double-clicked(r, c); }
+                edit-accepted(t) => { InspectorBridge.edit-accepted(t); }
+                edit-cancelled => { InspectorBridge.edit-cancelled(); }
             }
 
             // A failed or empty page still needs something to claim the

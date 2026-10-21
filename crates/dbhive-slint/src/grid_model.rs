@@ -15,8 +15,21 @@ use crate::{GridCell, GridColumn, GridRow};
 /// A cell value, with NULL kept distinct from the text "NULL".
 pub type Cell = Option<String>;
 
+/// What the editing layer knows about one row beyond its text: pending edits,
+/// a pending delete, a row that is not in the table yet.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct RowMark {
+    pub deleted: bool,
+    pub added: bool,
+    /// Per cell: holds an uncommitted edit.
+    pub modified: Vec<bool>,
+    /// Per cell: shown as a hint ("default"), not a value.
+    pub placeholder: Vec<bool>,
+}
+
 pub struct LazyRows {
     rows: Rc<Vec<Vec<Cell>>>,
+    marks: Option<Rc<Vec<RowMark>>>,
     notify: ModelNotify,
 }
 
@@ -24,6 +37,16 @@ impl LazyRows {
     pub fn new(rows: Rc<Vec<Vec<Cell>>>) -> Self {
         Self {
             rows,
+            marks: None,
+            notify: ModelNotify::default(),
+        }
+    }
+
+    /// The same rows with their edit marks, one `RowMark` per row.
+    pub fn with_marks(rows: Rc<Vec<Vec<Cell>>>, marks: Rc<Vec<RowMark>>) -> Self {
+        Self {
+            rows,
+            marks: Some(marks),
             notify: ModelNotify::default(),
         }
     }
@@ -38,21 +61,34 @@ impl Model for LazyRows {
 
     fn row_data(&self, row: usize) -> Option<GridRow> {
         let src = self.rows.get(row)?;
+        let mark = self.marks.as_ref().and_then(|m| m.get(row));
+        let flag = |v: Option<&Vec<bool>>, i: usize| v.and_then(|v| v.get(i)).copied().unwrap_or(false);
         let cells: Vec<GridCell> = src
             .iter()
-            .map(|c| match c {
-                Some(t) => GridCell {
-                    text: t.as_str().into(),
-                    is_null: false,
-                },
-                None => GridCell {
-                    text: "".into(),
-                    is_null: true,
-                },
+            .enumerate()
+            .map(|(i, c)| {
+                let modified = flag(mark.map(|m| &m.modified), i);
+                let placeholder = flag(mark.map(|m| &m.placeholder), i);
+                match c {
+                    Some(t) => GridCell {
+                        text: t.as_str().into(),
+                        is_null: false,
+                        modified,
+                        placeholder,
+                    },
+                    None => GridCell {
+                        text: "".into(),
+                        is_null: true,
+                        modified,
+                        placeholder,
+                    },
+                }
             })
             .collect();
         Some(GridRow {
             cells: ModelRc::new(VecModel::from(cells)),
+            deleted: mark.is_some_and(|m| m.deleted),
+            added: mark.is_some_and(|m| m.added),
         })
     }
 

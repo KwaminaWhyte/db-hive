@@ -523,6 +523,37 @@ impl EditSession {
     }
 }
 
+/// Everything about a table tab's editing that is not the pending changes
+/// themselves: the cell being typed into, whether the review page is open, and
+/// the last thing that went wrong.
+#[derive(Debug, Default)]
+pub struct EditUi {
+    pub session: Option<EditSession>,
+    /// The cell with a text box in it: `(row, column)` in the grid's own
+    /// coordinates. A row number past the page's rows is a new row.
+    pub editing: Option<(usize, usize)>,
+    /// What the text box starts with.
+    pub initial: String,
+    /// Why the last entry was refused.
+    pub cell_error: Option<String>,
+    pub review_open: bool,
+    /// The statements shown on the review page.
+    pub review: Vec<Statement>,
+    pub committing: bool,
+    /// A commit that failed, or changes that cannot be reviewed yet.
+    pub message: Option<String>,
+}
+
+impl EditUi {
+    pub fn pending_count(&self) -> usize {
+        self.session.as_ref().map(|s| s.pending_count()).unwrap_or(0)
+    }
+
+    pub fn has_pending(&self) -> bool {
+        self.pending_count() > 0
+    }
+}
+
 fn values_equal(a: &Value, b: &Value) -> bool {
     match (a, b) {
         // 3 and 3.0 are the same cell.

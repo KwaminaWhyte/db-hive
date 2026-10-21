@@ -152,7 +152,11 @@ impl Tabs {
     /// Whether closing this tab would throw away SQL the user typed.
     pub fn needs_close_confirmation(&self, id: u64) -> bool {
         self.get(id)
-            .map(|t| t.is_query() && !t.sql.trim().is_empty())
+            .map(|t| {
+                (t.is_query() && !t.sql.trim().is_empty())
+                    // Row edits that were never committed would be lost.
+                    || t.inspector.as_ref().is_some_and(|v| v.edit.has_pending())
+            })
             .unwrap_or(false)
     }
 
