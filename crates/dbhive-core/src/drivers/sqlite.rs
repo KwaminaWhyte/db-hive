@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use rusqlite::{Connection, OpenFlags, Row};
 use std::sync::{Arc, Mutex as StdMutex};
 
-use super::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
+use super::{ConnectionOptions, DatabaseDriver, QueryResult, TransactionFailure, MAX_RESULT_ROWS};
 use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
@@ -171,6 +171,59 @@ impl DatabaseDriver for SqliteDriver {
             }
         })
         .await
+    }
+
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    async fn execute_transaction(
+        &self,
+        statements: &[String],
+    ) -> Result<Vec<u64>, TransactionFailure> {
+        let statements = statements.to_vec();
+        let outcome = self
+            .run_blocking(move |conn| {
+                // One connection behind one mutex: the transaction cannot be
+                // interleaved with another caller's statements.
+                let tx = match conn.unchecked_transaction() {
+                    Ok(tx) => tx,
+                    Err(e) => {
+                        return Ok(Err(TransactionFailure {
+                            index: 0,
+                            error: DbError::QueryError(format!(
+                                "Failed to start a transaction: {}",
+                                e
+                            )),
+                        }))
+                    }
+                };
+                let mut affected = Vec::with_capacity(statements.len());
+                for (index, sql) in statements.iter().enumerate() {
+                    match tx.execute(sql, []) {
+                        Ok(n) => affected.push(n as u64),
+                        // Dropping `tx` here rolls everything back.
+                        Err(e) => {
+                            return Ok(Err(TransactionFailure {
+                                index,
+                                error: DbError::QueryError(format!("{}", e)),
+                            }))
+                        }
+                    }
+                }
+                if let Err(e) = tx.commit() {
+                    return Ok(Err(TransactionFailure {
+                        index: statements.len().saturating_sub(1),
+                        error: DbError::QueryError(format!("Commit failed: {}", e)),
+                    }));
+                }
+                Ok(Ok(affected))
+            })
+            .await;
+        match outcome {
+            Ok(inner) => inner,
+            Err(error) => Err(TransactionFailure { index: 0, error }),
+        }
     }
 
     async fn get_databases(&self) -> Result<Vec<DatabaseInfo>, DbError> {
@@ -588,5 +641,95 @@ mod tests {
 
         // Cleanup
         std::fs::remove_file(db_path).ok();
+    }
+}
+
+#[cfg(test)]
+mod transaction_tests {
+    use super::*;
+
+    async fn fresh(name: &str) -> (SqliteDriver, std::path::PathBuf) {
+        let path = std::env::temp_dir().join(format!("dbhive-tx-{}-{}.sqlite", std::process::id(), name));
+        let _ = std::fs::remove_file(&path);
+        let driver = SqliteDriver::connect(ConnectionOptions {
+            host: String::new(),
+            port: 0,
+            username: String::new(),
+            password: None,
+            database: Some(path.to_string_lossy().to_string()),
+            timeout: None,
+            require_tls: false,
+        })
+        .await
+        .unwrap();
+        driver
+            .execute_query("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL)")
+            .await
+            .unwrap();
+        driver
+            .execute_query("INSERT INTO t (id, name) VALUES (1, 'a'), (2, 'b')")
+            .await
+            .unwrap();
+        (driver, path)
+    }
+
+    async fn count(d: &SqliteDriver) -> i64 {
+        let r = d.execute_query("SELECT COUNT(*) FROM t").await.unwrap();
+        r.rows[0][0].as_i64().unwrap()
+    }
+
+    #[tokio::test]
+    async fn a_transaction_applies_every_statement_and_reports_each_count() {
+        let (d, path) = fresh("commit").await;
+        assert!(d.supports_transactions());
+        let affected = d
+            .execute_transaction(&[
+                "UPDATE t SET name = 'z' WHERE id = 1".to_string(),
+                "INSERT INTO t (id, name) VALUES (3, 'c')".to_string(),
+                "DELETE FROM t WHERE id = 2".to_string(),
+            ])
+            .await
+            .unwrap();
+        assert_eq!(affected, vec![1, 1, 1]);
+        let r = d.execute_query("SELECT id, name FROM t ORDER BY id").await.unwrap();
+        assert_eq!(
+            r.rows,
+            vec![
+                vec![serde_json::json!(1), serde_json::json!("z")],
+                vec![serde_json::json!(3), serde_json::json!("c")],
+            ]
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn a_failing_statement_rolls_back_the_earlier_ones_and_is_reported_by_index() {
+        let (d, path) = fresh("rollback").await;
+        let err = d
+            .execute_transaction(&[
+                "UPDATE t SET name = 'changed' WHERE id = 1".to_string(),
+                // Violates NOT NULL: the second statement fails.
+                "INSERT INTO t (id, name) VALUES (9, NULL)".to_string(),
+                "DELETE FROM t".to_string(),
+            ])
+            .await
+            .unwrap_err();
+        assert_eq!(err.index, 1);
+        // Nothing of the first statement survived, and the delete never ran.
+        let r = d.execute_query("SELECT name FROM t WHERE id = 1").await.unwrap();
+        assert_eq!(r.rows[0][0], serde_json::json!("a"));
+        assert_eq!(count(&d).await, 2);
+        // The driver is still usable afterwards.
+        assert!(d.execute_transaction(&["DELETE FROM t WHERE id = 2".to_string()]).await.is_ok());
+        assert_eq!(count(&d).await, 1);
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    async fn an_empty_transaction_commits_nothing_and_succeeds() {
+        let (d, path) = fresh("empty").await;
+        assert_eq!(d.execute_transaction(&[]).await.unwrap(), Vec::<u64>::new());
+        assert_eq!(count(&d).await, 2);
+        let _ = std::fs::remove_file(path);
     }
 }

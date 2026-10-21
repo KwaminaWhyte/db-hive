@@ -8,7 +8,9 @@ use mysql_async::prelude::*;
 use mysql_async::{Conn, OptsBuilder, Pool};
 use std::sync::Arc;
 
-use crate::drivers::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
+use crate::drivers::{
+    ConnectionOptions, DatabaseDriver, QueryResult, TransactionFailure, MAX_RESULT_ROWS,
+};
 use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo,
     TableSchema,
@@ -135,6 +137,46 @@ impl DatabaseDriver for MysqlDriver {
 
             Ok(QueryResult::with_affected(affected_rows))
         }
+    }
+
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    async fn execute_transaction(
+        &self,
+        statements: &[String],
+    ) -> Result<Vec<u64>, TransactionFailure> {
+        let mut conn = self
+            .get_conn()
+            .await
+            .map_err(|error| TransactionFailure { index: 0, error })?;
+        // One checked-out connection for the whole transaction.
+        let mut tx = conn
+            .start_transaction(mysql_async::TxOpts::default())
+            .await
+            .map_err(|e| TransactionFailure {
+                index: 0,
+                error: DbError::QueryError(format!("Failed to start a transaction: {}", e)),
+            })?;
+        let mut affected = Vec::with_capacity(statements.len());
+        for (index, sql) in statements.iter().enumerate() {
+            match tx.query_drop(sql.as_str()).await {
+                Ok(()) => affected.push(tx.affected_rows()),
+                Err(e) => {
+                    let _ = tx.rollback().await;
+                    return Err(TransactionFailure {
+                        index,
+                        error: Self::map_mysql_error(e),
+                    });
+                }
+            }
+        }
+        tx.commit().await.map_err(|e| TransactionFailure {
+            index: statements.len().saturating_sub(1),
+            error: DbError::QueryError(format!("Commit failed: {}", e)),
+        })?;
+        Ok(affected)
     }
 
     async fn get_databases(&self) -> Result<Vec<DatabaseInfo>, DbError> {

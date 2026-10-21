@@ -59,6 +59,14 @@ pub struct ConnectionOptions {
     pub require_tls: bool,
 }
 
+/// Why a transaction did not commit: which statement failed (0-based, in the
+/// order given) and the database's error. Nothing was applied.
+#[derive(Debug)]
+pub struct TransactionFailure {
+    pub index: usize,
+    pub error: DbError,
+}
+
 /// Result of a query execution
 ///
 /// Contains the columns, rows, and affected row count from a query.
@@ -172,6 +180,35 @@ pub trait DatabaseDriver: Send + Sync {
     /// commands (INSERT/UPDATE/DELETE). The QueryResult will be populated
     /// accordingly.
     async fn execute_query(&self, sql: &str) -> Result<QueryResult, DbError>;
+
+    /// Whether [`execute_transaction`](Self::execute_transaction) is real for
+    /// this driver. Callers that need all-or-nothing writes (the data grid's
+    /// commit) must check this and refuse otherwise, rather than fall back to
+    /// running the statements one by one.
+    fn supports_transactions(&self) -> bool {
+        false
+    }
+
+    /// Run `statements` in order inside ONE transaction on ONE connection:
+    /// either every statement takes effect or none does.
+    ///
+    /// Returns the rows affected by each statement. On failure the transaction
+    /// is rolled back and the failing statement's index is reported.
+    ///
+    /// This exists because `execute_query("BEGIN")` over a connection pool
+    /// does not guarantee the next call lands on the same connection.
+    async fn execute_transaction(
+        &self,
+        statements: &[String],
+    ) -> Result<Vec<u64>, TransactionFailure> {
+        let _ = statements;
+        Err(TransactionFailure {
+            index: 0,
+            error: DbError::InvalidInput(
+                "This driver cannot run statements in a transaction".to_string(),
+            ),
+        })
+    }
 
     /// Get list of databases
     ///

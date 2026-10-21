@@ -8,7 +8,7 @@ use deadpool_postgres::{Manager, ManagerConfig, Pool, RecyclingMethod};
 use futures_util::TryStreamExt;
 use tokio_postgres::NoTls;
 
-use super::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
+use super::{ConnectionOptions, DatabaseDriver, QueryResult, TransactionFailure, MAX_RESULT_ROWS};
 use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
@@ -572,6 +572,46 @@ impl DatabaseDriver for PostgresDriver {
             rows.iter().map(|row| Self::row_to_json_vec(row)).collect();
 
         Ok(QueryResult::with_data(columns, data))
+    }
+
+    fn supports_transactions(&self) -> bool {
+        true
+    }
+
+    async fn execute_transaction(
+        &self,
+        statements: &[String],
+    ) -> Result<Vec<u64>, TransactionFailure> {
+        let mut client = self
+            .client()
+            .await
+            .map_err(|error| TransactionFailure { index: 0, error })?;
+        // A real transaction object on one checked-out connection. If anything
+        // fails it is rolled back before the connection returns to the pool,
+        // so the pool never hands out a connection stuck in an aborted
+        // transaction.
+        let tx = client.transaction().await.map_err(|e| TransactionFailure {
+            index: 0,
+            error: DbError::QueryError(format!("Failed to start a transaction: {}", e)),
+        })?;
+        let mut affected = Vec::with_capacity(statements.len());
+        for (index, sql) in statements.iter().enumerate() {
+            match tx.execute(sql.as_str(), &[]).await {
+                Ok(n) => affected.push(n),
+                Err(e) => {
+                    let _ = tx.rollback().await;
+                    return Err(TransactionFailure {
+                        index,
+                        error: DbError::QueryError(format!("{}", e)),
+                    });
+                }
+            }
+        }
+        tx.commit().await.map_err(|e| TransactionFailure {
+            index: statements.len().saturating_sub(1),
+            error: DbError::QueryError(format!("Commit failed: {}", e)),
+        })?;
+        Ok(affected)
     }
 
     async fn get_databases(&self) -> Result<Vec<DatabaseInfo>, DbError> {
