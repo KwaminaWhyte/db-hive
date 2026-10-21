@@ -2812,8 +2812,10 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
             _ => NodeId::Table { schema: "public".into(), name: "orders".into() },
         };
         let entries = tree.menu_for(&id, caps);
-        // Beside the row it was raised on, over the editor.
-        dbhive_slint::schema_tree_view::show_menu(&c, &entries, 150.0, 190.0);
+        // At the pointer: window coordinates of a right click on the `orders`
+        // row (the snapshot window draws its fallback menu bar above the
+        // content, which the overlay accounts for).
+        dbhive_slint::schema_tree_view::show_menu(&c, &entries, 150.0, 413.0);
     }
 
     if name.starts_with("schema_drop") {

@@ -245,7 +245,8 @@ export component SchemaTreePanel inherits Rectangle {
 }
 
 // The right-click menu, over the whole window so it can sit on top of the
-// editor and results. A press anywhere outside it closes it.
+// editor and results. `TreeState.menu-x/y` are window coordinates (where the
+// pointer was). A press anywhere outside it closes it.
 export component TreeContextOverlay inherits Rectangle {
     TouchArea {
         pointer-event(e) => {
@@ -257,8 +258,11 @@ export component TreeContextOverlay inherits Rectangle {
     }
 
     menu := CtxMenu {
-        x: max(8px, min(TreeState.menu-x, root.width - self.width - 8px));
-        y: max(8px, min(TreeState.menu-y, root.height - self.height - 8px));
+        // The pointer is in window coordinates; this overlay may start below a
+        // menu bar the platform draws inside the window, so subtract where it
+        // actually starts.
+        x: max(8px, min(TreeState.menu-x - root.absolute-position.x, root.width - self.width - 8px));
+        y: max(8px, min(TreeState.menu-y - root.absolute-position.y, root.height - self.height - 8px));
         items: TreeState.menu-items;
         highlighted: 0;
         chosen(i) => {

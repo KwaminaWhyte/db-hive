@@ -294,6 +294,42 @@ async fn scenario(w: AppWindow, db: PathBuf, finished: Rc<Cell<bool>>) {
     choose(&w, "Copy Name");
     until("the copy toast", || toast_texts(&w).iter().any(|x| x == "Copied \"orders\"")).await;
 
+    // ---- the menu overlay itself, with real events -----------------------------
+    // A press outside closes it and does nothing else.
+    let tabs_before = w.get_workspace_tabs().row_count();
+    right_click_row(&w, 3);
+    until("the menu", || t.get_menu_visible()).await;
+    pointer(&w, LogicalPosition::new(700.0, 600.0), PointerEventButton::Left);
+    until("a press outside to close the menu", || !t.get_menu_visible()).await;
+    assert_eq!(w.get_workspace_tabs().row_count(), tabs_before, "closing opens nothing");
+    // Escape closes it too.
+    right_click_row(&w, 3);
+    until("the menu", || t.get_menu_visible()).await;
+    press_key(&w, Key::Escape);
+    until("Escape to close the menu", || !t.get_menu_visible()).await;
+    // The arrows and Enter pick an entry: the highlight starts on the first,
+    // so two Downs reach Generate INSERT.
+    right_click_row(&w, 3);
+    until("the menu", || t.get_menu_visible()).await;
+    press_key(&w, Key::DownArrow);
+    press_key(&w, Key::DownArrow);
+    press_key(&w, Key::Return);
+    until("Enter to pick Generate INSERT", || {
+        !t.get_menu_visible() && w.get_workspace_editor_text().starts_with("INSERT INTO \"orders\"")
+    })
+    .await;
+    // A click on an entry picks it. The menu opens at the pointer: 4px of
+    // padding, then 30px entries, so Generate SELECT (the second) is centred
+    // 4 + 30 + 15 below the row's click point.
+    right_click_row(&w, 3);
+    until("the menu", || t.get_menu_visible()).await;
+    let at = row_pos(3);
+    pointer(&w, LogicalPosition::new(at.x + 100.0, at.y + 49.0), PointerEventButton::Left);
+    until("a click to pick Generate SELECT", || {
+        !t.get_menu_visible() && w.get_workspace_editor_text().starts_with("SELECT *\nFROM \"orders\"")
+    })
+    .await;
+
     // ---- Edit Table and the header's new-table button use the table dialog ----
     right_click_row(&w, 3);
     until("the menu", || t.get_menu_visible()).await;
