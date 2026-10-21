@@ -181,11 +181,11 @@ pub fn support(id: CommandId) -> Support {
         | OpenCommandPalette | Disconnect | RunQuery | NewTab | CloseTab | ThemeLight
         | ThemeDark | ThemeToggle | GoImportExport | GoBackup | GoActivityMonitor
         | GoMigrations | GoVisualQueryBuilder | NewTable | GoErDiagram | GoSchemaDesigner
-        => Support::Live,
+        | GoPlugins => Support::Live,
 
         NewWindow => Support::Unsupported("Multiple windows are not supported yet"),
 
-        GoQueryEditor | GoTableInspector | GoHistory | GoAiAssistant | GoPlugins
+        GoQueryEditor | GoTableInspector | GoHistory | GoAiAssistant
         | ToggleSidebar | Connect
         | ConnectionsBack | WindowMinimize | WindowMaximizeToggle | WindowClose => Support::Hidden,
     }
@@ -843,10 +843,21 @@ mod tests {
     }
 
     #[test]
+    fn the_plugin_manager_is_a_live_workspace_independent_command_in_the_palette() {
+        assert_eq!(support(CommandId::GoPlugins), Support::Live);
+        assert_eq!(CommandId::from_slug("go-plugins"), Some(CommandId::GoPlugins));
+        let mut p = PaletteState::default();
+        p.open();
+        for ctx in [conns(), ws()] {
+            let rows: Vec<String> = p.view(&ctx, false).rows.iter().map(|r| r.title.clone()).collect();
+            assert!(rows.contains(&"Go to Plugin Manager".to_string()), "{:?}", ctx.screen);
+        }
+    }
+
+    #[test]
     fn unbuilt_screens_are_hidden_and_new_window_is_unsupported_with_a_reason() {
         for id in [
             CommandId::GoAiAssistant,
-            CommandId::GoPlugins,
             CommandId::ToggleSidebar,
             CommandId::WindowClose,
         ] {
@@ -859,8 +870,8 @@ mod tests {
     }
 
     #[test]
-    fn the_activity_monitor_and_migrations_open_from_either_screen_but_not_under_a_dialog() {
-        for id in [CommandId::GoActivityMonitor, CommandId::GoMigrations] {
+    fn the_activity_monitor_migrations_and_plugins_open_from_either_screen_but_not_under_a_dialog() {
+        for id in [CommandId::GoActivityMonitor, CommandId::GoMigrations, CommandId::GoPlugins] {
             assert_eq!(status(id, &conns()), Status::Enabled, "{:?}", id);
             assert_eq!(status(id, &ws()), Status::Enabled, "{:?}", id);
             let mut c = ws();

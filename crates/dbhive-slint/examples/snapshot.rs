@@ -387,6 +387,7 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
         _ if name.starts_with("migrations") => migrations_window(name),
         _ if name.starts_with("builder") => builder_window(name),
         _ if name.starts_with("tabledialog") => table_dialog_window(name),
+        _ if name.starts_with("plugins") => plugins_window(name),
         other => {
             eprintln!("unknown component {:?}", other);
             std::process::exit(2);
@@ -2188,6 +2189,207 @@ fn designer_window(name: &str) -> Box<dyn std::any::Any> {
 
 fn email_index(d: &dbhive_ui_model::designer_session::Designer) -> usize {
     d.tables[0].columns.iter().position(|c| c.base.name == "email").unwrap_or(0)
+}
+
+// -- Plugin manager ---------------------------------------------------------
+//
+// plugins (installed, one selected), plugins-disabled, plugins-interface (a
+// plugin's own interface open), plugins-interface-error, plugins-settings,
+// plugins-settings-error, plugins-busy, plugins-empty, plugins-loading,
+// plugins-error, plugins-problems, plugins-long; plugins-market,
+// plugins-market-filtered, plugins-market-empty, plugins-market-loading,
+// plugins-market-error; plugins-toolbar (panel closed, buttons in the
+// workspace header), plugins-toolbar-connections. Any of them with a `-light`
+// suffix. The workspace sits behind the panel, as it does in the app.
+
+const PLUGINS_MANIFEST: &str = r#"{
+  "id": "com.example.alpha", "name": "Advanced CSV Exporter", "version": "1.2.0",
+  "description": "Export query results to CSV with custom delimiters, headers and encodings.",
+  "author": { "name": "DB Hive Team", "email": "plugins@dbhive.com" },
+  "category": "export", "main": "index.js", "pluginType": "javascript",
+  "permissions": ["showNotification", "writeFiles", "modifyUI"],
+  "minVersion": "0.1.0", "license": "MIT",
+  "homepage": "https://github.com/dbhive/csv-exporter",
+  "repository": "https://github.com/dbhive/csv-exporter",
+  "keywords": ["csv", "export", "data", "excel"],
+  "configSchema": { "type": "object", "properties": {
+    "delimiter": { "type": "string", "enum": [",", ";", "\t", "|"], "default": ",", "title": "Field delimiter",
+                   "description": "Character that separates fields." },
+    "includeHeaders": { "type": "boolean", "default": true, "title": "Include headers" },
+    "maxRows": { "type": "integer", "default": 1000, "minimum": 1, "maximum": 50000, "title": "Row limit" },
+    "nullValue": { "type": "string", "default": "", "title": "NULL representation" }
+  } }
+}"#;
+
+fn plugins_sample(id: &str, name: &str, version: &str, enabled: bool) -> dbhive_core::plugins::Plugin {
+    use dbhive_core::plugins::{Plugin, PluginManifest, PluginStats};
+    let mut manifest = PluginManifest::parse(PLUGINS_MANIFEST).expect("sample manifest");
+    manifest.id = id.into();
+    manifest.name = name.into();
+    manifest.version = version.into();
+    let mut stats = PluginStats::new("2026-09-14T10:00:00Z".into());
+    stats.execution_count = 12;
+    stats.last_used = Some("2026-10-18T08:30:00Z".into());
+    Plugin {
+        manifest,
+        path: std::path::PathBuf::from("/plugins"),
+        enabled,
+        loaded: false,
+        config: None,
+        stats,
+    }
+}
+
+fn plugins_sample_list() -> Vec<dbhive_core::plugins::Plugin> {
+    let mut formatter = plugins_sample("com.example.formatter", "SQL Formatter Pro", "1.5.2", true);
+    formatter.manifest.category = dbhive_core::plugins::PluginCategory::Formatter;
+    formatter.manifest.permissions = vec![dbhive_core::plugins::PluginPermission::ModifyUi];
+    formatter.manifest.author.name = "SQL Tools Inc".into();
+    let mut theme = plugins_sample("com.example.theme", "Dark Theme Plus", "2.1.0", false);
+    theme.manifest.category = dbhive_core::plugins::PluginCategory::Theme;
+    theme.manifest.config_schema = None;
+    theme.manifest.permissions = vec![];
+    theme.manifest.author.name = "Theme Designer".into();
+    vec![
+        plugins_sample("com.example.alpha", "Advanced CSV Exporter", "1.2.0", true),
+        theme,
+        formatter,
+    ]
+}
+
+/// The interface a plugin described: a form, a button and a table.
+fn plugins_sample_interface() -> dbhive_core::plugins::PluginUi {
+    dbhive_core::plugins::PluginUi::parse(
+        r#"{
+      "title": "Export to CSV",
+      "toolbar": [{ "id": "quick-export", "label": "Export CSV", "icon": "export", "tooltip": "Export the last result" }],
+      "panels": [
+        { "title": "Options", "items": [
+          { "type": "text", "text": "Choose how the file is written.", "style": "muted" },
+          { "type": "input", "id": "name", "label": "File name", "value": "export.csv" },
+          { "type": "number", "id": "rows", "label": "Row limit", "value": 1000, "min": 1, "max": 50000 },
+          { "type": "select", "id": "enc", "label": "Encoding", "value": "utf-8",
+            "options": [{ "value": "utf-8", "label": "UTF-8" }, { "value": "utf-16", "label": "UTF-16" }] },
+          { "type": "checkbox", "id": "headers", "label": "Include a header row", "value": true },
+          { "type": "button", "id": "export", "label": "Export now", "style": "primary" }
+        ] },
+        { "title": "Recent exports", "collapsible": true, "items": [
+          { "type": "table", "columns": ["File", "Rows", "When"], "rows": [
+            ["orders-2026-10-18.csv", "1204", "2 days ago"],
+            ["customers.csv", "310", "last week"],
+            ["a_file_with_a_very_long_name_that_must_be_elided_instead_of_overflowing.csv", "52", "last month"] ] }
+        ] }
+      ]
+    }"#,
+    )
+    .expect("sample interface")
+}
+
+fn plugins_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_ui_model::plugins::Tab;
+    use dbhive_ui_model::plugins_panel::{Busy, Load, PluginsPanel};
+
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+
+    let c = AppWindow::new().expect("AppWindow");
+    if light {
+        c.global::<Theme>().set_dark(false);
+    }
+    if name == "plugins-toolbar-connections" {
+        c.set_screen(Screen::Connections);
+    } else {
+        panel_backdrop(&c);
+    }
+    let s = c.global::<PluginsState>();
+
+    let mut p = PluginsPanel::new();
+    p.apply_scan(Ok((plugins_sample_list(), vec![])));
+    p.select("com.example.alpha");
+    if name.starts_with("plugins-market") {
+        p.tab = Tab::Marketplace;
+    }
+
+    match name {
+        "plugins" | "plugins-toolbar" | "plugins-toolbar-connections" => {}
+        "plugins-disabled" => p.select("com.example.theme"),
+        "plugins-busy" => {
+            p.busy.insert("com.example.theme".into(), Busy::Toggling);
+            p.busy.insert("com.example.alpha".into(), Busy::Running);
+        }
+        "plugins-interface" | "plugins-interface-error" => {
+            p.set_interface("com.example.alpha", plugins_sample_interface());
+            p.open_view = Some("com.example.alpha".into());
+            if name == "plugins-interface-error" {
+                p.set_interface_error(
+                    "com.example.alpha",
+                    "Plugin execution error: Permission denied: writeFiles".into(),
+                );
+            }
+        }
+        "plugins-settings" | "plugins-settings-error" => {
+            p.open_settings("com.example.alpha");
+            if name == "plugins-settings-error" {
+                p.set_number(dbhive_ui_model::plugins_panel::Scope::Form, "maxRows", "lots");
+            }
+        }
+        "plugins-empty" => p.apply_scan(Ok((vec![], vec![]))),
+        "plugins-loading" | "plugins-market-loading" => p.load = Load::Loading,
+        "plugins-error" | "plugins-market-error" => {
+            p.apply_scan(Err("Could not read the plugin folder: permission denied (os error 13)".into()))
+        }
+        "plugins-problems" => p.apply_scan(Ok((
+            plugins_sample_list(),
+            vec![
+                "broken-theme: Invalid manifest: missing field `pluginType`".into(),
+                "old-exporter: Incompatible version: requires 9.0.0, current is 0.21.0".into(),
+            ],
+        ))),
+        "plugins-long" => {
+            let mut long = plugins_sample(
+                "com.example.long",
+                "A plugin with a name that is much too long to fit in the installed list without eliding",
+                "10.20.30",
+                true,
+            );
+            long.manifest.description = "This description keeps going to prove that long copy wraps inside the detail pane instead of running off the edge of the panel, and stays readable. ".repeat(3);
+            long.manifest.author.name = "An author with a very long name, Incorporated and Associates".into();
+            let mut list = plugins_sample_list();
+            list.insert(0, long);
+            p.apply_scan(Ok((list, vec![])));
+            p.select("com.example.long");
+        }
+        "plugins-market" => {
+            p.upsert(plugins_sample("com.dbhive.csv-exporter", "Advanced CSV Exporter", "1.0.0", true));
+            p.busy.insert("com.dbhive.dark-theme-plus".into(), Busy::Installing);
+            p.install_errors.insert(
+                "com.dbhive.sql-formatter".into(),
+                "SQL Formatter Pro is not bundled with this build, and downloading plugins is not supported yet.".into(),
+            );
+        }
+        "plugins-market-filtered" => {
+            p.filters.search = "theme".into();
+            s.set_search("theme".into());
+        }
+        "plugins-market-empty" => {
+            p.filters.search = "zzzz".into();
+            s.set_search("zzzz".into());
+        }
+        other => {
+            eprintln!("unknown plugins variant {:?}", other);
+            std::process::exit(2);
+        }
+    }
+
+    if name.starts_with("plugins-toolbar") {
+        // The panel stays closed; the buttons sit in the screen's header.
+        p.set_interface("com.example.alpha", plugins_sample_interface());
+    } else {
+        s.set_visible(true);
+    }
+    dbhive_slint::plugins_view::apply(&s, &p, dbhive_slint::plugins_view::Items::Rebuild);
+    c.show().unwrap();
+    Box::new(c)
 }
 
 fn main() {

@@ -47,6 +47,10 @@ import { TableDialogState, TableDialogOverlay } from "screens/table_dialog.slint
 export { BuilderState, QbSection, QbSource, QbAdded, QbJoin, QbColumn, QbFilter, QbHaving, QbOrder } from "screens/query_builder.slint";
 export { TableDialogState, TdChip, TdColumn, TdUnique, TdForeignKey, TdEditRow, TdStatement } from "screens/table_dialog.slint";
 export { ErdState } from "screens/er_diagram.slint";
+
+// Plugin manager: a state global plus an overlay, like the panels above.
+import { PluginsState, PluginsOverlay } from "screens/plugins_panel.slint";
+export { PluginsState, PluginInstalledRow, PluginMarketItem, PluginFact, PluginPermissionItem, PluginItem, PluginToolbarItem } from "screens/plugins_panel.slint";
 export { DesignerState, DesignerColumnRow, DesignerResultRow } from "screens/schema_designer.slint";
 
 export enum Screen { connections, workspace }
@@ -351,6 +355,10 @@ export component AppWindow inherits Window {
                 activated => { root.run-command("go-migrations"); }
             }
             MenuItem {
+                title: "Plugins…";
+                activated => { root.run-command("go-plugins"); }
+            }
+            MenuItem {
                 title: "Visual Query Builder";
                 activated => { root.run-command("go-visual-query-builder"); }
             }
@@ -572,7 +580,7 @@ export component AppWindow inherits Window {
     property <bool> any-overlay: root.show-about || root.show-confirm || root.show-connection-editor
         || root.any-palette-overlay || ActivityState.visible || MigrationsState.visible
         || BuilderState.visible || TableDialogState.visible || ErdState.visible
-        || DesignerState.visible;
+        || DesignerState.visible || PluginsState.visible;
     init => { fs.focus(); }
     changed any-overlay => {
         if (!root.any-overlay) {
@@ -604,6 +612,7 @@ export component AppWindow inherits Window {
     if BackupState.visible: BackupOverlay { }
     if ActivityState.visible: ActivityOverlay { }
     if MigrationsState.visible: MigrationsOverlay { }
+    if PluginsState.visible: PluginsOverlay { }
 
     // The query builder and the table dialogs, on the same layer.
     if BuilderState.visible: BuilderOverlay { }

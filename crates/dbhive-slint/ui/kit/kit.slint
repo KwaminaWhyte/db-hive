@@ -2010,3 +2010,251 @@ export component KeyTag inherits Text {
     font-weight: 700;
     vertical-alignment: center;
 }
+
+// -- Plugins additions ---------------------------------------------------------
+
+// One marketplace entry as a flat row: name with its verified and category
+// badges, who wrote it, what it does, its numbers and keywords, and the
+// permissions it asks for, with the install control on the right. `state` is
+// 0 available, 1 installing, 2 installed, 3 failed; a failure's reason shows
+// under the description in the danger colour.
+export component PluginMarketRow inherits Rectangle {
+    in property <string> name;
+    in property <string> byline;
+    in property <string> description;
+    in property <string> meta;
+    in property <string> category;
+    in property <[string]> keywords;
+    in property <string> requests;
+    // Asks for something that reads or writes outside the plugin itself.
+    in property <bool> sensitive: false;
+    in property <bool> verified: false;
+    in property <int> state: 0;
+    in property <string> note;
+    callback install;
+
+    min-height: 84px;
+    border-radius: Theme.radius-control;
+    background: row-touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: 90ms; }
+
+    accessible-role: AccessibleRole.groupbox;
+    accessible-label: root.name;
+    accessible-description: root.description;
+
+    row-touch := TouchArea { }
+
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 16px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            alignment: center;
+            spacing: 3px;
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: root.name;
+                    color: Theme.foreground;
+                    font-size: Theme.size-body;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 0;
+                }
+                if root.verified: VerticalLayout {
+                    alignment: center;
+                    Badge { text: "Verified"; tone: Tone.success; dot: true; }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Badge { text: root.category; }
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            Text {
+                text: root.byline;
+                color: Theme.dim-foreground;
+                font-size: Theme.size-small;
+                overflow: elide;
+            }
+            Text {
+                text: root.description;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+                wrap: word-wrap;
+                overflow: elide;
+                max-height: 2 * Theme.size-label * 1.35;
+            }
+            HorizontalLayout {
+                spacing: 6px;
+                Text {
+                    text: root.meta;
+                    color: Theme.dim-foreground;
+                    font-size: Theme.size-small;
+                    vertical-alignment: center;
+                    horizontal-stretch: 0;
+                }
+                for k in root.keywords: VerticalLayout {
+                    alignment: center;
+                    Badge { text: k; }
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            if root.requests != "": Text {
+                text: root.requests;
+                color: root.sensitive ? Theme.warning : Theme.dim-foreground;
+                font-size: Theme.size-small;
+                overflow: elide;
+            }
+            if root.note != "": Text {
+                text: root.note;
+                color: Theme.destructive;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 0;
+            width: 112px;
+            alignment: center;
+            spacing: 6px;
+            if root.state == 0 || root.state == 3: Button {
+                text: root.state == 3 ? "Retry" : "Install";
+                has-icon: true;
+                icon: Icons.download;
+                accessible-label: (root.state == 3 ? "Retry installing " : "Install ") + root.name;
+                clicked => { root.install(); }
+            }
+            if root.state == 1: VerticalLayout {
+                spacing: 6px;
+                Text {
+                    text: "Installing…";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-label;
+                    horizontal-alignment: center;
+                }
+                ProgressBar { indeterminate: true; }
+            }
+            if root.state == 2: HorizontalLayout {
+                alignment: center;
+                Badge { text: "Installed"; tone: Tone.success; dot: true; }
+            }
+        }
+    }
+}
+
+// One line of a table a plugin described: equal-width cells, elided. The
+// header line carries the secondary fill and semibold text.
+export component PluginTableRow inherits Rectangle {
+    in property <[string]> cells;
+    in property <bool> head: false;
+
+    min-height: 26px;
+    border-radius: Theme.radius-control;
+    background: root.head ? Theme.secondary : transparent;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        for cell in root.cells: Text {
+            // Equal columns: every cell starts at zero width and shares the
+            // row equally, so the columns line up from row to row.
+            horizontal-stretch: 1;
+            preferred-width: 0px;
+            min-width: 0px;
+            text: cell;
+            color: root.head ? Theme.foreground : Theme.muted-foreground;
+            font-size: Theme.size-small;
+            font-weight: root.head ? 600 : 400;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+// One permission a plugin declared: a marker, its name and what it allows.
+// A sensitive one (it reads or writes outside the plugin) gets a warning mark.
+export component PluginPermissionRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> detail;
+    in property <bool> sensitive: false;
+    spacing: 10px;
+    vertical-stretch: 0;
+
+    VerticalLayout {
+        alignment: start;
+        padding-top: 2px;
+        Icon {
+            source: root.sensitive ? Icons.triangle-alert : Icons.circle-check;
+            tint: root.sensitive ? Theme.warning : Theme.dim-foreground;
+            width: 14px;
+            height: 14px;
+        }
+    }
+    VerticalLayout {
+        horizontal-stretch: 1;
+        spacing: 1px;
+        Text {
+            text: root.label;
+            color: Theme.foreground;
+            font-size: Theme.size-label;
+            font-weight: 600;
+        }
+        Text {
+            text: root.detail;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            wrap: word-wrap;
+        }
+    }
+}
+
+// A multi-line text box in the field style, for a plugin's multi-line input.
+export component PluginTextArea inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder;
+    in property <bool> enabled: true;
+    callback edited(string);
+
+    min-height: 84px;
+    background: Theme.card;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: area.has-focus ? Theme.primary : Theme.border;
+    opacity: root.enabled ? 1 : 0.5;
+    animate border-color { duration: 110ms; }
+
+    Rectangle {
+        x: 10px;
+        y: 8px;
+        width: parent.width - 20px;
+        height: parent.height - 16px;
+        clip: true;
+        area := TextInput {
+            width: 100%;
+            height: 100%;
+            text <=> root.text;
+            enabled: root.enabled;
+            color: Theme.foreground;
+            font-size: Theme.size-body;
+            wrap: word-wrap;
+            single-line: false;
+            selection-background-color: Theme.primary.transparentize(0.65);
+            selection-foreground-color: Theme.foreground;
+            edited => { root.edited(self.text); }
+        }
+        Text {
+            width: 100%;
+            visible: root.text == "";
+            text: root.placeholder;
+            color: Theme.dim-foreground;
+            font-size: Theme.size-body;
+        }
+    }
+}

@@ -5,6 +5,7 @@ import { SqlEditor, HighlightLine, CompletionItem } from "../components/sql_edit
 import { TableInspectorView } from "table_inspector.slint";
 import { BuilderState } from "query_builder.slint";
 import { TableDialogState } from "table_dialog.slint";
+import { PluginsState, PluginToolbarHost } from "plugins_panel.slint";
 
 export struct TableItem {
     name: string,
@@ -115,6 +116,18 @@ export component WorkspaceScreen inherits VerticalLayout {
                 }
             }
             Rectangle { horizontal-stretch: 1; }
+            // Toolbar buttons enabled plugins registered, then the manager.
+            PluginToolbarHost { }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    has-icon: true;
+                    icon: Icons.plug;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Plugins";
+                    clicked => { PluginsState.open-requested(); }
+                }
+            }
             VerticalLayout {
                 alignment: center;
                 Button {

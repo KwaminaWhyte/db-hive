@@ -1,0 +1,922 @@
+// The plugin manager, opened over the app.
+//
+// Two tabs: the plugins installed (a list, and a detail pane for the one
+// selected) and the marketplace. All of its data and intents live in the
+// `PluginsState` global, so `app.slint` only has to mount `PluginsOverlay` and
+// the controller reaches the panel through `window.global::<PluginsState>()`.
+// Rust decides what every row says (`dbhive_ui_model::plugins_panel`); this
+// file lays it out.
+//
+// A plugin never draws anything itself. It returns data (panels, text, fields,
+// buttons, tables) and `PluginItemList` draws that data with kit components in
+// the application's own colours. There is no row kind that takes a colour, a
+// URL, an image or markup, so a plugin cannot reach past this vocabulary.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, Tone, ButtonVariant, Button, TextField, Dropdown, Toggle, CheckBox, Divider, VDivider, Banner, EmptyState, DetailRow, UnderlineTabs, SectionLabel, Badge, FactRow, FormField, CollapseHeader, Card, ChipStrip, PluginMarketRow, PluginTableRow, PluginPermissionRow, PluginTextArea } from "../kit/kit.slint";
+
+// One row of the installed list.
+export struct PluginInstalledRow {
+    id: string,
+    name: string,
+    subtitle: string,
+    category: string,
+    enabled: bool,
+    // "Updating…" and the like, blank when idle.
+    busy: string,
+    selected: bool,
+}
+
+// One marketplace entry. `state` is 0 available, 1 installing, 2 installed,
+// 3 failed.
+export struct PluginMarketItem {
+    id: string,
+    name: string,
+    byline: string,
+    description: string,
+    meta: string,
+    category: string,
+    keywords: [string],
+    requests: string,
+    sensitive: bool,
+    verified: bool,
+    state: int,
+    note: string,
+}
+
+// A label and its value, for the detail pane's fact lists.
+export struct PluginFact {
+    label: string,
+    value: string,
+}
+
+export struct PluginPermissionItem {
+    label: string,
+    detail: string,
+    sensitive: bool,
+}
+
+// One row of a plugin's interface (or of a settings form). `kind` is
+// 0 panel header, 1 text, 2 separator, 3 button, 4 input, 5 number,
+// 6 checkbox, 7 select, 8 table title, 9 table head, 10 table row, 11 table
+// note. `style` is a palette role: for text 0 body, 1 heading, 2 strong,
+// 3 muted, 4 success, 5 warning, 6 error; for a button 0 normal, 1 primary,
+// 2 danger.
+export struct PluginItem {
+    kind: int,
+    id: string,
+    label: string,
+    text: string,
+    hint: string,
+    error: string,
+    style: int,
+    placeholder: string,
+    checked: bool,
+    enabled: bool,
+    multiline: bool,
+    options: [string],
+    option-index: int,
+    cells: [string],
+    collapsible: bool,
+    open: bool,
+    panel: int,
+}
+
+// A toolbar button a plugin declared. `icon` is the plugin vocabulary:
+// 0 plug, 1 database, 2 code, 3 export, 4 import, 5 palette, 6 settings,
+// 7 chart, 8 search, 9 box.
+export struct PluginToolbarItem {
+    plugin-id: string,
+    plugin-name: string,
+    id: string,
+    label: string,
+    tooltip: string,
+    icon: int,
+    enabled: bool,
+}
+
+export global PluginsState {
+    in-out property <bool> visible: false;
+    in property <int> tab: 0;
+    in property <[string]> tab-labels: ["Installed", "Marketplace"];
+    // 0 ready, 1 reading the plugin directory, 2 could not read it.
+    in property <int> load: 0;
+    in property <string> error;
+    // Plugins on disk that could not be loaded, one line each.
+    in property <[string]> problems;
+
+    // Installed.
+    in property <[PluginInstalledRow]> installed;
+    in property <string> installed-summary;
+
+    // The selected plugin.
+    in property <bool> has-detail: false;
+    in property <string> d-name;
+    in property <string> d-version;
+    in property <string> d-description;
+    in property <bool> d-enabled: false;
+    in property <string> d-busy;
+    in property <bool> d-can-open: false;
+    in property <bool> d-has-settings: false;
+    in property <bool> d-interface-open: false;
+    in property <[PluginFact]> d-info;
+    in property <[PluginFact]> d-stats;
+    in property <[PluginPermissionItem]> d-permissions;
+    in property <[string]> d-keywords;
+    in property <[PluginFact]> d-links;
+
+    // The interface the plugin described, when it is open.
+    in property <string> view-title;
+    in property <string> view-error;
+    in property <[PluginToolbarItem]> view-toolbar;
+    in property <[PluginItem]> view-items;
+
+    // The settings form built from the manifest's schema.
+    in property <bool> form-open: false;
+    in property <string> form-title;
+    in property <string> form-error;
+    in property <bool> form-busy: false;
+    in property <[PluginItem]> form-items;
+
+    // Marketplace.
+    in-out property <string> search;
+    in property <[string]> categories;
+    in property <int> category-index: 0;
+    in property <[string]> sort-options;
+    in property <int> sort-index: 0;
+    in-out property <bool> verified-only: false;
+    in property <bool> filters-active: false;
+    in property <[PluginMarketItem]> market;
+    in property <string> market-summary;
+
+    // Buttons the enabled plugins put in the application's own toolbar.
+    in property <[PluginToolbarItem]> toolbar;
+
+    // The View menu, the palette or a header button asked for the panel; the
+    // controller fills it and sets `visible`.
+    callback open-requested;
+    callback close;
+    callback retry;
+    callback refresh;
+    callback tab-selected(int);
+
+    callback select(string);
+    callback toggle-enabled(string);
+    callback open-interface;
+    callback close-interface;
+    callback open-settings;
+    callback settings-save;
+    callback settings-cancel;
+    callback uninstall;
+
+    // Edits and presses in an interface (scope 0) or the settings form
+    // (scope 1).
+    callback item-button(int, string);
+    callback item-input(int, string, string);
+    callback item-input-accepted(int, string, string);
+    callback item-number(int, string, string);
+    callback item-number-accepted(int, string, string);
+    callback item-check(int, string);
+    callback item-select(int, string, int);
+    callback item-panel(int, int);
+
+    callback search-edited(string);
+    callback category-picked(int);
+    callback sort-picked(int);
+    callback verified-toggled;
+    callback clear-filters;
+    callback install(string);
+
+    callback toolbar-pressed(string, string);
+}
+
+// The plugin icon vocabulary mapped to kit icons.
+global PluginIcon {
+    pure public function of(index: int) -> image {
+        return index == 1 ? Icons.database
+        : index == 2 ? Icons.code
+        : index == 3 ? Icons.upload
+        : index == 4 ? Icons.download
+        : index == 5 ? Icons.sparkles
+        : index == 6 ? Icons.settings
+        : index == 7 ? Icons.activity
+        : index == 8 ? Icons.search
+        : index == 9 ? Icons.layout-grid
+        : Icons.plug;
+    }
+}
+
+// Draws a plugin's interface (or a settings form) from flat rows and reports
+// what the user did. Holds no state: Rust owns every value.
+component PluginItemList inherits VerticalLayout {
+    in property <[PluginItem]> items;
+    callback button(string);
+    callback input(string, string);
+    callback input-accepted(string, string);
+    callback number(string, string);
+    callback number-accepted(string, string);
+    callback check(string);
+    callback select(string, int);
+    callback panel(int);
+
+    spacing: 8px;
+    alignment: start;
+
+    for item in root.items: VerticalLayout {
+        spacing: 4px;
+        if item.kind == 0 && item.collapsible: CollapseHeader {
+            title: item.label;
+            open: item.open;
+            clicked => { root.panel(item.panel); }
+        }
+        if item.kind == 0 && !item.collapsible: SectionLabel { text: item.label; }
+        if item.kind == 1: Text {
+            text: item.text;
+            color: item.style == 3 ? Theme.muted-foreground
+                : item.style == 4 ? Theme.success
+                : item.style == 5 ? Theme.warning
+                : item.style == 6 ? Theme.destructive
+                : Theme.foreground;
+            font-size: item.style == 1 ? Theme.size-subheading : item.style == 3 ? Theme.size-small : Theme.size-label;
+            font-weight: item.style == 1 ? 700 : item.style == 2 ? 600 : 400;
+            wrap: word-wrap;
+        }
+        if item.kind == 2: Divider { }
+        if item.kind == 3: HorizontalLayout {
+            alignment: start;
+            Button {
+                text: item.label;
+                variant: item.style == 1 ? ButtonVariant.primary : item.style == 2 ? ButtonVariant.danger : ButtonVariant.secondary;
+                enabled: item.enabled;
+                accessible-description: item.hint;
+                clicked => { root.button(item.id); }
+            }
+        }
+        if item.kind == 4: FormField {
+            label: item.label;
+            if !item.multiline: TextField {
+                text: item.text;
+                placeholder: item.placeholder;
+                enabled: item.enabled;
+                edited(t) => { root.input(item.id, t); }
+                accepted(t) => { root.input-accepted(item.id, t); }
+            }
+            if item.multiline: PluginTextArea {
+                text: item.text;
+                placeholder: item.placeholder;
+                enabled: item.enabled;
+                edited(t) => { root.input(item.id, t); }
+            }
+        }
+        if item.kind == 5: FormField {
+            label: item.label;
+            hint: item.hint;
+            error: item.error;
+            HorizontalLayout {
+                alignment: start;
+                TextField {
+                    width: 160px;
+                    text: item.text;
+                    enabled: item.enabled;
+                    edited(t) => { root.number(item.id, t); }
+                    accepted(t) => { root.number-accepted(item.id, t); }
+                }
+            }
+        }
+        if item.kind == 6: HorizontalLayout {
+            alignment: start;
+            CheckBox {
+                text: item.label;
+                checked: item.checked;
+                enabled: item.enabled;
+                toggled => { root.check(item.id); }
+            }
+        }
+        if item.kind == 7: FormField {
+            label: item.label;
+            HorizontalLayout {
+                alignment: start;
+                Dropdown {
+                    width: 220px;
+                    options: item.options;
+                    value: item.text == "" ? "Select…" : item.text;
+                    enabled: item.enabled;
+                    selected(i) => { root.select(item.id, i); }
+                }
+            }
+        }
+        if item.kind == 8: Text {
+            text: item.text;
+            color: Theme.foreground;
+            font-size: Theme.size-label;
+            font-weight: 600;
+        }
+        if item.kind == 9: PluginTableRow { cells: item.cells; head: true; }
+        if item.kind == 10: PluginTableRow { cells: item.cells; }
+        if item.kind == 11: Text {
+            text: item.text;
+            color: Theme.dim-foreground;
+            font-size: Theme.size-small;
+        }
+    }
+}
+
+// The toolbar buttons enabled plugins registered, for a screen's header. A
+// divider keeps them apart from the application's own buttons; each button's
+// description names its plugin.
+export component PluginToolbarHost inherits HorizontalLayout {
+    spacing: 4px;
+    alignment: end;
+
+    if PluginsState.toolbar.length > 0: VerticalLayout {
+        alignment: center;
+        Rectangle { width: 1px; height: 20px; background: Theme.border; }
+    }
+    for t in PluginsState.toolbar: VerticalLayout {
+        alignment: center;
+        Button {
+            text: t.label;
+            has-icon: true;
+            icon: PluginIcon.of(t.icon);
+            variant: ButtonVariant.ghost;
+            enabled: t.enabled;
+            accessible-description: t.tooltip;
+            clicked => { PluginsState.toolbar-pressed(t.plugin-id, t.id); }
+        }
+    }
+}
+
+// The installed list on the left.
+component InstalledList inherits VerticalLayout {
+    spacing: 6px;
+    padding: 12px;
+
+    Text {
+        text: PluginsState.installed-summary;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+    }
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 2px;
+            for row in PluginsState.installed: DetailRow {
+                title: row.name;
+                subtitle: row.subtitle;
+                selected: row.selected;
+                clicked => { PluginsState.select(row.id); }
+                if row.busy != "": Text {
+                    text: row.busy;
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    vertical-alignment: center;
+                }
+                if row.busy == "": Toggle {
+                    checked: row.enabled;
+                    toggled => { PluginsState.toggle-enabled(row.id); }
+                }
+            }
+        }
+    }
+}
+
+// What the right-hand pane shows for the selected plugin.
+component DetailPane inherits ScrollView {
+    VerticalLayout {
+        alignment: start;
+        spacing: 12px;
+        padding: 16px;
+        padding-left: 18px;
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: PluginsState.d-name;
+                color: Theme.foreground;
+                font-size: Theme.size-heading;
+                font-weight: 700;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 0;
+            }
+            VerticalLayout {
+                alignment: center;
+                Badge { text: PluginsState.d-version; }
+            }
+            VerticalLayout {
+                alignment: center;
+                Badge {
+                    text: PluginsState.d-enabled ? "Enabled" : "Disabled";
+                    tone: PluginsState.d-enabled ? Tone.success : Tone.neutral;
+                    dot: true;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+        }
+        if PluginsState.d-description != "": Text {
+            text: PluginsState.d-description;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-label;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: start;
+            Button {
+                text: "Open interface";
+                // One primary button per view: the open interface has its own.
+                variant: PluginsState.d-interface-open ? ButtonVariant.secondary : ButtonVariant.primary;
+                has-icon: true;
+                icon: Icons.play;
+                enabled: PluginsState.d-can-open && !PluginsState.d-interface-open;
+                clicked => { PluginsState.open-interface(); }
+            }
+            if PluginsState.d-has-settings: Button {
+                text: "Settings";
+                has-icon: true;
+                icon: Icons.settings;
+                enabled: PluginsState.d-busy == "";
+                clicked => { PluginsState.open-settings(); }
+            }
+            Button {
+                text: PluginsState.d-enabled ? "Disable" : "Enable";
+                enabled: PluginsState.d-busy == "";
+                clicked => { PluginsState.toggle-enabled(""); }
+            }
+            Button {
+                text: "Uninstall";
+                variant: ButtonVariant.danger;
+                has-icon: true;
+                icon: Icons.trash-2;
+                enabled: PluginsState.d-busy == "";
+                clicked => { PluginsState.uninstall(); }
+            }
+            if PluginsState.d-busy != "": VerticalLayout {
+                alignment: center;
+                Text {
+                    text: PluginsState.d-busy;
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-label;
+                }
+            }
+        }
+        if !PluginsState.d-enabled: Text {
+            text: "Enable this plugin to run it. A disabled plugin is never executed.";
+            color: Theme.dim-foreground;
+            font-size: Theme.size-small;
+            wrap: word-wrap;
+        }
+
+        if PluginsState.d-interface-open: Card {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+                        Text {
+                            text: PluginsState.view-title;
+                            color: Theme.foreground;
+                            font-size: Theme.size-body;
+                            font-weight: 600;
+                            overflow: elide;
+                        }
+                        Text {
+                            text: "Interface from " + PluginsState.d-name + ". Drawn by DB Hive from data the plugin returned.";
+                            color: Theme.dim-foreground;
+                            font-size: Theme.size-small;
+                            overflow: elide;
+                        }
+                    }
+                    for t in PluginsState.view-toolbar: VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: t.label;
+                            has-icon: true;
+                            icon: PluginIcon.of(t.icon);
+                            enabled: t.enabled;
+                            accessible-description: t.tooltip;
+                            clicked => { PluginsState.toolbar-pressed(t.plugin-id, t.id); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            has-icon: true;
+                            icon: Icons.x;
+                            variant: ButtonVariant.ghost;
+                            accessible-label: "Close plugin interface";
+                            clicked => { PluginsState.close-interface(); }
+                        }
+                    }
+                }
+                Divider { }
+                if PluginsState.view-error != "": Banner {
+                    message: PluginsState.view-error;
+                    dismissible: false;
+                }
+                if PluginsState.view-items.length == 0 && PluginsState.view-error == "": Text {
+                    text: "This plugin returned an empty interface.";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-label;
+                }
+                PluginItemList {
+                    items: PluginsState.view-items;
+                    button(id) => { PluginsState.item-button(0, id); }
+                    input(id, t) => { PluginsState.item-input(0, id, t); }
+                    input-accepted(id, t) => { PluginsState.item-input-accepted(0, id, t); }
+                    number(id, t) => { PluginsState.item-number(0, id, t); }
+                    number-accepted(id, t) => { PluginsState.item-number-accepted(0, id, t); }
+                    check(id) => { PluginsState.item-check(0, id); }
+                    select(id, i) => { PluginsState.item-select(0, id, i); }
+                    panel(i) => { PluginsState.item-panel(0, i); }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            Card {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 6px;
+                    alignment: start;
+                    SectionLabel { text: "INFORMATION"; min-height: 18px; }
+                    for f in PluginsState.d-info: FactRow {
+                        label: f.label;
+                        value: f.value;
+                        label-width: 80px;
+                    }
+                }
+            }
+            Card {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: 12px;
+                    spacing: 6px;
+                    alignment: start;
+                    SectionLabel { text: "STATISTICS"; min-height: 18px; }
+                    for f in PluginsState.d-stats: FactRow {
+                        label: f.label;
+                        value: f.value;
+                        label-width: 80px;
+                    }
+                }
+            }
+        }
+
+        Card {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+                alignment: start;
+                SectionLabel { text: "PERMISSIONS"; min-height: 18px; }
+                if PluginsState.d-permissions.length == 0: Text {
+                    text: "No special permissions required.";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-label;
+                }
+                for p in PluginsState.d-permissions: PluginPermissionRow {
+                    label: p.label;
+                    detail: p.detail;
+                    sensitive: p.sensitive;
+                }
+            }
+        }
+
+        if PluginsState.d-keywords.length > 0: Card {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+                alignment: start;
+                SectionLabel { text: "KEYWORDS"; min-height: 18px; }
+                ChipStrip {
+                    for k in PluginsState.d-keywords: VerticalLayout {
+                        alignment: center;
+                        Badge { text: k; }
+                    }
+                }
+            }
+        }
+
+        if PluginsState.d-links.length > 0: Card {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 6px;
+                alignment: start;
+                SectionLabel { text: "LINKS"; min-height: 18px; }
+                for f in PluginsState.d-links: FactRow {
+                    label: f.label;
+                    value: f.value;
+                    label-width: 80px;
+                    mono: true;
+                }
+            }
+        }
+    }
+}
+
+// The settings form replaces the detail pane while it is open.
+component SettingsPane inherits VerticalLayout {
+    spacing: 0;
+
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 10px;
+            padding: 16px;
+            padding-left: 18px;
+            Text {
+                text: PluginsState.form-title;
+                color: Theme.foreground;
+                font-size: Theme.size-heading;
+                font-weight: 700;
+            }
+            Text {
+                text: "Changes take effect after saving. The form is built from the plugin's declared settings.";
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+                wrap: word-wrap;
+            }
+            if PluginsState.form-items.length == 0: Text {
+                text: "This plugin has no configurable settings.";
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+            }
+            PluginItemList {
+                items: PluginsState.form-items;
+                input(id, t) => { PluginsState.item-input(1, id, t); }
+                input-accepted(id, t) => { PluginsState.item-input-accepted(1, id, t); }
+                number(id, t) => { PluginsState.item-number(1, id, t); }
+                number-accepted(id, t) => { PluginsState.item-number-accepted(1, id, t); }
+                check(id) => { PluginsState.item-check(1, id); }
+                select(id, i) => { PluginsState.item-select(1, id, i); }
+                panel(i) => { PluginsState.item-panel(1, i); }
+            }
+        }
+    }
+    if PluginsState.form-error != "": VerticalLayout {
+        padding-left: 18px;
+        padding-right: 16px;
+        padding-bottom: 8px;
+        Banner { message: PluginsState.form-error; dismissible: false; }
+    }
+    Divider { }
+    HorizontalLayout {
+        padding: 12px;
+        padding-left: 18px;
+        spacing: 8px;
+        alignment: end;
+        Button {
+            text: "Cancel";
+            enabled: !PluginsState.form-busy;
+            clicked => { PluginsState.settings-cancel(); }
+        }
+        Button {
+            text: PluginsState.form-busy ? "Saving…" : "Save settings";
+            variant: ButtonVariant.primary;
+            enabled: !PluginsState.form-busy;
+            clicked => { PluginsState.settings-save(); }
+        }
+    }
+}
+
+component InstalledTab inherits HorizontalLayout {
+    spacing: 0;
+
+    if PluginsState.installed.length == 0: EmptyState {
+        horizontal-stretch: 1;
+        icon: Icons.plug;
+        title: "No plugins installed";
+        message: "Plugins add exporters, formatters and tools. Browse the marketplace to install one.";
+        Button {
+            text: "Open marketplace";
+            variant: ButtonVariant.primary;
+            clicked => { PluginsState.tab-selected(1); }
+        }
+    }
+    if PluginsState.installed.length > 0: InstalledList {
+        width: 290px;
+    }
+    if PluginsState.installed.length > 0: VDivider { }
+    if PluginsState.installed.length > 0 && PluginsState.form-open: SettingsPane {
+        horizontal-stretch: 1;
+    }
+    if PluginsState.installed.length > 0 && !PluginsState.form-open && PluginsState.has-detail: DetailPane {
+        horizontal-stretch: 1;
+    }
+    if PluginsState.installed.length > 0 && !PluginsState.form-open && !PluginsState.has-detail: EmptyState {
+        horizontal-stretch: 1;
+        icon: Icons.plug;
+        title: "Select a plugin";
+        message: "Choose a plugin from the list to see its details.";
+    }
+}
+
+component MarketplaceTab inherits VerticalLayout {
+    spacing: 10px;
+    padding: 12px;
+    padding-left: 16px;
+    padding-right: 16px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        TextField {
+            horizontal-stretch: 1;
+            has-icon: true;
+            icon: Icons.search;
+            placeholder: "Search plugins";
+            text <=> PluginsState.search;
+            edited(t) => { PluginsState.search-edited(t); }
+        }
+        Dropdown {
+            width: 170px;
+            options: PluginsState.categories;
+            value: PluginsState.categories[PluginsState.category-index];
+            selected(i) => { PluginsState.category-picked(i); }
+        }
+        Dropdown {
+            width: 170px;
+            options: PluginsState.sort-options;
+            value: PluginsState.sort-options[PluginsState.sort-index];
+            selected(i) => { PluginsState.sort-picked(i); }
+        }
+        VerticalLayout {
+            alignment: center;
+            CheckBox {
+                text: "Verified only";
+                checked: PluginsState.verified-only;
+                toggled => { PluginsState.verified-toggled(); }
+            }
+        }
+    }
+
+    if PluginsState.market.length == 0: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.search;
+        title: "No plugins match";
+        message: "Try a different search, category or sort.";
+        if PluginsState.filters-active: Button {
+            text: "Clear filters";
+            clicked => { PluginsState.clear-filters(); }
+        }
+    }
+    if PluginsState.market.length > 0: ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 2px;
+            padding-right: 14px;
+            for m in PluginsState.market: PluginMarketRow {
+                name: m.name;
+                byline: m.byline;
+                description: m.description;
+                meta: m.meta;
+                category: m.category;
+                keywords: m.keywords;
+                requests: m.requests;
+                sensitive: m.sensitive;
+                verified: m.verified;
+                state: m.state;
+                note: m.note;
+                install => { PluginsState.install(m.id); }
+            }
+        }
+    }
+    if PluginsState.market.length > 0: Text {
+        text: PluginsState.market-summary;
+        color: Theme.dim-foreground;
+        font-size: Theme.size-small;
+    }
+}
+
+export component PluginsPanel inherits Rectangle {
+    in property <length> available-height: 680px;
+    in property <length> available-width: 960px;
+
+    width: min(960px, root.available-width);
+    height: min(680px, root.available-height);
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    clip: true;
+
+    TouchArea { }
+
+    VerticalLayout {
+        padding-top: 14px;
+        spacing: 0;
+
+        HorizontalLayout {
+            padding-left: 20px;
+            padding-right: 12px;
+            spacing: 14px;
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "Plugins";
+                    color: Theme.foreground;
+                    font-size: Theme.size-subheading;
+                    font-weight: 700;
+                }
+            }
+            UnderlineTabs {
+                labels: PluginsState.tab-labels;
+                active: PluginsState.tab;
+                selected(i) => { PluginsState.tab-selected(i); }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    has-icon: true;
+                    icon: Icons.refresh-cw;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Rescan plugins";
+                    enabled: PluginsState.load != 1;
+                    clicked => { PluginsState.refresh(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    has-icon: true;
+                    icon: Icons.x;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Close";
+                    clicked => { PluginsState.close(); }
+                }
+            }
+        }
+        Divider { }
+
+        if PluginsState.problems.length > 0: VerticalLayout {
+            padding: 12px;
+            padding-bottom: 0px;
+            spacing: 6px;
+            for p in PluginsState.problems: Banner {
+                message: p;
+                tone: Tone.warning;
+                dismissible: false;
+            }
+        }
+
+        if PluginsState.load == 1: Text {
+            vertical-stretch: 1;
+            text: "Reading plugins…";
+            color: Theme.muted-foreground;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        if PluginsState.load == 2: VerticalLayout {
+            vertical-stretch: 1;
+            padding: 16px;
+            spacing: 10px;
+            alignment: start;
+            Banner { message: PluginsState.error; dismissible: false; }
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: "Retry";
+                    has-icon: true;
+                    icon: Icons.refresh-cw;
+                    clicked => { PluginsState.retry(); }
+                }
+            }
+        }
+        if PluginsState.load == 0 && PluginsState.tab == 0: InstalledTab {
+            vertical-stretch: 1;
+        }
+        if PluginsState.load == 0 && PluginsState.tab == 1: MarketplaceTab {
+            vertical-stretch: 1;
+        }
+    }
+}
+
+export component PluginsOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Theme.background.transparentize(0.25);
+
+    // A settings form can hold typed work, so a click on the backdrop does
+    // not close the panel.
+    TouchArea { }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            PluginsPanel {
+                available-height: root.height - 32px;
+                available-width: root.width - 32px;
+            }
+        }
+    }
+}
