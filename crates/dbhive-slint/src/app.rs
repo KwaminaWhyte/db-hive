@@ -26,10 +26,13 @@ use dbhive_ui_model::palette_session::{
     ShortcutsState, Status,
 };
 use dbhive_ui_model::results_grid::visible_rows;
-use dbhive_ui_model::sql_guard;
+use dbhive_ui_model::settings_editor::{
+    destructive_warnings, query_timeout, timeout_message, trim_history,
+};
 use dbhive_ui_model::workspace_tabs::{result_summary, TabKind, Tabs};
 
 mod inspector;
+mod settings;
 
 use crate::connection_editor as editor_view;
 use crate::connection_list::{self, EnvTone};
@@ -73,6 +76,10 @@ enum PendingAction {
     RunAnyway(u64),
     /// Clear history, or delete a snippet or template.
     History(history_glue::Pending),
+    /// Reset every setting to its default (Settings > Reset to defaults).
+    ResetSettings,
+    /// Close Settings and throw away its unsaved edits.
+    DiscardSettings,
 }
 
 /// The new/edit connection dialog's state.
@@ -135,6 +142,7 @@ struct Session {
     history: history_glue::PanelSession,
     palette: PaletteState,
     shortcuts: ShortcutsState,
+    settings: settings::SettingsState,
 }
 
 struct Ctx {
@@ -868,7 +876,8 @@ impl Ctx {
         }
 
         if guard {
-            let warnings = sql_guard::warnings(&sql);
+            // "Confirm destructive queries" in Settings turns the guard off.
+            let warnings = destructive_warnings(&self.app_settings().query, &sql);
             if !warnings.is_empty() {
                 let mut lines: Vec<String> =
                     warnings.iter().take(3).map(|w| format!("• {}", w.description)).collect();
@@ -906,10 +915,21 @@ impl Ctx {
         self.refresh_workspace();
 
         let run_sql = sql.clone();
+        let query_settings = self.app_settings().query;
         runtime::spawn(
             async move {
                 let started = std::time::Instant::now();
-                let out = d.execute_query(&run_sql).await;
+                // Settings > Query timeout. Dropping the future stops
+                // waiting; the server may finish the statement on its own.
+                let out = match query_timeout(&query_settings) {
+                    Some(limit) => match tokio::time::timeout(limit, d.execute_query(&run_sql)).await {
+                        Ok(result) => result,
+                        Err(_) => Err(dbhive_core::models::DbError::QueryError(timeout_message(
+                            &query_settings,
+                        ))),
+                    },
+                    None => d.execute_query(&run_sql).await,
+                };
                 (out, started.elapsed().as_millis() as u64)
             },
             move |(out, elapsed)| with_ctx(|ctx| {
@@ -964,11 +984,19 @@ impl Ctx {
                 entry.with_error(e.clone(), Some(elapsed_ms))
             }
         };
-        let snapshot = {
+        // Settings > Query Execution: history can be switched off, and is
+        // trimmed to its size when written. The activity log above is not
+        // history and is always kept.
+        let query_settings = self.app_settings().query;
+        if !query_settings.auto_save_history {
+            return;
+        }
+        let mut snapshot = {
             let mut guard = self.state.lock().unwrap();
             guard.add_history(entry);
             guard.get_all_history()
         };
+        trim_history(&mut snapshot, &query_settings);
         // Persisting history never delays showing the result, and a failed
         // write is not worth interrupting the user for.
         runtime::spawn(
@@ -999,6 +1027,8 @@ impl Ctx {
             }
             Some(PendingAction::RunAnyway(id)) => self.run_tab(id, false),
             Some(PendingAction::History(pending)) => self.history_confirmed(pending),
+            Some(PendingAction::ResetSettings) => self.reset_settings(),
+            Some(PendingAction::DiscardSettings) => self.discard_settings_and_close(),
             None => self.delete_pending_connection(),
         }
     }
@@ -1135,24 +1165,15 @@ impl Ctx {
                     self.close_tab(index);
                 }
             }
-            CommandId::ThemeLight => self.set_dark(false),
-            CommandId::ThemeDark => self.set_dark(true),
-            CommandId::ThemeToggle => self.set_dark(!w.global::<Theme>().get_dark()),
+            CommandId::ThemeLight => self.set_theme_dark(false),
+            CommandId::ThemeDark => self.set_theme_dark(true),
+            CommandId::ThemeToggle => self.toggle_theme_mode(),
             // `status` only returns Enabled for the commands above.
             _ => return Outcome::Refused("Not available yet"),
         }
         Outcome::Ran
     }
 
-    fn set_dark(&self, dark: bool) {
-        if let Some(w) = self.window.upgrade() {
-            w.global::<Theme>().set_dark(dark);
-        }
-        // The editor's syntax colours are chosen per theme in Rust, so they
-        // have to be recomputed.
-        self.refresh_workspace();
-        self.refresh_history_panel();
-    }
 
     /// A key nothing focused used. Returns whether it ran a shortcut.
     fn key_chord(self: &Rc<Self>, text: &str, ctrl: bool, alt: bool, shift: bool, meta: bool) -> bool {
@@ -1613,6 +1634,11 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
         window.on_shortcuts_close(move || ctx.close_shortcuts());
     }
     palette_view::set_metrics(&window);
+
+    settings::wire(&window, &ctx);
+    // After the load, so the saved theme, accent and editor font are applied
+    // before the first frame.
+    ctx.init_settings();
 
     ctx.refresh_connections();
     CTX.with(|c| *c.borrow_mut() = Some(ctx));

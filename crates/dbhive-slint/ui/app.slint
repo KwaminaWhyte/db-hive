@@ -9,9 +9,12 @@ import { ConnectionEditorDialog, ConnectionFormData } from "dialogs/connection_e
 import { HistoryState, HistoryOverlay } from "screens/history_panel.slint";
 import { PaletteDialog, PaletteItem } from "dialogs/command_palette.slint";
 import { ShortcutsDialog, ShortcutItem } from "dialogs/shortcuts.slint";
+import { SettingsDialog, SettingsData, ShortcutRowData } from "dialogs/settings.slint";
+import { Palette } from "std-widgets.slint";
 
 export { Theme, Icons, Tone, ConnectionItem, ConnectionFormData, TableItem, GridColumn, GridRow, TabInfo }
 export { PaletteItem, ShortcutItem }
+export { SettingsData, ShortcutRowData, Palette }
 
 // Table inspector (a table tab's Data and Structure views).
 import { ClipboardSink } from "kit/kit.slint";
@@ -187,6 +190,41 @@ export component AppWindow inherits Window {
 
     // About dialog.
     in-out property <bool> show-about: false;
+
+    // Settings dialog. `open-settings` (title-bar gear, File > Settings)
+    // is handled in Rust, which fills `settings` and then shows it.
+    in-out property <bool> show-settings: false;
+    in property <SettingsData> settings;
+    callback settings-section-selected(int);
+    callback settings-language-selected(int);
+    callback settings-startup-selected(int);
+    callback settings-toggle-auto-save-connections;
+    callback settings-toggle-auto-check-updates;
+    callback settings-update-interval-changed(string);
+    callback settings-toggle-auto-download;
+    callback settings-toggle-auto-install;
+    callback settings-theme-selected(int);
+    callback settings-accent-preset-picked(int);
+    callback settings-accent-text-changed(string);
+    callback settings-font-size-changed(string);
+    callback settings-font-family-changed(string);
+    callback settings-toggle-line-numbers;
+    callback settings-toggle-minimap;
+    callback settings-toggle-word-wrap;
+    callback settings-timeout-changed(string);
+    callback settings-max-rows-changed(string);
+    callback settings-toggle-confirm-destructive;
+    callback settings-toggle-auto-save-history;
+    callback settings-max-history-changed(string);
+    callback settings-shortcut-record(int);
+    callback settings-shortcut-clear(int);
+    callback settings-shortcut-key(string, bool, bool, bool, bool);
+    callback settings-dismiss-banner;
+    callback settings-retry;
+    callback settings-save;
+    callback settings-discard;
+    callback settings-reset;
+    callback settings-close;
 
     // Confirmation dialog (currently only used for delete).
     in-out property <bool> show-confirm: false;
@@ -485,7 +523,7 @@ export component AppWindow inherits Window {
     // raised from the panel (clear history, delete a snippet) shows above it.
     if HistoryState.visible: HistoryOverlay { }
 
-    if root.show-about || root.show-confirm || root.show-connection-editor || root.any-palette-overlay: Rectangle {
+    if root.show-about || root.show-confirm || root.show-connection-editor || root.show-settings || root.any-palette-overlay: Rectangle {
         width: 100%;
         height: 100%;
         background: #000000a0;
@@ -515,6 +553,55 @@ export component AppWindow inherits Window {
                     close => { root.show-about = false; }
                 }
             }
+        }
+
+        if root.show-settings: VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                SettingsDialog {
+                    available-height: root.height - 48px;
+                    data: root.settings;
+                    section-selected(i) => { root.settings-section-selected(i); }
+                    language-selected(i) => { root.settings-language-selected(i); }
+                    startup-selected(i) => { root.settings-startup-selected(i); }
+                    toggle-auto-save-connections => { root.settings-toggle-auto-save-connections(); }
+                    toggle-auto-check-updates => { root.settings-toggle-auto-check-updates(); }
+                    update-interval-changed(t) => { root.settings-update-interval-changed(t); }
+                    toggle-auto-download => { root.settings-toggle-auto-download(); }
+                    toggle-auto-install => { root.settings-toggle-auto-install(); }
+                    theme-selected(i) => { root.settings-theme-selected(i); }
+                    accent-preset-picked(i) => { root.settings-accent-preset-picked(i); }
+                    accent-text-changed(t) => { root.settings-accent-text-changed(t); }
+                    font-size-changed(t) => { root.settings-font-size-changed(t); }
+                    font-family-changed(t) => { root.settings-font-family-changed(t); }
+                    toggle-line-numbers => { root.settings-toggle-line-numbers(); }
+                    toggle-minimap => { root.settings-toggle-minimap(); }
+                    toggle-word-wrap => { root.settings-toggle-word-wrap(); }
+                    timeout-changed(t) => { root.settings-timeout-changed(t); }
+                    max-rows-changed(t) => { root.settings-max-rows-changed(t); }
+                    toggle-confirm-destructive => { root.settings-toggle-confirm-destructive(); }
+                    toggle-auto-save-history => { root.settings-toggle-auto-save-history(); }
+                    max-history-changed(t) => { root.settings-max-history-changed(t); }
+                    shortcut-record(i) => { root.settings-shortcut-record(i); }
+                    shortcut-clear(i) => { root.settings-shortcut-clear(i); }
+                    shortcut-key(text, control, alt, shift, meta) => { root.settings-shortcut-key(text, control, alt, shift, meta); }
+                    dismiss-banner => { root.settings-dismiss-banner(); }
+                    retry => { root.settings-retry(); }
+                    save => { root.settings-save(); }
+                    discard => { root.settings-discard(); }
+                    reset => { root.settings-reset(); }
+                    // Rust decides: closing with unsaved edits asks first.
+                    close => { root.settings-close(); }
+                }
+            }
+        }
+
+        // A confirmation raised from inside Settings (reset, discard) dims
+        // the Settings dialog too, and keeps clicks off it.
+        if root.show-confirm && root.show-settings: Rectangle {
+            background: Theme.scrim;
+            TouchArea { }
         }
 
         if root.show-confirm: VerticalLayout {

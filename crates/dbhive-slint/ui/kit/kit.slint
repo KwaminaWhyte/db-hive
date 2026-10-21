@@ -677,7 +677,9 @@ export component Toggle inherits Rectangle {
                     width: 16px;
                     height: 16px;
                     border-radius: 8px;
-                    background: Theme.primary-foreground;
+                    // Off, the knob is the muted foreground so it stays
+                    // visible against the track in both themes.
+                    background: root.checked ? Theme.primary-foreground : Theme.dim-foreground;
                     x: root.checked ? parent.width - self.width - 2px : 2px;
                     y: 2px;
                     animate x { duration: 110ms; }
@@ -1188,4 +1190,66 @@ export component ClipboardSink inherits Rectangle {
         width: 0px;
         height: 0px;
     }
+}
+
+export component VDivider inherits Rectangle {
+    width: 1px;
+    background: Theme.border;
+}
+
+// One setting in a form: its name and help text on the left, the control on
+// the right (the children). The error line sits under the text and turns the
+// row's help red, so a bad value is next to the box that holds it. Rows stack
+// inside a Card; `last` drops the divider under the final one.
+export component SettingRow inherits VerticalLayout {
+    in property <string> title;
+    in property <string> description;
+    in property <string> error;
+    in property <bool> last: false;
+    in property <length> min-control-width: 0px;
+    spacing: 0;
+    vertical-stretch: 0;
+
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 12px;
+        padding-bottom: 12px;
+        spacing: 16px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.title;
+                color: Theme.foreground;
+                font-size: Theme.size-label;
+                font-weight: 600;
+                wrap: word-wrap;
+            }
+            if root.description != "": Text {
+                text: root.description;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+            }
+            if root.error != "": Text {
+                text: root.error;
+                color: Theme.destructive;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 0;
+            min-width: root.min-control-width;
+            alignment: center;
+            HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+                @children
+            }
+        }
+    }
+    if !root.last: Divider { }
 }

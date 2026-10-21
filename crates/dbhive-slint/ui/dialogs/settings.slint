@@ -1,0 +1,580 @@
+// The Settings dialog: four sections behind a left nav (General, Appearance,
+// Query Execution, Keyboard Shortcuts), bulk Save, Discard, and a reset to
+// defaults.
+//
+// This file only lays out what the controller says. Which value a picker
+// holds, whether a number is in range, what a shortcut row shows and whether
+// Save is enabled all come from `dbhive_ui_model::settings_editor` on the Rust
+// side, so the two shells cannot disagree.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, Tone, ButtonVariant, Button, Card, ListRow, TextField, Dropdown, Toggle, SwatchPicker, Divider, VDivider, SettingRow, Banner, Badge, EmptyState } from "../kit/kit.slint";
+
+export struct ShortcutRowData {
+    label: string,
+    // Non-empty on the first row of a group.
+    group: string,
+    // The binding, "Press shortcut...", or "(unbound)".
+    binding: string,
+    recording: bool,
+    conflict: bool,
+    bound: bool,
+}
+
+export struct SettingsData {
+    section: int,
+    section-labels: [string],
+    section-blurb: string,
+    // 0 ready, 1 loading, 2 could not load.
+    state: int,
+    state-message: string,
+    banner: string,
+    banner-tone: Tone,
+    dirty: bool,
+    can-save: bool,
+    saving: bool,
+    // General.
+    language-options: [string],
+    language: string,
+    startup-options: [string],
+    startup: string,
+    auto-save-connections: bool,
+    auto-check-updates: bool,
+    update-interval: string,
+    update-interval-error: string,
+    auto-download: bool,
+    auto-install: bool,
+    // Appearance.
+    theme-options: [string],
+    theme-mode: string,
+    accent-presets: [color],
+    accent-index: int,
+    accent-text: string,
+    accent-error: string,
+    font-size: string,
+    font-size-error: string,
+    font-family: string,
+    line-numbers: bool,
+    minimap: bool,
+    word-wrap: bool,
+    // Query execution.
+    timeout: string,
+    timeout-error: string,
+    max-rows: string,
+    max-rows-error: string,
+    confirm-destructive: bool,
+    auto-save-history: bool,
+    max-history: string,
+    max-history-error: string,
+    // Keyboard shortcuts.
+    recording: bool,
+    shortcuts: [ShortcutRowData],
+}
+
+export component SettingsDialog inherits Rectangle {
+    in property <SettingsData> data;
+    // Set by the window so the footer never falls off a short window.
+    in property <length> available-height: 580px;
+
+    callback section-selected(int);
+    callback language-selected(int);
+    callback startup-selected(int);
+    callback toggle-auto-save-connections;
+    callback toggle-auto-check-updates;
+    callback update-interval-changed(string);
+    callback toggle-auto-download;
+    callback toggle-auto-install;
+    callback theme-selected(int);
+    callback accent-preset-picked(int);
+    callback accent-text-changed(string);
+    callback font-size-changed(string);
+    callback font-family-changed(string);
+    callback toggle-line-numbers;
+    callback toggle-minimap;
+    callback toggle-word-wrap;
+    callback timeout-changed(string);
+    callback max-rows-changed(string);
+    callback toggle-confirm-destructive;
+    callback toggle-auto-save-history;
+    callback max-history-changed(string);
+    callback shortcut-record(int);
+    callback shortcut-clear(int);
+    // One keystroke while a shortcut is being recorded. `text` is Slint's
+    // key text (special keys arrive as private-use characters); the flags use
+    // Slint's meaning, where `control` is Command on macOS.
+    callback shortcut-key(string, bool, bool, bool, bool);
+    callback dismiss-banner;
+    callback retry;
+    callback save;
+    callback discard;
+    callback reset;
+    callback close;
+
+    property <bool> ready: root.data.state == 0;
+    // Key events only reach the recorder if the focus scope has focus, and a
+    // TextField may have it. Follow the state rather than the click, so any
+    // way of starting a recording (a click, the keyboard, a test) works.
+    property <bool> recording: root.data.recording;
+    changed recording => {
+        if (root.recording) {
+            scope.focus();
+        }
+    }
+
+    width: 760px;
+    height: min(580px, root.available-height);
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: 32px;
+    drop-shadow-offset-y: 12px;
+    drop-shadow-color: Theme.shadow;
+
+    scope := FocusScope {
+        key-pressed(event) => {
+            if (root.data.recording) {
+                root.shortcut-key(event.text, event.modifiers.control, event.modifiers.alt, event.modifiers.shift, event.modifiers.meta);
+                return accept;
+            }
+            if (event.text == Key.Escape) {
+                root.close();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            // Title bar.
+            HorizontalLayout {
+                padding: 20px;
+                padding-bottom: 14px;
+                spacing: 10px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: "Settings";
+                        color: Theme.foreground;
+                        font-size: Theme.size-heading;
+                        font-weight: 700;
+                    }
+                    Text {
+                        text: root.data.section-blurb;
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        overflow: elide;
+                    }
+                }
+                TouchArea {
+                    width: 16px;
+                    mouse-cursor: pointer;
+                    clicked => { root.close(); }
+                    accessible-role: button;
+                    accessible-label: "Close settings";
+                    Icon { source: Icons.x; tint: Theme.dim-foreground; width: 13px; height: 13px; }
+                }
+            }
+            Divider { }
+
+            HorizontalLayout {
+                vertical-stretch: 1;
+
+                // Section nav.
+                VerticalLayout {
+                    width: 188px;
+                    padding: 12px;
+                    spacing: 2px;
+                    alignment: start;
+                    for label[i] in root.data.section-labels: ListRow {
+                        text: label;
+                        icon: i == 0 ? Icons.settings : i == 1 ? Icons.sun : i == 2 ? Icons.zap : Icons.command;
+                        selected: i == root.data.section;
+                        clicked => { root.section-selected(i); }
+                    }
+                }
+                VDivider { }
+
+                // Content.
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    padding: 16px;
+                    padding-right: 4px;
+                    spacing: 12px;
+
+                    // Same right edge as the cards, which leave room for the
+                    // scrollbar.
+                    if root.data.banner != "": HorizontalLayout {
+                        padding-right: 12px;
+                        Banner {
+                            message: root.data.banner;
+                            tone: root.data.banner-tone;
+                            dismissed => { root.dismiss-banner(); }
+                        }
+                    }
+
+                    if root.data.state == 1: EmptyState {
+                        vertical-stretch: 1;
+                        icon: Icons.refresh-cw;
+                        title: "Loading settings";
+                        message: "Reading your saved preferences.";
+                    }
+
+                    if root.data.state == 2: EmptyState {
+                        vertical-stretch: 1;
+                        icon: Icons.triangle-alert;
+                        title: "Could not load settings";
+                        message: root.data.state-message;
+                        Button {
+                            text: "Try again";
+                            variant: ButtonVariant.primary;
+                            clicked => { root.retry(); }
+                        }
+                    }
+
+                    if root.ready: ScrollView {
+                        vertical-stretch: 1;
+                        VerticalLayout {
+                            padding-right: 12px;
+                            spacing: 12px;
+                            alignment: start;
+
+                            // ---- General ----
+                            if root.data.section == 0: Card {
+                                VerticalLayout {
+                                    SettingRow {
+                                        title: "Language";
+                                        description: "Saved only. There is no translated interface yet.";
+                                        Dropdown {
+                                            width: 150px;
+                                            value: root.data.language;
+                                            options: root.data.language-options;
+                                            selected(i) => { root.language-selected(i); }
+                                        }
+                                    }
+                                    SettingRow {
+                                        title: "Startup behavior";
+                                        description: "What to show when the application starts";
+                                        Dropdown {
+                                            width: 190px;
+                                            value: root.data.startup;
+                                            options: root.data.startup-options;
+                                            selected(i) => { root.startup-selected(i); }
+                                        }
+                                    }
+                                    SettingRow {
+                                        title: "Auto-save connections";
+                                        description: "Save connection profiles after testing";
+                                        last: true;
+                                        Toggle {
+                                            checked: root.data.auto-save-connections;
+                                            toggled => { root.toggle-auto-save-connections(); }
+                                        }
+                                    }
+                                }
+                            }
+                            if root.data.section == 0: Card {
+                                VerticalLayout {
+                                    SettingRow {
+                                        title: "Check for updates automatically";
+                                        description: "Saved only. Updating is not built into this version yet.";
+                                        last: !root.data.auto-check-updates;
+                                        Toggle {
+                                            checked: root.data.auto-check-updates;
+                                            toggled => { root.toggle-auto-check-updates(); }
+                                        }
+                                    }
+                                    if root.data.auto-check-updates: SettingRow {
+                                        title: "Check interval";
+                                        description: "Hours between checks (1 to 168)";
+                                        error: root.data.update-interval-error;
+                                        TextField {
+                                            width: 72px;
+                                            text: root.data.update-interval;
+                                            edited(t) => { root.update-interval-changed(t); }
+                                        }
+                                    }
+                                    if root.data.auto-check-updates: SettingRow {
+                                        title: "Download updates automatically";
+                                        last: !root.data.auto-download;
+                                        Toggle {
+                                            checked: root.data.auto-download;
+                                            toggled => { root.toggle-auto-download(); }
+                                        }
+                                    }
+                                    if root.data.auto-check-updates && root.data.auto-download: SettingRow {
+                                        title: "Install updates automatically";
+                                        description: "Install downloaded updates and restart";
+                                        last: true;
+                                        Toggle {
+                                            checked: root.data.auto-install;
+                                            toggled => { root.toggle-auto-install(); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ---- Appearance ----
+                            if root.data.section == 1: Card {
+                                VerticalLayout {
+                                    SettingRow {
+                                        title: "Theme";
+                                        description: "Applied as you choose";
+                                        Dropdown {
+                                            width: 130px;
+                                            value: root.data.theme-mode;
+                                            options: root.data.theme-options;
+                                            selected(i) => { root.theme-selected(i); }
+                                        }
+                                    }
+                                    SettingRow {
+                                        title: "Accent colour";
+                                        description: "Swatch or hex value";
+                                        error: root.data.accent-error;
+                                        last: true;
+                                        SwatchPicker {
+                                            width: 248px;
+                                            options: root.data.accent-presets;
+                                            selected: root.data.accent-index;
+                                            picked(i) => { root.accent-preset-picked(i); }
+                                        }
+                                        TextField {
+                                            width: 92px;
+                                            text: root.data.accent-text;
+                                            placeholder: "Hex colour";
+                                            edited(t) => { root.accent-text-changed(t); }
+                                        }
+                                    }
+                                }
+                            }
+                            if root.data.section == 1: Card {
+                                VerticalLayout {
+                                    SettingRow {
+                                        title: "Editor font size";
+                                        description: "Pixels, 10 to 24. Applied to the SQL editor as you type.";
+                                        error: root.data.font-size-error;
+                                        TextField {
+                                            width: 72px;
+                                            text: root.data.font-size;
+                                            edited(t) => { root.font-size-changed(t); }
+                                        }
+                                    }
+                                    SettingRow {
+                                        title: "Editor font family";
+                                        description: "Saved only. The editor always uses a monospace font.";
+                                        TextField {
+                                            width: 250px;
+                                            text: root.data.font-family;
+                                            placeholder: "Monaco, monospace";
+                                            edited(t) => { root.font-family-changed(t); }
+                                        }
+                                    }
+                                    SettingRow {
+                                        title: "Line numbers";
+                                        Toggle {
+                                            checked: root.data.line-numbers;
+                                            toggled => { root.toggle-line-numbers(); }
+                                        }
+                                    }
+                                    SettingRow {
+                                        title: "Minimap";
+                                        description: "Saved only. The editor has no minimap yet.";
+                                        Toggle {
+                                            checked: root.data.minimap;
+                                            toggled => { root.toggle-minimap(); }
+                                        }
+                                    }
+                                    SettingRow {
+                                        title: "Word wrap";
+                                        description: "Saved only. The editor does not wrap lines yet.";
+                                        last: true;
+                                        Toggle {
+                                            checked: root.data.word-wrap;
+                                            toggled => { root.toggle-word-wrap(); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ---- Query execution ----
+                            if root.data.section == 2: Card {
+                                VerticalLayout {
+                                    SettingRow {
+                                        title: "Query timeout";
+                                        description: "Seconds to wait for a query; 0 means no limit";
+                                        error: root.data.timeout-error;
+                                        TextField {
+                                            width: 72px;
+                                            text: root.data.timeout;
+                                            edited(t) => { root.timeout-changed(t); }
+                                        }
+                                    }
+                                    SettingRow {
+                                        title: "Maximum rows";
+                                        description: "Saved only. Results are not capped by this yet.";
+                                        error: root.data.max-rows-error;
+                                        last: true;
+                                        TextField {
+                                            width: 92px;
+                                            text: root.data.max-rows;
+                                            edited(t) => { root.max-rows-changed(t); }
+                                        }
+                                    }
+                                }
+                            }
+                            if root.data.section == 2: Card {
+                                VerticalLayout {
+                                    SettingRow {
+                                        title: "Confirm destructive queries";
+                                        description: "Ask before DELETE or UPDATE with no WHERE, DROP, TRUNCATE";
+                                        Toggle {
+                                            checked: root.data.confirm-destructive;
+                                            toggled => { root.toggle-confirm-destructive(); }
+                                        }
+                                    }
+                                    SettingRow {
+                                        title: "Save queries to history";
+                                        Toggle {
+                                            checked: root.data.auto-save-history;
+                                            toggled => { root.toggle-auto-save-history(); }
+                                        }
+                                    }
+                                    SettingRow {
+                                        title: "History size";
+                                        description: "Entries to keep (50 to 2000)";
+                                        error: root.data.max-history-error;
+                                        last: true;
+                                        TextField {
+                                            width: 72px;
+                                            text: root.data.max-history;
+                                            edited(t) => { root.max-history-changed(t); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // ---- Keyboard shortcuts ----
+                            if root.data.section == 3: Text {
+                                text: root.data.recording
+                                    ? "Press the new keys. Backspace clears the shortcut, Escape cancels."
+                                    : "Click a shortcut, then press the keys you want.";
+                                color: Theme.muted-foreground;
+                                font-size: Theme.size-small;
+                                wrap: word-wrap;
+                            }
+                            if root.data.section == 3: Card {
+                                VerticalLayout {
+                                    for row[i] in root.data.shortcuts: VerticalLayout {
+                                        if row.group != "": HorizontalLayout {
+                                            padding-left: 16px;
+                                            height: 32px;
+                                            Text {
+                                                text: row.group;
+                                                color: Theme.muted-foreground;
+                                                font-size: Theme.size-small;
+                                                font-weight: 600;
+                                                letter-spacing: 0.6px;
+                                                vertical-alignment: bottom;
+                                            }
+                                        }
+                                        HorizontalLayout {
+                                            padding-left: 16px;
+                                            padding-right: 12px;
+                                            padding-top: 4px;
+                                            padding-bottom: 4px;
+                                            spacing: 8px;
+                                            VerticalLayout {
+                                                alignment: center;
+                                                horizontal-stretch: 1;
+                                                Text {
+                                                    text: row.label;
+                                                    color: Theme.foreground;
+                                                    font-size: Theme.size-label;
+                                                    overflow: elide;
+                                                }
+                                            }
+                                            if row.conflict: VerticalLayout {
+                                                alignment: center;
+                                                Badge { text: "Duplicate"; tone: Tone.warning; }
+                                            }
+                                            VerticalLayout {
+                                                alignment: center;
+                                                Button {
+                                                    min-width: 150px;
+                                                    text: row.binding;
+                                                    variant: row.recording ? ButtonVariant.primary : ButtonVariant.secondary;
+                                                    clicked => { root.shortcut-record(i); }
+                                                }
+                                            }
+                                            VerticalLayout {
+                                                alignment: center;
+                                                Button {
+                                                    has-icon: true;
+                                                    icon: Icons.x;
+                                                    variant: ButtonVariant.ghost;
+                                                    enabled: row.bound;
+                                                    clicked => { root.shortcut-clear(i); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Divider { }
+            HorizontalLayout {
+                padding: 14px;
+                padding-left: 20px;
+                padding-right: 20px;
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: "Reset to defaults";
+                        variant: ButtonVariant.danger;
+                        enabled: root.ready && !root.data.saving;
+                        clicked => { root.reset(); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    horizontal-stretch: 1;
+                    Text {
+                        text: root.data.saving ? "Saving…" : root.data.dirty ? "Unsaved changes" : "";
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        horizontal-alignment: right;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: root.data.dirty ? "Discard" : "Close";
+                        variant: ButtonVariant.secondary;
+                        clicked => {
+                            if (root.data.dirty) {
+                                root.discard();
+                            } else {
+                                root.close();
+                            }
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        text: root.data.saving ? "Saving…" : "Save changes";
+                        variant: ButtonVariant.primary;
+                        enabled: root.ready && root.data.can-save && !root.data.saving;
+                        clicked => { root.save(); }
+                    }
+                }
+            }
+        }
+    }
+}

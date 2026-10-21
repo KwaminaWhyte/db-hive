@@ -48,12 +48,14 @@ export component SqlEditor inherits Rectangle {
     in property <color> selection-color: Theme.primary.transparentize(0.73);
     in property <color> gutter-color: Theme.dim-foreground;
     in property <string> mono-family: "Menlo";
-    in property <length> mono-size: 13px;
+    // Settings > Appearance drives both of these through the Theme global.
+    in property <length> mono-size: Theme.editor-font-size;
+    in property <bool> show-line-numbers: Theme.editor-line-numbers;
 
     callback edited(string);
 
     property <length> pad: 12px;
-    property <length> gutter-width: 40px;
+    property <length> gutter-width: root.show-line-numbers ? max(40px, root.advance * 4 + 14px) : 0px;
     property <length> line-height: input.font-metrics.ascent - input.font-metrics.descent;
     property <length> advance: measure.preferred-width / 100;
     property <length> caret-x;
@@ -82,6 +84,7 @@ export component SqlEditor inherits Rectangle {
 
         // Line numbers.
         for line[index] in root.lines: Text {
+            visible: root.show-line-numbers;
             x: 0;
             y: root.pad + index * root.line-height;
             width: root.gutter-width - 10px;
