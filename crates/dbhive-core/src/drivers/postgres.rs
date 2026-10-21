@@ -430,6 +430,27 @@ impl PostgresDriver {
     }
 }
 
+/// A server error in words the user can act on.
+///
+/// `tokio_postgres::Error`'s `Display` for anything the server refused is just
+/// "db error"; the reason ("cannot drop table customers because other objects
+/// depend on it") lives in the `DbError` it wraps. This puts the message first,
+/// then the detail and the hint on one line, so a banner or a toast can show it.
+fn pg_message(e: &tokio_postgres::Error) -> String {
+    let Some(db) = e.as_db_error() else {
+        return e.to_string();
+    };
+    let mut out = db.message().to_string();
+    if let Some(detail) = db.detail() {
+        let detail = detail.lines().map(str::trim).collect::<Vec<_>>().join("; ");
+        out.push_str(&format!(" ({detail})"));
+    }
+    if let Some(hint) = db.hint() {
+        out.push_str(&format!(" Hint: {}", hint.trim()));
+    }
+    out
+}
+
 #[async_trait]
 impl DatabaseDriver for PostgresDriver {
     async fn connect(opts: ConnectionOptions) -> Result<Self, DbError>
@@ -504,7 +525,7 @@ impl DatabaseDriver for PostgresDriver {
             client
                 .batch_execute(sql)
                 .await
-                .map_err(|e| DbError::QueryError(format!("Transaction execution failed: {}", e)))?;
+                .map_err(|e| DbError::QueryError(format!("Transaction execution failed: {}", pg_message(&e))))?;
 
             // Return empty result for batch execution (no way to get affected rows count for all statements)
             return Ok(QueryResult::empty());
@@ -520,7 +541,7 @@ impl DatabaseDriver for PostgresDriver {
         let statement = client
             .prepare(sql)
             .await
-            .map_err(|e| DbError::QueryError(format!("{}", e)))?;
+            .map_err(|e| DbError::QueryError(pg_message(&e)))?;
 
         let columns: Vec<String> = statement
             .columns()
@@ -534,7 +555,7 @@ impl DatabaseDriver for PostgresDriver {
             let rows_affected = client
                 .execute(&statement, &[])
                 .await
-                .map_err(|e| DbError::QueryError(format!("{}", e)))?;
+                .map_err(|e| DbError::QueryError(pg_message(&e)))?;
 
             return Ok(QueryResult::with_affected(rows_affected));
         }
@@ -550,14 +571,14 @@ impl DatabaseDriver for PostgresDriver {
         let stream = client
             .query_raw(&statement, params)
             .await
-            .map_err(|e| DbError::QueryError(format!("{}", e)))?;
+            .map_err(|e| DbError::QueryError(pg_message(&e)))?;
         futures_util::pin_mut!(stream);
 
         let mut rows: Vec<tokio_postgres::Row> = Vec::new();
         while let Some(row) = stream
             .try_next()
             .await
-            .map_err(|e| DbError::QueryError(format!("{}", e)))?
+            .map_err(|e| DbError::QueryError(pg_message(&e)))?
         {
             rows.push(row);
             if rows.len() > MAX_RESULT_ROWS {
@@ -602,7 +623,7 @@ impl DatabaseDriver for PostgresDriver {
                     let _ = tx.rollback().await;
                     return Err(TransactionFailure {
                         index,
-                        error: DbError::QueryError(format!("{}", e)),
+                        error: DbError::QueryError(pg_message(&e)),
                     });
                 }
             }
@@ -918,30 +939,43 @@ impl DatabaseDriver for PostgresDriver {
     }
 
     async fn get_foreign_keys(&self, schema: &str) -> Result<Vec<ForeignKeyInfo>, DbError> {
+        // Read from the catalogs, not information_schema. The information_schema
+        // route joined constraint_column_usage on the constraint's own schema,
+        // but that view reports the REFERENCED table's schema, so a foreign key
+        // from one schema to another matched nothing and was silently missing.
+        // The catalogs also key a constraint by its table, which constraint
+        // names alone do not guarantee to be unique.
         let query = r#"
             SELECT
-                tc.constraint_name as name,
-                tc.table_name as table,
-                tc.table_schema as schema,
-                kcu.column_name,
-                ccu.table_name AS referenced_table,
-                ccu.table_schema AS referenced_schema,
-                ccu.column_name AS referenced_column,
-                rc.update_rule as on_update,
-                rc.delete_rule as on_delete
-            FROM information_schema.table_constraints AS tc
-            JOIN information_schema.key_column_usage AS kcu
-                ON tc.constraint_name = kcu.constraint_name
-                AND tc.table_schema = kcu.table_schema
-            JOIN information_schema.constraint_column_usage AS ccu
-                ON ccu.constraint_name = tc.constraint_name
-                AND ccu.table_schema = tc.table_schema
-            JOIN information_schema.referential_constraints AS rc
-                ON tc.constraint_name = rc.constraint_name
-                AND tc.table_schema = rc.constraint_schema
-            WHERE tc.constraint_type = 'FOREIGN KEY'
-                AND tc.table_schema = $1
-            ORDER BY tc.table_name, tc.constraint_name, kcu.ordinal_position
+                con.conname::text AS name,
+                cl.relname::text AS table,
+                ns.nspname::text AS schema,
+                att.attname::text AS column_name,
+                rcl.relname::text AS referenced_table,
+                rns.nspname::text AS referenced_schema,
+                ratt.attname::text AS referenced_column,
+                CASE con.confupdtype
+                    WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT'
+                    WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL'
+                    WHEN 'd' THEN 'SET DEFAULT' END AS on_update,
+                CASE con.confdeltype
+                    WHEN 'a' THEN 'NO ACTION' WHEN 'r' THEN 'RESTRICT'
+                    WHEN 'c' THEN 'CASCADE' WHEN 'n' THEN 'SET NULL'
+                    WHEN 'd' THEN 'SET DEFAULT' END AS on_delete
+            FROM pg_catalog.pg_constraint con
+            JOIN pg_catalog.pg_class cl ON cl.oid = con.conrelid
+            JOIN pg_catalog.pg_namespace ns ON ns.oid = cl.relnamespace
+            JOIN pg_catalog.pg_class rcl ON rcl.oid = con.confrelid
+            JOIN pg_catalog.pg_namespace rns ON rns.oid = rcl.relnamespace
+            CROSS JOIN LATERAL unnest(con.conkey, con.confkey)
+                WITH ORDINALITY AS k(attnum, rattnum, ord)
+            JOIN pg_catalog.pg_attribute att
+                ON att.attrelid = con.conrelid AND att.attnum = k.attnum
+            JOIN pg_catalog.pg_attribute ratt
+                ON ratt.attrelid = con.confrelid AND ratt.attnum = k.rattnum
+            WHERE con.contype = 'f'
+                AND ns.nspname = $1
+            ORDER BY cl.relname, con.conname, k.ord
         "#;
 
         let client = self.client().await?;
@@ -950,9 +984,10 @@ impl DatabaseDriver for PostgresDriver {
             .await
             .map_err(|e| DbError::QueryError(format!("Failed to fetch foreign keys: {}", e)))?;
 
-        // Group foreign keys by constraint name (for composite foreign keys)
+        // Group the rows of a composite foreign key. A constraint is keyed by
+        // its table as well as its name: two tables may reuse a name.
         use std::collections::HashMap;
-        let mut fk_map: HashMap<String, (ForeignKeyInfo, Vec<String>, Vec<String>)> =
+        let mut fk_map: HashMap<(String, String, String), (ForeignKeyInfo, Vec<String>, Vec<String>)> =
             HashMap::new();
 
         for row in rows {
@@ -967,7 +1002,7 @@ impl DatabaseDriver for PostgresDriver {
             let on_delete: Option<String> = row.get("on_delete");
 
             fk_map
-                .entry(fk_name.clone())
+                .entry((schema.clone(), table.clone(), fk_name.clone()))
                 .and_modify(|(_, cols, ref_cols)| {
                     cols.push(column.clone());
                     ref_cols.push(ref_column.clone());
@@ -988,8 +1023,8 @@ impl DatabaseDriver for PostgresDriver {
                 });
         }
 
-        // Convert HashMap to Vec, filling in the columns
-        let foreign_keys: Vec<ForeignKeyInfo> = fk_map
+        // Convert HashMap to Vec, filling in the columns, in a stable order.
+        let mut foreign_keys: Vec<ForeignKeyInfo> = fk_map
             .into_iter()
             .map(|(_, (mut fk, cols, ref_cols))| {
                 fk.columns = cols;
@@ -997,6 +1032,9 @@ impl DatabaseDriver for PostgresDriver {
                 fk
             })
             .collect();
+        foreign_keys.sort_by(|a, b| {
+            (&a.schema, &a.table, &a.name).cmp(&(&b.schema, &b.table, &b.name))
+        });
 
         Ok(foreign_keys)
     }
