@@ -27,6 +27,14 @@
 
 import { Theme } from "../kit/kit.slint";
 
+// One row of the completion popup. `kind` is "table", "column", "keyword",
+// "function" or "schema"; `detail` is a column's type or a table's schema.
+export struct CompletionItem {
+    label: string,
+    detail: string,
+    kind: string,
+}
+
 export struct HighlightRun {
     text: string,
     color: color,
@@ -57,6 +65,27 @@ export component SqlEditor inherits Rectangle {
     in property <bool> read-only: false;
 
     callback edited(string);
+    // The caret moved; the argument is its byte offset in `text`. Typing moves
+    // it too, so this is also how the controller learns where completion is.
+    callback cursor-moved(int);
+
+    // Completion popup, drawn at the caret. The controller owns the list and
+    // which row is selected; keys are handled by the screen around this
+    // component, and a click reports the row.
+    in property <[CompletionItem]> completions;
+    in property <int> completion-selected: 0;
+    callback completion-picked(int);
+
+    // Set to a byte offset to move the caret there (after a completion is
+    // applied); the editor puts it back to -1 once it has.
+    in-out property <int> pending-cursor: -1;
+    changed pending-cursor => {
+        if (self.pending-cursor >= 0) {
+            input.set-selection-offsets(self.pending-cursor, self.pending-cursor);
+            input.focus();
+            self.pending-cursor = -1;
+        }
+    }
 
     property <length> pad: 12px;
     property <length> gutter-width: root.show-line-numbers ? max(40px, root.advance * 4 + 14px) : 0px;
@@ -138,6 +167,7 @@ export component SqlEditor inherits Rectangle {
             cursor-position-changed(p) => {
                 root.caret-x = p.x;
                 root.caret-y = p.y;
+                root.cursor-moved(self.cursor-position-byte-offset);
             }
         }
 
@@ -148,6 +178,73 @@ export component SqlEditor inherits Rectangle {
             height: root.line-height;
             background: root.caret-color;
             visible: input.has-focus && !root.read-only;
+        }
+    }
+
+    // The completion list, below the caret or above it when there is no room.
+    if root.completions.length > 0 && !root.read-only: Rectangle {
+        property <length> row-height: 26px;
+        property <length> box-height: min(root.completions.length, 7) * self.row-height + 8px;
+        property <length> caret-top: input.y + root.caret-y + flick.viewport-y;
+        width: min(340px, root.width - 16px);
+        height: self.box-height;
+        x: max(8px, min(root.width - self.width - 8px, input.x + root.caret-x + flick.viewport-x));
+        y: self.caret-top + root.line-height + 4px + self.box-height <= root.height
+            ? self.caret-top + root.line-height + 4px
+            : max(4px, self.caret-top - self.box-height - 4px);
+        background: Theme.popover;
+        border-radius: Theme.radius-control;
+        border-width: 1px;
+        border-color: Theme.border-strong;
+        clip: true;
+        accessible-role: list;
+        accessible-label: "Completions";
+
+        VerticalLayout {
+            padding: 4px;
+            for item[i] in root.completions: Rectangle {
+                height: 26px;
+                border-radius: Theme.radius-control;
+                background: i == root.completion-selected ? Theme.primary-soft : item-touch.has-hover ? Theme.hover : transparent;
+                accessible-role: list-item;
+                accessible-label: item.label + ", " + item.detail;
+
+                item-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.completion-picked(i); }
+                }
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+                    spacing: 8px;
+                    Text {
+                        width: 14px;
+                        text: item.kind == "table" ? "T" : item.kind == "column" ? "C" : item.kind == "function" ? "f" : item.kind == "schema" ? "S" : "K";
+                        color: item.kind == "column" ? Theme.primary : item.kind == "table" || item.kind == "schema" ? Theme.success : Theme.dim-foreground;
+                        font-size: Theme.size-small;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: item.label;
+                        color: Theme.foreground;
+                        font-family: root.mono-family;
+                        font-size: Theme.size-label;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                    Text {
+                        text: item.detail;
+                        color: Theme.dim-foreground;
+                        font-size: Theme.size-small;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        max-width: 120px;
+                    }
+                }
+            }
         }
     }
 

@@ -79,6 +79,12 @@ fn mask(sql: &str) -> String {
     out
 }
 
+/// `sql` with string literals and comments blanked out, byte offsets intact.
+/// Shared with the completion logic so both agree on what is code.
+pub fn masked(sql: &str) -> String {
+    mask(sql)
+}
+
 /// Statements of `sql`, split on `;` outside literals and comments. Empty
 /// statements are dropped.
 pub fn split_statements(sql: &str) -> Vec<String> {

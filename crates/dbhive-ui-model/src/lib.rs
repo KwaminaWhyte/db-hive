@@ -38,6 +38,7 @@ pub mod settings;
 pub mod settings_editor;
 pub mod sql_completion;
 pub mod sql_guard;
+pub mod sql_suggest;
 pub mod table_dialog;
 pub mod table_editor;
 pub mod table_inspector;

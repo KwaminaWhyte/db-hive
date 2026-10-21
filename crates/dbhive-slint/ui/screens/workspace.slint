@@ -1,7 +1,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Divider, ListRow, Banner, EmptyState, TabBar, TabInfo } from "../kit/kit.slint";
 import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
-import { SqlEditor, HighlightLine } from "../components/sql_editor.slint";
+import { SqlEditor, HighlightLine, CompletionItem } from "../components/sql_editor.slint";
 import { TableInspectorView } from "table_inspector.slint";
 import { BuilderState } from "query_builder.slint";
 import { TableDialogState } from "table_dialog.slint";
@@ -31,6 +31,11 @@ export component WorkspaceScreen inherits VerticalLayout {
     in property <bool> active-is-query;
     in-out property <string> editor-text;
     in property <[HighlightLine]> editor-lines;
+    // Autocomplete: the rows, which one is selected, and a caret position to
+    // jump to once a completion has been applied.
+    in property <[CompletionItem]> completions;
+    in property <int> completion-selected;
+    in-out property <int> editor-pending-cursor: -1;
     // The active tab has a query in flight.
     in property <bool> running;
     in property <string> rows-error;
@@ -59,6 +64,11 @@ export component WorkspaceScreen inherits VerticalLayout {
     callback tab-closed(int);
     callback new-query;
     callback editor-edited(string);
+    callback cursor-moved(int);
+    callback completion-move(int);
+    callback completion-accept;
+    callback completion-dismiss;
+    callback completion-picked(int);
     callback run-query;
     callback retry;
     callback open-history;
@@ -311,6 +321,27 @@ export component WorkspaceScreen inherits VerticalLayout {
                         // Cmd+Enter on macOS, Ctrl+Enter elsewhere. Slint maps
                         // the two differently per platform, so accept both.
                         capture-key-pressed(event) => {
+                            // With the completion list open, these keys drive
+                            // it instead of the text.
+                            if (root.completions.length > 0 && !event.modifiers.control
+                                && !event.modifiers.meta && !event.modifiers.alt) {
+                                if (event.text == Key.DownArrow) {
+                                    root.completion-move(1);
+                                    return accept;
+                                }
+                                if (event.text == Key.UpArrow) {
+                                    root.completion-move(-1);
+                                    return accept;
+                                }
+                                if (event.text == Key.Return || event.text == Key.Tab) {
+                                    root.completion-accept();
+                                    return accept;
+                                }
+                                if (event.text == Key.Escape) {
+                                    root.completion-dismiss();
+                                    return accept;
+                                }
+                            }
                             if ((event.modifiers.control || event.modifiers.meta) && event.text == Key.Return) {
                                 root.run-query();
                                 return accept;
@@ -320,7 +351,12 @@ export component WorkspaceScreen inherits VerticalLayout {
                         SqlEditor {
                             text <=> root.editor-text;
                             lines: root.editor-lines;
+                            completions: root.completions;
+                            completion-selected: root.completion-selected;
+                            pending-cursor <=> root.editor-pending-cursor;
                             edited(t) => { root.editor-edited(t); }
+                            cursor-moved(o) => { root.cursor-moved(o); }
+                            completion-picked(i) => { root.completion-picked(i); }
                         }
                     }
                 }

@@ -98,6 +98,28 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                         c.set_workspace_result_message("3 rows affected · 4ms".into());
                     }
                     "workspace-query-blank" => {}
+                    // Autocomplete: columns after SELECT, popup under the caret.
+                    "workspace-query-complete" | "workspace-query-complete-light" => {
+                        let sql = "SELECT c.na, count(*)\n  FROM customers c\n  JOIN orders o ON o.customer_id = c.id\n GROUP BY c.na";
+                        c.set_workspace_editor_text(sql.into());
+                        c.set_workspace_editor_lines(dbhive_slint::sql_highlight::to_model_for(sql, dark));
+                        let item = |label: &str, detail: &str, kind: &str| dbhive_slint::CompletionItem {
+                            label: label.into(),
+                            detail: detail.into(),
+                            kind: kind.into(),
+                        };
+                        c.set_workspace_completions(slint::ModelRc::new(slint::VecModel::from(vec![
+                            item("name", "text", "column"),
+                            item("national_id", "varchar(32)", "column"),
+                            item("count", "function", "function"),
+                            item("natural", "keyword", "keyword"),
+                            item("notes", "public", "table"),
+                        ])));
+                        c.set_workspace_completion_selected(0);
+                        // Puts the caret after `c.na` on the first line so the
+                        // popup draws beneath it.
+                        c.set_workspace_editor_pending_cursor("SELECT c.na".len() as i32);
+                    }
                     _ => {
                         let cols = vec!["id".to_string(), "name".to_string(), "revenue".to_string()];
                         let widths = vec![80.0f32, 240.0, 160.0];

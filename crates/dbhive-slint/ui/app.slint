@@ -1,5 +1,5 @@
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Divider, TabInfo } from "kit/kit.slint";
-import { HighlightLine } from "components/sql_editor.slint";
+import { HighlightLine, CompletionItem } from "components/sql_editor.slint";
 import { ConnectionsScreen, ConnectionItem } from "screens/connections.slint";
 import { WorkspaceScreen, TableItem } from "screens/workspace.slint";
 import { GridColumn, GridRow } from "components/results_grid.slint";
@@ -16,7 +16,7 @@ import { ShortcutsDialog, ShortcutItem } from "dialogs/shortcuts.slint";
 import { SettingsDialog, SettingsData, ShortcutRowData } from "dialogs/settings.slint";
 import { Palette } from "std-widgets.slint";
 
-export { Theme, Icons, Tone, ConnectionItem, ConnectionFormData, TableItem, GridColumn, GridRow, TabInfo }
+export { Theme, Icons, Tone, ConnectionItem, ConnectionFormData, TableItem, GridColumn, GridRow, TabInfo, CompletionItem }
 export { PaletteItem, ShortcutItem }
 export { SettingsData, ShortcutRowData, Palette }
 
@@ -144,6 +144,9 @@ export component AppWindow inherits Window {
     in property <string> workspace-result-summary;
     in property <string> workspace-result-message;
     in property <bool> workspace-has-result;
+    in property <[CompletionItem]> workspace-completions;
+    in property <int> workspace-completion-selected;
+    in-out property <int> workspace-editor-pending-cursor: -1;
     in property <string> workspace-tables-error;
     in property <string> workspace-rows-error;
     in-out property <string> workspace-filter;
@@ -163,6 +166,11 @@ export component AppWindow inherits Window {
     callback workspace-editor-edited(string);
     callback workspace-run-query;
     callback workspace-retry;
+    callback workspace-cursor-moved(int);
+    callback workspace-completion-move(int);
+    callback workspace-completion-accept;
+    callback workspace-completion-dismiss;
+    callback workspace-completion-picked(int);
 
     // Puts text on the system clipboard (Slint has no call for it in Rust).
     public function copy-to-clipboard(text: string) {
@@ -521,6 +529,9 @@ export component AppWindow inherits Window {
             result-summary: root.workspace-result-summary;
             result-message: root.workspace-result-message;
             has-result: root.workspace-has-result;
+            completions: root.workspace-completions;
+            completion-selected: root.workspace-completion-selected;
+            editor-pending-cursor <=> root.workspace-editor-pending-cursor;
             tables-error: root.workspace-tables-error;
             rows-error: root.workspace-rows-error;
             filter <=> root.workspace-filter;
@@ -540,6 +551,11 @@ export component AppWindow inherits Window {
             editor-edited(t) => { root.workspace-editor-edited(t); }
             run-query => { root.workspace-run-query(); }
             retry => { root.workspace-retry(); }
+            cursor-moved(o) => { root.workspace-cursor-moved(o); }
+            completion-move(d) => { root.workspace-completion-move(d); }
+            completion-accept => { root.workspace-completion-accept(); }
+            completion-dismiss => { root.workspace-completion-dismiss(); }
+            completion-picked(i) => { root.workspace-completion-picked(i); }
             open-history => { HistoryState.open-requested(); }
             open-activity => { root.run-command("go-activity-monitor"); }
             open-migrations => { root.run-command("go-migrations"); }

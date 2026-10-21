@@ -32,6 +32,7 @@ use dbhive_ui_model::settings_editor::{
 use dbhive_ui_model::workspace_tabs::{result_summary, TabKind, Tabs};
 
 mod builder;
+mod completion;
 mod designer;
 mod erd;
 mod inspector;
@@ -172,6 +173,7 @@ struct Session {
     table_dialog: table_dialog::DialogSession,
     erd: erd::ErdSession,
     designer: designer::DesignerSession,
+    completion: completion::CompletionSession,
 }
 
 struct Ctx {
@@ -757,6 +759,7 @@ impl Ctx {
         // A diagram or design belongs to one connection.
         self.invalidate_erd();
         self.session.borrow_mut().designer = designer::DesignerSession::default();
+        self.completion_reset();
         self.session.borrow_mut().workspace = Workspace::default();
         if let Some(w) = self.window.upgrade() {
             w.set_screen(Screen::Connections);
@@ -813,6 +816,8 @@ impl Ctx {
                     Err(e) => ws.tables_error = format!("Could not list tables: {}", e),
                 }
                 drop(s);
+                // A reloaded schema means column lists may have changed.
+                ctx.completion_reset();
                 ctx.refresh_workspace();
             }),
         );
@@ -841,11 +846,13 @@ impl Ctx {
     }
 
     fn new_query_tab(&self) {
+        self.completion_clear();
         self.session.borrow_mut().workspace.tabs.open_query("");
         self.refresh_workspace();
     }
 
     fn select_tab(&self, index: usize) {
+        self.completion_clear();
         {
             let mut s = self.session.borrow_mut();
             let tabs = &mut s.workspace.tabs;
@@ -858,6 +865,7 @@ impl Ctx {
 
     /// Close a tab, asking first when it is a query with SQL in it.
     fn close_tab(&self, index: usize) {
+        self.completion_clear();
         let (id, ask, title) = {
             let s = self.session.borrow();
             let tabs = &s.workspace.tabs;
@@ -889,6 +897,7 @@ impl Ctx {
     }
 
     fn run_active_tab(self: &Rc<Self>) {
+        self.completion_clear();
         let id = self.session.borrow().workspace.tabs.active().map(|t| t.id);
         if let Some(id) = id {
             self.run_tab(id, true);
@@ -1647,6 +1656,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     table_dialog::wire(&window, &ctx);
     erd::wire(&window, &ctx);
     designer::wire(&window, &ctx);
+    completion::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {
