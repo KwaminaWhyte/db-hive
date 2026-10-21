@@ -1253,3 +1253,335 @@ export component SettingRow inherits VerticalLayout {
     }
     if !root.last: Divider { }
 }
+
+// -- Activity monitor and migrations additions ---------------------------------
+
+// One series of a LineChart. `commands` and `area` are SVG path data written
+// by Rust in a 1000 by 1000 space (see dbhive_ui_model::activity_panel), so
+// the chart does not care how big it is drawn.
+export struct ChartLine {
+    name: string,
+    commands: string,
+    area: string,
+    // Newest value, for the legend.
+    last: string,
+    tone: Tone,
+}
+
+// A line chart: a legend, three gridlines, one path per series and the two
+// ends of the time axis. Data and labels come from Rust; this only draws.
+// Each Path is sized to its own box and its viewbox pinned to the 1000 unit
+// space, or Slint scales the path to the bounding box of its points.
+export component LineChart inherits Rectangle {
+    in property <[ChartLine]> lines;
+    in property <string> y-top;
+    in property <string> y-mid;
+    in property <string> x-start;
+    in property <string> x-end;
+    // Shown instead of the plot when there is nothing to draw.
+    in property <string> empty-message: "Collecting samples…";
+    in property <length> plot-height: 120px;
+
+    background: Theme.card;
+    border-radius: Theme.radius-card;
+    border-width: 1px;
+    border-color: Theme.border;
+
+    pure function tone-color(t: Tone) -> color {
+        return t == Tone.accent ? Theme.primary
+            : t == Tone.success ? Theme.success
+            : t == Tone.warning ? Theme.warning
+            : t == Tone.danger ? Theme.destructive
+            : Theme.muted-foreground;
+    }
+
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.lines.length == 0 ? root.empty-message : "Chart";
+
+    VerticalLayout {
+        padding: 12px;
+        padding-bottom: 8px;
+        spacing: 8px;
+
+        // Legend.
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            for line in root.lines: HorizontalLayout {
+                spacing: 6px;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 4px;
+                        background: root.tone-color(line.tone);
+                    }
+                }
+                Text {
+                    text: line.name;
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: line.last;
+                    color: Theme.foreground;
+                    font-size: Theme.size-small;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        if root.lines.length == 0: Text {
+            vertical-stretch: 1;
+            min-height: root.plot-height;
+            text: root.empty-message;
+            color: Theme.dim-foreground;
+            font-size: Theme.size-label;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+
+        if root.lines.length > 0: HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: 8px;
+
+            // Y axis labels, top and middle gridline.
+            Rectangle {
+                width: 32px;
+                min-height: root.plot-height;
+                Text {
+                    y: 0;
+                    width: parent.width;
+                    text: root.y-top;
+                    color: Theme.dim-foreground;
+                    font-size: Theme.size-small;
+                    horizontal-alignment: right;
+                }
+                Text {
+                    y: (parent.height - self.height) / 2;
+                    width: parent.width;
+                    text: root.y-mid;
+                    color: Theme.dim-foreground;
+                    font-size: Theme.size-small;
+                    horizontal-alignment: right;
+                }
+                Text {
+                    y: parent.height - self.height;
+                    width: parent.width;
+                    text: "0";
+                    color: Theme.dim-foreground;
+                    font-size: Theme.size-small;
+                    horizontal-alignment: right;
+                }
+            }
+
+            plot := Rectangle {
+                horizontal-stretch: 1;
+                min-height: root.plot-height;
+                clip: true;
+
+                Rectangle { y: 0; height: 1px; background: Theme.border; }
+                Rectangle { y: (parent.height - 1px) / 2; height: 1px; background: Theme.border; }
+                Rectangle { y: parent.height - 1px; height: 1px; background: Theme.border-strong; }
+
+                for line in root.lines: Path {
+                    width: plot.width;
+                    height: plot.height;
+                    viewbox-x: 0;
+                    viewbox-y: 0;
+                    viewbox-width: 1000;
+                    viewbox-height: 1000;
+                    fit: fill;
+                    commands: line.area;
+                    fill: root.tone-color(line.tone).transparentize(0.88);
+                    stroke: transparent;
+                    stroke-width: 0px;
+                }
+                for line in root.lines: Path {
+                    width: plot.width;
+                    height: plot.height;
+                    viewbox-x: 0;
+                    viewbox-y: 0;
+                    viewbox-width: 1000;
+                    viewbox-height: 1000;
+                    fit: fill;
+                    commands: line.commands;
+                    stroke: root.tone-color(line.tone);
+                    stroke-width: 2px;
+                    stroke-line-join: round;
+                    stroke-line-cap: round;
+                }
+            }
+        }
+
+        if root.lines.length > 0: HorizontalLayout {
+            padding-left: 40px;
+            Text {
+                text: root.x-start;
+                color: Theme.dim-foreground;
+                font-size: Theme.size-small;
+                horizontal-stretch: 1;
+            }
+            Text {
+                text: root.x-end;
+                color: Theme.dim-foreground;
+                font-size: Theme.size-small;
+                horizontal-alignment: right;
+                horizontal-stretch: 1;
+            }
+        }
+    }
+}
+
+// A number with a caption, for the row of figures over a table or chart.
+export component StatTile inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    in property <Tone> tone: Tone.neutral;
+
+    background: Theme.card;
+    border-radius: Theme.radius-card;
+    border-width: 1px;
+    border-color: Theme.border;
+    min-width: 96px;
+
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.label + ": " + root.value;
+
+    VerticalLayout {
+        padding: 12px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 2px;
+        alignment: center;
+        Text {
+            text: root.label;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            overflow: elide;
+        }
+        Text {
+            text: root.value;
+            color: root.tone == Tone.accent ? Theme.primary
+                : root.tone == Tone.success ? Theme.success
+                : root.tone == Tone.warning ? Theme.warning
+                : root.tone == Tone.danger ? Theme.destructive
+                : Theme.foreground;
+            font-size: Theme.size-heading;
+            font-weight: 600;
+            overflow: elide;
+        }
+    }
+}
+
+// One row of a breakdown: a name, a bar showing its share, and a figure.
+export component MeterRow inherits Rectangle {
+    in property <string> label;
+    in property <string> value;
+    // 0 to 1.
+    in property <float> fraction: 0;
+    in property <Tone> tone: Tone.accent;
+
+    height: 22px;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.label + ": " + root.value;
+
+    HorizontalLayout {
+        spacing: 10px;
+        Text {
+            width: 84px;
+            text: root.label;
+            color: Theme.foreground;
+            font-size: Theme.size-label;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            track := Rectangle {
+                height: 6px;
+                border-radius: 3px;
+                background: Theme.secondary;
+                Rectangle {
+                    x: 0;
+                    width: max(0.0, min(1.0, root.fraction)) * track.width;
+                    border-radius: 3px;
+                    background: root.tone == Tone.success ? Theme.success
+                        : root.tone == Tone.warning ? Theme.warning
+                        : root.tone == Tone.danger ? Theme.destructive
+                        : root.tone == Tone.neutral ? Theme.dim-foreground
+                        : Theme.primary;
+                }
+            }
+        }
+        Text {
+            width: 76px;
+            text: root.value;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// A numbered progress strip for a short wizard: finished steps show a check,
+// the current one is accented, later ones are dim.
+export component Stepper inherits Rectangle {
+    in property <[string]> labels;
+    in property <int> current: 0;
+
+    height: 28px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: start;
+        for label[i] in root.labels: HorizontalLayout {
+            spacing: 8px;
+            if i > 0: VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 28px;
+                    height: 1px;
+                    background: i <= root.current ? Theme.primary : Theme.border-strong;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 20px;
+                    height: 20px;
+                    border-radius: 10px;
+                    background: i < root.current ? Theme.success-soft
+                        : i == root.current ? Theme.primary
+                        : Theme.secondary;
+                    if i < root.current: Icon {
+                        source: Icons.check;
+                        tint: Theme.success;
+                        width: 12px;
+                        height: 12px;
+                    }
+                    if i >= root.current: Text {
+                        text: i + 1;
+                        color: i == root.current ? Theme.primary-foreground : Theme.dim-foreground;
+                        font-size: Theme.size-small;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+            Text {
+                text: label;
+                color: i == root.current ? Theme.foreground : Theme.muted-foreground;
+                font-size: Theme.size-label;
+                font-weight: i == root.current ? 600 : 400;
+                vertical-alignment: center;
+            }
+        }
+    }
+}

@@ -1,6 +1,6 @@
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Card, ClickableCard, ListRow, SwatchPicker, Badge, TextField,
     ScreenHeader, SectionLabel, Banner, EmptyState, Divider, DetailRow, UnderlineTabs, FilterChip,
-    Segmented, DataRow, SidePanel, ClipboardSink, KeyCap, KeyCaps, Popover, SettingRow, Toggle } from "../kit/kit.slint";
+    Segmented, DataRow, SidePanel, ClipboardSink, KeyCap, KeyCaps, Popover, SettingRow, Toggle, Stepper, StatTile, MeterRow, LineChart } from "../kit/kit.slint";
 
 export component KitGallery inherits Window {
     background: Theme.background;
@@ -242,6 +242,33 @@ export component KitGallery inherits Window {
                         message: "Write a statement and run it.";
                         Button { text: "Run SELECT 1"; variant: ButtonVariant.secondary; }
                     }
+                }
+                SectionLabel { text: "ACTIVITY AND MIGRATIONS"; }
+                Stepper { labels: ["Select", "Diff", "SQL"]; current: 1; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    StatTile { label: "Connections"; value: "31"; tone: Tone.accent; }
+                    StatTile { label: "Active"; value: "5"; tone: Tone.success; }
+                    StatTile { label: "Failed"; value: "2"; tone: Tone.danger; }
+                    StatTile { label: "Rows"; value: "1.4K"; }
+                }
+                MeterRow { label: "SELECT"; value: "5  56%"; fraction: 0.56; }
+                MeterRow { label: "Failed"; value: "1  11%"; fraction: 0.11; tone: Tone.danger; }
+                LineChart {
+                    height: 150px;
+                    plot-height: 70px;
+                    y-top: "50";
+                    y-mid: "25";
+                    x-start: "09:15:45";
+                    x-end: "09:20:45";
+                    lines: [
+                        { name: "Connections", last: "31", tone: Tone.accent,
+                          commands: "M 0 600 L 250 400 L 500 500 L 750 200 L 1000 300",
+                          area: "M 0 600 L 250 400 L 500 500 L 750 200 L 1000 300 L 1000 1000 L 0 1000 Z" },
+                        { name: "Active", last: "5", tone: Tone.success,
+                          commands: "M 0 900 L 250 850 L 500 880 L 750 800 L 1000 850",
+                          area: "M 0 900 L 250 850 L 500 880 L 750 800 L 1000 850 L 1000 1000 L 0 1000 Z" },
+                    ];
                 }
             }
         }

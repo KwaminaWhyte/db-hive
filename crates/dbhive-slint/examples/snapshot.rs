@@ -356,6 +356,8 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
         _ if name.starts_with("history") || name.starts_with("snippets") || name.starts_with("templates") => {
             history_panel_window(name)
         }
+        _ if name.starts_with("activity") => activity_window(name),
+        _ if name.starts_with("migrations") => migrations_window(name),
         other => {
             eprintln!("unknown component {:?}", other);
             std::process::exit(2);
@@ -789,6 +791,364 @@ fn command_overlay(name: &str) -> Box<dyn std::any::Any> {
     Box::new(c)
 }
 
+// -- Activity monitor and schema migrations ------------------------------------
+//
+// activity: queries tab populated with the details of a failed row open;
+// activity-filters, activity-empty, activity-empty-filtered, activity-error,
+// activity-long; activity-stats, activity-stats-empty; activity-server,
+// activity-server-loading, -error, -none, -unsupported, -stale.
+// migrations: migrations-select, -select-empty, -select-error,
+// -select-warning, -select-busy, -diff, -diff-collapsed, -diff-empty, -sql,
+// -sql-destructive, -sql-applying, -sql-success, -sql-failed,
+// -sql-failed-partial. Any of them with a `-light` suffix.
+// The workspace sits behind the panel, as it does in the app.
+
+fn panel_backdrop(c: &AppWindow) {
+    c.set_screen(Screen::Workspace);
+    c.set_workspace_connection_name("Production Postgres".into());
+    c.set_workspace_location_label("app · public".into());
+    let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products"]
+        .iter()
+        .map(|n| TableItem { name: (*n).into(), row_count: "~1240".into() })
+        .collect();
+    c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
+    c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![TabInfo {
+        title: "Query 1".into(),
+        query: true,
+        busy: false,
+    }])));
+    c.set_workspace_active_tab(0);
+    c.set_workspace_active_is_query(true);
+}
+
+fn activity_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_core::models::QueryLog;
+    use dbhive_core::service_monitoring as mon;
+    use dbhive_slint::activity_view as view;
+    use dbhive_ui_model::activity_monitor::FilterState;
+    use dbhive_ui_model::activity_panel as ap;
+
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+
+    let c = AppWindow::new().expect("AppWindow");
+    if light {
+        c.global::<Theme>().set_dark(false);
+    }
+    panel_backdrop(&c);
+    let a = c.global::<ActivityState>();
+    a.set_visible(true);
+    a.set_tab(if name.starts_with("activity-stats") {
+        1
+    } else if name.starts_with("activity-server") {
+        2
+    } else {
+        0
+    });
+
+    // A morning's worth of queries.
+    let now = chrono::Utc::now();
+    let long_sql = "SELECT c.id, c.name, c.email, SUM(o.total) AS revenue, COUNT(o.id) AS orders, MAX(o.created_at) AS last_order FROM customers c JOIN orders o ON o.customer_id = c.id WHERE o.status = 'paid' GROUP BY c.id, c.name, c.email HAVING SUM(o.total) > 1000 ORDER BY revenue DESC LIMIT 100";
+    let mk = |i: usize, conn: &str, db: &str, sql: &str, mins: i64, outcome: Result<(u64, u64), (u64, &str)>| {
+        let mut l = QueryLog::new(format!("log-{i}"), conn.to_lowercase(), conn.into(), Some(db.into()), sql.into());
+        l.started_at = now - chrono::Duration::minutes(mins);
+        match outcome {
+            Ok((ms, rows)) => l.complete(ms, Some(rows)),
+            Err((ms, e)) => l.fail(ms, e.to_string()),
+        }
+        l
+    };
+    let mut logs = vec![
+        mk(1, "Production Postgres", "app", "SELECT * FROM customers WHERE id = 4271", 2, Ok((4, 1))),
+        mk(2, "Production Postgres", "app", long_sql, 5, Ok((1840, 100))),
+        mk(3, "Production Postgres", "app", "UPDATE orders SET status = 'shipped' WHERE id IN (8812, 8813)", 9, Ok((12, 2))),
+        mk(4, "Production Postgres", "app", "SELECT * FROM missing_table", 14, Err((2, "relation \"missing_table\" does not exist"))),
+        mk(5, "Local MySQL", "shop", "INSERT INTO carts (user_id, created_at) VALUES (17, NOW())", 22, Ok((7, 1))),
+        mk(6, "Local MySQL", "shop", "SELECT COUNT(*) FROM carts", 31, Ok((3, 1))),
+        mk(7, "Production Postgres", "app", "DELETE FROM sessions WHERE expires_at < now()", 47, Ok((95, 1204))),
+        mk(8, "Production Postgres", "app", "CREATE INDEX idx_orders_customer ON orders (customer_id)", 63, Ok((5120, 0))),
+        mk(9, "Local MySQL", "shop", "SELECT p.name, SUM(i.qty) FROM items i JOIN products p ON p.id = i.product_id GROUP BY p.name", 88, Ok((260, 48))),
+    ];
+    if name == "activity-long" {
+        logs[0].connection_name = "A connection with a very long display name that cannot fit its column".into();
+    }
+    if name == "activity-empty" || name == "activity-stats-empty" || name == "activity-empty-filtered" {
+        logs.clear();
+    }
+
+    let filtered = name == "activity-empty-filtered" || name == "activity-filters";
+    let mut filters = FilterState::default();
+    if filtered {
+        filters.search_text = "orders".into();
+        filters.types = vec![dbhive_core::models::QueryType::Select];
+        filters.time_range = mon::TimeRange::LastHour;
+    }
+    a.set_filters_open(name == "activity-filters" || name == "activity-empty-filtered");
+    a.set_filters_active(filtered);
+    a.set_filter_connections(view_strings(&["All connections", "Production Postgres", "Local MySQL"]));
+    a.set_filter_databases(view_strings(&["All databases", "app", "shop"]));
+    a.set_filter_ranges(view_strings(&mon::TimeRange::ALL.map(|r| r.label())));
+    a.set_filter_range(if filtered { 2 } else { 0 });
+    a.set_type_chips(view::chips(
+        &mon::QUERY_TYPES
+            .iter()
+            .map(|t| (mon::query_type_key(*t), filters.types.contains(t)))
+            .collect::<Vec<_>>(),
+    ));
+    a.set_status_chips(view::chips(
+        &mon::QUERY_STATUSES
+            .iter()
+            .map(|s| (ap::status_label(*s), false))
+            .collect::<Vec<_>>(),
+    ));
+    if name == "activity-filters" {
+        a.set_search("orders".into());
+        a.set_min_duration("10".into());
+    }
+
+    let shown: Vec<QueryLog> = if name == "activity-empty-filtered" { Vec::new() } else { logs.clone() };
+    let (columns, rows, width) = view::grid(&ap::log_grid(&shown), &ap::LOG_COLUMN_WIDTHS);
+    a.set_columns(columns);
+    a.set_rows(rows);
+    a.set_grid_width(width);
+    a.set_log_total(if name == "activity-empty-filtered" { 9 } else { logs.len() as i32 });
+    a.set_summary(ap::log_summary(shown.len(), a.get_log_total() as usize, filtered).into());
+    a.set_page_label(ap::page_label(0, 1, shown.len()).into());
+    a.set_sort_column(0);
+    a.set_sort_desc(true);
+    if name == "activity-error" {
+        a.set_error("Export failed: Failed to write /nonexistent/query-logs.csv: permission denied".into());
+    }
+    // Expand the failed query, which shows the error line too.
+    if name == "activity" || name == "activity-long" {
+        a.set_selected_row(3);
+        let d = ap::log_detail(&logs[3]);
+        a.set_has_detail(true);
+        a.set_detail_status(d.status.as_str().into());
+        a.set_detail_tone(view::tone(d.tone));
+        a.set_detail_facts(view::facts(&d));
+        a.set_detail_sql(d.sql.as_str().into());
+        a.set_detail_error(d.error.as_str().into());
+        a.set_can_open_in_editor(true);
+    }
+
+    // Statistics.
+    let stats = mon::compute_stats(&logs);
+    a.set_tiles(view::tiles(&ap::stat_tiles(&stats)));
+    a.set_type_bars(view::bars(&ap::type_breakdown(&stats)));
+    a.set_status_bars(view::bars(&ap::status_breakdown(&stats)));
+
+    // Server.
+    a.set_server_connections(view_strings(&["Production Postgres (PostgreSQL)", "Local MySQL (MySQL)"]));
+    a.set_server_connection(0);
+    let mut series = mon::MetricSeries::default();
+    for i in 0..90i64 {
+        let wave = ((i as f64) / 7.0).sin();
+        series.push(
+            1_700_000_000_000 + i * 5_000,
+            &mon::ServerStats {
+                numeric_connections: 24 + (wave * 6.0) as i64 + (i / 12),
+                active_connections: 3 + ((wave + 1.0) * 3.0) as i64,
+                cache_hit_ratio: Some(0.991),
+                transactions_per_sec: Some(i as f64 * 5_000.0 / 1000.0 * (40.0 + wave * 15.0)),
+                deadlocks: Some(0),
+            },
+        );
+    }
+    let latest = mon::ServerStats {
+        numeric_connections: 31,
+        active_connections: 5,
+        cache_hit_ratio: Some(0.991),
+        transactions_per_sec: Some(0.0),
+        deadlocks: Some(0),
+    };
+    let window = series.window(Some(300_000));
+    a.set_live_tiles(view::tiles(&ap::live_tiles(Some(&latest), series.latest().map(|s| s.tx_per_sec))));
+    a.set_sessions_chart(view::chart(ap::sessions_chart(window).as_ref()));
+    a.set_tx_chart(view::chart(ap::transactions_chart(window).as_ref()));
+    a.set_updated_label("Updated 09:41:12".into());
+    let p = |pid: i64, user: &str, state: &str, ms: i64, q: &str| mon::ActiveQuery {
+        pid,
+        user: Some(user.into()),
+        database: Some("app".into()),
+        client_addr: None,
+        query_start: None,
+        state: Some(state.into()),
+        query_text: Some(q.into()),
+        duration_ms: Some(ms),
+    };
+    let processes = vec![
+        p(8812, "app", "active", 14_200, "SELECT o.id, SUM(i.qty) FROM orders o JOIN order_items i ON i.order_id = o.id GROUP BY o.id"),
+        p(8830, "app", "idle in transaction", 61_400, "UPDATE carts SET updated_at = now() WHERE id = 17"),
+        p(8841, "report", "active", 820, "SELECT count(*) FROM events"),
+    ];
+    let (pc, pr, pw) = view::grid(&ap::process_grid(&processes), &ap::PROCESS_COLUMN_WIDTHS);
+    a.set_process_columns(pc);
+    a.set_process_rows(pr);
+    a.set_process_width(pw);
+    a.set_process_summary("3 active sessions".into());
+    a.set_process_selected(0);
+    a.set_can_cancel(true);
+    a.set_cancel_label("Cancel query 8812".into());
+    a.set_server_state(match name {
+        "activity-server-loading" => MonitorServerState::Loading,
+        "activity-server-error" => MonitorServerState::Error,
+        "activity-server-none" => MonitorServerState::None,
+        "activity-server-unsupported" => MonitorServerState::Unsupported,
+        _ => MonitorServerState::Ready,
+    });
+    a.set_server_message(match name {
+        "activity-server-error" => "connection to server at \"db.internal\" (10.0.4.12), port 5432 failed: timeout expired".into(),
+        "activity-server-unsupported" => "Not supported for this driver (Sqlite)".into(),
+        _ => "".into(),
+    });
+    if name == "activity-server-stale" {
+        a.set_updated_label("Last refresh failed: connection reset by peer".into());
+    }
+    if name == "activity-server-loading" || name == "activity-server-error" {
+        a.set_updated_label("".into());
+    }
+    a.set_auto_refresh(name == "activity" || name.starts_with("activity-server"));
+    c.show().unwrap();
+    Box::new(c)
+}
+
+fn view_strings(items: &[&str]) -> slint::ModelRc<slint::SharedString> {
+    slint::ModelRc::new(slint::VecModel::from(
+        items.iter().map(|s| slint::SharedString::from(*s)).collect::<Vec<_>>(),
+    ))
+}
+
+fn migrations_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_core::migrations::diff::TableWithFks;
+    use dbhive_core::migrations::{compute_diff, generate_migration_sql};
+    use dbhive_core::models::metadata::{ColumnInfo, IndexInfo, TableInfo, TableSchema};
+    use dbhive_core::models::DbDriver;
+    use dbhive_core::service_migrations::ApplyResult;
+    use dbhive_slint::migrations_view as view;
+    use dbhive_ui_model::migrations as mg;
+    use dbhive_ui_model::migrations_panel as mp;
+
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+
+    let c = AppWindow::new().expect("AppWindow");
+    if light {
+        c.global::<Theme>().set_dark(false);
+    }
+    panel_backdrop(&c);
+    let dark = !light;
+    let m = c.global::<MigrationsState>();
+    m.set_visible(true);
+
+    // Two schemas that differ in every way the tree can show.
+    let col = |n: &str, t: &str, nullable: bool| ColumnInfo::new(n.into(), t.into(), nullable);
+    let table = |n: &str, cols: Vec<ColumnInfo>, idx: Vec<IndexInfo>| TableWithFks {
+        schema: TableSchema::new(TableInfo::new(n.into(), "public".into(), "TABLE".into()), cols, idx),
+        foreign_keys: vec![],
+    };
+    let source = vec![
+        table("customers", vec![col("id", "integer", false), col("email", "varchar(320)", false), col("phone", "text", true)], vec![]),
+        table("orders", vec![col("id", "integer", false), col("customer_id", "integer", false), col("total", "numeric(12,2)", false)], vec![]),
+        table("invoices", vec![col("id", "integer", false), col("order_id", "integer", false)], vec![]),
+    ];
+    let target = vec![
+        table("customers", vec![col("id", "integer", false), col("email", "varchar(100)", true), col("fax", "text", true)], vec![]),
+        table("orders", vec![col("id", "integer", false), col("customer_id", "integer", false), col("total", "numeric(12,2)", false)], vec![]),
+        table("legacy_exports", vec![col("id", "integer", false)], vec![]),
+    ];
+    let diff = if name == "migrations-diff-empty" { compute_diff(&source, &source) } else { compute_diff(&source, &target) };
+
+    m.set_connections(slint::ModelRc::new(slint::VecModel::from(vec![
+        slint::SharedString::from("● Staging Postgres (PostgreSQL)"),
+        slint::SharedString::from("● Production Postgres (PostgreSQL)"),
+        slint::SharedString::from("○ Local MySQL (MySQL)"),
+    ])));
+
+    let step = if name.starts_with("migrations-sql") {
+        2
+    } else if name.starts_with("migrations-diff") {
+        1
+    } else {
+        0
+    };
+    m.set_step(step);
+
+    if name == "migrations-select-empty" {
+        m.set_connections(slint::ModelRc::new(slint::VecModel::from(Vec::<slint::SharedString>::new())));
+    } else {
+        m.set_source_index(1);
+        m.set_target_index(if name == "migrations-select" || name == "migrations-select-busy" { 0 } else { 0 });
+    }
+    if name == "migrations-select-warning" {
+        m.set_target_index(2);
+        m.set_select_warning("Not connected: Local MySQL. Open it from the connections screen first.".into());
+        m.set_blocked_reason("Connect first: Local MySQL".into());
+    }
+    if name == "migrations-select-error" {
+        m.set_error("Could not compare the schemas: relation \"information_schema.tables\" is not accessible: permission denied".into());
+    }
+    if name == "migrations-select-busy" {
+        m.set_busy(true);
+        m.set_busy_label("Comparing schemas…".into());
+    }
+
+    // Diff.
+    m.set_diff_empty(mg::is_empty_diff(&diff));
+    m.set_diff_summary(mp::diff_summary(&diff).into());
+    let expanded = if name == "migrations-diff-collapsed" { Default::default() } else { mp::default_expanded(&diff) };
+    m.set_diff_rows(view::diff_rows(&mp::diff_tree(&diff, &expanded)));
+
+    // SQL.
+    let mut statements = generate_migration_sql(&diff, &DbDriver::Postgres).unwrap();
+    if name == "migrations-sql" {
+        statements.retain(|s| !mp::is_destructive_statement(s));
+    }
+    let sql = mg::statements_to_text(&statements);
+    m.set_sql(sql.as_str().into());
+    m.set_sql_lines(dbhive_slint::sql_highlight::to_model_for(&sql, dark));
+    m.set_target_name("Staging Postgres".into());
+    m.set_sql_summary(mp::sql_summary(&statements, "Staging Postgres", false).into());
+    m.set_acknowledged(name != "migrations-sql");
+    m.set_use_transaction(name != "migrations-sql-failed-partial");
+
+    let outcome = match name {
+        "migrations-sql-success" => Some(ApplyResult { executed: statements.len() as u32, succeeded: statements.len() as u32, ..Default::default() }),
+        "migrations-sql-failed" => Some(ApplyResult {
+            executed: 3,
+            succeeded: 2,
+            failed_statement: Some("ALTER TABLE \"public\".\"customers\" ALTER COLUMN \"email\" SET NOT NULL".into()),
+            error: Some("column \"email\" of relation \"customers\" contains null values".into()),
+        }),
+        "migrations-sql-failed-partial" => Some(ApplyResult {
+            executed: 3,
+            succeeded: 2,
+            failed_statement: Some("DROP TABLE \"public\".\"legacy_exports\"".into()),
+            error: Some("cannot drop table legacy_exports because other objects depend on it".into()),
+        }),
+        _ => None,
+    };
+    if let Some(r) = &outcome {
+        let o = mp::outcome_view(r, m.get_use_transaction());
+        m.set_has_outcome(true);
+        m.set_outcome_ok(o.ok);
+        m.set_outcome_headline(o.headline.into());
+        m.set_outcome_detail(o.detail.into());
+        m.set_outcome_statement(o.failed_statement.into());
+    }
+    if name == "migrations-sql-applying" {
+        m.set_busy(true);
+        m.set_busy_label("Applying the migration…".into());
+    }
+    if name.starts_with("migrations-sql") && name != "migrations-sql-applying" && m.get_blocked_reason().is_empty() && !m.get_acknowledged() {
+        m.set_blocked_reason("Tick the box to enable Apply".into());
+    }
+    if name == "migrations-diff-empty" {
+        m.set_blocked_reason("Nothing to generate".into());
+    }
+    c.show().unwrap();
+    Box::new(c)
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

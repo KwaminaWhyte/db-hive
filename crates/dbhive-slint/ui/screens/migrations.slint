@@ -1,0 +1,424 @@
+// Schema migrations: compare two connections and sync the target.
+//
+// A three step wizard (Select, Diff, SQL) in a panel opened over the app. As
+// with the History and Activity panels, all state and intents live in one
+// global (`MigrationsState`), so `app.slint` only mounts `MigrationsOverlay`.
+// Rust decides what every row and message says
+// (`dbhive_ui_model::migrations_panel`); this file lays it out.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, Tone, ButtonVariant, Button, TextField, Dropdown, Toggle, Divider, Banner, EmptyState, Stepper, SectionLabel, DataRow, Card } from "../kit/kit.slint";
+import { SqlEditor, HighlightLine } from "../components/sql_editor.slint";
+
+// One line of the diff tree. `depth` 0 is a section heading, 1 a table,
+// 2 a change inside a table. `tone` is success, danger or warning.
+export struct MigrationDiffRow {
+    key: string,
+    depth: int,
+    marker: string,
+    tone: Tone,
+    label: string,
+    detail: string,
+    expandable: bool,
+    expanded: bool,
+    heading: bool,
+}
+
+export global MigrationsState {
+    in-out property <bool> visible: false;
+    // 0 Select, 1 Diff, 2 SQL.
+    in property <int> step: 0;
+    in property <[string]> step-labels: ["Select", "Diff", "SQL"];
+
+    // Select.
+    in property <[string]> connections;
+    in property <int> source-index: -1;
+    in property <int> target-index: -1;
+    in-out property <string> schema: "public";
+    // A note under the pickers: not connected, mixed dialects.
+    in property <string> select-warning;
+    in property <Tone> select-warning-tone: Tone.warning;
+
+    // Diff.
+    in property <string> diff-summary;
+    in property <bool> diff-empty: false;
+    in property <[MigrationDiffRow]> diff-rows;
+
+    // SQL.
+    in-out property <string> sql;
+    in property <[HighlightLine]> sql-lines;
+    in property <string> sql-summary;
+    in property <string> target-name;
+    in-out property <bool> use-transaction: true;
+    in-out property <bool> acknowledged: false;
+    in property <bool> sql-edited: false;
+
+    // Footer.
+    in property <string> blocked-reason;
+    // A diff or an apply is running.
+    in property <bool> busy: false;
+    in property <string> busy-label;
+    in property <string> error;
+
+    // The result of the last apply.
+    in property <bool> has-outcome: false;
+    in property <bool> outcome-ok: false;
+    in property <string> outcome-headline;
+    in property <string> outcome-detail;
+    in property <string> outcome-statement;
+
+    // The View menu, the palette or the connections screen asked for the
+    // panel; the controller fills it and sets `visible`.
+    callback open-requested;
+    callback close;
+
+    callback source-picked(int);
+    callback target-picked(int);
+    callback schema-edited(string);
+    callback compute-diff;
+    callback toggle-row(string);
+    callback generate;
+    callback sql-changed(string);
+    callback reset-sql;
+    callback transaction-toggled;
+    callback acknowledge-toggled;
+    callback back;
+    callback apply-requested;
+}
+
+component SelectStep inherits VerticalLayout {
+    spacing: 10px;
+    alignment: start;
+
+    if MigrationsState.connections.length == 0: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.git-compare;
+        title: "No saved connections";
+        message: "Add the two databases you want to compare, then come back here.";
+    }
+
+    if MigrationsState.connections.length > 0: VerticalLayout {
+        spacing: 6px;
+        alignment: start;
+
+        Text {
+            text: "Compare the schema of two connections and generate the SQL that makes the target match the source. Open connections are marked with a filled dot.";
+            color: Theme.muted-foreground;
+            font-size: Theme.size-label;
+            wrap: word-wrap;
+        }
+
+        SectionLabel { text: "SOURCE (THE SCHEMA YOU WANT)"; }
+        Dropdown {
+            options: MigrationsState.connections;
+            value: MigrationsState.source-index >= 0
+                ? MigrationsState.connections[MigrationsState.source-index]
+                : "Choose the source connection";
+            selected(i) => { MigrationsState.source-picked(i); }
+        }
+
+        SectionLabel { text: "TARGET (WILL BE MODIFIED)"; }
+        Dropdown {
+            options: MigrationsState.connections;
+            value: MigrationsState.target-index >= 0
+                ? MigrationsState.connections[MigrationsState.target-index]
+                : "Choose the target connection";
+            selected(i) => { MigrationsState.target-picked(i); }
+        }
+
+        SectionLabel { text: "SCHEMA"; }
+        TextField {
+            placeholder: "public";
+            text <=> MigrationsState.schema;
+            edited(t) => { MigrationsState.schema-edited(t); }
+        }
+        Text {
+            text: "Only base tables are compared. Views are ignored.";
+            color: Theme.dim-foreground;
+            font-size: Theme.size-small;
+        }
+
+        if MigrationsState.select-warning != "": Banner {
+            message: MigrationsState.select-warning;
+            tone: MigrationsState.select-warning-tone;
+            dismissible: false;
+        }
+    }
+
+    if MigrationsState.error != "": Banner {
+        message: MigrationsState.error;
+        dismissible: false;
+    }
+}
+
+component DiffLine inherits DataRow {
+    in property <MigrationDiffRow> item;
+    callback toggle;
+
+    min-height: item.heading ? 30px : 26px;
+    clickable: item.expandable;
+    clicked => { root.toggle(); }
+
+    accessible-role: button;
+    accessible-label: item.marker + " " + item.label + " " + item.detail;
+    accessible-expandable: item.expandable;
+    accessible-expanded: item.expanded;
+
+    HorizontalLayout {
+        padding-left: 8px + item.depth * 18px;
+        padding-right: 8px;
+        spacing: 8px;
+        VerticalLayout {
+            width: 13px;
+            horizontal-stretch: 0;
+            alignment: center;
+            if item.expandable: Icon {
+                source: item.expanded ? Icons.chevron-down : Icons.chevron-right;
+                tint: Theme.dim-foreground;
+                width: 13px;
+                height: 13px;
+            }
+            if !item.expandable && !item.heading: Rectangle { width: 13px; height: 13px; }
+        }
+        if !item.heading: Text {
+            width: 12px;
+            text: item.marker;
+            color: item.tone == Tone.success ? Theme.success
+                : item.tone == Tone.danger ? Theme.destructive
+                : Theme.warning;
+            font-family: "Menlo";
+            font-size: Theme.size-mono;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+        Text {
+            text: item.label;
+            color: item.heading
+                ? (item.tone == Tone.success ? Theme.success
+                    : item.tone == Tone.danger ? Theme.destructive
+                    : Theme.warning)
+                : Theme.foreground;
+            font-size: item.heading ? Theme.size-label : Theme.size-body;
+            font-weight: item.heading || item.depth == 1 ? 600 : 400;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            horizontal-stretch: 1;
+            text: item.detail;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
+component DiffStep inherits VerticalLayout {
+    spacing: 8px;
+
+    if MigrationsState.diff-empty: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.circle-check;
+        title: "Schemas are identical";
+        message: "Nothing to migrate: the target already matches the source.";
+    }
+
+    if !MigrationsState.diff-empty: VerticalLayout {
+        vertical-stretch: 1;
+        spacing: 8px;
+        Text {
+            text: MigrationsState.diff-summary;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-label;
+        }
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                alignment: start;
+                spacing: 1px;
+                padding-right: 14px;
+                for r in MigrationsState.diff-rows: DiffLine {
+                    item: r;
+                    toggle => { MigrationsState.toggle-row(r.key); }
+                }
+            }
+        }
+    }
+}
+
+component SqlStep inherits VerticalLayout {
+    spacing: 8px;
+
+    HorizontalLayout {
+        spacing: 10px;
+        Text {
+            horizontal-stretch: 1;
+            text: MigrationsState.sql-summary;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-label;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Button {
+            text: "Reset to generated";
+            variant: ButtonVariant.ghost;
+            enabled: MigrationsState.sql-edited && !MigrationsState.busy;
+            clicked => { MigrationsState.reset-sql(); }
+        }
+    }
+
+    SqlEditor {
+        vertical-stretch: 1;
+        min-height: 120px;
+        text: MigrationsState.sql;
+        lines: MigrationsState.sql-lines;
+        edited(t) => { MigrationsState.sql-changed(t); }
+    }
+
+    if MigrationsState.has-outcome: Banner {
+        message: MigrationsState.outcome-headline
+            + (MigrationsState.outcome-detail != "" ? "\n" + MigrationsState.outcome-detail : "")
+            + (MigrationsState.outcome-statement != "" ? "\n" + MigrationsState.outcome-statement : "");
+        tone: MigrationsState.outcome-ok ? Tone.success : Tone.danger;
+        dismissible: false;
+    }
+    if MigrationsState.error != "": Banner {
+        message: MigrationsState.error;
+        dismissible: false;
+    }
+
+    HorizontalLayout {
+        spacing: 24px;
+        alignment: start;
+        Toggle {
+            text: "Run in a transaction";
+            checked: MigrationsState.use-transaction;
+            enabled: !MigrationsState.busy;
+            toggled => { MigrationsState.transaction-toggled(); }
+        }
+        Toggle {
+            text: "I understand this will modify " + MigrationsState.target-name;
+            checked: MigrationsState.acknowledged;
+            enabled: !MigrationsState.busy;
+            toggled => { MigrationsState.acknowledge-toggled(); }
+        }
+    }
+}
+
+export component MigrationsPanel inherits Rectangle {
+    in property <length> available-height: 680px;
+    in property <length> available-width: 900px;
+
+    width: min(900px, root.available-width);
+    height: min(680px, root.available-height);
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    clip: true;
+
+    TouchArea { }
+
+    VerticalLayout {
+        padding: 20px;
+        padding-top: 16px;
+        spacing: 12px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "Schema migrations";
+                    color: Theme.foreground;
+                    font-size: Theme.size-subheading;
+                    font-weight: 700;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                has-icon: true;
+                icon: Icons.x;
+                variant: ButtonVariant.ghost;
+                accessible-label: "Close";
+                enabled: !MigrationsState.busy;
+                clicked => { MigrationsState.close(); }
+            }
+        }
+
+        Stepper {
+            labels: MigrationsState.step-labels;
+            current: MigrationsState.step;
+        }
+
+        if MigrationsState.step == 0: SelectStep { vertical-stretch: 1; }
+        if MigrationsState.step == 1: DiffStep { vertical-stretch: 1; }
+        if MigrationsState.step == 2: SqlStep { vertical-stretch: 1; }
+
+        Divider { }
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                horizontal-stretch: 1;
+                text: MigrationsState.busy ? MigrationsState.busy-label : MigrationsState.blocked-reason;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+            if MigrationsState.step > 0: Button {
+                text: "Back";
+                enabled: !MigrationsState.busy;
+                clicked => { MigrationsState.back(); }
+            }
+            if MigrationsState.step == 0: Button {
+                text: "Cancel";
+                variant: ButtonVariant.ghost;
+                enabled: !MigrationsState.busy;
+                clicked => { MigrationsState.close(); }
+            }
+            if MigrationsState.step == 0: Button {
+                text: "Compute diff";
+                variant: ButtonVariant.primary;
+                enabled: MigrationsState.blocked-reason == "" && !MigrationsState.busy;
+                clicked => { MigrationsState.compute-diff(); }
+            }
+            if MigrationsState.step == 1: Button {
+                text: "Generate SQL";
+                variant: ButtonVariant.primary;
+                enabled: MigrationsState.blocked-reason == "" && !MigrationsState.busy;
+                clicked => { MigrationsState.generate(); }
+            }
+            if MigrationsState.step == 2: Button {
+                text: MigrationsState.busy ? "Applying…" : "Apply migration";
+                has-icon: true;
+                icon: Icons.zap;
+                variant: ButtonVariant.danger;
+                enabled: MigrationsState.blocked-reason == "" && !MigrationsState.busy;
+                clicked => { MigrationsState.apply-requested(); }
+            }
+        }
+    }
+}
+
+export component MigrationsOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Theme.background.transparentize(0.25);
+
+    // The wizard can hold typed work and an unapplied diff, so a click on the
+    // backdrop does not close it.
+    TouchArea { }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            MigrationsPanel {
+                available-height: root.height - 32px;
+                available-width: root.width - 32px;
+            }
+        }
+    }
+}

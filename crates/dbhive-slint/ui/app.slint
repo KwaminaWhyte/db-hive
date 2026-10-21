@@ -27,6 +27,13 @@ export { DiagramSpike } from "spikes/diagram_spike.slint";
 export { KitGallery } from "spikes/kit_gallery.slint";
 export { HistoryState, PanelRow, RunParam, FormParam, PanelMode } from "screens/history_panel.slint";
 
+// Activity monitor and schema migrations (panels over the app).
+import { ActivityState, ActivityOverlay } from "screens/activity_monitor.slint";
+import { MigrationsState, MigrationsOverlay } from "screens/migrations.slint";
+export { ActivityState, MonitorTile, MonitorBar, MonitorFact, MonitorChip, MonitorChart, MonitorServerState } from "screens/activity_monitor.slint";
+export { MigrationsState, MigrationDiffRow } from "screens/migrations.slint";
+export { ChartLine } from "kit/kit.slint";
+
 export enum Screen { connections, workspace }
 
 export struct ToastItem {
@@ -304,6 +311,14 @@ export component AppWindow inherits Window {
                 shortcut: @keys(Control + Shift + H);
                 activated => { HistoryState.open-requested(); }
             }
+            MenuItem {
+                title: "Activity Monitor";
+                activated => { root.run-command("go-activity-monitor"); }
+            }
+            MenuItem {
+                title: "Schema Migrations…";
+                activated => { root.run-command("go-migrations"); }
+            }
             MenuSeparator { }
             MenuItem {
                 title: Theme.dark ? "Light Theme" : "Dark Theme";
@@ -485,6 +500,8 @@ export component AppWindow inherits Window {
             run-query => { root.workspace-run-query(); }
             retry => { root.workspace-retry(); }
             open-history => { HistoryState.open-requested(); }
+            open-activity => { root.run-command("go-activity-monitor"); }
+            open-migrations => { root.run-command("go-migrations"); }
         }
     }
     }
@@ -495,7 +512,7 @@ export component AppWindow inherits Window {
     // held focus goes away (its focused element is destroyed with it).
     property <bool> any-palette-overlay: root.show-palette || root.show-shortcuts;
     property <bool> any-overlay: root.show-about || root.show-confirm || root.show-connection-editor
-        || root.any-palette-overlay;
+        || root.any-palette-overlay || ActivityState.visible || MigrationsState.visible;
     init => { fs.focus(); }
     changed any-overlay => {
         if (!root.any-overlay) {
@@ -522,6 +539,8 @@ export component AppWindow inherits Window {
     // History, snippets and templates. Below the dialogs, so a confirmation
     // raised from the panel (clear history, delete a snippet) shows above it.
     if HistoryState.visible: HistoryOverlay { }
+    if ActivityState.visible: ActivityOverlay { }
+    if MigrationsState.visible: MigrationsOverlay { }
 
     if root.show-about || root.show-confirm || root.show-connection-editor || root.show-settings || root.any-palette-overlay: Rectangle {
         width: 100%;
