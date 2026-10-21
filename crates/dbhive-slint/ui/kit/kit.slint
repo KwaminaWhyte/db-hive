@@ -6,6 +6,7 @@
 
 import { Theme } from "theme.slint";
 import { Icons } from "icons.slint";
+import { ScrollView } from "std-widgets.slint";
 
 export { Theme, Icons }
 
@@ -2256,5 +2257,159 @@ export component PluginTextArea inherits Rectangle {
             color: Theme.dim-foreground;
             font-size: Theme.size-body;
         }
+    }
+}
+// -- AI assistant additions ---------------------------------------------------
+
+// One entry of the assistant's conversation: the user's request, an answer
+// (prose, then the statement in its own block with the ways to apply it) or a
+// failure. Flat, not carded: an answer sits on the panel itself; a request is
+// a tinted block, so the two read apart at a glance.
+export component AiTurnCard inherits Rectangle {
+    in property <bool> user: false;
+    in property <string> heading;
+    in property <string> body;
+    in property <bool> has-sql: false;
+    in property <string> sql;
+    // "gpt-4o-mini · 1.2s".
+    in property <string> meta;
+    in property <bool> failed: false;
+    callback replace;
+    callback append;
+    callback new-tab;
+    callback copy;
+
+    background: root.failed ? Theme.destructive-soft : root.user ? Theme.secondary : transparent;
+    border-radius: Theme.radius-control;
+    border-width: root.failed ? 1px : 0px;
+    border-color: Theme.destructive.transparentize(0.6);
+
+    VerticalLayout {
+        padding: root.user || root.failed ? 10px : 2px;
+        spacing: 6px;
+
+        HorizontalLayout {
+            spacing: 6px;
+            if !root.user: VerticalLayout {
+                alignment: center;
+                Icon {
+                    source: root.failed ? Icons.triangle-alert : Icons.sparkles;
+                    tint: root.failed ? Theme.destructive : Theme.primary;
+                    width: 13px;
+                    height: 13px;
+                }
+            }
+            Text {
+                text: root.heading;
+                color: root.failed ? Theme.destructive : Theme.muted-foreground;
+                font-size: Theme.size-small;
+                font-weight: 600;
+                vertical-alignment: center;
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if root.meta != "": Text {
+                text: root.meta;
+                color: Theme.dim-foreground;
+                font-size: Theme.size-small;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+
+        if root.body != "": Text {
+            text: root.body;
+            color: root.failed ? Theme.destructive : root.user ? Theme.muted-foreground : Theme.foreground;
+            font-size: root.user ? Theme.size-mono : Theme.size-label;
+            font-family: root.user ? "Menlo" : "";
+            wrap: word-wrap;
+        }
+
+        if root.has-sql: CodeBlock {
+            text: root.sql;
+            max-lines: 14;
+        }
+
+        if root.has-sql: HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            Button {
+                text: "Replace in editor";
+                accessible-label: "Replace the editor's query with this statement";
+                clicked => { root.replace(); }
+            }
+            Button {
+                text: "Add below";
+                accessible-label: "Add this statement below the editor's query";
+                clicked => { root.append(); }
+            }
+            Button {
+                text: "New tab";
+                accessible-label: "Open this statement in a new query tab";
+                clicked => { root.new-tab(); }
+            }
+            Button {
+                has-icon: true;
+                icon: Icons.copy;
+                variant: ButtonVariant.ghost;
+                accessible-label: "Copy this statement";
+                clicked => { root.copy(); }
+            }
+        }
+    }
+}
+
+// Monospace text in a frame that scrolls when it is longer than the frame.
+// The caller passes the line count so the frame fits short text and stops at
+// `limit-height` for long text; measuring wrapped text from inside a scroll
+// view would make the height depend on itself.
+export component AiScrollText inherits Rectangle {
+    in property <string> text;
+    in property <int> line-count: 1;
+    in property <length> limit-height: 160px;
+
+    height: min(root.limit-height, root.line-count * Theme.size-mono * 1.5 + 18px);
+    background: Theme.card;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.text;
+
+    ScrollView {
+        width: 100%;
+        height: 100%;
+        VerticalLayout {
+            padding: 8px;
+            padding-left: 10px;
+            padding-right: 10px;
+            Text {
+                text: root.text;
+                color: Theme.foreground;
+                font-size: Theme.size-mono;
+                font-family: "Menlo";
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+// A line saying the assistant is waiting on the provider: a moving bar and
+// what it is doing.
+export component AiBusyRow inherits HorizontalLayout {
+    in property <string> text;
+    spacing: 10px;
+    height: 22px;
+    VerticalLayout {
+        alignment: center;
+        width: 72px;
+        ProgressBar { indeterminate: true; }
+    }
+    Text {
+        text: root.text;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        vertical-alignment: center;
     }
 }

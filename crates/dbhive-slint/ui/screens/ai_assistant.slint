@@ -1,0 +1,551 @@
+// The AI assistant: a panel docked to the right of the workspace.
+//
+// All of its data and intents live in the `AiState` global, so `app.slint`
+// gains no properties and the controller reaches the panel through
+// `window.global::<AiState>()`. Rust decides what every line says
+// (`dbhive_ui_model::ai_panel`); this file lays it out.
+//
+// It is docked, not an overlay, because the point is to read an answer next to
+// the query it is about and to put it back into that query.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, Tone, ButtonVariant, Button, TextField, Dropdown, Toggle, Divider, Banner, Badge, SectionLabel, FormField, PropField, CodeBlock, EmptyState, AiTurnCard, AiScrollText, AiBusyRow } from "../kit/kit.slint";
+
+// One entry of the conversation. `index` is the position in the controller's
+// transcript, because the list is shown newest exchange first.
+export struct AiTurnRow {
+    index: int,
+    user: bool,
+    heading: string,
+    body: string,
+    has-sql: bool,
+    sql: string,
+    meta: string,
+    failed: bool,
+}
+
+// One line of "what each button sends".
+export struct AiDisclosure {
+    label: string,
+    text: string,
+}
+
+export global AiState {
+    in-out property <bool> visible: false;
+
+    // Provider.
+    in property <[string]> providers;
+    in property <int> provider-index: 0;
+    // 0 checking, 1 connected, 2 key missing, 3 not answering.
+    in property <int> status-tone: 0;
+    in property <string> status-text: "Checking";
+    in property <bool> needs-key: false;
+    in property <bool> key-saved: false;
+    in property <string> key-hint;
+    // What is typed into the key field. Rust clears it the moment the key is
+    // handed to the keyring; it is never shown back.
+    in-out property <string> api-key;
+    in property <bool> saving-key: false;
+    in-out property <string> base-url;
+    in property <string> base-url-warning;
+    in property <string> settings-error;
+    in property <bool> show-settings: false;
+
+    // Models.
+    in property <[string]> models;
+    in property <string> model-text;
+    in property <bool> models-loading: false;
+    in property <string> models-error;
+
+    // A guided state shown instead of the controls: -1 none, 0 checking,
+    // 1 needs an API key, 2 Ollama is not running, 3 the endpoint did not
+    // answer.
+    in property <int> empty-kind: -1;
+    in property <string> empty-title;
+    in property <string> empty-message;
+    in property <string> empty-action;
+
+    // Requests.
+    in-out property <string> prompt;
+    in property <bool> busy: false;
+    in property <string> busy-label;
+    in property <bool> can-generate: false;
+    in property <bool> can-explain: false;
+    in property <bool> can-optimize: false;
+    in property <bool> can-fix: false;
+    in property <bool> has-sql: false;
+    in property <string> sql-preview;
+    in property <bool> has-error: false;
+    in property <string> error-text;
+    in property <string> notice;
+
+    // What is sent.
+    in property <bool> include-schema: true;
+    in property <bool> show-context: false;
+    in property <string> context-text;
+    in property <int> context-lines: 1;
+    in property <string> context-summary;
+    in property <bool> context-loading: false;
+    in property <string> context-error;
+    in property <[AiDisclosure]> disclosure;
+
+    in property <[AiTurnRow]> turns;
+
+    // The header button or the View menu asked for the panel; the controller
+    // fills it and sets `visible`.
+    callback open-requested;
+    callback close;
+    callback toggle-settings;
+    callback provider-selected(int);
+    callback model-selected(int);
+    callback refresh-status;
+    callback save-key;
+    callback remove-key;
+    callback save-base-url(string);
+    callback empty-action-clicked;
+    // The request box changed, so which buttons are enabled may have.
+    callback prompt-edited(string);
+    callback generate;
+    callback explain;
+    callback optimize;
+    callback fix;
+    callback toggle-schema;
+    callback toggle-context;
+    callback reload-context;
+    // Put a turn's statement in the editor: 0 replace, 1 add below, 2 new tab.
+    callback apply(int, int);
+    callback copy-sql(int);
+    callback clear;
+    callback dismiss-notice;
+}
+
+component AiSettingsBlock inherits VerticalLayout {
+    spacing: 10px;
+
+    if AiState.needs-key: FormField {
+        label: "API key";
+        hint: AiState.key-saved
+            ? "A key is saved in the system keyring. Enter a new one to replace it."
+            : AiState.key-hint;
+        HorizontalLayout {
+            spacing: 6px;
+            TextField {
+                horizontal-stretch: 1;
+                password: true;
+                has-icon: true;
+                icon: Icons.key-round;
+                text <=> AiState.api-key;
+                placeholder: AiState.key-saved ? "Replace the saved key" : "Paste your API key";
+                accepted(t) => { AiState.save-key(); }
+            }
+            Button {
+                text: AiState.saving-key ? "Saving…" : "Save key";
+                enabled: AiState.api-key != "" && !AiState.saving-key;
+                clicked => { AiState.save-key(); }
+            }
+            if AiState.key-saved: Button {
+                text: "Remove";
+                variant: ButtonVariant.danger;
+                accessible-label: "Remove the saved API key";
+                clicked => { AiState.remove-key(); }
+            }
+        }
+    }
+    if !AiState.needs-key: Text {
+        text: "Ollama runs on this machine and needs no key.";
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+
+    FormField {
+        label: "Base URL";
+        error: AiState.settings-error;
+        HorizontalLayout {
+            spacing: 6px;
+            TextField {
+                horizontal-stretch: 1;
+                text <=> AiState.base-url;
+                accepted(t) => { AiState.save-base-url(t); }
+            }
+            Button {
+                text: "Save URL";
+                clicked => { AiState.save-base-url(AiState.base-url); }
+            }
+        }
+    }
+    if AiState.base-url-warning != "": Banner {
+        tone: Tone.warning;
+        message: AiState.base-url-warning;
+        dismissible: false;
+    }
+}
+
+component AiSchemaSection inherits VerticalLayout {
+    spacing: 6px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        Toggle {
+            text: "Send schema";
+            checked: AiState.include-schema;
+            toggled => { AiState.toggle-schema(); }
+        }
+        if AiState.context-summary != "": VerticalLayout {
+            alignment: center;
+            Text {
+                text: AiState.context-summary;
+                color: Theme.dim-foreground;
+                font-size: Theme.size-small;
+                overflow: elide;
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        VerticalLayout {
+            alignment: center;
+            Button {
+                text: AiState.show-context ? "Hide details" : "What is sent";
+                has-icon: true;
+                icon: AiState.show-context ? Icons.chevron-down : Icons.chevron-right;
+                variant: ButtonVariant.ghost;
+                accessible-label: "Show exactly what is sent to the provider";
+                clicked => { AiState.toggle-context(); }
+            }
+        }
+    }
+    if AiState.show-context: VerticalLayout {
+        spacing: 8px;
+        padding-left: 6px;
+        padding-bottom: 6px;
+        for d in AiState.disclosure: HorizontalLayout {
+            spacing: 8px;
+            Text {
+                width: 92px;
+                text: d.label;
+                color: Theme.foreground;
+                font-size: Theme.size-small;
+                font-weight: 600;
+                vertical-alignment: top;
+            }
+            Text {
+                horizontal-stretch: 1;
+                text: d.text;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+            }
+        }
+        Text {
+            text: "Table and column names are sent. Row data never is.";
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            SectionLabel {
+                horizontal-stretch: 1;
+                text: "SCHEMA CONTEXT";
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "Reload";
+                    has-icon: true;
+                    icon: Icons.refresh-cw;
+                    variant: ButtonVariant.ghost;
+                    enabled: !AiState.context-loading;
+                    accessible-label: "Read the schema again";
+                    clicked => { AiState.reload-context(); }
+                }
+            }
+        }
+        if AiState.context-loading: AiBusyRow { text: "Reading the schema"; }
+        if AiState.context-error != "": Banner {
+            tone: Tone.warning;
+            message: "The schema could not be read, so requests go out without it. " + AiState.context-error;
+            dismissible: false;
+        }
+        if AiState.context-text != "": AiScrollText {
+            text: AiState.context-text;
+            line-count: AiState.context-lines;
+            limit-height: 170px;
+        }
+        if !AiState.include-schema && AiState.context-text != "": Text {
+            text: "Turned off: none of this is sent.";
+            color: Theme.warning;
+            font-size: Theme.size-small;
+        }
+    }
+}
+
+component AiControls inherits VerticalLayout {
+    spacing: 10px;
+
+    PropField {
+        label: "Ask for a query";
+        HorizontalLayout {
+            spacing: 6px;
+            TextField {
+                horizontal-stretch: 1;
+                has-icon: true;
+                icon: Icons.sparkles;
+                text <=> AiState.prompt;
+                placeholder: "e.g. top 10 customers by revenue";
+                edited(t) => { AiState.prompt-edited(t); }
+                accepted(t) => { AiState.generate(); }
+            }
+            Button {
+                text: "Generate";
+                variant: ButtonVariant.primary;
+                enabled: AiState.can-generate;
+                clicked => { AiState.generate(); }
+            }
+        }
+    }
+
+    PropField {
+        label: AiState.has-error ? "Query in the editor and its last error" : "Query in the editor";
+        if AiState.has-sql: CodeBlock {
+            text: AiState.sql-preview;
+            max-lines: 2;
+        }
+        if !AiState.has-sql: Text {
+            text: "The editor is empty. Write a query to explain, optimize or fix it.";
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            wrap: word-wrap;
+        }
+        if AiState.has-error: CodeBlock {
+            text: AiState.error-text;
+            tone: Tone.danger;
+            max-lines: 2;
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        Button {
+            text: "Explain";
+            has-icon: true;
+            icon: Icons.file-text;
+            enabled: AiState.can-explain;
+            clicked => { AiState.explain(); }
+        }
+        Button {
+            text: "Optimize";
+            has-icon: true;
+            icon: Icons.zap;
+            enabled: AiState.can-optimize;
+            clicked => { AiState.optimize(); }
+        }
+        Button {
+            text: "Fix error";
+            has-icon: true;
+            icon: Icons.pencil;
+            enabled: AiState.can-fix;
+            clicked => { AiState.fix(); }
+        }
+    }
+
+    AiSchemaSection { }
+
+    if AiState.notice != "": Banner {
+        tone: Tone.warning;
+        message: AiState.notice;
+        dismissed => { AiState.dismiss-notice(); }
+    }
+    if AiState.busy: AiBusyRow { text: AiState.busy-label; }
+
+    Divider { }
+
+    HorizontalLayout {
+        spacing: 8px;
+        SectionLabel {
+            horizontal-stretch: 1;
+            text: "CONVERSATION, NEWEST FIRST";
+        }
+        if AiState.turns.length > 0: VerticalLayout {
+            alignment: center;
+            Button {
+                text: "Clear";
+                variant: ButtonVariant.ghost;
+                accessible-label: "Clear the conversation";
+                clicked => { AiState.clear(); }
+            }
+        }
+    }
+    if AiState.turns.length == 0 && !AiState.busy: Text {
+        text: "Answers appear here. Nothing is run for you: a statement goes into the editor only when you choose.";
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+    for t in AiState.turns: AiTurnCard {
+        user: t.user;
+        heading: t.heading;
+        body: t.body;
+        has-sql: t.has-sql;
+        sql: t.sql;
+        meta: t.meta;
+        failed: t.failed;
+        replace => { AiState.apply(t.index, 0); }
+        append => { AiState.apply(t.index, 1); }
+        new-tab => { AiState.apply(t.index, 2); }
+        copy => { AiState.copy-sql(t.index); }
+    }
+}
+
+export component AiDock inherits Rectangle {
+    background: Theme.card;
+
+    VerticalLayout {
+        spacing: 0;
+
+        Rectangle {
+            height: 48px;
+            background: Theme.sidebar;
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 8px;
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    Icon {
+                        source: Icons.sparkles;
+                        tint: Theme.primary;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: "AI Assistant";
+                        color: Theme.foreground;
+                        font-size: Theme.size-body;
+                        font-weight: 700;
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Badge {
+                        dot: true;
+                        text: AiState.status-text;
+                        tone: AiState.status-tone == 1 ? Tone.success
+                            : AiState.status-tone == 2 ? Tone.warning
+                            : AiState.status-tone == 3 ? Tone.danger
+                            : Tone.neutral;
+                    }
+                }
+                Rectangle { horizontal-stretch: 1; }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        has-icon: true;
+                        icon: Icons.settings;
+                        variant: AiState.show-settings ? ButtonVariant.secondary : ButtonVariant.ghost;
+                        accessible-label: "Provider settings and API key";
+                        clicked => { AiState.toggle-settings(); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Button {
+                        has-icon: true;
+                        icon: Icons.x;
+                        variant: ButtonVariant.ghost;
+                        accessible-label: "Close the AI assistant";
+                        clicked => { AiState.close(); }
+                    }
+                }
+            }
+            Divider { y: parent.height - 1px; }
+        }
+
+        VerticalLayout {
+            padding: 12px;
+            padding-bottom: 10px;
+            spacing: 8px;
+
+            HorizontalLayout {
+                spacing: 8px;
+                PropField {
+                    horizontal-stretch: 1;
+                    label: "Provider";
+                    Dropdown {
+                        options: AiState.providers;
+                        value: AiState.provider-index >= 0 && AiState.provider-index < AiState.providers.length
+                            ? AiState.providers[AiState.provider-index] : "";
+                        selected(i) => { AiState.provider-selected(i); }
+                    }
+                }
+                PropField {
+                    horizontal-stretch: 1;
+                    label: "Model";
+                    Dropdown {
+                        options: AiState.models;
+                        value: AiState.model-text;
+                        enabled: AiState.models.length > 0 && !AiState.models-loading;
+                        selected(i) => { AiState.model-selected(i); }
+                    }
+                }
+                VerticalLayout {
+                    alignment: end;
+                    Button {
+                        has-icon: true;
+                        icon: Icons.refresh-cw;
+                        variant: ButtonVariant.ghost;
+                        accessible-label: "Check the provider and reload the model list";
+                        clicked => { AiState.refresh-status(); }
+                    }
+                }
+            }
+            if AiState.models-error != "": Text {
+                text: AiState.models-error;
+                color: Theme.warning;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+            }
+            if AiState.show-settings: AiSettingsBlock { }
+        }
+        Divider { }
+
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: 12px;
+                padding-right: 14px;
+                spacing: 10px;
+                alignment: start;
+
+                if AiState.empty-kind >= 0: VerticalLayout {
+                    spacing: 10px;
+                    padding-top: 24px;
+                    EmptyState {
+                        icon: AiState.empty-kind == 1 ? Icons.key-round : Icons.sparkles;
+                        title: AiState.empty-title;
+                        message: AiState.empty-message;
+                        if AiState.empty-action != "": Button {
+                            text: AiState.empty-action;
+                            variant: ButtonVariant.secondary;
+                            clicked => { AiState.empty-action-clicked(); }
+                        }
+                    }
+                    if AiState.empty-kind == 0: AiBusyRow { text: "Checking the provider"; }
+                    if AiState.notice != "": Banner {
+                        tone: Tone.warning;
+                        message: AiState.notice;
+                        dismissed => { AiState.dismiss-notice(); }
+                    }
+                }
+                if AiState.empty-kind < 0: AiControls { }
+            }
+        }
+    }
+
+    Rectangle {
+        x: 0;
+        width: 1px;
+        background: Theme.border;
+    }
+}

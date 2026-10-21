@@ -11,6 +11,7 @@
 pub mod activity_monitor;
 pub mod activity_panel;
 pub mod ai_assistant;
+pub mod ai_panel;
 pub mod backup;
 pub mod backup_manager;
 pub mod builder_editor;

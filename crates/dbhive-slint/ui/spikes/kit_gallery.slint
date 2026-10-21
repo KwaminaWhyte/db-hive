@@ -3,7 +3,8 @@ import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Card, ClickableCard, L
     Segmented, DataRow, SidePanel, ClipboardSink, KeyCap, KeyCaps, Popover, SettingRow, Toggle,
     StepBar, ProgressBar, CodeBlock, FormField, FactRow, Stepper, StatTile, MeterRow, LineChart,
     CollapseHeader, CheckBox, StepTabs, ChipStrip, PropField, KeyTag, Dropdown,
-    PluginMarketRow, PluginTableRow, PluginPermissionRow, PluginTextArea } from "../kit/kit.slint";
+    PluginMarketRow, PluginTableRow, PluginPermissionRow, PluginTextArea,
+    AiTurnCard, AiScrollText, AiBusyRow } from "../kit/kit.slint";
 
 export component KitGallery inherits Window {
     background: Theme.background;
@@ -380,6 +381,20 @@ export component KitGallery inherits Window {
                 PluginTableRow { cells: ["File", "Rows", "When"]; head: true; }
                 PluginTableRow { cells: ["orders.csv", "1204", "2 days ago"]; }
                 PluginTextArea { text: ""; placeholder: "A multi-line plugin input"; }
+                SectionLabel { text: "AI ASSISTANT PARTS"; }
+                AiTurnCard { user: true; heading: "You"; body: "list the ten newest customers"; }
+                AiTurnCard {
+                    heading: "Generate SQL";
+                    meta: "gpt-4o · 1.2s";
+                    has-sql: true;
+                    sql: "SELECT id, name FROM customers ORDER BY created_at DESC LIMIT 10;";
+                }
+                AiTurnCard { failed: true; heading: "Explain"; body: "OpenAI API error: rate limit reached"; }
+                AiScrollText {
+                    text: "Database: shop\n\nTables:\n\npublic.customers:\n  - id: integer\n  - name: text";
+                    line-count: 6;
+                }
+                AiBusyRow { text: "Generating SQL"; }
             }
         }
     }

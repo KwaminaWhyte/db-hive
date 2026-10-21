@@ -31,6 +31,9 @@ export { DiagramSpike } from "spikes/diagram_spike.slint";
 export { KitGallery } from "spikes/kit_gallery.slint";
 export { HistoryState, PanelRow, RunParam, FormParam, PanelMode } from "screens/history_panel.slint";
 export { ImportExportState, MappingRow } from "screens/import_export_panel.slint";
+// The AI assistant is docked inside the workspace screen, so the window needs
+// only the types the controller fills.
+export { AiState, AiTurnRow, AiDisclosure } from "screens/ai_assistant.slint";
 export { BackupState, BackupRow, BackupView } from "screens/backup_panel.slint";
 
 // Activity monitor and schema migrations (panels over the app).
@@ -337,6 +340,11 @@ export component AppWindow inherits Window {
                 title: "History and Snippets";
                 shortcut: @keys(Control + Shift + H);
                 activated => { HistoryState.open-requested(); }
+            }
+            MenuItem {
+                title: "AI Assistant";
+                enabled: root.screen == Screen.workspace;
+                activated => { root.run-command("go-ai-assistant"); }
             }
             MenuItem {
                 title: "Import and Export…";

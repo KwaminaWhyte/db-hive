@@ -192,6 +192,98 @@ pub fn delete_api_key(provider: AiProviderType) -> Result<(), DbError> {
     CredentialManager::delete_password(&key_id(provider))
 }
 
+/// Where API keys are read from and written to.
+///
+/// Production uses [`KeyringKeyStore`]. The trait exists so a shell can be
+/// driven in a test against [`MemoryKeyStore`]: the OS keyring refuses an
+/// unsigned test binary, and a test must never write a key into the
+/// developer's own keychain either.
+pub trait ApiKeyStore: Send + Sync {
+    /// The stored key, or `None` when there is none (or the store failed:
+    /// the caller's next step is the same).
+    fn get(&self, provider: AiProviderType) -> Option<String>;
+    /// Store a key; an empty key deletes the entry. A provider that needs no
+    /// key is a no-op.
+    fn set(&self, provider: AiProviderType, api_key: &str) -> Result<(), DbError>;
+    fn delete(&self, provider: AiProviderType) -> Result<(), DbError>;
+
+    fn has(&self, provider: AiProviderType) -> bool {
+        self.get(provider).is_some()
+    }
+}
+
+/// The OS keyring, through the free functions above.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct KeyringKeyStore;
+
+impl ApiKeyStore for KeyringKeyStore {
+    fn get(&self, provider: AiProviderType) -> Option<String> {
+        get_api_key(provider)
+    }
+
+    fn set(&self, provider: AiProviderType, api_key: &str) -> Result<(), DbError> {
+        set_api_key(provider, api_key)
+    }
+
+    fn delete(&self, provider: AiProviderType) -> Result<(), DbError> {
+        delete_api_key(provider)
+    }
+}
+
+/// Keys held in memory only. For tests and previews; nothing is persisted.
+#[derive(Default)]
+pub struct MemoryKeyStore {
+    keys: Mutex<HashMap<String, String>>,
+}
+
+impl MemoryKeyStore {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+// The derived Debug of a map of secrets would print them; this prints only
+// how many there are.
+impl std::fmt::Debug for MemoryKeyStore {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let n = self.keys.lock().map(|k| k.len()).unwrap_or(0);
+        write!(f, "MemoryKeyStore({} keys)", n)
+    }
+}
+
+impl ApiKeyStore for MemoryKeyStore {
+    fn get(&self, provider: AiProviderType) -> Option<String> {
+        if !provider_info(provider).needs_api_key() {
+            return None;
+        }
+        self.keys
+            .lock()
+            .ok()?
+            .get(&key_id(provider))
+            .cloned()
+            .filter(|k| !k.is_empty())
+    }
+
+    fn set(&self, provider: AiProviderType, api_key: &str) -> Result<(), DbError> {
+        if !provider_info(provider).needs_api_key() {
+            return Ok(());
+        }
+        let trimmed = api_key.trim();
+        let mut keys = self.keys.lock().unwrap();
+        if trimmed.is_empty() {
+            keys.remove(&key_id(provider));
+        } else {
+            keys.insert(key_id(provider), trimmed.to_string());
+        }
+        Ok(())
+    }
+
+    fn delete(&self, provider: AiProviderType) -> Result<(), DbError> {
+        self.keys.lock().unwrap().remove(&key_id(provider));
+        Ok(())
+    }
+}
+
 // ===========================================================================
 // Settings
 // ===========================================================================
@@ -328,8 +420,17 @@ pub fn set_active_provider(provider: AiProviderType) -> Result<(), DbError> {
 /// The key is read here and nowhere else, so it exists only for the life of
 /// the client and never reaches settings, logs or the UI.
 pub fn build_provider(settings: &AiSettings, provider: AiProviderType) -> Box<dyn AiProvider> {
+    build_provider_with(&KeyringKeyStore, settings, provider)
+}
+
+/// [`build_provider`] reading the key from `store` instead of the keyring.
+pub fn build_provider_with(
+    store: &dyn ApiKeyStore,
+    settings: &AiSettings,
+    provider: AiProviderType,
+) -> Box<dyn AiProvider> {
     let s = settings.get(provider);
-    let api_key = get_api_key(provider).unwrap_or_default();
+    let api_key = store.get(provider).unwrap_or_default();
     match provider {
         AiProviderType::Ollama => Box::new(OllamaProvider::with_config(OllamaConfig {
             base_url: s.base_url.clone(),
@@ -380,9 +481,18 @@ pub async fn provider_status(
     settings: &AiSettings,
     provider: AiProviderType,
 ) -> Result<ProviderStatus, DbError> {
-    let client = build_provider(settings, provider);
+    provider_status_with(&KeyringKeyStore, settings, provider).await
+}
+
+/// [`provider_status`] reading the key from `store`.
+pub async fn provider_status_with(
+    store: &dyn ApiKeyStore,
+    settings: &AiSettings,
+    provider: AiProviderType,
+) -> Result<ProviderStatus, DbError> {
+    let client = build_provider_with(store, settings, provider);
     let available = client.is_available().await;
-    let configured = !provider_info(provider).needs_api_key() || has_api_key(provider);
+    let configured = !provider_info(provider).needs_api_key() || store.has(provider);
     Ok(ProviderStatus {
         provider,
         available,
@@ -403,7 +513,16 @@ pub async fn list_models(
     settings: &AiSettings,
     provider: AiProviderType,
 ) -> Result<Vec<AiModel>, DbError> {
-    let client = build_provider(settings, provider);
+    list_models_with(&KeyringKeyStore, settings, provider).await
+}
+
+/// [`list_models`] reading the key from `store`.
+pub async fn list_models_with(
+    store: &dyn ApiKeyStore,
+    settings: &AiSettings,
+    provider: AiProviderType,
+) -> Result<Vec<AiModel>, DbError> {
+    let client = build_provider_with(store, settings, provider);
     let models = client.list_models().await.map_err(DbError::AiError)?;
     Ok(dedupe_models(models))
 }
@@ -489,7 +608,18 @@ pub async fn run_task(
     model: Option<String>,
     task: AiTask,
 ) -> Result<AiResponse, DbError> {
-    let client = build_provider(&settings, provider);
+    run_task_with(&KeyringKeyStore, settings, provider, model, task).await
+}
+
+/// [`run_task`] reading the key from `store`.
+pub async fn run_task_with(
+    store: &dyn ApiKeyStore,
+    settings: AiSettings,
+    provider: AiProviderType,
+    model: Option<String>,
+    task: AiTask,
+) -> Result<AiResponse, DbError> {
+    let client = build_provider_with(store, &settings, provider);
     let resolved = settings.resolve_model(provider, model.as_deref());
     let m = Some(resolved.as_str());
 
@@ -1069,6 +1199,56 @@ mod tests {
     fn key_ids_are_namespaced_away_from_connection_profiles() {
         assert_eq!(key_id(AiProviderType::OpenAI), "ai-openai");
         assert!(key_id(AiProviderType::Google).starts_with("ai-"));
+    }
+
+    // --- key stores -----------------------------------------------------
+
+    #[test]
+    fn the_memory_store_keeps_trimmed_keys_and_an_empty_key_clears_one() {
+        let store = MemoryKeyStore::new();
+        let p = AiProviderType::OpenAI;
+        assert!(!store.has(p));
+        store.set(p, "  test-key-not-real  ").unwrap();
+        assert_eq!(store.get(p).as_deref(), Some("test-key-not-real"));
+        // One provider's key is not another's.
+        assert!(!store.has(AiProviderType::Anthropic));
+        store.set(p, "   ").unwrap();
+        assert!(!store.has(p));
+        store.set(p, "again").unwrap();
+        store.delete(p).unwrap();
+        assert!(!store.has(p));
+    }
+
+    #[test]
+    fn ollama_takes_no_key_in_any_store() {
+        let store = MemoryKeyStore::new();
+        store.set(AiProviderType::Ollama, "ignored").unwrap();
+        assert!(!store.has(AiProviderType::Ollama));
+    }
+
+    #[test]
+    fn a_store_never_prints_its_keys() {
+        let store = MemoryKeyStore::new();
+        store.set(AiProviderType::Google, "sentinel-secret-value").unwrap();
+        assert!(!format!("{:?}", store).contains("sentinel"));
+    }
+
+    #[test]
+    fn status_reads_the_key_from_the_store_it_is_given() {
+        // Port 1 refuses connections at once, so nothing leaves the machine.
+        let mut settings = AiSettings::default();
+        settings.openai.base_url = "http://127.0.0.1:1/v1".into();
+        let store = MemoryKeyStore::new();
+        let p = AiProviderType::OpenAI;
+        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+
+        let none = rt.block_on(provider_status_with(&store, &settings, p)).unwrap();
+        assert!(!none.configured && !none.available);
+
+        store.set(p, "test-key-not-real").unwrap();
+        let keyed = rt.block_on(provider_status_with(&store, &settings, p)).unwrap();
+        assert!(keyed.configured, "a key in the store counts as configured");
+        assert!(!keyed.available, "but nothing answers on that port");
     }
 
     // --- settings -------------------------------------------------------
