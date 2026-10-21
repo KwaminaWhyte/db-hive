@@ -61,6 +61,8 @@ pub struct Turn {
     /// SQL pulled out of an assistant answer, if there was any.
     pub sql: Option<String>,
     pub duration_ms: Option<u64>,
+    /// The model that answered, when the response said.
+    pub model: Option<String>,
     pub failed: bool,
 }
 
@@ -72,6 +74,7 @@ impl Turn {
             content: content.into(),
             sql: None,
             duration_ms: None,
+            model: None,
             failed: false,
         }
     }
@@ -85,6 +88,7 @@ impl Turn {
             content,
             sql,
             duration_ms: None,
+            model: None,
             failed: false,
         }
     }
@@ -96,6 +100,7 @@ impl Turn {
             content: message.into(),
             sql: None,
             duration_ms: None,
+            model: None,
             failed: true,
         }
     }

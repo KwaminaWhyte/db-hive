@@ -181,11 +181,11 @@ pub fn support(id: CommandId) -> Support {
         | OpenCommandPalette | Disconnect | RunQuery | NewTab | CloseTab | ThemeLight
         | ThemeDark | ThemeToggle | GoImportExport | GoBackup | GoActivityMonitor
         | GoMigrations | GoVisualQueryBuilder | NewTable | GoErDiagram | GoSchemaDesigner
-        => Support::Live,
+        | GoAiAssistant => Support::Live,
 
         NewWindow => Support::Unsupported("Multiple windows are not supported yet"),
 
-        GoQueryEditor | GoTableInspector | GoHistory | GoAiAssistant | GoPlugins
+        GoQueryEditor | GoTableInspector | GoHistory | GoPlugins
         | ToggleSidebar | Connect
         | ConnectionsBack | WindowMinimize | WindowMaximizeToggle | WindowClose => Support::Hidden,
     }
@@ -819,7 +819,7 @@ mod tests {
             );
         }
         // Still hidden, still unsupported: the reason that matters wins.
-        assert_eq!(status(CommandId::GoAiAssistant, &c), Status::Hidden);
+        assert_eq!(status(CommandId::GoPlugins, &c), Status::Hidden);
     }
 
     #[test]
@@ -845,7 +845,6 @@ mod tests {
     #[test]
     fn unbuilt_screens_are_hidden_and_new_window_is_unsupported_with_a_reason() {
         for id in [
-            CommandId::GoAiAssistant,
             CommandId::GoPlugins,
             CommandId::ToggleSidebar,
             CommandId::WindowClose,
@@ -856,6 +855,24 @@ mod tests {
             status(CommandId::NewWindow, &ws()),
             Status::Unsupported("Multiple windows are not supported yet")
         );
+    }
+
+    #[test]
+    fn the_ai_assistant_is_live_in_a_workspace_and_refused_elsewhere() {
+        let id = CommandId::GoAiAssistant;
+        assert_eq!(status(id, &ws()), Status::Enabled);
+        assert_eq!(status(id, &conns()).reason(), "Open a connection first");
+        let mut c = ws();
+        c.dialog_open = true;
+        assert_eq!(status(id, &c).reason(), "Close the open dialog first");
+        // Listed in the workspace palette, not on the connection list.
+        let mut p = PaletteState::default();
+        p.open();
+        let titles = |ctx: &CommandContext| -> Vec<String> {
+            p.view(ctx, false).rows.iter().map(|r| r.title.clone()).collect()
+        };
+        assert!(titles(&ws()).contains(&"Go to AI Assistant".to_string()));
+        assert!(!titles(&conns()).iter().any(|x| x.contains("AI Assistant")));
     }
 
     #[test]

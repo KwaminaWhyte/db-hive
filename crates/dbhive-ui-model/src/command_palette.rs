@@ -462,11 +462,14 @@ pub const COMMANDS: &[Command] = &[
         "Previously executed queries",
         Group::Navigation,
     ),
-    cmd(
-        CommandId::GoAiAssistant,
-        "Go to AI Assistant",
-        "Generate and explain SQL",
-        Group::Navigation,
+    scoped(
+        cmd(
+            CommandId::GoAiAssistant,
+            "Go to AI Assistant",
+            "Generate, explain, optimize and fix SQL",
+            Group::Navigation,
+        ),
+        Scope::Workspace,
     ),
     scoped(
         cmd(
