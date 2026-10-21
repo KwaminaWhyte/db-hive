@@ -673,31 +673,49 @@ fn run_dump(
 
         DbDriver::MySql => {
             let database = target_database(profile);
-            let mut cmd = SysCommand::new("mysqldump");
-            // Password goes through the environment, not argv, where it
-            // would be visible to every local process via `ps`
-            cmd.env("MYSQL_PWD", password)
-                .arg("-h")
-                .arg(&profile.host)
-                .arg("-P")
-                .arg(profile.port.to_string())
-                .arg("-u")
-                .arg(&profile.username)
-                .arg(&database);
+            let build = |gtid_purged_off: bool| {
+                let mut cmd = SysCommand::new("mysqldump");
+                // Password goes through the environment, not argv, where it
+                // would be visible to every local process via `ps`
+                cmd.env("MYSQL_PWD", password)
+                    .arg("-h")
+                    .arg(&profile.host)
+                    .arg("-P")
+                    .arg(profile.port.to_string())
+                    .arg("-u")
+                    .arg(&profile.username);
+                // On a server with GTIDs the default dump carries a
+                // `SET @@GLOBAL.GTID_PURGED`, which the same server refuses
+                // when the dump is replayed ("added gtid set must not overlap
+                // with @@GLOBAL.GTID_EXECUTED"): a backup that cannot be
+                // restored where it came from.
+                if gtid_purged_off {
+                    cmd.arg("--set-gtid-purged=OFF");
+                }
+                cmd.arg(&database);
+                if !options.include_data {
+                    cmd.arg("--no-data");
+                }
+                if !options.include_schema {
+                    cmd.arg("--no-create-info");
+                }
+                for table in &options.tables {
+                    cmd.arg(table);
+                }
+                cmd
+            };
 
-            if !options.include_data {
-                cmd.arg("--no-data");
-            }
-            if !options.include_schema {
-                cmd.arg("--no-create-info");
-            }
-            for table in &options.tables {
-                cmd.arg(table);
-            }
-
-            let out = cmd
+            let mut out = build(true)
                 .output()
                 .map_err(|e| DbError::InternalError(format!("mysqldump not found: {}", e)))?;
+            // MariaDB's dump tool has no such option: run it without.
+            if !out.status.success()
+                && String::from_utf8_lossy(&out.stderr).contains("set-gtid-purged")
+            {
+                out = build(false)
+                    .output()
+                    .map_err(|e| DbError::InternalError(format!("mysqldump not found: {}", e)))?;
+            }
             if !out.status.success() {
                 return Err(DbError::QueryError(
                     String::from_utf8_lossy(&out.stderr).to_string(),
@@ -866,8 +884,8 @@ fn run_restore(
             if options.drop_existing {
                 // dropdb/createdb connect to the maintenance database, so
                 // they can drop the one being restored into.
-                for (tool, extra) in [("dropdb", Some("--if-exists")), ("createdb", None)] {
-                    let mut cmd = SysCommand::new(tool);
+                let tool = |name: &str, args: &[&str]| -> Result<std::process::Output, DbError> {
+                    let mut cmd = SysCommand::new(name);
                     cmd.env("PGPASSWORD", password)
                         .arg("-h")
                         .arg(&profile.host)
@@ -876,18 +894,40 @@ fn run_restore(
                         .arg("-U")
                         .arg(&profile.username)
                         .arg("--no-password");
-                    if let Some(extra) = extra {
-                        cmd.arg(extra);
+                    for a in args {
+                        cmd.arg(a);
                     }
-                    cmd.arg(&database);
-                    let out = cmd.output().map_err(|e| {
-                        DbError::InternalError(format!("{} not found: {}", tool, e))
-                    })?;
-                    if !out.status.success() {
-                        return Err(DbError::QueryError(
-                            String::from_utf8_lossy(&out.stderr).to_string(),
-                        ));
+                    cmd.output()
+                        .map_err(|e| DbError::InternalError(format!("{} not found: {}", name, e)))
+                };
+                let failed = |out: &std::process::Output| {
+                    DbError::QueryError(String::from_utf8_lossy(&out.stderr).to_string())
+                };
+
+                // The app itself almost always has this database open (the
+                // Backup screen is used from a connected workspace), so a
+                // plain dropdb stops at "database is being accessed by other
+                // users". `--force` (PostgreSQL 13+) ends those sessions.
+                let mut dropped = tool("dropdb", &["--if-exists", "--force", &database])?;
+                if !dropped.status.success() {
+                    let err = String::from_utf8_lossy(&dropped.stderr).to_string();
+                    if err.contains("--force") || err.contains("unrecognized option") {
+                        // An older client: end the sessions by hand, then drop.
+                        let literal = database.replace('\'', "''");
+                        let kill = format!(
+                            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity \
+                             WHERE datname = '{literal}' AND pid <> pg_backend_pid()"
+                        );
+                        let _ = tool("psql", &["-d", "postgres", "-c", &kill])?;
+                        dropped = tool("dropdb", &["--if-exists", &database])?;
                     }
+                }
+                if !dropped.status.success() {
+                    return Err(failed(&dropped));
+                }
+                let created = tool("createdb", &[&database])?;
+                if !created.status.success() {
+                    return Err(failed(&created));
                 }
             }
 
@@ -901,6 +941,13 @@ fn run_restore(
                 .arg(&profile.username)
                 .arg("-d")
                 .arg(&database)
+                // psql exits 0 even when statements failed, which would
+                // report a half-applied restore as a success. Stop at the
+                // first error (exit status 3) and apply the file atomically,
+                // so a failed restore leaves the database as it was.
+                .arg("-v")
+                .arg("ON_ERROR_STOP=1")
+                .arg("--single-transaction")
                 .arg("-f")
                 .arg(&options.file_path)
                 .output()
