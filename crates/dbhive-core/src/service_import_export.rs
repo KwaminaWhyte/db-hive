@@ -1704,10 +1704,29 @@ pub fn map_row(
                     .filter(|d| !d.is_empty())
                     .cloned()
             } else {
-                Some(raw.to_string())
+                Some(boolean_cell(raw, m.target_type.as_deref()))
             }
         })
         .collect()
+}
+
+/// A boolean word (`true`, `no`, `T`...) headed for a boolean-like column
+/// becomes `1` or `0`, which every dialect accepts there. MySQL stores
+/// booleans as TINYINT(1) and refuses the quoted string `'true'` ("Incorrect
+/// integer value"); PostgreSQL accepts `'1'` for a boolean. Anything that is
+/// not exactly a boolean word, and every other column type, is left alone, so
+/// a text column still receives the text "true".
+pub fn boolean_cell(raw: &str, target_type: Option<&str>) -> String {
+    let ty = target_type.unwrap_or("").to_ascii_uppercase();
+    let boolean_like = ty.contains("BOOL") || ty.starts_with("TINYINT");
+    if !boolean_like {
+        return raw.to_string();
+    }
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "true" | "t" | "yes" | "y" | "on" => "1".to_string(),
+        "false" | "f" | "no" | "n" | "off" => "0".to_string(),
+        _ => raw.to_string(),
+    }
 }
 
 /// One INSERT covering `rows`, with every value escaped for `driver`.
@@ -2849,6 +2868,33 @@ mod tests {
             vec![Some("1".to_string()), Some("ada".to_string())],
             "values follow the mapping order, not the file's"
         );
+    }
+
+    #[test]
+    fn boolean_words_become_1_and_0_only_for_boolean_like_columns() {
+        for (raw, want) in [("true", "1"), ("FALSE", "0"), (" Yes ", "1"), ("n", "0"), ("T", "1")] {
+            assert_eq!(boolean_cell(raw, Some("BOOLEAN")), want, "{raw:?}");
+            assert_eq!(boolean_cell(raw, Some("tinyint(1)")), want, "{raw:?}");
+            assert_eq!(boolean_cell(raw, Some("bool")), want, "{raw:?}");
+        }
+        // Not a boolean word: left alone, even in a boolean column (the server says no).
+        assert_eq!(boolean_cell("maybe", Some("BOOLEAN")), "maybe");
+        assert_eq!(boolean_cell("2", Some("BOOLEAN")), "2");
+        // Other column types keep the text exactly.
+        for ty in [Some("TEXT"), Some("VARCHAR(20)"), Some("INTEGER"), None] {
+            assert_eq!(boolean_cell("true", ty), "true", "{ty:?}");
+        }
+    }
+
+    #[test]
+    fn a_boolean_word_is_converted_when_a_row_is_mapped() {
+        let src = source(&["flag", "label"], &[&["true", "true"]]);
+        let mappings = vec![
+            ColumnMapping { target_type: Some("BOOLEAN".to_string()), ..mapping("flag", "flag") },
+            ColumnMapping { target_type: Some("TEXT".to_string()), ..mapping("label", "label") },
+        ];
+        let row = map_row(&src.columns, &src.rows[0], &mappings);
+        assert_eq!(row, vec![Some("1".to_string()), Some("true".to_string())]);
     }
 
     #[test]
