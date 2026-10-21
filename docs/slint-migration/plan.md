@@ -49,8 +49,8 @@ controller tests drive the real window headlessly instead.
 | Connections (21) | 15 | 4 | 2 |
 | Titlebar / shell (10) | 2 | 5 | 3 |
 | Cross-cutting (14) | 2 | 8 | 4 |
-| SQL editor (12) | 4 | 3 | 5 |
-| Results grid (16) | 2 | 4 | 10 |
+| SQL editor (12) | 5 | 4 | 3 |
+| Results grid (16) | 5 | 7 | 4 |
 | Schema browser (10) | 0 | 4 | 6 |
 | Settings (6) | 2 | 4 | 0 |
 | Command palette (3) | 2 | 1 | 0 |
@@ -66,23 +66,34 @@ controller tests drive the real window headlessly instead.
 | Backup / restore (5) | 5 | 0 | 0 |
 | Import / export (3) | 3 | 0 | 0 |
 | Activity monitor (7) | 7 | 0 | 0 |
-| Plugins (6) | 0 | 0 | 6 |
-| AI assistant (5) | 0 | 0 | 5 |
+| Plugins (6) | 5 | 1 | 0 |
+| AI assistant (5) | 4 | 1 | 0 |
 | Multi-window (5) | 0 | 0 | 5 |
-| **Total (167)** | **83** | **37** | **47** |
+| **Total (167)** | **96** | **43** | **28** |
 
 History of this number: 18 / 26 / 123 (2026-10-20), 22 / 28 / 117 after the SQL editor,
 40 / 35 / 92 after wave one (history, inspector, palette, settings), 83 / 37 / 47 after wave two
 (ER diagram and designer, import/export and backup, activity and migrations, query builder and
-table dialogs).
+table dialogs), 96 / 43 / 28 after wave three (autocomplete, the editable grid, plugins, the AI
+assistant). The wave-three tally is mine, counted against the inventory checklist; it was not
+re-audited independently.
 
-- **Feature coverage: about 61%** ((83 + 37/2) / 167).
-- **Ready for real work: about 65%, a judgement.** You can manage connections, browse and
+What moved in wave three: SQL editor items 4 (metadata refresh) done and 5 (suggestions) partial
+(no database/schema suggestions); results grid 7, 8 and 12 done (inline edit, pending highlight,
+atomic commit) and 9, 10 and 11 partial (single-row select only, no client-side UUID/timestamp
+defaults, one review list rather than separate diff and raw views); plugins 5 done and install
+partial (core installs only bundled plugins); AI 4 done and generate/explain/optimize/fix partial
+(only the OpenAI wire format was run end to end).
+
+- **Feature coverage: about 70%** ((96 + 43/2) / 167).
+- **Ready for real work: about 72%, a judgement.** You can manage connections, browse and
   inspect tables, write and run SQL in tabs, build queries visually, create and alter tables,
   view and design schemas as diagrams, diff and migrate schemas, import and export data, back up
-  and restore, watch activity, and use settings, history, snippets and templates. You cannot yet:
-  edit data in the grid, autocomplete SQL, use plugins or the AI assistant, or open a second
-  window.
+  and restore, watch activity, edit rows in the grid with a reviewed atomic commit, autocomplete
+  SQL, manage plugins, use the AI assistant, and use settings, history, snippets and templates.
+  You cannot yet: open a second window, multi-select rows, export or chart results, or browse
+  schemas as a tree. Editing and the Postgres/MySQL transaction paths have been run on SQLite and
+  one scratch Postgres database only.
 - **Everything below was verified on SQLite only** (Postgres and MySQL paths are unit tested, not
   run), and none of it has been clicked through in the real GPU window.
 - **Known defects and risks:**
@@ -95,9 +106,10 @@ table dialogs).
   - The ER canvas node rendering was rewritten; its 120 fps figure has not been re-measured.
   - Foreign key targets in generated DDL are unqualified, so a non-default Postgres schema
     relies on the search path.
-- **Remaining work, in order:** editable grid (needs its own design), autocomplete, plugins, AI
-  assistant, multi-window; then the partial items (schema browser tree and context menus,
-  results export and charts, update checks, connection folders, a Connection Lost screen).
+- **Remaining work, in order:** multi-window; then the partial items (schema browser tree and
+  context menus, results export and charts, multi-row select and bulk actions, update checks,
+  connection folders, a Connection Lost screen), then clicking everything through in the real GPU
+  window, which has never been done.
 
 ## Status
 
