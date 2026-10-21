@@ -113,6 +113,12 @@ pub fn status_for(manifest: &UpdateManifest, current: &str) -> UpdateStatus {
 
 /// Fetch the manifest and compare it with `current_version`.
 pub async fn check(current_version: &str) -> Result<UpdateStatus, DbError> {
+    check_at(MANIFEST_URL, current_version).await
+}
+
+/// [`check`] against a manifest at `url`, for tests and for pointing a
+/// development build at a local server.
+pub async fn check_at(url: &str, current_version: &str) -> Result<UpdateStatus, DbError> {
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(15))
         .user_agent(concat!("db-hive/", env!("CARGO_PKG_VERSION")))
@@ -120,7 +126,7 @@ pub async fn check(current_version: &str) -> Result<UpdateStatus, DbError> {
         .map_err(|e| DbError::InternalError(format!("Could not build HTTP client: {}", e)))?;
 
     let response = client
-        .get(MANIFEST_URL)
+        .get(url)
         .send()
         .await
         .map_err(|e| DbError::InternalError(format!("Update check failed: {}", e)))?;
@@ -212,5 +218,52 @@ mod tests {
         let m: UpdateManifest = serde_json::from_str(r#"{"version":"1.2.3"}"#).unwrap();
         assert_eq!(m.version, "1.2.3");
         assert!(m.notes.is_none());
+    }
+
+    /// One-shot HTTP server on an ephemeral port that answers every request
+    /// with `status` and `body`, for exercising `check_at` end to end.
+    async fn serve(status: &'static str, body: &'static str) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut sock, _)) = listener.accept().await {
+                let mut buf = [0u8; 2048];
+                let _ = sock.read(&mut buf).await;
+                let reply = format!(
+                    "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                let _ = sock.write_all(reply.as_bytes()).await;
+            }
+        });
+        format!("http://{addr}/latest.json")
+    }
+
+    #[tokio::test]
+    async fn check_at_reports_newer_same_and_older_manifests() {
+        let url = serve("200 OK", r#"{"version":"2.0.0","notes":"big"}"#).await;
+        match check_at(&url, "1.9.9").await.unwrap() {
+            UpdateStatus::Available { latest, notes, .. } => {
+                assert_eq!(latest, "2.0.0");
+                assert_eq!(notes.as_deref(), Some("big"));
+            }
+            other => panic!("expected an update, got {other:?}"),
+        }
+        assert!(!check_at(&url, "2.0.0").await.unwrap().is_available());
+        assert!(!check_at(&url, "3.0.0").await.unwrap().is_available());
+    }
+
+    #[tokio::test]
+    async fn check_at_fails_loudly_on_a_server_error_or_an_unreadable_manifest() {
+        let down = serve("500 Internal Server Error", "oops").await;
+        let e = check_at(&down, "1.0.0").await.unwrap_err().to_string();
+        assert!(e.contains("500"), "error was {e:?}");
+
+        // An error page served as 200 must not be read as "newer".
+        let junk = serve("200 OK", "<html>not a manifest</html>").await;
+        assert!(check_at(&junk, "1.0.0").await.is_err());
+        let not_a_version = serve("200 OK", r#"{"version":"<html>"}"#).await;
+        assert!(!check_at(&not_a_version, "1.0.0").await.map(|s| s.is_available()).unwrap_or(false));
     }
 }

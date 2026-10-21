@@ -6,6 +6,7 @@
 
 import { AboutSlint } from "std-widgets.slint";
 import { Theme, Icons, Icon, Divider, ButtonVariant, Button } from "../kit/kit.slint";
+import { UpdateBridge } from "../components/update_banner.slint";
 
 export component AboutDialog inherits Rectangle {
     in property <string> version;
@@ -65,6 +66,33 @@ export component AboutDialog inherits Rectangle {
             color: Theme.muted-foreground;
             font-size: Theme.size-label;
             wrap: word-wrap;
+        }
+
+        Divider { }
+
+        // Updates: the app checks and says; it does not install.
+        VerticalLayout {
+            spacing: 8px;
+            HorizontalLayout {
+                spacing: 8px;
+                Button {
+                    text: UpdateBridge.checking ? "Checking…" : "Check for updates";
+                    variant: ButtonVariant.secondary;
+                    enabled: !UpdateBridge.checking;
+                    clicked => { UpdateBridge.check(); }
+                }
+                if UpdateBridge.has-update: Button {
+                    text: "View release";
+                    variant: ButtonVariant.primary;
+                    clicked => { UpdateBridge.open-release(); }
+                }
+            }
+            if UpdateBridge.about-status != "": Text {
+                text: UpdateBridge.about-status;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+                wrap: word-wrap;
+            }
         }
 
         Divider { }

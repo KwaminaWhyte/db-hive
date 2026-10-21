@@ -4,6 +4,8 @@ import { ConnectionsScreen, ConnectionItem } from "screens/connections.slint";
 import { WorkspaceScreen, TableItem } from "screens/workspace.slint";
 import { GridColumn, GridRow } from "components/results_grid.slint";
 import { AboutDialog } from "dialogs/about.slint";
+import { UpdateBanner, UpdateBridge } from "components/update_banner.slint";
+export { UpdateBridge }
 import { ConfirmDialog } from "dialogs/confirm.slint";
 import { ConnectionEditorDialog, ConnectionFormData } from "dialogs/connection_editor.slint";
 import { HistoryState, HistoryOverlay } from "screens/history_panel.slint";
@@ -509,6 +511,9 @@ export component AppWindow inherits Window {
             }
             Divider { y: parent.height - 1px; }
         }
+
+        // A newer version, or a check the person asked for that failed.
+        if UpdateBridge.banner-visible: UpdateBanner { }
 
         if root.screen == Screen.connections: ConnectionsScreen {
             vertical-stretch: 1;

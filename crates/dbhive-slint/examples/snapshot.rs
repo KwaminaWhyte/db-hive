@@ -225,6 +225,43 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
+        // About after a check: -update (a newer version, with the banner
+        // behind it), -current (up to date), -failed, -checking.
+        _ if name.starts_with("about-") => {
+            use dbhive_slint::UpdateBridge;
+            let c = AppWindow::new().expect("AppWindow");
+            if name.ends_with("-light") {
+                c.global::<Theme>().set_dark(false);
+            }
+            c.set_app_version("0.21.0".into());
+            c.set_show_about(true);
+            let u = c.global::<UpdateBridge>();
+            let v = name.trim_end_matches("-light");
+            match v {
+                "about-update" => {
+                    u.set_banner_visible(true);
+                    u.set_banner_message("Version 0.22.0 is available.".into());
+                    u.set_about_status("Version 0.22.0 is available.".into());
+                    u.set_has_update(true);
+                }
+                "about-current" => u.set_about_status("You are up to date (version 0.21.0).".into()),
+                "about-failed" => {
+                    u.set_banner_visible(true);
+                    u.set_banner_message("Could not check for updates: Update check failed: the server replied 500 Internal Server Error".into());
+                    u.set_about_status("Could not check for updates: Update check failed: the server replied 500 Internal Server Error".into());
+                }
+                "about-checking" => {
+                    u.set_checking(true);
+                    u.set_about_status("Checking for updates…".into());
+                }
+                other => {
+                    eprintln!("unknown about variant {:?}", other);
+                    std::process::exit(2);
+                }
+            }
+            c.show().unwrap();
+            Box::new(c)
+        }
         "confirm" => {
             let c = AppWindow::new().expect("AppWindow");
             c.set_confirm_title("Delete connection?".into());

@@ -1,0 +1,80 @@
+import { Theme, Icons, Icon, Button, ButtonVariant } from "../kit/kit.slint";
+
+// What the update check turned up, for the banner under the title bar and for
+// the About dialog. State comes from `dbhive_ui_model::update_state`; the
+// network call is `dbhive_core::service_updater`.
+export global UpdateBridge {
+    // A newer version, or a check the person asked for that failed.
+    in property <bool> banner-visible;
+    in property <string> banner-message;
+    // The line under "Check for updates" in About.
+    in property <string> about-status;
+    in property <bool> checking;
+    // A newer version exists, so the release page is worth offering.
+    in property <bool> has-update;
+    callback check;
+    callback dismiss;
+    callback open-release;
+}
+
+export component UpdateBanner inherits Rectangle {
+    height: 40px;
+    background: Theme.primary-soft;
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 8px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: Icons.info;
+                tint: Theme.primary;
+                width: 14px;
+                height: 14px;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: UpdateBridge.banner-message;
+                color: Theme.foreground;
+                font-size: Theme.size-label;
+                font-weight: 600;
+                overflow: elide;
+            }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        if UpdateBridge.has-update: VerticalLayout {
+            alignment: center;
+            Button {
+                text: "View release";
+                variant: ButtonVariant.primary;
+                clicked => { UpdateBridge.open-release(); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            TouchArea {
+                width: 24px;
+                height: 24px;
+                mouse-cursor: pointer;
+                accessible-role: button;
+                accessible-label: "Dismiss";
+                clicked => { UpdateBridge.dismiss(); }
+                Icon {
+                    source: Icons.x;
+                    tint: Theme.muted-foreground;
+                    width: 13px;
+                    height: 13px;
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.border;
+    }
+}

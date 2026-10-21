@@ -38,6 +38,7 @@ mod erd;
 mod inspector;
 mod row_edit;
 mod tab_persist;
+mod updates;
 mod settings;
 mod table_dialog;
 
@@ -186,6 +187,7 @@ struct Session {
     plugins: plugins_glue::PluginSession,
     ai: ai_glue::AiSession,
     tab_persist: tab_persist::TabPersist,
+    updates: updates::UpdateSession,
 }
 
 struct Ctx {
@@ -1706,6 +1708,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     completion::wire(&window, &ctx);
     row_edit::wire(&window, &ctx);
     tab_persist::wire(&window, &ctx);
+    updates::wire(&window, &ctx);
     plugins_glue::wire(&window, &ctx);
     ai_glue::wire(&window, &ctx);
 
