@@ -63,6 +63,12 @@ import { PluginsState, PluginsOverlay } from "screens/plugins_panel.slint";
 export { PluginsState, PluginInstalledRow, PluginMarketItem, PluginFact, PluginPermissionItem, PluginItem, PluginToolbarItem } from "screens/plugins_panel.slint";
 export { DesignerState, DesignerColumnRow, DesignerResultRow } from "screens/schema_designer.slint";
 
+// Schema browser: a state global plus the overlays for its right-click menu
+// and its drop-table confirmation, like the panels above.
+import { TreeState, TreeContextOverlay, TreeDropOverlay, TreeCreateDbOverlay, TreeRoutinesOverlay } from "screens/schema_tree.slint";
+export { TreeState, TreeStatus, TreeRoutine } from "screens/schema_tree.slint";
+export { TreeNode, TreeRowKind, CtxItem } from "kit/kit.slint";
+
 export enum Screen { connections, workspace }
 
 export struct ToastItem {
@@ -598,7 +604,9 @@ export component AppWindow inherits Window {
     property <bool> any-overlay: root.show-about || root.show-confirm || root.show-connection-editor
         || root.any-palette-overlay || ActivityState.visible || MigrationsState.visible
         || BuilderState.visible || TableDialogState.visible || ErdState.visible
-        || DesignerState.visible || PluginsState.visible || ResultsState.export-visible;
+        || DesignerState.visible || PluginsState.visible || ResultsState.export-visible
+        || TreeState.menu-visible || TreeState.drop-visible
+        || TreeState.create-db-visible || TreeState.routines-visible;
     init => { fs.focus(); }
     changed any-overlay => {
         if (!root.any-overlay) {
@@ -631,6 +639,12 @@ export component AppWindow inherits Window {
     if ActivityState.visible: ActivityOverlay { }
     if MigrationsState.visible: MigrationsOverlay { }
     if PluginsState.visible: PluginsOverlay { }
+
+    // The schema browser's right-click menu and drop-table confirmation.
+    if TreeState.menu-visible: TreeContextOverlay { }
+    if TreeState.drop-visible: TreeDropOverlay { }
+    if TreeState.create-db-visible: TreeCreateDbOverlay { }
+    if TreeState.routines-visible: TreeRoutinesOverlay { }
 
     // The query builder and the table dialogs, on the same layer.
     if BuilderState.visible: BuilderOverlay { }

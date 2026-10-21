@@ -177,6 +177,8 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             Box::new(c)
         }
         _ if name.starts_with("inspector") => inspector(name),
+        // The schema browser: schema_populated, schema_menu_table, schema_drop, ...
+        _ if name.starts_with("schema_") => schema_window(name),
         // The ER diagram and the schema designer, over the workspace.
         _ if name == "er" || name.starts_with("er-") => er_window(name),
         _ if name.starts_with("designer") => designer_window(name),
@@ -2916,4 +2918,282 @@ fn main() {
     }
     std::fs::write(out, ppm).expect("write snapshot");
     println!("wrote {} ({}x{})", out, pw, ph);
+}
+
+// ---------------------------------------------------------------------------
+// Schema browser (variant names start with `schema_`)
+// ---------------------------------------------------------------------------
+
+fn schema_table(name: &str, kind: &str, rows: Option<u64>) -> dbhive_core::models::TableInfo {
+    let mut t = dbhive_core::models::TableInfo::new(name.to_string(), "public".to_string(), kind.to_string());
+    t.row_count = rows;
+    t
+}
+
+/// A Postgres-shaped tree: two databases, three schemas, tables and a view.
+fn schema_pg_tree(long: bool) -> dbhive_ui_model::schema_tree::SchemaTree {
+    use dbhive_core::service_schema::Overview;
+    use dbhive_ui_model::schema_tree::{NodeId, SchemaTree};
+    let mut t = SchemaTree::new();
+    t.apply_overview(
+        &Overview {
+            databases: vec!["analytics".into(), "app".into(), "postgres".into()],
+            database: "app".into(),
+            schemas: vec!["public".into(), "billing".into(), "audit".into()],
+        },
+        "public",
+    );
+    let mut tables = vec![
+        schema_table("customers", "BASE TABLE", Some(48_210)),
+        schema_table("order_items", "BASE TABLE", Some(1_204_881)),
+        schema_table("order_totals", "VIEW", None),
+        schema_table("orders", "BASE TABLE", Some(312_944)),
+        schema_table("products", "BASE TABLE", Some(1_204)),
+        schema_table("refunds", "BASE TABLE", Some(0)),
+    ];
+    if long {
+        tables.push(schema_table(
+            "a_table_with_a_very_long_name_that_must_be_elided_not_overflow_0001",
+            "BASE TABLE",
+            Some(7),
+        ));
+    }
+    t.set_tables("public", Ok(tables));
+    t.toggle(&NodeId::Schema("billing".into()));
+    t.set_tables(
+        "billing",
+        Ok(vec![
+            schema_table("invoices", "BASE TABLE", Some(90_113)),
+            schema_table("payments", "BASE TABLE", Some(88_020)),
+        ]),
+    );
+    t
+}
+
+fn schema_mysql_tree() -> dbhive_ui_model::schema_tree::SchemaTree {
+    use dbhive_core::service_schema::Overview;
+    let mut t = dbhive_ui_model::schema_tree::SchemaTree::new();
+    t.apply_overview(
+        &Overview {
+            databases: vec!["app".into(), "information_schema".into(), "mysql".into(), "sys".into()],
+            database: "app".into(),
+            schemas: vec![],
+        },
+        "app",
+    );
+    t.set_tables(
+        "app",
+        Ok(vec![
+            schema_table("users", "BASE TABLE", Some(3_210)),
+            schema_table("sessions", "BASE TABLE", Some(88_231)),
+            schema_table("active_users", "VIEW", None),
+        ]),
+    );
+    t
+}
+
+/// Mouse click on the centre of a point, to give the tree the keyboard so its
+/// focus ring is drawn.
+fn schema_click(c: &AppWindow, x: f32, y: f32) {
+    let pos = slint::LogicalPosition::new(x, y);
+    let w = c.window();
+    w.dispatch_event(WindowEvent::PointerMoved { position: pos });
+    w.dispatch_event(WindowEvent::PointerPressed { position: pos, button: slint::platform::PointerEventButton::Left });
+    w.dispatch_event(WindowEvent::PointerReleased { position: pos, button: slint::platform::PointerEventButton::Left });
+    // Take the pointer away again so no row is left drawn as hovered.
+    w.dispatch_event(WindowEvent::PointerExited);
+}
+
+fn schema_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_core::service_schema::TableRef;
+    use dbhive_ui_model::schema_tree::{Caps, Dependents, DropDialog, NavKey, NodeId, SchemaTree};
+
+    let c = AppWindow::new().expect("AppWindow");
+    let light = name.contains("light");
+    workspace_behind(&c, light, "Production Postgres", "app · public");
+    let caps = Caps { ddl: true, switch_database: true, create_database: true };
+
+    let mut tree = match name {
+        _ if name.starts_with("schema_mysql") => schema_mysql_tree(),
+        "schema_loading" => {
+            let mut t = SchemaTree::new();
+            t.begin_listing();
+            t
+        }
+        "schema_error" => {
+            let mut t = SchemaTree::new();
+            t.fail_listing("connection to server at \"db.internal\" failed: timeout expired");
+            t
+        }
+        "schema_empty" => {
+            use dbhive_core::service_schema::Overview;
+            let mut t = SchemaTree::new();
+            t.apply_overview(
+                &Overview { databases: vec!["app".into(), "postgres".into()], database: "app".into(), schemas: vec![] },
+                "app",
+            );
+            t.set_tables("app", Ok(vec![]));
+            t
+        }
+        "schema_subloading" | "schema_suberror" | "schema_subempty" => {
+            let mut t = schema_pg_tree(false);
+            t.toggle(&NodeId::Schema("audit".into()));
+            match name {
+                "schema_subloading" => t.begin_schema("audit"),
+                "schema_suberror" => t.set_tables("audit", Err("permission denied for schema audit".into())),
+                _ => t.set_tables("audit", Ok(vec![])),
+            }
+            t
+        }
+        _ => schema_pg_tree(name.contains("long")),
+    };
+
+    if name.contains("nomatch") {
+        tree.set_filter("zzzz");
+    } else if name.contains("filtered") {
+        tree.set_filter("order");
+    }
+    // The keyboard cursor: on a table, so the ring and the fill both show.
+    if name.contains("keyboard") || name.contains("menu") || name.contains("drop") {
+        let schema = if name.starts_with("schema_mysql") { "app" } else { "public" };
+        let table = if name.starts_with("schema_mysql") { "users" } else { "orders" };
+        tree.set_cursor(Some(NodeId::Table { schema: schema.into(), name: table.into() }));
+    }
+    if name.contains("walk") {
+        for _ in 0..3 {
+            tree.key(NavKey::Down);
+        }
+    }
+
+    let view = tree.view();
+    dbhive_slint::schema_tree_view::apply(&c, &view, caps.ddl);
+    c.global::<TreeState>().set_filter(tree.filter().into());
+
+    if name.contains("menu") {
+        let id = match name {
+            "schema_menu_schema" => NodeId::Schema("billing".into()),
+            "schema_menu_view" => NodeId::Table { schema: "public".into(), name: "order_totals".into() },
+            "schema_menu_db" => NodeId::Database("analytics".into()),
+            _ => NodeId::Table { schema: "public".into(), name: "orders".into() },
+        };
+        let entries = tree.menu_for(&id, caps);
+        // At the pointer: window coordinates of a right click on the `orders`
+        // row (the snapshot window draws its fallback menu bar above the
+        // content, which the overlay accounts for).
+        dbhive_slint::schema_tree_view::show_menu(&c, &entries, 150.0, 413.0);
+    }
+
+    if name.starts_with("schema_drop") {
+        let mut d = DropDialog::new("public", "public", "customers", true);
+        match name {
+            "schema_drop_checking" => {}
+            "schema_drop_clear" => d.dependents = Dependents::Ready(vec![]),
+            "schema_drop_failed" => d.dependents = Dependents::Failed("permission denied for table pg_constraint".into()),
+            _ => {
+                d.dependents = Dependents::Ready(vec![
+                    TableRef { schema: "public".into(), name: "orders".into() },
+                    TableRef { schema: "public".into(), name: "refunds".into() },
+                    TableRef { schema: "billing".into(), name: "invoices".into() },
+                ]);
+                if name == "schema_drop_cascade" {
+                    d.cascade = true;
+                    d.typed = "customers".into();
+                }
+                if name == "schema_drop_error" {
+                    d.typed = "customers".into();
+                    d.error = "cannot drop table customers because other objects depend on it".into();
+                }
+            }
+        }
+        let sql = dbhive_core::service_schema::drop_table_sql(
+            &dbhive_core::models::DbDriver::Postgres,
+            "public",
+            "customers",
+            d.cascade && d.cascade_offered(),
+        )
+        .unwrap()
+        .join("\n");
+        dbhive_slint::schema_tree_view::apply_drop(&c, &d, &sql);
+    }
+
+    // Postgres and MySQL have stored routines, so the footer entry shows.
+    c.global::<TreeState>().set_routines_supported(!name.contains("sqlite"));
+
+    if name.starts_with("schema_createdb") {
+        use dbhive_ui_model::schema_tree::CreateDatabaseDialog;
+        let mut d = CreateDatabaseDialog::new(&dbhive_core::models::DbDriver::Postgres);
+        match name {
+            "schema_createdb_empty" => {}
+            "schema_createdb_invalid" => d.name = "1st-database".into(),
+            "schema_createdb_refused" => {
+                d.name = "analytics".into();
+                d.server_error = "database \"analytics\" already exists".into();
+            }
+            "schema_createdb_running" => {
+                d.name = "reporting".into();
+                d.running = true;
+            }
+            _ => d.name = "reporting-2026".into(),
+        }
+        dbhive_slint::schema_tree_view::apply_create_db(&c, &d);
+    }
+
+    if name.starts_with("schema_routines") {
+        use dbhive_core::service_procedures::{ProcedureInfo, RoutineKind};
+        use dbhive_slint::schema_tree_view::{apply_routines, PickedRoutine, RoutinesView};
+        use dbhive_ui_model::routine_list::{rows, status};
+        let proc = |schema: &str, name: &str, kind, sig: &str, ret: Option<&str>| ProcedureInfo {
+            schema: schema.into(),
+            name: name.into(),
+            kind,
+            language: Some("plpgsql".into()),
+            return_type: ret.map(str::to_string),
+            argument_signature: sig.into(),
+        };
+        let all = vec![
+            proc("billing", "close_month", RoutineKind::Procedure, "(period date)", None),
+            proc("billing", "invoice_total", RoutineKind::Function, "(invoice_id bigint)", Some("numeric")),
+            proc("public", "add_numbers", RoutineKind::Function, "(a integer, b integer)", Some("integer")),
+            proc("public", "refresh_order_totals", RoutineKind::Procedure, "()", None),
+            proc("public", "slugify", RoutineKind::Function, "(title text)", Some("text")),
+        ];
+        let query = if name.contains("nomatch") { "zzzz" } else if name.contains("search") { "tot" } else { "" };
+        let picked_routine = all[1].clone();
+        let selected = name.contains("picked").then_some(&picked_routine);
+        let (list_rows, _) = rows(&all, query, selected);
+        let (loading, error, shown): (bool, &str, &[ProcedureInfo]) = match name {
+            "schema_routines_loading" => (true, "", &[]),
+            "schema_routines_error" => (false, "permission denied for table pg_proc", &[]),
+            "schema_routines_empty" => (false, "", &[]),
+            _ => (false, "", &all),
+        };
+        let (list_rows, items_for_status) = if shown.is_empty() { (Vec::new(), &[][..]) } else { (list_rows, &all[..]) };
+        let definition = "CREATE OR REPLACE FUNCTION billing.invoice_total(invoice_id bigint)\n RETURNS numeric\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  RETURN (SELECT COALESCE(SUM(quantity * unit_price), 0)\n            FROM billing.invoice_lines\n           WHERE invoice_lines.invoice_id = invoice_total.invoice_id);\nEND;\n$function$\n";
+        let view = RoutinesView {
+            status: status(loading, error, false, items_for_status, query),
+            rows: list_rows,
+            count: shown.len(),
+            error: error.to_string(),
+            message: "This database has no stored procedures or functions.".to_string(),
+            picked: name.contains("picked").then(|| PickedRoutine {
+                title: "billing.invoice_total".into(),
+                signature: "(invoice_id bigint) returns numeric".into(),
+                meta: "function · plpgsql".into(),
+                definition: if name.contains("defloading") { String::new() } else { definition.to_string() },
+            }),
+            def_loading: name.contains("defloading"),
+            def_error: if name.contains("deferror") { "Could not read the definition: permission denied for function invoice_total".to_string() } else { String::new() },
+        };
+        apply_routines(&c, &view);
+        c.global::<TreeState>().set_routines_filter(query.into());
+        c.global::<TreeState>().set_routines_visible(true);
+    }
+
+    c.show().unwrap();
+    // Give the tree the keyboard so the focus ring is drawn: a click on the
+    // header gap does nothing else, so click the highlighted row's neighbour.
+    if name.contains("keyboard") || name.contains("walk") {
+        schema_click(&c, 120.0, 58.0 + 44.0 + 6.0 * 30.0);
+    }
+    Box::new(c)
 }

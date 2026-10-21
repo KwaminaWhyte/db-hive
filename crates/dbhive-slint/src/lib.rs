@@ -24,6 +24,7 @@ pub mod palette_view;
 pub mod plugins_view;
 pub mod results_view;
 pub mod runtime;
+pub mod schema_tree_view;
 pub mod settings_view;
 pub mod sql_highlight;
 pub mod table_dialog_view;

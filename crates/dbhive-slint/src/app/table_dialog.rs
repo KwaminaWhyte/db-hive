@@ -137,7 +137,7 @@ impl Ctx {
         }
     }
 
-    fn table_dialog_open_edit(self: &Rc<Self>, table: &str) {
+    pub(super) fn table_dialog_open_edit(self: &Rc<Self>, table: &str) {
         let Some((_, driver, schema_arg)) = self.table_dialog_target() else {
             return;
         };

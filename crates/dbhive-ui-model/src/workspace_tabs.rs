@@ -24,6 +24,10 @@ pub struct Tab {
     pub id: u64,
     pub kind: TabKind,
     pub title: String,
+    /// The schema a table tab's table lives in, when it was opened from
+    /// outside the workspace's current one (the schema browser can open any
+    /// schema's tables). `None` means the workspace's current schema.
+    pub schema: Option<String>,
     pub sql: String,
     pub result: Option<QueryResult>,
     pub grid: GridState,
@@ -69,6 +73,7 @@ impl Tabs {
             id,
             kind,
             title,
+            schema: None,
             sql,
             result: None,
             grid: GridState::default(),
@@ -93,17 +98,27 @@ impl Tabs {
     /// The preview tab for `name`, made active. Returns its id and whether it
     /// was newly created (so the caller knows to run its query).
     pub fn open_table(&mut self, name: &str, sql: String) -> (u64, bool) {
-        if let Some(t) = self
-            .tabs
-            .iter()
-            .find(|t| matches!(&t.kind, TabKind::Table(n) if n == name))
-        {
+        self.open_table_in(None, name, sql)
+    }
+
+    /// Like `open_table`, for a table in a named schema. Two tables with one
+    /// name in different schemas get two tabs; a tab for the workspace's own
+    /// schema is `schema: None`, as `open_table` makes it.
+    pub fn open_table_in(&mut self, schema: Option<&str>, name: &str, sql: String) -> (u64, bool) {
+        if let Some(t) = self.tabs.iter().find(|t| {
+            matches!(&t.kind, TabKind::Table(n) if n == name) && t.schema.as_deref() == schema
+        }) {
             let id = t.id;
             self.active = Some(id);
             return (id, false);
         }
-        let id = self.push(TabKind::Table(name.to_string()), name.to_string(), sql);
+        let title = match schema {
+            Some(s) => format!("{s}.{name}"),
+            None => name.to_string(),
+        };
+        let id = self.push(TabKind::Table(name.to_string()), title, sql);
         if let Some(t) = self.get_mut(id) {
+            t.schema = schema.map(str::to_string);
             t.inspector = Some(TableView::default());
         }
         (id, true)
@@ -505,6 +520,21 @@ mod tests {
         assert!(t.finish_run(id, second, Ok(rows(2)), 1));
         assert_eq!(t.get(id).unwrap().result.as_ref().unwrap().rows.len(), 2);
         assert!(t.restart_run(999).is_none());
+    }
+
+    #[test]
+    fn one_table_name_in_two_schemas_gets_two_tabs() {
+        let mut t = Tabs::default();
+        let (a, _) = t.open_table_in(Some("billing"), "users", String::new());
+        let (b, created) = t.open_table_in(None, "users", String::new());
+        assert!(created);
+        assert_ne!(a, b);
+        let (again, created) = t.open_table_in(Some("billing"), "users", String::new());
+        assert!(!created);
+        assert_eq!(again, a);
+        assert_eq!(t.get(a).unwrap().schema.as_deref(), Some("billing"));
+        assert_eq!(t.get(a).unwrap().title, "billing.users");
+        assert_eq!(t.get(b).unwrap().title, "users");
     }
 
     #[test]
