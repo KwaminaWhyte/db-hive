@@ -100,11 +100,13 @@ partial (core installs only bundled plugins); AI 4 done and generate/explain/opt
   boolean, timestamptz, uuid, jsonb, array columns), SQL dump export and replay, data import, and
   the activity monitor's server tab. On MySQL: transactions, the DDL generator, the same inspector
   and row-edit scenario (auto_increment, decimal, tinyint(1), datetime, json), SQL dump export and
-  replay, and data import. String and identifier quoting round trips run on SQLite, PostgreSQL and
-  MySQL. The first live import run found a real MySQL bug (boolean words into `TINYINT(1)`),
-  now fixed. Not run against a server: backup and restore (they shell out to the dump tools),
-  the query builder and the ER diagram on a non-default schema, SQL Server, MongoDB, Redis and
-  Turso. None of it has been clicked through in the real GPU window.
+  replay, and data import. Backup and restore ran on both (real `pg_dump`, `mysqldump`, `psql`,
+  `mysql`). String and identifier quoting round trips run on SQLite, PostgreSQL and MySQL. The
+  live runs found four real bugs, all fixed: boolean words refused by MySQL `TINYINT(1)` on
+  import; a MySQL backup that the same GTID server refused to restore; a PostgreSQL restore with
+  "drop and recreate" that failed because the app itself held the database open; and `psql`
+  reporting a failed restore as success. Not run against a server: the query builder and the ER
+  diagram on a non-default schema, SQL Server, MongoDB, Redis and Turso. None of it has been clicked through in the real GPU window.
 - **Known defects and risks:**
   - Settings stored but not consumed: language, startup, update checks, editor font family,
     minimap, word wrap. Shortcut rebinding saves but is not dispatched. (Max rows now applies to
