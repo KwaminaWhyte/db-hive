@@ -37,7 +37,7 @@ Tools this produced, kept for the rest of the migration:
 6. **Plugins, multi-window, updater.**
 7. **Cut over.** Interaction tests, smoke tests, memory, a human walkthrough of every screen, then delete `dbhive-app` and update docs, CI and packaging.
 
-## Parity (measured 2026-10-21)
+## Parity (measured 2026-10-21, after the second wave)
 
 Yardstick: the 167-item flat checklist in `docs/rust-ui-migration/01-frontend-inventory.md`
 section 4. Method: read the Slint code, tests and snapshots, item by item. Done = built, wired
@@ -58,31 +58,46 @@ controller tests drive the real window headlessly instead.
 | History (3) | 3 | 0 | 0 |
 | Snippets (3) | 2 | 0 | 1 |
 | Query templates (5) | 4 | 1 | 0 |
-| Multi-window, ER diagram, schema designer, table dialogs, query builder, migrations, backup, import/export, activity, plugins, AI (61) | 0 | 0 | 61 |
-| **Total (167)** | **40** | **35** | **92** |
+| ER diagram (7) | 6 | 1 | 0 |
+| Visual schema designer (6) | 5 | 1 | 0 |
+| Table create / edit dialogs (4) | 4 | 0 | 0 |
+| Visual query builder (8) | 8 | 0 | 0 |
+| Migrations (5) | 5 | 0 | 0 |
+| Backup / restore (5) | 5 | 0 | 0 |
+| Import / export (3) | 3 | 0 | 0 |
+| Activity monitor (7) | 7 | 0 | 0 |
+| Plugins (6) | 0 | 0 | 6 |
+| AI assistant (5) | 0 | 0 | 5 |
+| Multi-window (5) | 0 | 0 | 5 |
+| **Total (167)** | **83** | **37** | **47** |
 
-History of this number: 18 / 26 / 123 (2026-10-20), 22 / 28 / 117 after the SQL editor, 40 / 35 / 92
-after the history panel, table inspector, command palette and settings landed.
+History of this number: 18 / 26 / 123 (2026-10-20), 22 / 28 / 117 after the SQL editor,
+40 / 35 / 92 after wave one (history, inspector, palette, settings), 83 / 37 / 47 after wave two
+(ER diagram and designer, import/export and backup, activity and migrations, query builder and
+table dialogs).
 
-- **Feature coverage: about 34%** ((40 + 35/2) / 167).
-- **Ready for real work: about 40%, a judgement.** You can add and edit connections, connect, browse
-  tables with paging, sorting, filters and structure, write and run SQL in tabs with highlighting,
-  get a guard on destructive statements, re-run from history, keep snippets and templates, use
-  the command palette and shortcuts, and change settings. Every run is recorded. You cannot yet:
-  edit data in the grid, autocomplete, export results, see an ER diagram, import data, run
-  migrations or backups, or keep tabs across restarts.
-- **Defects found in this pass, not yet fixed:**
-  - Settings that are stored but not consumed: language, startup, update checks, max rows, editor
-    font family, minimap, word wrap. The dialog says so beside each.
-  - Shortcut rebinding saves, but the app still dispatches the fixed shortcuts.
-  - Page loads in the table inspector are not written to history or the activity log.
+- **Feature coverage: about 61%** ((83 + 37/2) / 167).
+- **Ready for real work: about 65%, a judgement.** You can manage connections, browse and
+  inspect tables, write and run SQL in tabs, build queries visually, create and alter tables,
+  view and design schemas as diagrams, diff and migrate schemas, import and export data, back up
+  and restore, watch activity, and use settings, history, snippets and templates. You cannot yet:
+  edit data in the grid, autocomplete SQL, use plugins or the AI assistant, or open a second
+  window.
+- **Everything below was verified on SQLite only** (Postgres and MySQL paths are unit tested, not
+  run), and none of it has been clicked through in the real GPU window.
+- **Known defects and risks:**
+  - Settings stored but not consumed: language, startup, update checks, max rows, editor font
+    family, minimap, word wrap. Shortcut rebinding saves but is not dispatched.
+  - Table-inspector page loads are not written to history or the activity log.
   - SQLite `get_table_schema` does not escape quotes in a table name (core).
-- **Dead controls:** fixed. The gear, the command box, File > Settings and View > Command Palette
-  work. File > New Window was removed rather than left dead (one window per controller today).
-- **What is left is mostly screens, not logic:** `dbhive-ui-model` already holds the logic for most
-  missing areas, and the ER diagram canvas is a proven component.
-- **Order from here:** table editing and export (data you can change and take out), autocomplete,
-  then ER diagram, migrations, backup, import/export, activity monitor, query builder, plugins, AI.
+  - Postgres and MySQL migration transactions go through `execute_query("BEGIN")` on a pool and
+    work only because sequential use reuses one connection (core).
+  - The ER canvas node rendering was rewritten; its 120 fps figure has not been re-measured.
+  - Foreign key targets in generated DDL are unqualified, so a non-default Postgres schema
+    relies on the search path.
+- **Remaining work, in order:** editable grid (needs its own design), autocomplete, plugins, AI
+  assistant, multi-window; then the partial items (schema browser tree and context menus,
+  results export and charts, update checks, connection folders, a Connection Lost screen).
 
 ## Status
 
