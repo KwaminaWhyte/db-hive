@@ -4,12 +4,13 @@
 //! Kept apart from the controller so the snapshot tool projects exactly what
 //! the app does, with no controller behind it.
 
+use dbhive_ui_model::routine_list::{RoutineRow, RoutineStatus};
 use dbhive_ui_model::schema_tree::{
-    DropDialog, MenuEntry, PanelStatus, RowKind, TreeRow, TreeView,
+    CreateDatabaseDialog, DropDialog, MenuEntry, PanelStatus, RowKind, TreeRow, TreeView,
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
-use crate::{AppWindow, CtxItem, TreeNode, TreeRowKind, TreeState, TreeStatus};
+use crate::{AppWindow, CtxItem, TreeNode, TreeRoutine, TreeRowKind, TreeState, TreeStatus};
 
 fn kind(k: RowKind) -> TreeRowKind {
     match k {
@@ -127,4 +128,94 @@ pub fn apply_drop(w: &AppWindow, d: &DropDialog, sql: &str) {
     s.set_drop_running(d.running);
     s.set_drop_can_drop(d.can_drop());
     s.set_drop_visible(true);
+}
+
+/// Draw the create-database dialog.
+pub fn apply_create_db(w: &AppWindow, d: &CreateDatabaseDialog) {
+    let s = w.global::<TreeState>();
+    s.set_create_db_sql(d.sql().into());
+    s.set_create_db_error(d.error().into());
+    s.set_create_db_running(d.running);
+    s.set_create_db_can_create(d.can_create());
+    if s.get_create_db_name() != d.name.as_str() {
+        s.set_create_db_name(d.name.as_str().into());
+    }
+    s.set_create_db_visible(true);
+}
+
+/// Everything the Procedures & Functions panel shows.
+pub struct RoutinesView {
+    pub status: RoutineStatus,
+    pub rows: Vec<RoutineRow>,
+    pub count: usize,
+    pub error: String,
+    pub message: String,
+    pub picked: Option<PickedRoutine>,
+    pub def_loading: bool,
+    pub def_error: String,
+}
+
+/// The routine whose source is on show.
+pub struct PickedRoutine {
+    pub title: String,
+    pub signature: String,
+    pub meta: String,
+    pub definition: String,
+}
+
+fn routine_status(s: RoutineStatus) -> TreeStatus {
+    match s {
+        RoutineStatus::Loading => TreeStatus::Loading,
+        RoutineStatus::Error => TreeStatus::Error,
+        RoutineStatus::Empty | RoutineStatus::Unsupported => TreeStatus::Empty,
+        RoutineStatus::NoMatches => TreeStatus::NoMatches,
+        RoutineStatus::Populated => TreeStatus::Populated,
+    }
+}
+
+/// Draw the Procedures & Functions panel. Rows are updated in place, like the
+/// tree's, so a click does not destroy the row it landed on.
+pub fn apply_routines(w: &AppWindow, v: &RoutinesView) {
+    let s = w.global::<TreeState>();
+    let nodes: Vec<TreeRoutine> = v
+        .rows
+        .iter()
+        .map(|r| TreeRoutine {
+            header: r.header,
+            label: r.label.as_str().into(),
+            detail: r.detail.as_str().into(),
+            kind: r.kind.into(),
+            selected: r.selected,
+        })
+        .collect();
+    let current = s.get_routines();
+    match current.as_any().downcast_ref::<VecModel<TreeRoutine>>() {
+        Some(model) => {
+            for (i, n) in nodes.iter().enumerate() {
+                if i < model.row_count() {
+                    if model.row_data(i).as_ref() != Some(n) {
+                        model.set_row_data(i, n.clone());
+                    }
+                } else {
+                    model.push(n.clone());
+                }
+            }
+            while model.row_count() > nodes.len() {
+                model.remove(model.row_count() - 1);
+            }
+        }
+        None => s.set_routines(ModelRc::new(VecModel::from(nodes))),
+    }
+    s.set_routines_status(routine_status(v.status));
+    s.set_routines_count(v.count as i32);
+    s.set_routines_error(v.error.as_str().into());
+    s.set_routines_message(v.message.as_str().into());
+    s.set_routine_picked(v.picked.is_some());
+    let p = v.picked.as_ref();
+    s.set_routine_title(p.map_or("", |p| p.title.as_str()).into());
+    s.set_routine_signature(p.map_or("", |p| p.signature.as_str()).into());
+    s.set_routine_meta(p.map_or("", |p| p.meta.as_str()).into());
+    s.set_routine_definition(p.map_or("", |p| p.definition.as_str()).into());
+    s.set_routine_def_loading(v.def_loading);
+    s.set_routine_def_error(v.def_error.as_str().into());
 }

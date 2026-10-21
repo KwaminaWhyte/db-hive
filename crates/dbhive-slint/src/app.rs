@@ -814,6 +814,7 @@ impl Ctx {
         self.session.borrow_mut().workspace.tables_error.clear();
         self.refresh_workspace();
         self.tree_listing_begin();
+        let tree_generation = self.tree_generation();
 
         runtime::spawn(
             async move {
@@ -865,7 +866,7 @@ impl Ctx {
                 // A reloaded schema means column lists may have changed.
                 ctx.completion_reset();
                 ctx.refresh_workspace();
-                ctx.tree_seed(overview, &schema, for_tree);
+                ctx.tree_seed(tree_generation, overview, &schema, for_tree);
             }),
         );
     }

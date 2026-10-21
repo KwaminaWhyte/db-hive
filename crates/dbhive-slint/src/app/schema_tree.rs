@@ -21,10 +21,13 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use dbhive_core::models::{DbDriver, TableInfo};
-use dbhive_core::service_procedures::qualify;
+use dbhive_core::service_procedures::{self, qualify};
 use dbhive_core::service_schema::{self, Overview};
+use dbhive_ui_model::procedures::ProceduresModel;
+use dbhive_ui_model::routine_list;
 use dbhive_ui_model::schema_tree::{
-    Action, Caps, Dependents, DropDialog, Load, MenuAction, MenuEntry, NavKey, NodeId, SchemaTree,
+    Action, Caps, CreateDatabaseDialog, Dependents, DropDialog, Load, MenuAction, MenuEntry,
+    NavKey, NodeId, SchemaTree,
 };
 use dbhive_ui_model::table_view::sql_qualifier;
 use dbhive_ui_model::workspace_tabs::TabKind;
@@ -52,6 +55,21 @@ pub(super) struct TreeSession {
     drop_latest: runtime::Latest,
     switching: bool,
     focus_tick: i32,
+    create_db: Option<CreateDatabaseDialog>,
+    create_db_latest: runtime::Latest,
+    routines: RoutinesSession,
+}
+
+/// The Procedures & Functions panel's own state.
+#[derive(Default)]
+struct RoutinesSession {
+    model: ProceduresModel,
+    list_loading: bool,
+    list_error: String,
+    def_loading: bool,
+    def_error: String,
+    list_latest: runtime::Latest,
+    def_latest: runtime::Latest,
 }
 
 fn schema_of(id: &NodeId) -> Option<&str> {
@@ -94,8 +112,16 @@ impl Ctx {
             let state = w.global::<TreeState>();
             state.set_menu_visible(false);
             state.set_drop_visible(false);
+            state.set_create_db_visible(false);
+            state.set_routines_visible(false);
             state.set_filter("".into());
         }
+    }
+
+    /// Which tree a load started for, to refuse its result if the tree was
+    /// rebuilt in the meantime.
+    pub(super) fn tree_generation(&self) -> u64 {
+        self.session.borrow().tree.generation
     }
 
     /// `load_tables` started: keep the rows, show that they are being refreshed.
@@ -113,12 +139,18 @@ impl Ctx {
     /// `load_tables` finished: take the overview and the current schema's tables.
     pub(super) fn tree_seed(
         self: &Rc<Self>,
+        generation: u64,
         overview: Overview,
         schema: &str,
         tables: Result<Vec<TableInfo>, String>,
     ) {
         let reload = {
             let mut s = self.session.borrow_mut();
+            // A load that began under a tree since rebuilt (the workspace was
+            // left, or the database switched) is not for this tree.
+            if s.tree.generation != generation {
+                return;
+            }
             s.tree.switching = false;
             let m = &mut s.tree.model;
             m.apply_overview(&overview, schema);
@@ -136,11 +168,13 @@ impl Ctx {
         let Some(w) = self.window.upgrade() else {
             return;
         };
-        let (view, can_create) = {
+        let (view, can_create, routines) = {
             let s = self.session.borrow();
-            (s.tree.model.view(), s.tree.caps.ddl)
+            let routines = s.tree.driver.as_ref().is_some_and(service_procedures::supports_routines);
+            (s.tree.model.view(), s.tree.caps.ddl, routines)
         };
         schema_tree_view::apply(&w, &view, can_create);
+        w.global::<TreeState>().set_routines_supported(routines);
     }
 
     // -- Loading a schema -----------------------------------------------------------
@@ -455,15 +489,24 @@ impl Ctx {
     }
 
     fn tree_menu_dismissed(self: &Rc<Self>) {
-        let tick = {
-            let mut s = self.session.borrow_mut();
-            s.tree.menu = None;
-            s.tree.focus_tick += 1;
-            s.tree.focus_tick
-        };
-        if let Some(w) = self.window.upgrade() {
-            w.global::<TreeState>().set_focus_tick(tick);
-        }
+        self.session.borrow_mut().tree.menu = None;
+        // The window gives the keyboard back to its own shortcut scope when an
+        // overlay goes away. Hand it to the tree afterwards, on the next turn
+        // of the event loop, so the tree is the one that keeps it.
+        let ctx = Rc::downgrade(self);
+        slint::Timer::single_shot(std::time::Duration::from_millis(10), move || {
+            let Some(ctx) = ctx.upgrade() else {
+                return;
+            };
+            let tick = {
+                let mut s = ctx.session.borrow_mut();
+                s.tree.focus_tick += 1;
+                s.tree.focus_tick
+            };
+            if let Some(w) = ctx.window.upgrade() {
+                w.global::<TreeState>().set_focus_tick(tick);
+            }
+        });
     }
 
     fn tree_menu_chosen(self: &Rc<Self>, index: i32) {
@@ -931,10 +974,325 @@ impl Ctx {
         self.toast(format!("Dropped table {table}"), Tone::Success);
     }
 
-    // -- Create database (stretch) -----------------------------------------------------------------------
+    // -- Create database ------------------------------------------------------------------------------
 
     fn tree_create_database_open(self: &Rc<Self>) {
-        self.toast("Create Database is not available yet.", Tone::Neutral);
+        let driver = {
+            let s = self.session.borrow();
+            s.tree.caps.create_database.then(|| s.tree.driver.clone()).flatten()
+        };
+        let Some(driver) = driver else {
+            self.toast("This database cannot create databases from here.", Tone::Warning);
+            return;
+        };
+        self.session.borrow_mut().tree.create_db = Some(CreateDatabaseDialog::new(&driver));
+        self.tree_create_db_refresh();
+    }
+
+    fn tree_create_db_refresh(&self) {
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
+        let s = self.session.borrow();
+        match s.tree.create_db.as_ref() {
+            Some(d) => schema_tree_view::apply_create_db(&w, d),
+            None => w.global::<TreeState>().set_create_db_visible(false),
+        }
+    }
+
+    fn tree_create_db_edited(&self, text: &str) {
+        if let Some(d) = self.session.borrow_mut().tree.create_db.as_mut() {
+            d.name = text.to_string();
+            d.server_error.clear();
+        }
+        self.tree_create_db_refresh();
+    }
+
+    fn tree_create_db_cancel(&self) {
+        {
+            let mut s = self.session.borrow_mut();
+            s.tree.create_db_latest.begin();
+            s.tree.create_db = None;
+        }
+        self.tree_create_db_refresh();
+    }
+
+    fn tree_create_db_confirm(self: &Rc<Self>) {
+        let (name, connection_id) = {
+            let mut s = self.session.borrow_mut();
+            let connection_id = s.workspace.connection_id.clone();
+            let Some(d) = s.tree.create_db.as_mut() else {
+                return;
+            };
+            if !d.can_create() {
+                return;
+            }
+            d.running = true;
+            d.server_error.clear();
+            (d.name.trim().to_string(), connection_id)
+        };
+        self.tree_create_db_refresh();
+        let ticket = self.session.borrow().tree.create_db_latest.begin();
+        let state = self.state.clone();
+        let created = name.clone();
+        runtime::spawn(
+            async move {
+                dbhive_core::service::create_database(&state, &connection_id, &name)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            move |result| {
+                with_ctx(|ctx| {
+                    if !ticket.is_current() {
+                        return;
+                    }
+                    match result {
+                        Ok(_) => {
+                            ctx.session.borrow_mut().tree.create_db = None;
+                            ctx.tree_create_db_refresh();
+                            ctx.toast(format!("Created database {created}"), Tone::Success);
+                            ctx.tree_refresh_all();
+                        }
+                        Err(e) => {
+                            if let Some(d) = ctx.session.borrow_mut().tree.create_db.as_mut() {
+                                d.running = false;
+                                d.server_error = e;
+                            }
+                            ctx.tree_create_db_refresh();
+                        }
+                    }
+                })
+            },
+        );
+    }
+
+    // -- Procedures and functions ----------------------------------------------------------------------------
+
+    fn tree_routines_open(self: &Rc<Self>) {
+        let (connection_id, supported) = {
+            let s = self.session.borrow();
+            (
+                s.workspace.connection_id.clone(),
+                s.tree.driver.as_ref().is_some_and(service_procedures::supports_routines),
+            )
+        };
+        if !supported {
+            self.toast("This database has no stored procedures or functions.", Tone::Neutral);
+            return;
+        }
+        let needs_list = {
+            let mut s = self.session.borrow_mut();
+            // Every schema, not just the current one: the list is grouped.
+            s.tree.routines.model.open_for(connection_id, "");
+            s.tree.routines.model.needs_list
+        };
+        if let Some(w) = self.window.upgrade() {
+            w.global::<TreeState>().set_routines_visible(true);
+        }
+        if needs_list {
+            self.tree_routines_load();
+        } else {
+            self.tree_routines_project();
+        }
+    }
+
+    fn tree_routines_close(&self) {
+        {
+            let mut s = self.session.borrow_mut();
+            s.tree.routines.model.close();
+            s.tree.routines.def_latest.begin();
+        }
+        if let Some(w) = self.window.upgrade() {
+            w.global::<TreeState>().set_routines_visible(false);
+        }
+    }
+
+    fn tree_routines_load(self: &Rc<Self>) {
+        let (connection_id, ticket, generation) = {
+            let mut s = self.session.borrow_mut();
+            let r = &mut s.tree.routines;
+            r.model.needs_list = false;
+            r.list_loading = true;
+            r.list_error.clear();
+            let id = r.model.connection_id.clone().unwrap_or_default();
+            (id, r.list_latest.begin(), s.tree.generation)
+        };
+        self.tree_routines_project();
+        let state = self.state.clone();
+        runtime::spawn(
+            async move {
+                service_procedures::list_procedures(&state, &connection_id, None)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            move |result| {
+                with_ctx(|ctx| {
+                    if !ticket.is_current() {
+                        return;
+                    }
+                    {
+                        let mut s = ctx.session.borrow_mut();
+                        if s.tree.generation != generation {
+                            return;
+                        }
+                        let r = &mut s.tree.routines;
+                        r.list_loading = false;
+                        match result {
+                            Ok(list) => {
+                                // A routine picked before a refresh stays picked
+                                // if it is still there.
+                                if r.model.selected.as_ref().is_some_and(|p| !list.contains(p)) {
+                                    r.model.selected = None;
+                                    r.model.definition.clear();
+                                }
+                                r.model.procedures = list;
+                            }
+                            Err(e) => r.list_error = e,
+                        }
+                    }
+                    ctx.tree_routines_project();
+                })
+            },
+        );
+    }
+
+    fn tree_routines_search(&self, text: &str) {
+        self.session.borrow_mut().tree.routines.model.search = text.to_string();
+        self.tree_routines_project();
+    }
+
+    /// The routine a list row stands for (a heading is not one).
+    fn tree_routine_at(&self, row: i32) -> Option<service_procedures::ProcedureInfo> {
+        let s = self.session.borrow();
+        let m = &s.tree.routines.model;
+        let (_, items) = routine_list::rows(&m.procedures, &m.search, m.selected.as_ref());
+        usize::try_from(row).ok().and_then(|i| items.into_iter().nth(i)).flatten()
+    }
+
+    fn tree_routine_pick(self: &Rc<Self>, row: i32) {
+        let Some(p) = self.tree_routine_at(row) else {
+            return;
+        };
+        let (connection_id, ticket, generation, need_load) = {
+            let mut s = self.session.borrow_mut();
+            let generation = s.tree.generation;
+            let r = &mut s.tree.routines;
+            let changed = r.model.select(p.clone());
+            // Picking the same routine again retries a definition that failed.
+            let need_load = changed || r.model.definition.is_empty();
+            if need_load {
+                r.def_loading = true;
+                r.def_error.clear();
+            }
+            (
+                r.model.connection_id.clone().unwrap_or_default(),
+                r.def_latest.begin(),
+                generation,
+                need_load,
+            )
+        };
+        self.tree_routines_project();
+        if !need_load {
+            return;
+        }
+        let state = self.state.clone();
+        let target = p.clone();
+        runtime::spawn(
+            async move {
+                service_procedures::get_procedure_definition(
+                    &state,
+                    &connection_id,
+                    &target.schema,
+                    &target.name,
+                    Some(target.kind),
+                )
+                .await
+                .map_err(|e| e.to_string())
+            },
+            move |result| {
+                with_ctx(|ctx| {
+                    if !ticket.is_current() {
+                        return;
+                    }
+                    {
+                        let mut s = ctx.session.borrow_mut();
+                        if s.tree.generation != generation {
+                            return;
+                        }
+                        let r = &mut s.tree.routines;
+                        // Only if it is still the routine on show.
+                        if r.model.selected.as_ref() != Some(&p) {
+                            return;
+                        }
+                        r.def_loading = false;
+                        match result {
+                            Ok(text) => r.model.definition = text,
+                            Err(e) => r.def_error = format!("Could not read the definition: {e}"),
+                        }
+                    }
+                    ctx.tree_routines_project();
+                })
+            },
+        );
+    }
+
+    fn tree_routines_project(&self) {
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
+        let view = {
+            let s = self.session.borrow();
+            let r = &s.tree.routines;
+            let m = &r.model;
+            let (rows, _) = routine_list::rows(&m.procedures, &m.search, m.selected.as_ref());
+            let status = routine_list::status(
+                r.list_loading,
+                &r.list_error,
+                m.unsupported,
+                &m.procedures,
+                &m.search,
+            );
+            schema_tree_view::RoutinesView {
+                status,
+                count: m.procedures.len(),
+                rows,
+                error: r.list_error.clone(),
+                message: "This database has no stored procedures or functions.".to_string(),
+                picked: m.selected.as_ref().map(|p| schema_tree_view::PickedRoutine {
+                    title: p.qualified(),
+                    signature: routine_list::signature_line(p),
+                    meta: match &p.language {
+                        Some(l) => format!("{} · {l}", p.kind.label()),
+                        None => p.kind.label().to_string(),
+                    },
+                    definition: m.definition.clone(),
+                }),
+                def_loading: r.def_loading,
+                def_error: r.def_error.clone(),
+            }
+        };
+        schema_tree_view::apply_routines(&w, &view);
+    }
+
+    fn tree_routine_copy(self: &Rc<Self>) {
+        let text = self.session.borrow().tree.routines.model.definition.clone();
+        if text.is_empty() {
+            return;
+        }
+        if let Some(w) = self.window.upgrade() {
+            w.invoke_copy_to_clipboard(text.as_str().into());
+        }
+        self.toast("Copied the definition", Tone::Success);
+    }
+
+    /// The definition goes into a new query tab and is never run.
+    fn tree_routine_to_editor(self: &Rc<Self>) {
+        let text = self.session.borrow().tree.routines.model.definition.clone();
+        if text.is_empty() {
+            return;
+        }
+        self.tree_routines_close();
+        self.tree_put_sql(routine_list::definition_for_editor(&text), "The definition");
     }
 }
 
@@ -966,4 +1324,14 @@ pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
     on!(on_drop_cascade_toggled, |ctx| ctx.tree_drop_toggle_cascade());
     on!(on_drop_confirm, |ctx| ctx.tree_drop_confirm());
     on!(on_drop_cancel, |ctx| ctx.tree_drop_cancel());
+    on!(on_create_db_edited, |ctx, t| ctx.tree_create_db_edited(&t));
+    on!(on_create_db_confirm, |ctx| ctx.tree_create_db_confirm());
+    on!(on_create_db_cancel, |ctx| ctx.tree_create_db_cancel());
+    on!(on_routines_open, |ctx| ctx.tree_routines_open());
+    on!(on_routines_close, |ctx| ctx.tree_routines_close());
+    on!(on_routines_refresh, |ctx| ctx.tree_routines_load());
+    on!(on_routines_search, |ctx, t| ctx.tree_routines_search(&t));
+    on!(on_routine_pick, |ctx, i| ctx.tree_routine_pick(i));
+    on!(on_routine_copy, |ctx| ctx.tree_routine_copy());
+    on!(on_routine_to_editor, |ctx| ctx.tree_routine_to_editor());
 }

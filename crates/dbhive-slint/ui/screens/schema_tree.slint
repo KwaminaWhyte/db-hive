@@ -7,9 +7,19 @@
 // file draws the rows and reports intents through `TreeState`.
 
 import { ScrollView } from "std-widgets.slint";
-import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Divider, Banner, EmptyState, Icon, Popover, CheckBox, CodeBlock, TreeNode, TreeRowView, CtxItem, CtxMenu } from "../kit/kit.slint";
+import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Divider, VDivider, Banner, EmptyState, Icon, Popover, CheckBox, CodeBlock, ListRow, SectionLabel, TreeNode, TreeRowView, TreeCodeView, CtxItem, CtxMenu } from "../kit/kit.slint";
 
 export enum TreeStatus { populated, empty, no-matches, loading, error }
+
+// One row of the Procedures & Functions list: a schema heading or a routine.
+export struct TreeRoutine {
+    header: bool,
+    label: string,
+    detail: string,
+    // "function" or "procedure"; empty on a heading.
+    kind: string,
+    selected: bool,
+}
 
 export global TreeState {
     in property <[TreeNode]> rows;
@@ -45,6 +55,33 @@ export global TreeState {
     in property <bool> drop-running;
     in property <bool> drop-can-drop;
 
+    // The create-database dialog.
+    in-out property <bool> create-db-visible;
+    in-out property <string> create-db-name;
+    in property <string> create-db-sql;
+    in property <string> create-db-error;
+    in property <bool> create-db-running;
+    in property <bool> create-db-can-create;
+
+    // Procedures & Functions.
+    // Whether the driver has stored routines at all (hides the entry if not).
+    in property <bool> routines-supported;
+    in-out property <bool> routines-visible;
+    in property <TreeStatus> routines-status: TreeStatus.loading;
+    in property <string> routines-error;
+    in property <string> routines-message;
+    in property <[TreeRoutine]> routines;
+    in property <int> routines-count;
+    in-out property <string> routines-filter;
+    // The picked routine: what to call it, what it takes, and its source.
+    in property <bool> routine-picked;
+    in property <string> routine-title;
+    in property <string> routine-signature;
+    in property <string> routine-meta;
+    in property <string> routine-definition;
+    in property <bool> routine-def-loading;
+    in property <string> routine-def-error;
+
     callback clicked(int);
     callback double-clicked(int);
     callback toggled(int);
@@ -65,6 +102,16 @@ export global TreeState {
     callback drop-cascade-toggled;
     callback drop-confirm;
     callback drop-cancel;
+    callback create-db-edited(string);
+    callback create-db-confirm;
+    callback create-db-cancel;
+    callback routines-open;
+    callback routines-close;
+    callback routines-refresh;
+    callback routines-search(string);
+    callback routine-pick(int);
+    callback routine-copy;
+    callback routine-to-editor;
 }
 
 export component SchemaTreePanel inherits Rectangle {
@@ -235,6 +282,20 @@ export component SchemaTreePanel inherits Rectangle {
                 }
             }
         }
+
+        // Pinned under the tree, so it is always one click away.
+        // No stretch of its own: the tree above takes all the spare height.
+        if TreeState.routines-supported: VerticalLayout {
+            vertical-stretch: 0;
+            spacing: 6px;
+            Divider { }
+            ListRow {
+                height: 30px;
+                icon: Icons.code;
+                text: "Procedures & Functions";
+                clicked => { TreeState.routines-open(); }
+            }
+        }
     }
 
     Rectangle {
@@ -389,6 +450,327 @@ export component TreeDropOverlay inherits Rectangle {
                             variant: ButtonVariant.danger;
                             enabled: TreeState.drop-can-drop;
                             clicked => { TreeState.drop-confirm(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// "Create Database": a name, the statement that will run, and the reason when
+// the name or the server says no.
+export component TreeCreateDbOverlay inherits Rectangle {
+    background: Theme.scrim;
+
+    TouchArea { }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            Popover {
+                width: 420px;
+
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 12px;
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 32px;
+                                height: 32px;
+                                border-radius: 16px;
+                                background: Theme.primary-soft;
+                                Icon {
+                                    source: Icons.database;
+                                    tint: Theme.primary;
+                                    width: 16px;
+                                    height: 16px;
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "Create database";
+                                color: Theme.foreground;
+                                font-size: Theme.size-subheading;
+                                font-weight: 700;
+                            }
+                            Text {
+                                text: "On the server this connection is using.";
+                                color: Theme.muted-foreground;
+                                font-size: Theme.size-small;
+                            }
+                        }
+                    }
+
+                    TextField {
+                        placeholder: "Database name";
+                        text <=> TreeState.create-db-name;
+                        enabled: !TreeState.create-db-running;
+                        edited(t) => { TreeState.create-db-edited(t); }
+                        accepted(t) => {
+                            if (TreeState.create-db-can-create) {
+                                TreeState.create-db-confirm();
+                            }
+                        }
+                        init => { self.focus-input(); }
+                    }
+
+                    if TreeState.create-db-sql != "": CodeBlock {
+                        text: TreeState.create-db-sql;
+                        max-lines: 2;
+                    }
+
+                    if TreeState.create-db-error != "": Banner {
+                        message: TreeState.create-db-error;
+                        dismissible: false;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: end;
+                        Button {
+                            text: "Cancel";
+                            enabled: !TreeState.create-db-running;
+                            clicked => { TreeState.create-db-cancel(); }
+                        }
+                        Button {
+                            text: TreeState.create-db-running ? "Creating…" : "Create";
+                            variant: ButtonVariant.primary;
+                            enabled: TreeState.create-db-can-create;
+                            clicked => { TreeState.create-db-confirm(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// "Procedures & Functions": every routine on the connection with a search
+// box, and the source of the one picked. Reading only: nothing here runs a
+// routine.
+export component TreeRoutinesOverlay inherits Rectangle {
+    background: Theme.scrim;
+
+    TouchArea {
+        clicked => { TreeState.routines-close(); }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            Popover {
+                width: min(900px, root.width - 48px);
+                height: min(600px, root.height - 48px);
+
+                // Keeps clicks inside the panel from reaching the backdrop.
+                TouchArea { }
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 12px;
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "Procedures & Functions"
+                                    + (TreeState.routines-count > 0 ? " (" + TreeState.routines-count + ")" : "");
+                                color: Theme.foreground;
+                                font-size: Theme.size-subheading;
+                                font-weight: 700;
+                            }
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Button {
+                            has-icon: true;
+                            icon: Icons.refresh-cw;
+                            variant: ButtonVariant.ghost;
+                            accessible-label: "Refresh routines";
+                            clicked => { TreeState.routines-refresh(); }
+                        }
+                        Button {
+                            has-icon: true;
+                            icon: Icons.x;
+                            variant: ButtonVariant.ghost;
+                            accessible-label: "Close";
+                            clicked => { TreeState.routines-close(); }
+                        }
+                    }
+
+                    TextField {
+                        has-icon: true;
+                        icon: Icons.search;
+                        placeholder: "Search routines";
+                        text <=> TreeState.routines-filter;
+                        edited(t) => { TreeState.routines-search(t); }
+                    }
+
+                    HorizontalLayout {
+                        vertical-stretch: 1;
+                        spacing: 12px;
+
+                        // The list.
+                        Rectangle {
+                            width: 300px;
+
+                            ScrollView {
+                                VerticalLayout {
+                                    alignment: start;
+                                    spacing: 2px;
+                                    for r[i] in TreeState.routines: VerticalLayout {
+                                        if r.header: SectionLabel {
+                                            text: r.label + "  ·  " + r.detail;
+                                        }
+                                        if !r.header: ListRow {
+                                            icon: r.kind == "procedure" ? Icons.square-terminal : Icons.code;
+                                            text: r.label;
+                                            detail: r.kind;
+                                            selected: r.selected;
+                                            clicked => { TreeState.routine-pick(i); }
+                                        }
+                                    }
+                                }
+                            }
+
+                            if TreeState.routines-status == TreeStatus.loading: Text {
+                                text: "Loading routines…";
+                                color: Theme.muted-foreground;
+                                font-size: Theme.size-label;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            if TreeState.routines-status == TreeStatus.error: VerticalLayout {
+                                alignment: start;
+                                spacing: 8px;
+                                Banner {
+                                    message: TreeState.routines-error;
+                                    dismissible: false;
+                                }
+                                HorizontalLayout {
+                                    alignment: start;
+                                    Button {
+                                        text: "Retry";
+                                        has-icon: true;
+                                        icon: Icons.refresh-cw;
+                                        clicked => { TreeState.routines-refresh(); }
+                                    }
+                                }
+                            }
+
+                            if TreeState.routines-status == TreeStatus.empty: EmptyState {
+                                icon: Icons.code;
+                                title: "No routines";
+                                message: TreeState.routines-message;
+                            }
+
+                            if TreeState.routines-status == TreeStatus.no-matches: EmptyState {
+                                icon: Icons.search;
+                                title: "No matches";
+                                message: "No routine matches \"" + TreeState.routines-filter + "\".";
+                                Button {
+                                    text: "Clear search";
+                                    has-icon: true;
+                                    icon: Icons.x;
+                                    clicked => {
+                                        TreeState.routines-filter = "";
+                                        TreeState.routines-search("");
+                                    }
+                                }
+                            }
+                        }
+
+                        VDivider { }
+
+                        // The picked routine.
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 8px;
+
+                            if !TreeState.routine-picked: EmptyState {
+                                vertical-stretch: 1;
+                                icon: Icons.code;
+                                title: "Pick a routine";
+                                message: "Select a function or procedure to read its definition.";
+                            }
+
+                            if TreeState.routine-picked: VerticalLayout {
+                                vertical-stretch: 1;
+                                spacing: 8px;
+
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    VerticalLayout {
+                                        horizontal-stretch: 1;
+                                        spacing: 2px;
+                                        Text {
+                                            text: TreeState.routine-title;
+                                            color: Theme.foreground;
+                                            font-size: Theme.size-body;
+                                            font-weight: 700;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: TreeState.routine-signature;
+                                            color: Theme.muted-foreground;
+                                            font-size: Theme.size-small;
+                                            overflow: elide;
+                                        }
+                                        Text {
+                                            text: TreeState.routine-meta;
+                                            color: Theme.dim-foreground;
+                                            font-size: Theme.size-small;
+                                        }
+                                    }
+                                    VerticalLayout {
+                                        alignment: start;
+                                        HorizontalLayout {
+                                            spacing: 8px;
+                                            Button {
+                                                text: "Copy";
+                                                has-icon: true;
+                                                icon: Icons.copy;
+                                                enabled: TreeState.routine-definition != "";
+                                                clicked => { TreeState.routine-copy(); }
+                                            }
+                                            Button {
+                                                text: "Open in editor";
+                                                has-icon: true;
+                                                icon: Icons.square-terminal;
+                                                enabled: TreeState.routine-definition != "";
+                                                clicked => { TreeState.routine-to-editor(); }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                if TreeState.routine-def-error != "": Banner {
+                                    message: TreeState.routine-def-error;
+                                    dismissible: false;
+                                }
+
+                                if TreeState.routine-def-loading: Text {
+                                    text: "Reading the definition…";
+                                    color: Theme.muted-foreground;
+                                    font-size: Theme.size-label;
+                                }
+
+                                TreeCodeView {
+                                    vertical-stretch: 1;
+                                    visible: TreeState.routine-definition != "";
+                                    text: TreeState.routine-definition;
+                                }
+                            }
                         }
                     }
                 }

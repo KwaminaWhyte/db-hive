@@ -2554,6 +2554,36 @@ export component TreeRowView inherits Rectangle {
     }
 }
 
+// Read-only monospace text that fills its frame and scrolls when it is longer
+// (a routine's definition). The caller sizes the frame.
+export component TreeCodeView inherits Rectangle {
+    in property <string> text;
+
+    background: Theme.card;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.text;
+
+    ScrollView {
+        width: 100%;
+        height: 100%;
+        VerticalLayout {
+            padding: 10px;
+            Text {
+                text: root.text;
+                color: Theme.foreground;
+                font-size: Theme.size-mono;
+                font-family: "Menlo";
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
 // One entry of a context menu. `icon` names a kit icon; the menu maps it.
 export struct CtxItem {
     label: string,

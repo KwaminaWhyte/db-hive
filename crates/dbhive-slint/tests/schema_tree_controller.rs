@@ -307,6 +307,13 @@ async fn scenario(w: AppWindow, db: PathBuf, finished: Rc<Cell<bool>>) {
     until("the menu", || t.get_menu_visible()).await;
     press_key(&w, Key::Escape);
     until("Escape to close the menu", || !t.get_menu_visible()).await;
+    // The keyboard goes back to the tree, not to nowhere.
+    let before = cursor(&w);
+    settle().await;
+    press_key(&w, Key::UpArrow);
+    until("the tree to take the arrow keys again", || cursor(&w) == before - 1).await;
+    press_key(&w, Key::DownArrow);
+    until("and again", || cursor(&w) == before).await;
     // The arrows and Enter pick an entry: the highlight starts on the first,
     // so two Downs reach Generate INSERT.
     right_click_row(&w, 3);

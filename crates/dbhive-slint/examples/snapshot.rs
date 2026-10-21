@@ -2851,6 +2851,79 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
         dbhive_slint::schema_tree_view::apply_drop(&c, &d, &sql);
     }
 
+    // Postgres and MySQL have stored routines, so the footer entry shows.
+    c.global::<TreeState>().set_routines_supported(!name.contains("sqlite"));
+
+    if name.starts_with("schema_createdb") {
+        use dbhive_ui_model::schema_tree::CreateDatabaseDialog;
+        let mut d = CreateDatabaseDialog::new(&dbhive_core::models::DbDriver::Postgres);
+        match name {
+            "schema_createdb_empty" => {}
+            "schema_createdb_invalid" => d.name = "1st-database".into(),
+            "schema_createdb_refused" => {
+                d.name = "analytics".into();
+                d.server_error = "database \"analytics\" already exists".into();
+            }
+            "schema_createdb_running" => {
+                d.name = "reporting".into();
+                d.running = true;
+            }
+            _ => d.name = "reporting-2026".into(),
+        }
+        dbhive_slint::schema_tree_view::apply_create_db(&c, &d);
+    }
+
+    if name.starts_with("schema_routines") {
+        use dbhive_core::service_procedures::{ProcedureInfo, RoutineKind};
+        use dbhive_slint::schema_tree_view::{apply_routines, PickedRoutine, RoutinesView};
+        use dbhive_ui_model::routine_list::{rows, status};
+        let proc = |schema: &str, name: &str, kind, sig: &str, ret: Option<&str>| ProcedureInfo {
+            schema: schema.into(),
+            name: name.into(),
+            kind,
+            language: Some("plpgsql".into()),
+            return_type: ret.map(str::to_string),
+            argument_signature: sig.into(),
+        };
+        let all = vec![
+            proc("billing", "close_month", RoutineKind::Procedure, "(period date)", None),
+            proc("billing", "invoice_total", RoutineKind::Function, "(invoice_id bigint)", Some("numeric")),
+            proc("public", "add_numbers", RoutineKind::Function, "(a integer, b integer)", Some("integer")),
+            proc("public", "refresh_order_totals", RoutineKind::Procedure, "()", None),
+            proc("public", "slugify", RoutineKind::Function, "(title text)", Some("text")),
+        ];
+        let query = if name.contains("nomatch") { "zzzz" } else if name.contains("search") { "tot" } else { "" };
+        let picked_routine = all[1].clone();
+        let selected = name.contains("picked").then_some(&picked_routine);
+        let (list_rows, _) = rows(&all, query, selected);
+        let (loading, error, shown): (bool, &str, &[ProcedureInfo]) = match name {
+            "schema_routines_loading" => (true, "", &[]),
+            "schema_routines_error" => (false, "permission denied for table pg_proc", &[]),
+            "schema_routines_empty" => (false, "", &[]),
+            _ => (false, "", &all),
+        };
+        let (list_rows, items_for_status) = if shown.is_empty() { (Vec::new(), &[][..]) } else { (list_rows, &all[..]) };
+        let definition = "CREATE OR REPLACE FUNCTION billing.invoice_total(invoice_id bigint)\n RETURNS numeric\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  RETURN (SELECT COALESCE(SUM(quantity * unit_price), 0)\n            FROM billing.invoice_lines\n           WHERE invoice_lines.invoice_id = invoice_total.invoice_id);\nEND;\n$function$\n";
+        let view = RoutinesView {
+            status: status(loading, error, false, items_for_status, query),
+            rows: list_rows,
+            count: shown.len(),
+            error: error.to_string(),
+            message: "This database has no stored procedures or functions.".to_string(),
+            picked: name.contains("picked").then(|| PickedRoutine {
+                title: "billing.invoice_total".into(),
+                signature: "(invoice_id bigint) returns numeric".into(),
+                meta: "function · plpgsql".into(),
+                definition: if name.contains("defloading") { String::new() } else { definition.to_string() },
+            }),
+            def_loading: name.contains("defloading"),
+            def_error: if name.contains("deferror") { "Could not read the definition: permission denied for function invoice_total".to_string() } else { String::new() },
+        };
+        apply_routines(&c, &view);
+        c.global::<TreeState>().set_routines_filter(query.into());
+        c.global::<TreeState>().set_routines_visible(true);
+    }
+
     c.show().unwrap();
     // Give the tree the keyboard so the focus ring is drawn: a click on the
     // header gap does nothing else, so click the highlighted row's neighbour.
