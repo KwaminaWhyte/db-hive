@@ -12,8 +12,8 @@ use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
 use crate::history_view::strings_model;
 use crate::{
-    sql_highlight, AppWindow, BuilderState, QbAdded, QbColumn, QbFilter, QbHaving, QbJoin,
-    QbOrder, QbSection, QbSource,
+    sql_highlight, AppWindow, BuilderState, QbAdded, QbColumn, QbFilter, QbHaving, QbJoin, QbOrder,
+    QbSection, QbSource,
 };
 
 fn section(s: &SectionView) -> QbSection {
@@ -186,4 +186,50 @@ pub fn reset_fields(w: &AppWindow, view: &BuilderView) {
     b.set_table_search(view.table_search.as_str().into());
     b.set_limit_text(view.limit_text.as_str().into());
     b.set_offset_text(view.offset_text.as_str().into());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn model(items: &[i32]) -> ModelRc<i32> {
+        ModelRc::new(VecModel::from(items.to_vec()))
+    }
+
+    #[test]
+    fn typing_updates_rows_where_they_stand_and_keeps_the_model() {
+        let current = model(&[1, 2, 3]);
+        let replaced = put(current.clone(), vec![1, 20, 3], true);
+        assert!(
+            replaced.is_none(),
+            "the existing model must stay, or the focused field is recreated"
+        );
+        assert_eq!(current.row_data(1), Some(20));
+        assert_eq!(current.row_count(), 3);
+    }
+
+    #[test]
+    fn a_structural_change_always_gets_a_fresh_model() {
+        let current = model(&[1, 2, 3]);
+        // Same length, but not typing: rows must be rebuilt so every field
+        // is bound to the new state again.
+        let fresh = put(current.clone(), vec![1, 2, 3], false).expect("a new model");
+        assert!(
+            current != fresh,
+            "same model means the rows were not rebuilt"
+        );
+    }
+
+    #[test]
+    fn a_length_change_while_typing_gets_a_fresh_model() {
+        let current = model(&[1, 2]);
+        let fresh = put(current, vec![1, 2, 3], true).expect("a new model");
+        assert_eq!(fresh.row_count(), 3);
+    }
+
+    #[test]
+    fn a_model_that_is_not_a_vec_model_is_replaced() {
+        let current: ModelRc<i32> = ModelRc::default();
+        assert!(put(current, vec![1], true).is_some());
+    }
 }

@@ -20,8 +20,8 @@
 use dbhive_core::models::ForeignKeyInfo;
 
 use crate::query_builder::{
-    active_aliases, count_conditions, generate_sql, join_suggestions, pagination_summary, validate, Aggregate,
-    BuilderState, CompareOp, Condition, ConditionGroup, DialectRules, GroupByClause,
+    active_aliases, count_conditions, generate_sql, join_suggestions, pagination_summary, validate,
+    Aggregate, BuilderState, CompareOp, Condition, ConditionGroup, DialectRules, GroupByClause,
     HavingCondition, Join, JoinType, Logical, OrderByClause, QueryTable, SelectedColumn, SortDir,
     ValueKind, MAX_GROUP_DEPTH, STAR,
 };
@@ -156,9 +156,9 @@ pub fn value_hint(c: &Condition) -> String {
         crate::query_builder::Arity::None => false,
         crate::query_builder::Arity::One => bad(&c.value),
         crate::query_builder::Arity::Range => bad(&c.value) || bad(&c.value2),
-        crate::query_builder::Arity::List => {
-            crate::query_builder::parse_list(&c.value).iter().any(|v| bad(v))
-        }
+        crate::query_builder::Arity::List => crate::query_builder::parse_list(&c.value)
+            .iter()
+            .any(|v| bad(v)),
     };
     if any_bad {
         "Not a number, so it is written as text".to_string()
@@ -180,9 +180,7 @@ pub fn parse_count(text: &str, minimum: u64, what: &str) -> Result<Option<u64>, 
     if !t.chars().all(|c| c.is_ascii_digit()) {
         return Err(format!("{} must be a whole number", what));
     }
-    let n: u64 = t
-        .parse()
-        .map_err(|_| format!("{} is too large", what))?;
+    let n: u64 = t.parse().map_err(|_| format!("{} is too large", what))?;
     if n > i64::MAX as u64 {
         return Err(format!("{} is too large", what));
     }
@@ -436,14 +434,20 @@ impl BuilderEditor {
     }
 
     fn table(&self, index: i32) -> Option<&QueryTable> {
-        usize::try_from(index).ok().and_then(|i| self.state.tables.get(i))
+        usize::try_from(index)
+            .ok()
+            .and_then(|i| self.state.tables.get(i))
     }
 
     fn alias_at(&self, index: i32) -> Option<String> {
         self.table(index).map(|t| t.alias.clone())
     }
 
-    fn column_at(&self, alias_index: i32, column_index: i32) -> Option<(String, String, ValueKind)> {
+    fn column_at(
+        &self,
+        alias_index: i32,
+        column_index: i32,
+    ) -> Option<(String, String, ValueKind)> {
         let t = self.table(alias_index)?;
         let (name, ty) = t.columns.get(usize::try_from(column_index).ok()?)?;
         Some((t.alias.clone(), name.clone(), ValueKind::from_data_type(ty)))
@@ -586,7 +590,9 @@ impl BuilderEditor {
         let flat = flatten_filters(&self.state.filters);
         let row = flat.get(usize::try_from(flat_index).ok()?)?.clone();
         let ci = row.condition?;
-        group_at(&mut self.state.filters, &row.path)?.conditions.get_mut(ci)
+        group_at(&mut self.state.filters, &row.path)?
+            .conditions
+            .get_mut(ci)
     }
 
     /// Re-point a condition at a column, keeping its operator when the new
@@ -626,11 +632,15 @@ impl BuilderEditor {
     // -- Limit / offset ------------------------------------------------------
 
     fn limit_error(&self) -> String {
-        parse_count(&self.limit_text, 1, "Limit").err().unwrap_or_default()
+        parse_count(&self.limit_text, 1, "Limit")
+            .err()
+            .unwrap_or_default()
     }
 
     fn offset_error(&self) -> String {
-        parse_count(&self.offset_text, 0, "Offset").err().unwrap_or_default()
+        parse_count(&self.offset_text, 0, "Offset")
+            .err()
+            .unwrap_or_default()
     }
 
     fn sync_limits(&mut self) {
@@ -692,7 +702,10 @@ impl BuilderEditor {
                 None => Nothing,
             },
             "join-type" => {
-                let Some(t) = usize::try_from(j).ok().and_then(|k| JoinType::ALL.get(k)).copied()
+                let Some(t) = usize::try_from(j)
+                    .ok()
+                    .and_then(|k| JoinType::ALL.get(k))
+                    .copied()
                 else {
                     return Nothing;
                 };
@@ -727,7 +740,11 @@ impl BuilderEditor {
                 let Some(join) = idx.and_then(|k| self.state.joins.get(k)).cloned() else {
                     return Nothing;
                 };
-                let alias = if action == "join-lc" { &join.left_table } else { &join.right_table };
+                let alias = if action == "join-lc" {
+                    &join.left_table
+                } else {
+                    &join.right_table
+                };
                 let Some(name) = self
                     .state
                     .columns_of(alias)
@@ -755,7 +772,10 @@ impl BuilderEditor {
                 None => Nothing,
             },
             "col-agg" => {
-                let Some(a) = usize::try_from(j).ok().and_then(|k| Aggregate::ALL.get(k)).copied()
+                let Some(a) = usize::try_from(j)
+                    .ok()
+                    .and_then(|k| Aggregate::ALL.get(k))
+                    .copied()
                 else {
                     return Nothing;
                 };
@@ -896,7 +916,9 @@ impl BuilderEditor {
                     Some(c) => c.kind,
                     None => return Nothing,
                 };
-                let Some(op) = usize::try_from(j).ok().and_then(|k| ops_for(kind).get(k).copied())
+                let Some(op) = usize::try_from(j)
+                    .ok()
+                    .and_then(|k| ops_for(kind).get(k).copied())
                 else {
                     return Nothing;
                 };
@@ -1337,7 +1359,10 @@ impl BuilderEditor {
             join_suggestions: suggestion_labels,
             query_distinct: s.distinct,
             columns,
-            aggregate_labels: Aggregate::ALL.iter().map(|a| a.label().to_string()).collect(),
+            aggregate_labels: Aggregate::ALL
+                .iter()
+                .map(|a| a.label().to_string())
+                .collect(),
             filters,
             group_by,
             having,
@@ -1448,14 +1473,20 @@ mod tests {
     }
 
     fn cols(list: &[(&str, &str)]) -> Vec<(String, String)> {
-        list.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect()
+        list.iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect()
     }
 
     fn users() -> Vec<(String, String)> {
         cols(&[("id", "integer"), ("name", "text"), ("active", "boolean")])
     }
     fn orders() -> Vec<(String, String)> {
-        cols(&[("id", "integer"), ("user_id", "integer"), ("total", "numeric")])
+        cols(&[
+            ("id", "integer"),
+            ("user_id", "integer"),
+            ("total", "numeric"),
+        ])
     }
 
     fn editor() -> BuilderEditor {
@@ -1543,13 +1574,22 @@ mod tests {
         e.add_table("public", "orders", orders());
         assert_eq!(e.apply("join-add", 0, 0, "", &[]), Change::Structure);
         assert!(!sql(&e).contains("JOIN"));
-        assert!(e.warnings(pg()).iter().any(|w| w.contains("missing a column")));
+        assert!(e
+            .warnings(pg())
+            .iter()
+            .any(|w| w.contains("missing a column")));
 
         e.apply("join-lc", 0, 0, "", &[]); // users.id
         e.apply("join-rc", 0, 1, "", &[]); // orders.user_id
         let s = sql(&e);
-        assert!(s.contains("INNER JOIN \"public\".\"orders\" AS \"orders\""), "{s}");
-        assert!(s.contains("ON \"users\".\"id\" = \"orders\".\"user_id\""), "{s}");
+        assert!(
+            s.contains("INNER JOIN \"public\".\"orders\" AS \"orders\""),
+            "{s}"
+        );
+        assert!(
+            s.contains("ON \"users\".\"id\" = \"orders\".\"user_id\""),
+            "{s}"
+        );
     }
 
     #[test]
@@ -1569,7 +1609,10 @@ mod tests {
         let keys = vec![fk()];
         let v = e.view(&[], &keys, &q, &esc, pg());
         // users is the FROM table, so the join is written from users to orders.
-        assert_eq!(v.join_suggestions, vec!["users.id = orders.user_id".to_string()]);
+        assert_eq!(
+            v.join_suggestions,
+            vec!["users.id = orders.user_id".to_string()]
+        );
 
         assert_eq!(e.apply("join-suggest", 0, 0, "", &keys), Change::Structure);
         assert_eq!(e.state.joins.len(), 1);
@@ -1579,7 +1622,10 @@ mod tests {
         assert!(s.contains("INNER JOIN \"public\".\"orders\" AS \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\""), "{s}");
         assert!(e.warnings(pg()).iter().all(|w| !w.contains("not joined")));
         // Accepted, so no longer offered.
-        assert!(e.view(&[], &keys, &q, &esc, pg()).join_suggestions.is_empty());
+        assert!(e
+            .view(&[], &keys, &q, &esc, pg())
+            .join_suggestions
+            .is_empty());
         assert_eq!(e.apply("join-suggest", 0, 0, "", &keys), Change::None);
     }
 
@@ -1606,7 +1652,10 @@ mod tests {
         e.apply("col-agg", 0, 1, "", &[]); // COUNT on *
         e.apply("col-alias", 0, 0, "  n  ", &[]);
         assert_eq!(e.state.columns[0].alias, "n");
-        assert_eq!(sql(&e), "SELECT COUNT(*) AS \"n\", \"users\".\"name\"\nFROM \"public\".\"users\" AS \"users\";");
+        assert_eq!(
+            sql(&e),
+            "SELECT COUNT(*) AS \"n\", \"users\".\"name\"\nFROM \"public\".\"users\" AS \"users\";"
+        );
 
         e.apply("distinct", 0, 0, "", &[]);
         assert!(sql(&e).starts_with("SELECT DISTINCT "));
@@ -1639,7 +1688,7 @@ mod tests {
     fn conditions_nest_to_three_levels_and_no_further() {
         let mut e = editor();
         assert_eq!(e.apply("f-group-add", 0, 0, "", &[]), Change::Structure); // level 2
-        // The flat order is root, then the nested group.
+                                                                              // The flat order is root, then the nested group.
         assert_eq!(e.apply("f-group-add", 1, 0, "", &[]), Change::Structure); // level 3
         assert_eq!(e.apply("f-group-add", 2, 0, "", &[]), Change::None); // level 4 refused
 
@@ -1661,7 +1710,12 @@ mod tests {
         e.apply("f-cond-add", 0, 0, "", &[]);
         assert_eq!(e.state.filters.conditions.len(), 1);
         // Conditions come before nested groups in the drawn order.
-        let kinds: Vec<i32> = e.view(&[], &[], &q, &esc, pg()).filters.iter().map(|f| f.kind).collect();
+        let kinds: Vec<i32> = e
+            .view(&[], &[], &q, &esc, pg())
+            .filters
+            .iter()
+            .map(|f| f.kind)
+            .collect();
         assert_eq!(kinds, vec![0, 1, 0, 1]);
     }
 
@@ -1677,13 +1731,19 @@ mod tests {
         e.apply("f-val", 3, 0, "Ann", &[]);
         e.apply("f-op", 2, 0, "", &[]); // inner group to OR
         let s = sql(&e);
-        assert!(s.contains("WHERE \"users\".\"id\" = 7 AND (\"users\".\"name\" = 'Ann')"), "{s}");
+        assert!(
+            s.contains("WHERE \"users\".\"id\" = 7 AND (\"users\".\"name\" = 'Ann')"),
+            "{s}"
+        );
 
         e.apply("f-cond-add", 2, 0, "", &[]);
         e.apply("f-col", 4, 1, "", &[]);
         e.apply("f-val", 4, 0, "Bob", &[]);
         let s = sql(&e);
-        assert!(s.contains("(\"users\".\"name\" = 'Ann' OR \"users\".\"name\" = 'Bob')"), "{s}");
+        assert!(
+            s.contains("(\"users\".\"name\" = 'Ann' OR \"users\".\"name\" = 'Bob')"),
+            "{s}"
+        );
     }
 
     #[test]
@@ -1730,7 +1790,10 @@ mod tests {
         let mut e = editor();
         e.apply("f-cond-add", 0, 0, "", &[]);
         e.apply("f-col", 1, 1, "", &[]); // text
-        let like = ops_for(ValueKind::Text).iter().position(|o| *o == CompareOp::Like).unwrap();
+        let like = ops_for(ValueKind::Text)
+            .iter()
+            .position(|o| *o == CompareOp::Like)
+            .unwrap();
         e.apply("f-cmp", 1, like as i32, "", &[]);
         e.apply("f-val", 1, 0, "%a%", &[]);
         assert_eq!(e.state.filters.conditions[0].op, CompareOp::Like);
@@ -1745,7 +1808,12 @@ mod tests {
     fn the_value_editor_follows_the_operator() {
         let mut e = editor();
         e.apply("f-cond-add", 0, 0, "", &[]);
-        let idx = |op: CompareOp| ops_for(ValueKind::Number).iter().position(|o| *o == op).unwrap() as i32;
+        let idx = |op: CompareOp| {
+            ops_for(ValueKind::Number)
+                .iter()
+                .position(|o| *o == op)
+                .unwrap() as i32
+        };
         let arity = |e: &BuilderEditor| e.view(&[], &[], &q, &esc, pg()).filters[1].arity;
 
         assert_eq!(arity(&e), 1);
@@ -1763,7 +1831,10 @@ mod tests {
         let mut e = editor();
         e.apply("f-cond-add", 0, 0, "", &[]);
         e.apply("f-val", 1, 0, "5", &[]);
-        let between = ops_for(ValueKind::Number).iter().position(|o| *o == CompareOp::Between).unwrap();
+        let between = ops_for(ValueKind::Number)
+            .iter()
+            .position(|o| *o == CompareOp::Between)
+            .unwrap();
         e.apply("f-cmp", 1, between as i32, "", &[]);
         assert!(e.state.filters.conditions[0].value.is_empty());
     }
@@ -1827,10 +1898,16 @@ mod tests {
         e.apply("col-add", 0, 2, "", &[]); // name
         e.apply("gb-add", 0, 0, "", &[]); // group by id
         let v = e.view(&[], &[], &q, &esc, pg());
-        assert!(v.group_issues.iter().any(|w| w.contains("users.name must be in GROUP BY")));
+        assert!(v
+            .group_issues
+            .iter()
+            .any(|w| w.contains("users.name must be in GROUP BY")));
         // The same problem also reaches the warnings beside the preview, so it
         // is seen even with the section folded away.
-        assert!(v.warnings.iter().any(|w| w.contains("users.name must be in GROUP BY")));
+        assert!(v
+            .warnings
+            .iter()
+            .any(|w| w.contains("users.name must be in GROUP BY")));
 
         e.apply("gb-add", 0, 1, "", &[]);
         assert!(e.view(&[], &[], &q, &esc, pg()).group_issues.is_empty());
@@ -1845,8 +1922,15 @@ mod tests {
         e.apply("hv-add", 0, 0, "", &[]);
         e.apply("hv-val", 0, 0, "5", &[]);
         let v = e.view(&[], &[], &q, &esc, pg());
-        assert!(v.group_issues.iter().any(|w| w.contains("HAVING without GROUP BY")));
-        assert!(sql(&e).contains("HAVING COUNT(\"users\".\"id\") > 5"), "{}", sql(&e));
+        assert!(v
+            .group_issues
+            .iter()
+            .any(|w| w.contains("HAVING without GROUP BY")));
+        assert!(
+            sql(&e).contains("HAVING COUNT(\"users\".\"id\") > 5"),
+            "{}",
+            sql(&e)
+        );
     }
 
     #[test]
@@ -1854,9 +1938,12 @@ mod tests {
         let mut e = editor();
         e.apply("hv-add", 0, 0, "", &[]);
         e.apply("hv-col", 0, 1, "", &[]); // name: text
-        // COUNT stays numeric whatever the column is.
+                                          // COUNT stays numeric whatever the column is.
         assert_eq!(e.state.having[0].kind, ValueKind::Number);
-        let min = Aggregate::FOR_HAVING.iter().position(|a| *a == Aggregate::Min).unwrap();
+        let min = Aggregate::FOR_HAVING
+            .iter()
+            .position(|a| *a == Aggregate::Min)
+            .unwrap();
         e.apply("hv-agg", 0, min as i32, "", &[]);
         assert_eq!(e.state.having[0].kind, ValueKind::Text);
     }
@@ -1882,13 +1969,28 @@ mod tests {
         assert_eq!(parse_count("", 1, "Limit"), Ok(None));
         assert_eq!(parse_count("  25 ", 1, "Limit"), Ok(Some(25)));
         assert_eq!(parse_count("0", 0, "Offset"), Ok(Some(0)));
-        assert!(parse_count("0", 1, "Limit").unwrap_err().contains("at least 1"));
-        assert!(parse_count("-3", 0, "Offset").unwrap_err().contains("whole number"));
-        assert!(parse_count("1.5", 1, "Limit").unwrap_err().contains("whole number"));
-        assert!(parse_count("ten", 1, "Limit").unwrap_err().contains("whole number"));
-        assert!(parse_count("99999999999999999999999", 1, "Limit").unwrap_err().contains("too large"));
-        assert!(parse_count("9223372036854775808", 1, "Limit").unwrap_err().contains("too large"));
-        assert_eq!(parse_count("9223372036854775807", 1, "Limit"), Ok(Some(i64::MAX as u64)));
+        assert!(parse_count("0", 1, "Limit")
+            .unwrap_err()
+            .contains("at least 1"));
+        assert!(parse_count("-3", 0, "Offset")
+            .unwrap_err()
+            .contains("whole number"));
+        assert!(parse_count("1.5", 1, "Limit")
+            .unwrap_err()
+            .contains("whole number"));
+        assert!(parse_count("ten", 1, "Limit")
+            .unwrap_err()
+            .contains("whole number"));
+        assert!(parse_count("99999999999999999999999", 1, "Limit")
+            .unwrap_err()
+            .contains("too large"));
+        assert!(parse_count("9223372036854775808", 1, "Limit")
+            .unwrap_err()
+            .contains("too large"));
+        assert_eq!(
+            parse_count("9223372036854775807", 1, "Limit"),
+            Ok(Some(i64::MAX as u64))
+        );
     }
 
     #[test]
@@ -1903,7 +2005,10 @@ mod tests {
         e.apply("limit", 0, 0, "abc", &[]);
         let v = e.view(&[], &[], &q, &esc, pg());
         assert!(v.limit_error.contains("whole number"));
-        assert!(!sql(&e).contains("LIMIT 10"), "an invalid limit must not keep the old one");
+        assert!(
+            !sql(&e).contains("LIMIT 10"),
+            "an invalid limit must not keep the old one"
+        );
         assert!(v.warnings[0].contains("Limit must be a whole number"));
         assert!(!e.can_use(&e.sql(&q, &esc, pg())));
 
@@ -1983,13 +2088,18 @@ mod tests {
     #[test]
     fn flatten_addresses_groups_and_conditions_in_drawing_order() {
         let mut root = ConditionGroup::default();
-        root.conditions.push(Condition::new("t", "a", ValueKind::Text));
+        root.conditions
+            .push(Condition::new("t", "a", ValueKind::Text));
         let mut inner = ConditionGroup::default();
-        inner.conditions.push(Condition::new("t", "b", ValueKind::Text));
+        inner
+            .conditions
+            .push(Condition::new("t", "b", ValueKind::Text));
         root.groups.push(inner);
         let flat = flatten_filters(&root);
-        let shape: Vec<(usize, Option<usize>, Vec<usize>)> =
-            flat.iter().map(|f| (f.depth, f.condition, f.path.clone())).collect();
+        let shape: Vec<(usize, Option<usize>, Vec<usize>)> = flat
+            .iter()
+            .map(|f| (f.depth, f.condition, f.path.clone()))
+            .collect();
         assert_eq!(
             shape,
             vec![

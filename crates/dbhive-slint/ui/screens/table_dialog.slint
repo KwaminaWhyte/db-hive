@@ -84,8 +84,8 @@ export global TableDialogState {
     in property <string> load-error;
 
     // Create, step 1.
-    in property <string> name;
-    in property <string> description;
+    in-out property <string> name;
+    in-out property <string> description;
     in property <bool> if-not-exists: false;
     // Create, step 2.
     in property <[TdColumn]> columns;
@@ -146,7 +146,7 @@ component BasicsStep inherits VerticalLayout {
         Label { text: "Table name"; }
         TextField {
             placeholder: "orders";
-            text: TableDialogState.name;
+            text <=> TableDialogState.name;
             edited(t) => { TableDialogState.act("name", 0, 0, t); }
         }
     }
@@ -155,7 +155,7 @@ component BasicsStep inherits VerticalLayout {
         Label { text: "Description (optional)"; }
         TextField {
             placeholder: "What this table holds";
-            text: TableDialogState.description;
+            text <=> TableDialogState.description;
             edited(t) => { TableDialogState.act("desc", 0, 0, t); }
         }
     }

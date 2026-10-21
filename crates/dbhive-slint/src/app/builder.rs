@@ -42,10 +42,15 @@ pub(super) struct BuilderSession {
 impl Ctx {
     /// Open the builder on the current connection.
     pub(super) fn builder_open(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let (connection_id, driver) = {
             let s = self.session.borrow();
-            (s.workspace.connection_id.clone(), s.workspace.driver.clone())
+            (
+                s.workspace.connection_id.clone(),
+                s.workspace.driver.clone(),
+            )
         };
         let Some(driver) = driver.filter(|_| !connection_id.is_empty()) else {
             self.toast("Open a connection first.", Tone::Neutral);
@@ -100,7 +105,9 @@ impl Ctx {
                 s.workspace.schema.clone().unwrap_or_default(),
             )
         };
-        let Some(d) = self.open_driver(&connection_id) else { return };
+        let Some(d) = self.open_driver(&connection_id) else {
+            return;
+        };
         self.session.borrow_mut().builder.keys_loading = true;
         runtime::spawn(
             async move { d.get_foreign_keys(&schema_arg).await.unwrap_or_default() },
@@ -217,7 +224,9 @@ impl Ctx {
     /// Project the builder into the window. `fields` also rewrites the three
     /// typed boxes (open, reset); while typing they belong to the user.
     pub(super) fn builder_refresh(&self, change: Change, fields: bool) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let dark = w.global::<Theme>().get_dark();
 
         // Copy what the projection needs, then drop the borrow.
@@ -270,9 +279,8 @@ impl Ctx {
                 view.warnings
                     .insert(0, "This connection is no longer open.".to_string());
             }
-            let can_use = !view.sql.is_empty()
-                && view.limit_error.is_empty()
-                && view.offset_error.is_empty();
+            let can_use =
+                !view.sql.is_empty() && view.limit_error.is_empty() && view.offset_error.is_empty();
             let error = if !b.error.is_empty() {
                 b.error.clone()
             } else {
@@ -320,7 +328,9 @@ impl Ctx {
     }
 
     fn builder_copy(self: &Rc<Self>) {
-        let Some(sql) = self.builder_statement() else { return };
+        let Some(sql) = self.builder_statement() else {
+            return;
+        };
         if let Some(w) = self.window.upgrade() {
             w.invoke_copy_to_clipboard(sql.as_str().into());
         }
@@ -389,7 +399,8 @@ pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
         c.builder_refresh(Change::Structure, false);
     });
     on!(on_add_table, |c, name| c.builder_add_table(&name));
-    on!(on_act, |c, action, i, j, text| c.builder_act(&action, i, j, &text));
+    on!(on_act, |c, action, i, j, text| c
+        .builder_act(&action, i, j, &text));
     on!(on_copy_sql, |c| c.builder_copy());
     on!(on_use_sql, |c| c.builder_send(false));
     on!(on_run_sql, |c| c.builder_send(true));

@@ -75,7 +75,10 @@ impl Ctx {
         }
         if ws.schema.is_none() {
             drop(s);
-            self.toast("Tables are still loading. Try again in a moment.", Tone::Neutral);
+            self.toast(
+                "Tables are still loading. Try again in a moment.",
+                Tone::Neutral,
+            );
             return None;
         }
         Some((
@@ -97,7 +100,9 @@ impl Ctx {
     }
 
     pub(super) fn table_dialog_open_create(self: &Rc<Self>) {
-        let Some((_, driver, schema_arg)) = self.table_dialog_target() else { return };
+        let Some((_, driver, schema_arg)) = self.table_dialog_target() else {
+            return;
+        };
         let qualifier = sql_qualifier(&driver, &schema_arg);
         let fk_tables = self.table_dialog_fk_candidates();
         {
@@ -133,7 +138,9 @@ impl Ctx {
     }
 
     fn table_dialog_open_edit(self: &Rc<Self>, table: &str) {
-        let Some((_, driver, schema_arg)) = self.table_dialog_target() else { return };
+        let Some((_, driver, schema_arg)) = self.table_dialog_target() else {
+            return;
+        };
         let viewing = self
             .session
             .borrow()
@@ -241,15 +248,15 @@ impl Ctx {
                         s.table_dialog.loading = false;
                         match result {
                             Ok(schema) => {
-                                let mut editor = AlterEditor::from_schema(&qualifier, &table, &schema);
+                                let mut editor =
+                                    AlterEditor::from_schema(&qualifier, &table, &schema);
                                 if keep_report {
                                     editor.step = 1;
                                 }
                                 s.table_dialog.dialog = Some(Dialog::Edit(editor));
                             }
                             Err(e) => {
-                                s.table_dialog.load_error =
-                                    format!("Could not read {table}: {e}");
+                                s.table_dialog.load_error = format!("Could not read {table}: {e}");
                             }
                         }
                     }
@@ -266,7 +273,9 @@ impl Ctx {
     // -- Projection -----------------------------------------------------------------
 
     pub(super) fn table_dialog_refresh(&self, change: Change) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let dark = w.global::<Theme>().get_dark();
 
         let (view, report, loading, load_error, running) = {
@@ -277,7 +286,13 @@ impl Ctx {
                 (Some(Dialog::Edit(e)), Some(driver)) => Some(e.view(driver)),
                 _ => None,
             };
-            (view, d.report.clone(), d.loading, d.load_error.clone(), d.running)
+            (
+                view,
+                d.report.clone(),
+                d.loading,
+                d.load_error.clone(),
+                d.running,
+            )
         };
 
         let state = w.global::<TableDialogState>();
@@ -328,7 +343,9 @@ impl Ctx {
             let s = &mut *guard;
             let connection_id = s.workspace.connection_id.clone();
             let d = &mut s.table_dialog;
-            let Some(Dialog::Create(w)) = d.dialog.as_mut() else { return };
+            let Some(Dialog::Create(w)) = d.dialog.as_mut() else {
+                return;
+            };
             let missing = w.missing_ref_tables();
             for t in &missing {
                 w.ref_columns.insert(t.clone(), RefColumns::Loading);
@@ -339,7 +356,9 @@ impl Ctx {
             return;
         }
         self.table_dialog_refresh(Change::Structure);
-        let Some(d) = self.open_driver(&connection_id) else { return };
+        let Some(d) = self.open_driver(&connection_id) else {
+            return;
+        };
 
         for table in missing {
             let (d, schema_arg) = (d.clone(), schema_arg.clone());
@@ -501,7 +520,10 @@ impl Ctx {
                             Tone::Success,
                         );
                     } else {
-                        ctx.toast("The table was not fully updated. See the report.", Tone::Danger);
+                        ctx.toast(
+                            "The table was not fully updated. See the report.",
+                            Tone::Danger,
+                        );
                     }
                     if ran_any {
                         // The sidebar and any open tab for the table now
@@ -536,7 +558,9 @@ impl Ctx {
     }
 
     fn table_dialog_copy(self: &Rc<Self>) {
-        let Ok(statements) = self.table_dialog_statements() else { return };
+        let Ok(statements) = self.table_dialog_statements() else {
+            return;
+        };
         if statements.is_empty() {
             return;
         }
@@ -567,7 +591,8 @@ pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
     on!(on_open_edit_active, |c| c.table_dialog_open_edit_active());
     on!(on_close, |c| c.table_dialog_close());
     on!(on_retry_load, |c| c.table_dialog_retry_load());
-    on!(on_act, |c, action, i, j, text| c.table_dialog_act(&action, i, j, &text));
+    on!(on_act, |c, action, i, j, text| c
+        .table_dialog_act(&action, i, j, &text));
     on!(on_apply, |c| c.table_dialog_apply());
     on!(on_copy_sql, |c| c.table_dialog_copy());
 }

@@ -228,7 +228,7 @@ component TablesSection inherits VerticalLayout {
         has-icon: true;
         icon: Icons.search;
         placeholder: "Search tables to add";
-        text: BuilderState.table-search;
+        text <=> BuilderState.table-search;
         edited(t) => { BuilderState.act("table-search", 0, 0, t); }
     }
 
@@ -781,7 +781,7 @@ component LimitSection inherits VerticalLayout {
             Hint { text: "Limit (rows to return)"; }
             TextField {
                 placeholder: "No limit";
-                text: BuilderState.limit-text;
+                text <=> BuilderState.limit-text;
                 edited(t) => { BuilderState.act("limit", 0, 0, t); }
             }
             if BuilderState.limit-error != "": Text {
@@ -796,7 +796,7 @@ component LimitSection inherits VerticalLayout {
             Hint { text: "Offset (rows to skip)"; }
             TextField {
                 placeholder: "0";
-                text: BuilderState.offset-text;
+                text <=> BuilderState.offset-text;
                 edited(t) => { BuilderState.act("offset", 0, 0, t); }
             }
             if BuilderState.offset-error != "": Text {
@@ -1032,13 +1032,27 @@ export component BuilderOverlay inherits Rectangle {
         clicked => { BuilderState.close(); }
     }
 
-    VerticalLayout {
-        alignment: center;
-        HorizontalLayout {
+    // Escape closes it from anywhere inside, since a key a text field does
+    // not use bubbles up to here. Focus starts here so it works untouched.
+    scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        init => { self.focus(); }
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                BuilderState.close();
+                return accept;
+            }
+            return reject;
+        }
+        VerticalLayout {
             alignment: center;
-            BuilderPanel {
-                available-width: root.width - 48px;
-                available-height: root.height - 48px;
+            HorizontalLayout {
+                alignment: center;
+                BuilderPanel {
+                    available-width: root.width - 48px;
+                    available-height: root.height - 48px;
+                }
             }
         }
     }

@@ -139,7 +139,12 @@ pub fn apply(
     }
     list!(get_columns, set_columns, v.columns, column);
     list!(get_uniques, set_uniques, v.uniques, unique);
-    list!(get_foreign_keys, set_foreign_keys, v.foreign_keys, foreign_key);
+    list!(
+        get_foreign_keys,
+        set_foreign_keys,
+        v.foreign_keys,
+        foreign_key
+    );
     list!(get_edit_rows, set_edit_rows, v.edit_rows, edit_row);
 
     d.set_preset_labels(strings_model(&v.preset_labels));

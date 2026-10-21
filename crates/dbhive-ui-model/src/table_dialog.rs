@@ -61,7 +61,10 @@ pub fn preset_labels() -> Vec<String> {
 }
 
 fn preset_index(kind: TypeKind) -> i32 {
-    PRESETS.iter().position(|k| *k == kind).map_or(-1, |i| i as i32)
+    PRESETS
+        .iter()
+        .position(|k| *k == kind)
+        .map_or(-1, |i| i as i32)
 }
 
 /// A fresh row of this preset, with the usual defaults for its parameters.
@@ -117,7 +120,9 @@ fn apply_param(c: &mut ColumnRow, text: &str) -> Result<(), String> {
                     c.scale = s;
                     Ok(())
                 }
-                _ => Err("use precision,scale such as 10,2 (scale cannot exceed precision)".to_string()),
+                _ => Err(
+                    "use precision,scale such as 10,2 (scale cannot exceed precision)".to_string(),
+                ),
             }
         }
         _ => Ok(()),
@@ -136,7 +141,10 @@ pub struct ChipView {
 }
 
 pub fn action_labels() -> Vec<String> {
-    FK_ACTIONS.iter().map(|a| fk_action_label(a).to_string()).collect()
+    FK_ACTIONS
+        .iter()
+        .map(|a| fk_action_label(a).to_string())
+        .collect()
 }
 
 fn action_index(a: &ForeignKeyAction) -> i32 {
@@ -300,7 +308,10 @@ impl CreateWizard {
                 let mut e = Vec::new();
                 for (i, u) in self.uniques.iter().enumerate() {
                     if u.columns.is_empty() {
-                        e.push(format!("Unique constraint {} needs at least one column", i + 1));
+                        e.push(format!(
+                            "Unique constraint {} needs at least one column",
+                            i + 1
+                        ));
                     }
                 }
                 for (i, fk) in self.foreign_keys.iter().enumerate() {
@@ -333,7 +344,9 @@ impl CreateWizard {
                         }
                     }
                     if fk.columns.iter().any(|c| !names.contains(c)) {
-                        e.push(format!("Foreign key {n} uses a column that no longer exists"));
+                        e.push(format!(
+                            "Foreign key {n} uses a column that no longer exists"
+                        ));
                     }
                 }
                 e
@@ -499,7 +512,11 @@ impl CreateWizard {
                 None => Nothing,
             },
             "col-type" => {
-                let Some(kind) = usize::try_from(j).ok().and_then(|p| PRESETS.get(p)).copied() else {
+                let Some(kind) = usize::try_from(j)
+                    .ok()
+                    .and_then(|p| PRESETS.get(p))
+                    .copied()
+                else {
                     return Nothing;
                 };
                 match col_idx {
@@ -658,7 +675,11 @@ impl CreateWizard {
                 }
             }
             "fk-del" | "fk-upd" => {
-                let Some(a) = usize::try_from(j).ok().and_then(|p| FK_ACTIONS.get(p)).cloned() else {
+                let Some(a) = usize::try_from(j)
+                    .ok()
+                    .and_then(|p| FK_ACTIONS.get(p))
+                    .cloned()
+                else {
                     return Nothing;
                 };
                 match idx.and_then(|k| self.foreign_keys.get_mut(k)) {
@@ -768,7 +789,11 @@ impl AlterEditor {
 
     /// The rows that survive, in the form the diff wants.
     fn effective(&self) -> Vec<EditRow> {
-        self.rows.iter().filter(|r| !r.removed).map(|r| r.row.clone()).collect()
+        self.rows
+            .iter()
+            .filter(|r| !r.removed)
+            .map(|r| r.row.clone())
+            .collect()
     }
 
     /// Primary key columns of the live table that the edit would drop.
@@ -905,7 +930,11 @@ impl AlterEditor {
             // Only a column that is not yet in the table can pick its type;
             // changing a live column's type is out of scope here.
             "col-type" => {
-                let Some(kind) = usize::try_from(j).ok().and_then(|p| PRESETS.get(p)).copied() else {
+                let Some(kind) = usize::try_from(j)
+                    .ok()
+                    .and_then(|p| PRESETS.get(p))
+                    .copied()
+                else {
                     return Nothing;
                 };
                 match idx {
@@ -966,7 +995,10 @@ pub fn report_ok(report: &[StatementReport]) -> bool {
 }
 
 pub fn report_summary(report: &[StatementReport]) -> String {
-    let done = report.iter().filter(|r| r.status == StatementStatus::Done).count();
+    let done = report
+        .iter()
+        .filter(|r| r.status == StatementStatus::Done)
+        .count();
     let failed = report
         .iter()
         .filter(|r| matches!(r.status, StatementStatus::Failed(_)))
@@ -1121,7 +1153,9 @@ impl CreateWizard {
                 let (ref_chips, ref_note) = match self.ref_columns.get(&f.ref_table) {
                     _ if f.ref_table.is_empty() => (Vec::new(), String::new()),
                     Some(RefColumns::Loaded(list)) => (chips(list, &f.ref_columns), String::new()),
-                    Some(RefColumns::Failed(m)) => (Vec::new(), format!("Could not read columns: {m}")),
+                    Some(RefColumns::Failed(m)) => {
+                        (Vec::new(), format!("Could not read columns: {m}"))
+                    }
                     _ => (Vec::new(), "Loading columns...".to_string()),
                 };
                 FkView {
@@ -1132,7 +1166,10 @@ impl CreateWizard {
                     } else {
                         f.ref_table.clone()
                     },
-                    ref_table_index: tables.iter().position(|t| *t == f.ref_table).map_or(-1, |p| p as i32),
+                    ref_table_index: tables
+                        .iter()
+                        .position(|t| *t == f.ref_table)
+                        .map_or(-1, |p| p as i32),
                     ref_chips,
                     ref_note,
                     on_delete_index: action_index(&f.on_delete),
@@ -1241,7 +1278,11 @@ impl AlterEditor {
             subtitle: qualified_display(&self.schema, &self.table),
             steps: EDIT_STEPS.iter().map(|s| s.to_string()).collect(),
             step: self.step as i32,
-            step_errors: if self.step == 0 { self.errors() } else { Vec::new() },
+            step_errors: if self.step == 0 {
+                self.errors()
+            } else {
+                Vec::new()
+            },
             can_next: self.step == 0 && self.errors().is_empty(),
             name: String::new(),
             description: String::new(),
@@ -1388,7 +1429,11 @@ mod tests {
         w.apply("col-type", 1, 2, "", &[]);
         w.apply("col-param", 1, 0, "lots", &[]);
         let errs = w.step_errors(1);
-        assert!(errs.iter().any(|e| e.contains("Column code") && e.contains("length")), "{errs:?}");
+        assert!(
+            errs.iter()
+                .any(|e| e.contains("Column code") && e.contains("length")),
+            "{errs:?}"
+        );
         assert!(w.statements(&pg()).is_err());
         w.apply("col-param", 1, 0, "12", &[]);
         assert!(w.step_errors(1).is_empty());
@@ -1398,9 +1443,15 @@ mod tests {
     fn duplicate_and_empty_column_names_are_refused() {
         let mut w = CreateWizard::new("public");
         w.apply("col-add", 0, 0, "", &[]);
-        assert!(w.step_errors(1).iter().any(|e| e.contains("Every column needs a name")));
+        assert!(w
+            .step_errors(1)
+            .iter()
+            .any(|e| e.contains("Every column needs a name")));
         w.apply("col-name", 1, 0, "ID", &[]);
-        assert!(w.step_errors(1).iter().any(|e| e.contains("Duplicate column")));
+        assert!(w
+            .step_errors(1)
+            .iter()
+            .any(|e| e.contains("Duplicate column")));
     }
 
     #[test]
@@ -1424,17 +1475,29 @@ mod tests {
         w.apply("fk-col", 0, 2, "", &tables); // owner_id
         w.apply("fk-table", 0, 0, "", &tables);
         assert_eq!(w.missing_ref_tables(), vec!["owners".to_string()]);
-        w.ref_columns.insert("owners".into(), RefColumns::Loaded(vec!["id".into(), "name".into()]));
+        w.ref_columns.insert(
+            "owners".into(),
+            RefColumns::Loaded(vec!["id".into(), "name".into()]),
+        );
         w.apply("fk-rcol", 0, 0, "", &tables);
         w.apply("fk-del", 0, 2, "", &tables); // CASCADE
         w.apply("fk-upd", 0, 3, "", &tables); // SET NULL
 
         assert!(w.all_errors().is_empty(), "{:?}", w.all_errors());
         let sql = w.statements(&pg()).unwrap().join("\n");
-        assert!(sql.contains("CREATE TABLE IF NOT EXISTS \"public\".\"pets\""), "{sql}");
-        assert!(sql.contains("CONSTRAINT \"uq_email\" UNIQUE (\"email\")"), "{sql}");
+        assert!(
+            sql.contains("CREATE TABLE IF NOT EXISTS \"public\".\"pets\""),
+            "{sql}"
+        );
+        assert!(
+            sql.contains("CONSTRAINT \"uq_email\" UNIQUE (\"email\")"),
+            "{sql}"
+        );
         assert!(sql.contains("FOREIGN KEY (\"owner_id\") REFERENCES \"owners\" (\"id\") ON DELETE CASCADE ON UPDATE SET NULL"), "{sql}");
-        assert!(sql.contains("COMMENT ON TABLE \"public\".\"pets\" IS 'All the pets'"), "{sql}");
+        assert!(
+            sql.contains("COMMENT ON TABLE \"public\".\"pets\" IS 'All the pets'"),
+            "{sql}"
+        );
         assert!(sql.contains("VARCHAR(255)"), "{sql}");
     }
 
@@ -1451,10 +1514,18 @@ mod tests {
         w.apply("fk-col", 0, 0, "", &tables);
         w.apply("fk-table", 0, 0, "", &tables);
         assert!(w.step_errors(2).iter().any(|m| m.contains("still loading")));
-        w.ref_columns.insert("owners".into(), RefColumns::Failed("no such table".into()));
-        assert!(w.step_errors(2).iter().any(|m| m.contains("could not read owners")));
-        w.ref_columns.insert("owners".into(), RefColumns::Loaded(vec!["id".into()]));
-        assert!(w.step_errors(2).iter().any(|m| m.contains("needs a column to reference")));
+        w.ref_columns
+            .insert("owners".into(), RefColumns::Failed("no such table".into()));
+        assert!(w
+            .step_errors(2)
+            .iter()
+            .any(|m| m.contains("could not read owners")));
+        w.ref_columns
+            .insert("owners".into(), RefColumns::Loaded(vec!["id".into()]));
+        assert!(w
+            .step_errors(2)
+            .iter()
+            .any(|m| m.contains("needs a column to reference")));
         w.apply("fk-rcol", 0, 0, "", &tables);
         assert!(w.step_errors(2).is_empty());
 
@@ -1478,7 +1549,10 @@ mod tests {
 
         w.apply("col-remove", 1, 0, "", &[]);
         assert!(w.uniques[0].columns.is_empty());
-        assert!(w.step_errors(2).iter().any(|m| m.contains("Unique constraint 1")));
+        assert!(w
+            .step_errors(2)
+            .iter()
+            .any(|m| m.contains("Unique constraint 1")));
     }
 
     #[test]
@@ -1541,7 +1615,10 @@ mod tests {
         assert_eq!(v.pending, 0);
         assert_eq!(v.edit_rows.len(), 3);
         assert!(v.edit_rows[0].primary_key && !v.edit_rows[0].can_remove);
-        assert_eq!(v.edit_rows[0].remove_note, "Primary key columns cannot be dropped");
+        assert_eq!(
+            v.edit_rows[0].remove_note,
+            "Primary key columns cannot be dropped"
+        );
         assert!(v.edit_rows.iter().all(|r| r.badges.is_empty()));
     }
 
@@ -1559,7 +1636,10 @@ mod tests {
         e.rows[0].removed = true; // bypass the action on purpose
         assert_eq!(e.dropped_primary_keys(), vec!["id".to_string()]);
         let err = e.statements(&pg()).unwrap_err();
-        assert!(err.contains("primary key") && err.contains("cannot be dropped"), "{err}");
+        assert!(
+            err.contains("primary key") && err.contains("cannot be dropped"),
+            "{err}"
+        );
         assert!(e.view(&pg()).sql.is_empty());
     }
 
@@ -1577,7 +1657,10 @@ mod tests {
         e.step = 1;
         let sql = e.view(&pg()).sql;
         assert!(sql.contains("DROP COLUMN \"age\""), "{sql}");
-        assert!(!sql.contains("CASCADE"), "a drop must never cascade silently: {sql}");
+        assert!(
+            !sql.contains("CASCADE"),
+            "a drop must never cascade silently: {sql}"
+        );
 
         assert_eq!(e.apply("col-restore", 2, 0, ""), Change::Structure);
         assert_eq!(e.pending_count(), 0);
@@ -1589,7 +1672,9 @@ mod tests {
         let mut e = editor();
         e.apply("col-add", 0, 0, "");
         assert_eq!(e.rows.len(), 4);
-        assert!(e.view(&pg()).edit_rows[3].badges.contains(&"new".to_string()));
+        assert!(e.view(&pg()).edit_rows[3]
+            .badges
+            .contains(&"new".to_string()));
         e.apply("col-remove", 3, 0, "");
         assert_eq!(e.rows.len(), 3);
     }
@@ -1611,7 +1696,10 @@ mod tests {
 
         e.step = 1;
         let sql = e.view(&pg()).sql;
-        assert!(sql.contains("RENAME COLUMN \"name\" TO \"full_name\""), "{sql}");
+        assert!(
+            sql.contains("RENAME COLUMN \"name\" TO \"full_name\""),
+            "{sql}"
+        );
         assert!(sql.contains("ADD COLUMN \"email\" VARCHAR(255)"), "{sql}");
         assert!(sql.contains("\"age\" SET NOT NULL"), "{sql}");
         assert_eq!(e.view(&pg()).statement_count, 3);
@@ -1621,7 +1709,10 @@ mod tests {
     fn an_unnamed_new_column_is_an_error_not_an_add() {
         let mut e = editor();
         e.apply("col-add", 0, 0, "");
-        assert!(e.errors().iter().any(|m| m.contains("Every column needs a name")));
+        assert!(e
+            .errors()
+            .iter()
+            .any(|m| m.contains("Every column needs a name")));
         assert!(!e.view(&pg()).can_next);
     }
 
@@ -1669,7 +1760,10 @@ mod tests {
             ),
         );
         no_key.apply("col-remove", 0, 0, "");
-        assert!(no_key.errors().iter().any(|m| m.contains("at least one column")));
+        assert!(no_key
+            .errors()
+            .iter()
+            .any(|m| m.contains("at least one column")));
     }
 
     #[test]
@@ -1705,7 +1799,10 @@ mod tests {
         assert_eq!(r[1].status, StatementStatus::Failed("boom".into()));
         assert_eq!(r[2].status, StatementStatus::Skipped);
         assert!(!report_ok(&r));
-        assert_eq!(report_summary(&r), "1 of 3 statements ran; 1 failed, 1 skipped");
+        assert_eq!(
+            report_summary(&r),
+            "1 of 3 statements ran; 1 failed, 1 skipped"
+        );
 
         let ok = report(&stmts, &[Ok(()), Ok(()), Ok(())]);
         assert!(report_ok(&ok));
