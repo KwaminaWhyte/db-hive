@@ -1253,3 +1253,30 @@ export component SettingRow inherits VerticalLayout {
     }
     if !root.last: Divider { }
 }
+
+// -- ER diagram and schema designer additions ---------------------------------
+
+// A form control with a small caption above it, for property panels where
+// SettingRow's two-column layout is too wide.
+export component FormField inherits VerticalLayout {
+    in property <string> label;
+    spacing: 4px;
+    vertical-stretch: 0;
+    Text {
+        text: root.label;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        font-weight: 600;
+    }
+    @children
+}
+
+// A small key marker ("PK", "FK") shown in front of a column name in lists.
+export component KeyTag inherits Text {
+    in property <bool> primary: false;
+    width: 24px;
+    color: root.primary ? Theme.primary : Theme.dim-foreground;
+    font-size: Theme.size-small;
+    font-weight: 700;
+    vertical-alignment: center;
+}

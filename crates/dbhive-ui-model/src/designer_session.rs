@@ -20,8 +20,8 @@ use crate::erd_scene::{Badge, Rect, RowView, FOOT_H, GRID, HEADER_H, ROW_H};
 use crate::graph_layout::{self, Edge, LayoutOptions, Node};
 use crate::schema_designer::{
     self as sd, build_definition, cascade_position, check_reference, column_display_label,
-    column_display_suffix, creation_order, display_name, new_table, relationships, validate,
-    DesignColumn, DesignTable, FK_ACTIONS,
+    creation_order, display_name, new_table, relationships, validate, DesignColumn, DesignTable,
+    FK_ACTIONS,
 };
 use crate::table_editor::TypeKind;
 
@@ -81,7 +81,11 @@ pub fn script(plan: &[PlannedTable]) -> String {
             if s.is_empty() {
                 continue;
             }
-            parts.push(if s.ends_with(';') { s.to_string() } else { format!("{};", s) });
+            parts.push(if s.ends_with(';') {
+                s.to_string()
+            } else {
+                format!("{};", s)
+            });
         }
     }
     parts.join("\n\n")
@@ -113,6 +117,7 @@ pub struct Designer {
     drag_raw: Option<(u64, Point)>,
     /// How the last apply went; cleared by any edit.
     pub results: Vec<TableResult>,
+    created: HashSet<u64>,
 }
 
 impl Default for Designer {
@@ -132,6 +137,7 @@ impl Designer {
             snap: true,
             drag_raw: None,
             results: Vec::new(),
+            created: HashSet::new(),
         }
     }
 
@@ -200,6 +206,7 @@ impl Designer {
         let name = self.tables[i].name.trim().to_lowercase();
         self.tables.remove(i);
         self.pinned.remove(&id);
+        self.created.remove(&id);
         if !name.is_empty() {
             for t in &mut self.tables {
                 for c in &mut t.columns {
@@ -269,7 +276,9 @@ impl Designer {
         if !col.is_empty() {
             for t in &mut self.tables {
                 for x in &mut t.columns {
-                    if x.ref_table.trim().to_lowercase() == table && x.ref_column.trim().to_lowercase() == col {
+                    if x.ref_table.trim().to_lowercase() == table
+                        && x.ref_column.trim().to_lowercase() == col
+                    {
                         x.ref_table.clear();
                         x.ref_column.clear();
                     }
@@ -283,14 +292,18 @@ impl Designer {
     /// Rename a column; references to it follow.
     pub fn rename_column(&mut self, id: u64, c: usize, name: &str) {
         let Some(i) = self.index_of(id) else { return };
-        let Some(col) = self.tables[i].columns.get(c) else { return };
+        let Some(col) = self.tables[i].columns.get(c) else {
+            return;
+        };
         let old = col.base.name.trim().to_lowercase();
         let table = self.tables[i].name.trim().to_lowercase();
         self.tables[i].columns[c].base.name = name.to_string();
         if !old.is_empty() && !table.is_empty() {
             for t in &mut self.tables {
                 for x in &mut t.columns {
-                    if x.ref_table.trim().to_lowercase() == table && x.ref_column.trim().to_lowercase() == old {
+                    if x.ref_table.trim().to_lowercase() == table
+                        && x.ref_column.trim().to_lowercase() == old
+                    {
                         x.ref_column = name.trim().to_string();
                     }
                 }
@@ -302,7 +315,9 @@ impl Designer {
     /// Pick a type by its index in `TypeKind::ALL`. A type that cannot
     /// auto-increment drops that flag.
     pub fn set_column_type(&mut self, id: u64, c: usize, type_index: usize) {
-        let Some(kind) = TypeKind::ALL.get(type_index).copied() else { return };
+        let Some(kind) = TypeKind::ALL.get(type_index).copied() else {
+            return;
+        };
         if let Some(col) = self.col_mut(id, c) {
             col.base.type_kind = kind;
             if !kind.can_auto_increment() {
@@ -419,7 +434,11 @@ impl Designer {
         let options = self.reference_column_options(table);
         if let Some(col) = self.col_mut(id, c) {
             col.ref_table = table.trim().to_string();
-            col.ref_column = if options.len() == 1 { options[0].clone() } else { String::new() };
+            col.ref_column = if options.len() == 1 {
+                options[0].clone()
+            } else {
+                String::new()
+            };
             self.edited();
         }
     }
@@ -450,13 +469,18 @@ impl Designer {
 
     /// Why the reference on this column cannot be used, if it cannot.
     pub fn reference_problem(&self, table: usize, column: usize) -> Option<String> {
-        check_reference(&self.tables, table, column).err().map(|p| p.message())
+        check_reference(&self.tables, table, column)
+            .err()
+            .map(|p| p.message())
     }
 
     // -- Geometry --------------------------------------------------------------
 
     pub fn position(&self, i: usize) -> Point {
-        self.pinned.get(&self.tables[i].id).copied().unwrap_or(Point::ZERO)
+        self.pinned
+            .get(&self.tables[i].id)
+            .copied()
+            .unwrap_or(Point::ZERO)
     }
 
     pub fn size(&self, i: usize) -> (f32, f32) {
@@ -466,8 +490,8 @@ impl Designer {
             .iter()
             .map(|c| {
                 column_display_label(c).chars().count() as f32 * 7.1
-                    + column_display_suffix(c).chars().count() as f32 * 6.2
-                    + 40.0
+                    + column_detail_text(c).chars().count() as f32 * 6.2
+                    + 64.0
             })
             .fold(0.0, f32::max);
         let title = display_name(t).chars().count() as f32 * 8.0 + 32.0;
@@ -486,7 +510,9 @@ impl Designer {
     }
 
     pub fn hit(&self, world: Point) -> Option<usize> {
-        (0..self.len()).rev().find(|i| self.rect(*i).contains(world))
+        (0..self.len())
+            .rev()
+            .find(|i| self.rect(*i).contains(world))
     }
 
     pub fn title(&self, i: usize) -> String {
@@ -503,7 +529,7 @@ impl Designer {
                 } else {
                     c.base.name.trim().to_string()
                 },
-                data_type: column_display_suffix(c),
+                data_type: column_detail_text(c),
                 badge: if c.base.primary_key {
                     Badge::Pk
                 } else if c.has_reference() {
@@ -519,11 +545,11 @@ impl Designer {
         let longest = self.tables[i]
             .columns
             .iter()
-            .map(|c| column_display_suffix(c).chars().count())
+            .map(|c| column_detail_text(c).chars().count())
             .max()
             .unwrap_or(0) as f32;
         let (w, _) = self.size(i);
-        (longest * 6.2 + 8.0).min(w * 0.5).max(40.0)
+        (longest * 6.2 + 8.0).min(w * 0.55).max(40.0)
     }
 
     /// Relationships that resolve; broken ones are listed by `errors`, not drawn.
@@ -578,7 +604,11 @@ impl Designer {
         let nodes: Vec<Node> = (0..self.len())
             .map(|i| {
                 let (w, h) = self.size(i);
-                Node { id: self.tables[i].id.to_string(), width: w, height: h }
+                Node {
+                    id: self.tables[i].id.to_string(),
+                    width: w,
+                    height: h,
+                }
             })
             .collect();
         let edges: Vec<Edge> = self
@@ -592,7 +622,12 @@ impl Designer {
         let layout = graph_layout::layout(
             &nodes,
             &edges,
-            LayoutOptions { layer_gap: 90.0, node_gap: 36.0, horizontal: true, sweeps: 4 },
+            LayoutOptions {
+                layer_gap: 130.0,
+                node_gap: 36.0,
+                horizontal: true,
+                sweeps: 4,
+            },
         );
         for t in &self.tables {
             if let Some(p) = layout.placements.get(&t.id.to_string()) {
@@ -612,17 +647,30 @@ impl Designer {
     /// The tables to create, referenced ones first, each with the statements
     /// the connected driver's generator produces for it. `Err` carries the
     /// problems that stop anything from being created.
-    pub fn plan(&self, driver: &DbDriver, default_schema: &str) -> Result<Vec<PlannedTable>, Vec<String>> {
+    pub fn plan(
+        &self,
+        driver: &DbDriver,
+        default_schema: &str,
+    ) -> Result<Vec<PlannedTable>, Vec<String>> {
         let errors = validate(&self.tables);
         if !errors.is_empty() {
             return Err(errors);
         }
-        let order = creation_order(&self.tables)
-            .map_err(|stuck| vec![format!("Foreign keys form a cycle between {}", stuck.join(", "))])?;
+        let order = creation_order(&self.tables).map_err(|stuck| {
+            vec![format!(
+                "Foreign keys form a cycle between {}",
+                stuck.join(", ")
+            )]
+        })?;
         let generator = get_ddl_generator(driver).map_err(|e| vec![e.to_string()])?;
         let rels = relationships(&self.tables);
         let mut out = Vec::with_capacity(order.len());
         for i in order {
+            // Already created by an earlier apply: still part of the design
+            // (others may reference it) but not created again.
+            if self.created.contains(&self.tables[i].id) {
+                continue;
+            }
             let def = build_definition(default_schema, &self.tables[i]);
             let result = generator
                 .generate_create_table(&def)
@@ -649,42 +697,138 @@ impl Designer {
         self.results = results;
     }
 
-    /// Tables that were created are no longer part of the design to apply, so
-    /// a second apply cannot try to create them again.
-    pub fn drop_created(&mut self) {
+    /// Remember which tables the last apply created. They stay in the design
+    /// (a table still to be created may reference them) but are not planned
+    /// again, so a second apply cannot try to create them twice.
+    pub fn mark_created(&mut self) {
         let created: HashSet<String> = self
             .results
             .iter()
             .filter(|r| r.outcome == Outcome::Created)
             .map(|r| r.name.to_lowercase())
             .collect();
-        if created.is_empty() {
-            return;
-        }
-        let results = std::mem::take(&mut self.results);
-        let ids: Vec<u64> = self
-            .tables
-            .iter()
-            .filter(|t| created.contains(&t.name.trim().to_lowercase()))
-            .map(|t| t.id)
-            .collect();
-        for id in ids {
-            if let Some(i) = self.index_of(id) {
-                self.tables.remove(i);
-                self.pinned.remove(&id);
-                if self.selected == Some(id) {
-                    self.selected = None;
-                    self.selected_column = None;
-                }
+        for t in &self.tables {
+            if created.contains(&t.name.trim().to_lowercase()) {
+                self.created.insert(t.id);
             }
         }
-        self.results = results;
+    }
+
+    pub fn is_created(&self, i: usize) -> bool {
+        self.tables
+            .get(i)
+            .is_some_and(|t| self.created.contains(&t.id))
+    }
+
+    /// How many tables an apply would create now.
+    pub fn pending_count(&self) -> usize {
+        self.tables
+            .iter()
+            .filter(|t| !self.created.contains(&t.id))
+            .count()
+    }
+}
+
+/// The type as it will be created, parameters included: `VARCHAR(255)`,
+/// `DECIMAL(10,2)`, or the custom name as typed.
+pub fn display_type(c: &DesignColumn) -> String {
+    let b = &c.base;
+    match b.type_kind {
+        TypeKind::Varchar => format!("VARCHAR({})", b.length),
+        TypeKind::Char => format!("CHAR({})", b.length),
+        TypeKind::Decimal => format!("DECIMAL({},{})", b.precision, b.scale),
+        TypeKind::Custom if b.custom.trim().is_empty() => "custom".to_string(),
+        TypeKind::Custom => b.custom.trim().to_string(),
+        k => k.label().to_string(),
+    }
+}
+
+/// The right-hand text in a table box: the type plus UNQ and NN flags that a
+/// primary key already implies and so does not repeat.
+pub fn column_detail_text(c: &DesignColumn) -> String {
+    let mut s = display_type(c);
+    if c.unique && !c.base.primary_key {
+        s.push_str(" UNQ");
+    }
+    if !c.base.nullable && !c.base.primary_key {
+        s.push_str(" NN");
+    }
+    s
+}
+
+/// Everything the properties panel shows about one column.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ColumnDetail {
+    pub name: String,
+    pub type_index: usize,
+    pub type_label: String,
+    pub takes_length: bool,
+    pub length: String,
+    pub takes_precision: bool,
+    pub precision: String,
+    pub scale: String,
+    pub takes_custom: bool,
+    pub custom: String,
+    pub nullable: bool,
+    pub primary_key: bool,
+    pub unique: bool,
+    pub auto_increment: bool,
+    pub can_auto_increment: bool,
+    pub default: String,
+    pub has_reference: bool,
+    pub ref_table: String,
+    pub ref_column: String,
+    /// Tables the column may point at.
+    pub ref_tables: Vec<String>,
+    /// Columns of the chosen table it may point at.
+    pub ref_columns: Vec<String>,
+    pub on_delete_index: usize,
+    /// Why the reference does not resolve, or empty.
+    pub problem: String,
+}
+
+impl Designer {
+    pub fn column_detail(&self, table: usize, column: usize) -> Option<ColumnDetail> {
+        let c = self.tables.get(table)?.columns.get(column)?;
+        let b = &c.base;
+        Some(ColumnDetail {
+            name: b.name.clone(),
+            type_index: type_index(b.type_kind),
+            type_label: b.type_kind.label().to_string(),
+            takes_length: b.type_kind.takes_length(),
+            length: b.length.to_string(),
+            takes_precision: b.type_kind.takes_precision(),
+            precision: b.precision.to_string(),
+            scale: b.scale.to_string(),
+            takes_custom: b.type_kind.takes_custom_name(),
+            custom: b.custom.clone(),
+            nullable: b.nullable,
+            primary_key: b.primary_key,
+            unique: c.unique,
+            auto_increment: b.auto_increment,
+            can_auto_increment: b.type_kind.can_auto_increment(),
+            default: b.default.clone(),
+            has_reference: c.has_reference(),
+            ref_table: c.ref_table.clone(),
+            ref_column: c.ref_column.clone(),
+            ref_tables: self.reference_table_options(),
+            ref_columns: if c.ref_table.trim().is_empty() {
+                Vec::new()
+            } else {
+                self.reference_column_options(&c.ref_table)
+            },
+            on_delete_index: action_index(&c.on_delete),
+            problem: self.reference_problem(table, column).unwrap_or_default(),
+        })
     }
 }
 
 /// The type picker's labels, in `TypeKind::ALL` order.
 pub fn type_labels() -> Vec<String> {
-    TypeKind::ALL.iter().map(|k| k.label().to_string()).collect()
+    TypeKind::ALL
+        .iter()
+        .map(|k| k.label().to_string())
+        .collect()
 }
 
 pub fn type_index(kind: TypeKind) -> usize {
@@ -693,7 +837,10 @@ pub fn type_index(kind: TypeKind) -> usize {
 
 /// The ON DELETE picker's labels, in `FK_ACTIONS` order.
 pub fn action_labels() -> Vec<String> {
-    FK_ACTIONS.iter().map(|a| sd::fk_action_label(a).to_string()).collect()
+    FK_ACTIONS
+        .iter()
+        .map(|a| sd::fk_action_label(a).to_string())
+        .collect()
 }
 
 pub fn action_index(a: &ForeignKeyAction) -> usize {
@@ -724,7 +871,11 @@ mod tests {
         let a = d.add_table();
         let b = d.add_table();
         assert_ne!(a, b);
-        assert_ne!(d.position(0), d.position(1), "new tables landed on top of each other");
+        assert_ne!(
+            d.position(0),
+            d.position(1),
+            "new tables landed on top of each other"
+        );
         assert_eq!(d.selected(), Some(b));
         assert_eq!(d.selected_index(), Some(1));
     }
@@ -746,7 +897,10 @@ mod tests {
         assert!(d.tables[1].columns[1].has_reference());
         d.remove_table(users);
         assert_eq!(d.len(), 1);
-        assert!(!d.tables[0].columns[1].has_reference(), "a dangling reference survived");
+        assert!(
+            !d.tables[0].columns[1].has_reference(),
+            "a dangling reference survived"
+        );
         assert!(d.errors().is_empty(), "{:?}", d.errors());
         d.remove_table(9999);
     }
@@ -791,7 +945,10 @@ mod tests {
         let t = d.add_table();
         assert!(d.tables[0].columns[0].base.auto_increment);
         d.set_column_type(t, 0, type_index(TypeKind::Text));
-        assert!(!d.tables[0].columns[0].base.auto_increment, "TEXT cannot auto-increment");
+        assert!(
+            !d.tables[0].columns[0].base.auto_increment,
+            "TEXT cannot auto-increment"
+        );
         d.toggle_auto_increment(t, 0);
         assert!(!d.tables[0].columns[0].base.auto_increment);
         d.set_column_type(t, 0, type_index(TypeKind::Integer));
@@ -825,7 +982,10 @@ mod tests {
         let o = d.tables[1].id;
         d.set_reference_column(o, 1, "missing");
         assert!(d.reference_problem(1, 1).unwrap().contains("missing"));
-        assert!(d.links().is_empty(), "a broken reference should not be drawn");
+        assert!(
+            d.links().is_empty(),
+            "a broken reference should not be drawn"
+        );
         assert!(d.errors().iter().any(|e| e.contains("orders.user_id")));
     }
 
@@ -845,7 +1005,11 @@ mod tests {
         let rows = d.rows(1);
         assert_eq!(rows[0].badge, Badge::Pk);
         assert_eq!(rows[1].badge, Badge::Fk);
-        assert!(rows[1].data_type.contains("BIGINT"), "{}", rows[1].data_type);
+        assert!(
+            rows[1].data_type.contains("BIGINT"),
+            "{}",
+            rows[1].data_type
+        );
         let mut d = d;
         let o = d.tables[1].id;
         let c = d.add_column(o).unwrap();
@@ -872,7 +1036,10 @@ mod tests {
     fn auto_layout_puts_parents_left_of_children_and_pins_the_result() {
         let mut d = users_and_orders();
         d.auto_layout();
-        assert!(d.position(0).x < d.position(1).x, "users should be left of orders");
+        assert!(
+            d.position(0).x < d.position(1).x,
+            "users should be left of orders"
+        );
         let before = d.position(0);
         d.drag(1, 100.0, 0.0);
         assert_eq!(d.position(0), before);
@@ -901,7 +1068,11 @@ mod tests {
         let sql = script(&plan);
         assert!(sql.contains("CREATE TABLE \"users\""), "{}", sql);
         assert!(sql.contains("REFERENCES"), "{}", sql);
-        assert!(sql.matches(';').count() >= 2, "each statement ends with a semicolon: {}", sql);
+        assert!(
+            sql.matches(';').count() >= 2,
+            "each statement ends with a semicolon: {}",
+            sql
+        );
     }
 
     #[test]
@@ -910,7 +1081,8 @@ mod tests {
         d.add_table(); // unnamed
         let err = d.plan(&DbDriver::Sqlite, "").unwrap_err();
         assert!(err.iter().any(|e| e.contains("Table name")));
-        assert!(Designer::new().plan(&DbDriver::Sqlite, "").unwrap_err()[0].contains("at least one table"));
+        assert!(Designer::new().plan(&DbDriver::Sqlite, "").unwrap_err()[0]
+            .contains("at least one table"));
     }
 
     #[test]
@@ -923,7 +1095,12 @@ mod tests {
         d.set_reference_table(u, c, "orders");
         // orders needs a key target
         let err = d.plan(&DbDriver::Sqlite, "").unwrap_err();
-        assert!(err.iter().any(|e| e.contains("cycle") || e.contains("last_order")), "{:?}", err);
+        assert!(
+            err.iter()
+                .any(|e| e.contains("cycle") || e.contains("last_order")),
+            "{:?}",
+            err
+        );
     }
 
     #[test]
@@ -933,32 +1110,124 @@ mod tests {
         let mut failed = HashSet::new();
         assert_eq!(skip_reason(&plan[1], &failed), None);
         failed.insert("users".to_string());
-        assert_eq!(skip_reason(&plan[1], &failed).unwrap(), "users was not created");
-        assert_eq!(skip_reason(&plan[0], &failed), None, "users itself is not skipped by its own failure");
+        assert_eq!(
+            skip_reason(&plan[1], &failed).unwrap(),
+            "users was not created"
+        );
+        assert_eq!(
+            skip_reason(&plan[0], &failed),
+            None,
+            "users itself is not skipped by its own failure"
+        );
     }
 
     #[test]
-    fn results_summarise_and_created_tables_leave_the_design() {
+    fn results_summarise_and_created_tables_are_not_planned_again_but_still_referenced() {
         let mut d = users_and_orders();
         d.set_results(vec![
-            TableResult { name: "users".into(), outcome: Outcome::Created },
-            TableResult { name: "orders".into(), outcome: Outcome::Failed("boom".into()) },
-            TableResult { name: "x".into(), outcome: Outcome::Skipped("y was not created".into()) },
+            TableResult {
+                name: "users".into(),
+                outcome: Outcome::Created,
+            },
+            TableResult {
+                name: "orders".into(),
+                outcome: Outcome::Failed("boom".into()),
+            },
+            TableResult {
+                name: "x".into(),
+                outcome: Outcome::Skipped("y was not created".into()),
+            },
         ]);
-        assert_eq!(results_summary(&d.results), "1 created, 1 failed, 1 skipped");
-        d.drop_created();
-        assert_eq!(d.len(), 1);
-        assert_eq!(d.tables[0].name, "orders");
-        assert_eq!(d.results.len(), 3, "the report survives dropping created tables");
+        assert_eq!(
+            results_summary(&d.results),
+            "1 created, 1 failed, 1 skipped"
+        );
+        assert_eq!(d.pending_count(), 2);
+        d.mark_created();
+        assert!(d.is_created(0) && !d.is_created(1));
+        assert_eq!(d.pending_count(), 1);
+        assert_eq!(d.results.len(), 3, "the report is kept");
+
+        // Retrying creates only orders, and users still resolves as its target.
+        let plan = d.plan(&DbDriver::Sqlite, "").unwrap();
+        assert_eq!(plan.len(), 1);
+        assert_eq!(plan[0].name, "orders");
+        assert!(d.errors().is_empty(), "{:?}", d.errors());
+        assert_eq!(
+            d.links().len(),
+            1,
+            "the relationship to the created table is still drawn"
+        );
+    }
+
+    #[test]
+    fn removing_a_created_table_forgets_that_it_was_created() {
+        let mut d = users_and_orders();
+        d.set_results(vec![TableResult {
+            name: "users".into(),
+            outcome: Outcome::Created,
+        }]);
+        d.mark_created();
+        let u = d.tables[0].id;
+        d.remove_table(u);
+        assert_eq!(d.pending_count(), 1);
+        assert!(!d.is_created(0));
     }
 
     #[test]
     fn any_edit_clears_the_last_report() {
         let mut d = users_and_orders();
-        d.set_results(vec![TableResult { name: "users".into(), outcome: Outcome::Created }]);
+        d.set_results(vec![TableResult {
+            name: "users".into(),
+            outcome: Outcome::Created,
+        }]);
         let u = d.tables[0].id;
         d.rename_table(u, "people");
         assert!(d.results.is_empty());
+    }
+
+    #[test]
+    fn types_show_their_parameters_and_flags() {
+        let mut d = Designer::new();
+        let t = d.add_table();
+        let c = d.add_column(t).unwrap();
+        d.set_column_type(t, c, type_index(TypeKind::Varchar));
+        assert_eq!(display_type(&d.tables[0].columns[c]), "VARCHAR(255)");
+        d.set_column_length(t, c, "40");
+        d.toggle_nullable(t, c);
+        d.toggle_unique(t, c);
+        assert_eq!(
+            column_detail_text(&d.tables[0].columns[c]),
+            "VARCHAR(40) UNQ NN"
+        );
+        d.set_column_type(t, c, type_index(TypeKind::Decimal));
+        d.set_column_precision(t, c, "12");
+        d.set_column_scale(t, c, "4");
+        assert_eq!(display_type(&d.tables[0].columns[c]), "DECIMAL(12,4)");
+        d.set_column_type(t, c, type_index(TypeKind::Custom));
+        assert_eq!(display_type(&d.tables[0].columns[c]), "custom");
+        d.set_column_custom(t, c, " citext ");
+        assert_eq!(display_type(&d.tables[0].columns[c]), "citext");
+        // The key column implies NN and UNQ, so it does not repeat them.
+        assert_eq!(column_detail_text(&d.tables[0].columns[0]), "BIGINT");
+        // Junk in a numeric field is ignored, not stored.
+        d.set_column_length(t, c, "lots");
+        assert_eq!(d.tables[0].columns[c].base.length, 40);
+    }
+
+    #[test]
+    fn column_detail_carries_the_choices_the_panel_needs() {
+        let d = users_and_orders();
+        let det = d.column_detail(1, 1).unwrap();
+        assert_eq!(det.name, "user_id");
+        assert_eq!(det.type_label, "BIGINT");
+        assert!(det.has_reference && det.problem.is_empty());
+        assert_eq!(det.ref_table, "users");
+        assert_eq!(det.ref_tables, vec!["users", "orders"]);
+        assert_eq!(det.ref_columns, vec!["id"]);
+        assert!(det.can_auto_increment && !det.auto_increment);
+        assert!(d.column_detail(1, 9).is_none());
+        assert!(d.column_detail(9, 0).is_none());
     }
 
     #[test]

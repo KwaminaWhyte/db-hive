@@ -1,6 +1,7 @@
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Card, ClickableCard, ListRow, SwatchPicker, Badge, TextField,
     ScreenHeader, SectionLabel, Banner, EmptyState, Divider, DetailRow, UnderlineTabs, FilterChip,
-    Segmented, DataRow, SidePanel, ClipboardSink, KeyCap, KeyCaps, Popover, SettingRow, Toggle } from "../kit/kit.slint";
+    Segmented, DataRow, SidePanel, ClipboardSink, KeyCap, KeyCaps, Popover, SettingRow, Toggle,
+    FormField, KeyTag, Dropdown } from "../kit/kit.slint";
 
 export component KitGallery inherits Window {
     background: Theme.background;
@@ -234,6 +235,43 @@ export component KitGallery inherits Window {
                     }
                 }
                 sink := ClipboardSink { }
+                SectionLabel { text: "FORM FIELD AND KEY TAG (ER diagram, schema designer)"; }
+                Card {
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 10px;
+                        FormField {
+                            label: "Table name";
+                            TextField { text: "orders"; }
+                        }
+                        FormField {
+                            label: "References";
+                            HorizontalLayout {
+                                spacing: 6px;
+                                Dropdown { horizontal-stretch: 1; options: ["(none)", "users"]; value: "users"; }
+                                Dropdown { horizontal-stretch: 1; options: ["id"]; value: "id"; }
+                            }
+                        }
+                        DataRow {
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                spacing: 4px;
+                                KeyTag { text: "PK"; primary: true; }
+                                Text { text: "id"; color: Theme.foreground; font-size: Theme.size-label; vertical-alignment: center; horizontal-stretch: 1; }
+                                Text { text: "BIGINT"; color: Theme.dim-foreground; font-size: Theme.size-small; vertical-alignment: center; }
+                            }
+                        }
+                        DataRow {
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                spacing: 4px;
+                                KeyTag { text: "FK"; }
+                                Text { text: "user_id"; color: Theme.foreground; font-size: Theme.size-label; vertical-alignment: center; horizontal-stretch: 1; }
+                                Text { text: "BIGINT"; color: Theme.dim-foreground; font-size: Theme.size-small; vertical-alignment: center; }
+                            }
+                        }
+                    }
+                }
                 Card {
                     height: 190px;
                     EmptyState {

@@ -31,6 +31,8 @@ use dbhive_ui_model::settings_editor::{
 };
 use dbhive_ui_model::workspace_tabs::{result_summary, TabKind, Tabs};
 
+mod designer;
+mod erd;
 mod inspector;
 mod settings;
 
@@ -143,6 +145,8 @@ struct Session {
     palette: PaletteState,
     shortcuts: ShortcutsState,
     settings: settings::SettingsState,
+    erd: erd::ErdSession,
+    designer: designer::DesignerSession,
 }
 
 struct Ctx {
@@ -719,6 +723,11 @@ impl Ctx {
 
     fn leave_workspace(&self) {
         self.hide_history_panel();
+        self.hide_erd();
+        self.hide_designer();
+        // A diagram or design belongs to one connection.
+        self.invalidate_erd();
+        self.session.borrow_mut().designer = designer::DesignerSession::default();
         self.session.borrow_mut().workspace = Workspace::default();
         if let Some(w) = self.window.upgrade() {
             w.set_screen(Screen::Connections);
@@ -1151,6 +1160,8 @@ impl Ctx {
             CommandId::GoAbout => w.set_show_about(true),
             CommandId::NewConnection => self.open_new_connection(),
             CommandId::RefreshMetadata => self.load_tables(),
+            CommandId::GoErDiagram => self.open_erd(),
+            CommandId::GoSchemaDesigner => self.open_designer(),
             CommandId::ShowShortcuts => self.open_shortcuts(),
             CommandId::OpenCommandPalette => self.open_palette(),
             CommandId::Disconnect => {
@@ -1579,6 +1590,8 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
 
     history_glue::wire(&window, &ctx);
     inspector::wire(&window, &ctx);
+    erd::wire(&window, &ctx);
+    designer::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {

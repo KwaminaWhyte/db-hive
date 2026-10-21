@@ -90,7 +90,12 @@ impl Rect {
         p.in_box(Point::new(self.x, self.y), (self.w, self.h))
     }
     pub fn inflate(&self, by: f32) -> Rect {
-        Rect::new(self.x - by, self.y - by, self.w + 2.0 * by, self.h + 2.0 * by)
+        Rect::new(
+            self.x - by,
+            self.y - by,
+            self.w + 2.0 * by,
+            self.h + 2.0 * by,
+        )
     }
 }
 
@@ -121,7 +126,11 @@ fn pt(x: f32, y: f32) -> Point {
 fn curve(start: Point, sd: Point, end: Point, ed: Point, min_reach: f32) -> Route {
     // How far the tangents reach: a share of the span along the leaving
     // direction, never so small the curve kinks.
-    let span = if sd.x != 0.0 { (end.x - start.x).abs() } else { (end.y - start.y).abs() };
+    let span = if sd.x != 0.0 {
+        (end.x - start.x).abs()
+    } else {
+        (end.y - start.y).abs()
+    };
     let reach = (span * 0.45).max(min_reach);
     Route {
         p: [
@@ -260,9 +269,15 @@ pub fn marker_lines(route: &Route) -> Vec<Vec<Point>> {
         route.p[0].y + route.start_dir.y * 10.0,
     );
     let n = perp(route.start_dir);
-    out.push(vec![pt(c.x + n.x * 5.0, c.y + n.y * 5.0), pt(c.x - n.x * 5.0, c.y - n.y * 5.0)]);
+    out.push(vec![
+        pt(c.x + n.x * 5.0, c.y + n.y * 5.0),
+        pt(c.x - n.x * 5.0, c.y - n.y * 5.0),
+    ]);
     let end = route.p[3];
-    let tip = pt(end.x + route.end_dir.x * 12.0, end.y + route.end_dir.y * 12.0);
+    let tip = pt(
+        end.x + route.end_dir.x * 12.0,
+        end.y + route.end_dir.y * 12.0,
+    );
     let n = perp(route.end_dir);
     out.push(vec![tip, pt(end.x + n.x * 6.0, end.y + n.y * 6.0)]);
     out.push(vec![tip, end]);
@@ -307,7 +322,11 @@ pub fn edge_path(route: &Route, dashed: bool, markers: bool) -> EdgePath {
         curve_cmd = Some(route.p);
     }
 
-    let marks = if markers { marker_lines(route) } else { Vec::new() };
+    let marks = if markers {
+        marker_lines(route)
+    } else {
+        Vec::new()
+    };
 
     // Bounding box over everything emitted. A curve stays inside the hull of
     // its control points.
@@ -426,8 +445,16 @@ pub fn is_junction(table: &DiagramTable, fk_columns: &HashSet<String>) -> bool {
 
 /// Size of a table box given what it shows.
 pub fn node_size(t: &DiagramTable, show_columns: bool, junction: bool) -> (f32, f32) {
-    let shown = if show_columns { t.columns.len().min(MAX_COLUMNS) } else { 0 };
-    let more = if show_columns && t.columns.len() > MAX_COLUMNS { 1 } else { 0 };
+    let shown = if show_columns {
+        t.columns.len().min(MAX_COLUMNS)
+    } else {
+        0
+    };
+    let more = if show_columns && t.columns.len() > MAX_COLUMNS {
+        1
+    } else {
+        0
+    };
     let title_w = t.name.chars().count() as f32 * (NAME_CHAR + 0.9)
         + SIDE_PAD * 2.0
         + if junction { 52.0 } else { 0.0 };
@@ -436,11 +463,12 @@ pub fn node_size(t: &DiagramTable, show_columns: bool, junction: bool) -> (f32, 
         .iter()
         .take(shown)
         .map(|c| {
+            // Badge, name, a gap, the type, and the padding either side.
             c.name.chars().count() as f32 * NAME_CHAR
                 + c.data_type.chars().count() as f32 * TYPE_CHAR
                 + BADGE_W
                 + SIDE_PAD * 2.0
-                + 12.0
+                + 20.0
         })
         .fold(0.0, f32::max);
     let width = title_w.max(body_w).clamp(MIN_WIDTH, MAX_WIDTH);
@@ -462,8 +490,8 @@ pub fn type_column_width(t: &DiagramTable, width: f32) -> f32 {
         .max()
         .unwrap_or(0) as f32;
     let want = longest * TYPE_CHAR + 8.0;
-    // Never more than 45% of the box, so names keep room.
-    want.min(width * 0.45).max(40.0)
+    // Never more than 55% of the box, so names keep room.
+    want.min(width * 0.55).max(40.0)
 }
 
 // -- The scene --------------------------------------------------------------
@@ -571,7 +599,11 @@ impl ErdScene {
                 Info {
                     junction,
                     pk: t.columns.iter().map(|c| c.is_primary_key).collect(),
-                    fk: t.columns.iter().map(|c| fk_cols[i].contains(&c.name)).collect(),
+                    fk: t
+                        .columns
+                        .iter()
+                        .map(|c| fk_cols[i].contains(&c.name))
+                        .collect(),
                     width,
                     height,
                 }
@@ -737,7 +769,45 @@ impl ErdScene {
         if l.parent == l.child {
             return route_self(self.rect(l.parent));
         }
-        route(self.rect(l.parent), self.rect(l.child), Flow::Vertical, HEADER_H)
+        route(
+            self.rect(l.parent),
+            self.rect(l.child),
+            Flow::Vertical,
+            HEADER_H,
+        )
+    }
+
+    /// A line about one table for the status strip:
+    /// "orders - 4 columns - references users, roles - referenced by 1".
+    pub fn describe(&self, i: usize) -> String {
+        let name = &self.tables[i].name;
+        let n = self.tables[i].columns.len();
+        let mut parts = vec![format!("{} column{}", n, if n == 1 { "" } else { "s" })];
+        let mut parents: Vec<&str> = Vec::new();
+        for l in self.links.iter().filter(|l| l.child == i && l.parent != i) {
+            let p = self.tables[l.parent].name.as_str();
+            if !parents.contains(&p) {
+                parents.push(p);
+            }
+        }
+        if !parents.is_empty() {
+            parts.push(format!("references {}", parents.join(", ")));
+        }
+        let mut children = 0;
+        let mut seen: Vec<usize> = Vec::new();
+        for l in self.links.iter().filter(|l| l.parent == i && l.child != i) {
+            if !seen.contains(&l.child) {
+                seen.push(l.child);
+                children += 1;
+            }
+        }
+        if children > 0 {
+            parts.push(format!("referenced by {}", children));
+        }
+        if self.info[i].junction {
+            parts.push("junction table".to_string());
+        }
+        format!("{} \u{b7} {}", name, parts.join(" \u{b7} "))
     }
 
     /// "12 tables, 14 relationships".
@@ -749,7 +819,11 @@ impl ErdScene {
             t,
             if t == 1 { "table" } else { "tables" },
             r,
-            if r == 1 { "relationship" } else { "relationships" }
+            if r == 1 {
+                "relationship"
+            } else {
+                "relationships"
+            }
         )
     }
 
@@ -808,7 +882,9 @@ impl ErdScene {
 
     /// The index of the topmost table under a world point.
     pub fn hit(&self, world: Point) -> Option<usize> {
-        (0..self.len()).rev().find(|i| self.rect(*i).contains(world))
+        (0..self.len())
+            .rev()
+            .find(|i| self.rect(*i).contains(world))
     }
 
     // -- Export -------------------------------------------------------------
@@ -816,7 +892,10 @@ impl ErdScene {
     /// The diagram as a standalone SVG document in the given palette.
     pub fn to_svg(&self, palette: &Palette) -> String {
         const MARGIN: f32 = 32.0;
-        let bounds = self.bounds().unwrap_or(Rect::new(0.0, 0.0, 200.0, 100.0)).inflate(MARGIN);
+        let bounds = self
+            .bounds()
+            .unwrap_or(Rect::new(0.0, 0.0, 200.0, 100.0))
+            .inflate(MARGIN);
         let mut s = String::new();
         let _ = writeln!(
             s,
@@ -826,14 +905,22 @@ impl ErdScene {
         let _ = writeln!(
             s,
             "<rect x=\"{:.1}\" y=\"{:.1}\" width=\"{:.1}\" height=\"{:.1}\" fill=\"{}\"/>",
-            bounds.x, bounds.y, bounds.w, bounds.h, palette.background.hex()
+            bounds.x,
+            bounds.y,
+            bounds.w,
+            bounds.h,
+            palette.background.hex()
         );
 
         if self.options.show_relationships {
             for l in &self.links {
                 let r = self.route_of(l);
                 let m = l.kind == Cardinality::ManyToMany;
-                let stroke = if m { palette.muted_foreground } else { palette.border_strong };
+                let stroke = if m {
+                    palette.muted_foreground
+                } else {
+                    palette.border_strong
+                };
                 let [a, b, c, d] = r.p;
                 let _ = writeln!(
                     s,
@@ -846,7 +933,13 @@ impl ErdScene {
                 let mut marks = String::new();
                 for line in marker_lines(&r) {
                     for (k, p) in line.iter().enumerate() {
-                        let _ = write!(marks, "{} {:.1} {:.1} ", if k == 0 { "M" } else { "L" }, p.x, p.y);
+                        let _ = write!(
+                            marks,
+                            "{} {:.1} {:.1} ",
+                            if k == 0 { "M" } else { "L" },
+                            p.x,
+                            p.y
+                        );
                     }
                 }
                 let _ = writeln!(
@@ -965,7 +1058,11 @@ pub struct View {
 
 impl Default for View {
     fn default() -> Self {
-        Self { zoom: 1.0, pan_x: 0.0, pan_y: 0.0 }
+        Self {
+            zoom: 1.0,
+            pan_x: 0.0,
+            pan_y: 0.0,
+        }
     }
 }
 
@@ -976,7 +1073,11 @@ impl View {
         let z = new_zoom.clamp(MIN_ZOOM, MAX_ZOOM);
         let wx = (ax - self.pan_x) / self.zoom;
         let wy = (ay - self.pan_y) / self.zoom;
-        View { zoom: z, pan_x: ax - wx * z, pan_y: ay - wy * z }
+        View {
+            zoom: z,
+            pan_x: ax - wx * z,
+            pan_y: ay - wy * z,
+        }
     }
 
     /// A mouse wheel or trackpad scroll of `delta` about a screen point. Up
@@ -1003,7 +1104,12 @@ impl View {
 
     /// The world rectangle the viewport shows.
     pub fn visible(self, vw: f32, vh: f32) -> Rect {
-        Rect::new(-self.pan_x / self.zoom, -self.pan_y / self.zoom, vw / self.zoom, vh / self.zoom)
+        Rect::new(
+            -self.pan_x / self.zoom,
+            -self.pan_y / self.zoom,
+            vw / self.zoom,
+            vh / self.zoom,
+        )
     }
 }
 
@@ -1056,7 +1162,33 @@ pub fn minimap(bounds: Rect, max_w: f32, max_h: f32) -> MiniMap {
 impl MiniMap {
     /// The world point under a point of the minimap.
     pub fn to_world(&self, mx: f32, my: f32) -> Point {
-        Point::new(self.origin.x + mx / self.scale, self.origin.y + my / self.scale)
+        Point::new(
+            self.origin.x + mx / self.scale,
+            self.origin.y + my / self.scale,
+        )
+    }
+}
+
+/// A file name for an exported diagram: `public-erd.svg`. Anything that is
+/// not a letter, digit, dash or underscore becomes a dash, so a schema called
+/// `my schema/v2` cannot name a path.
+pub fn export_file_name(schema: &str) -> String {
+    let stem: String = schema
+        .trim()
+        .chars()
+        .map(|c| {
+            if c.is_alphanumeric() || c == '_' || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
+        .collect();
+    let stem = stem.trim_matches('-');
+    if stem.is_empty() {
+        "diagram-erd.svg".to_string()
+    } else {
+        format!("{}-erd.svg", stem)
     }
 }
 
@@ -1140,15 +1272,27 @@ mod tests {
     /// users, roles, user_roles (junction), orders (not a junction).
     fn shop() -> ErdScene {
         let tables = vec![
-            table("users", &[("id", "integer", true), ("email", "text", false)]),
+            table(
+                "users",
+                &[("id", "integer", true), ("email", "text", false)],
+            ),
             table("roles", &[("id", "integer", true), ("name", "text", false)]),
             table(
                 "user_roles",
-                &[("user_id", "integer", true), ("role_id", "integer", true), ("granted_at", "timestamp", false)],
+                &[
+                    ("user_id", "integer", true),
+                    ("role_id", "integer", true),
+                    ("granted_at", "timestamp", false),
+                ],
             ),
             table(
                 "orders",
-                &[("id", "integer", true), ("user_id", "integer", false), ("role_id", "integer", false), ("total", "numeric", false)],
+                &[
+                    ("id", "integer", true),
+                    ("user_id", "integer", false),
+                    ("role_id", "integer", false),
+                    ("total", "numeric", false),
+                ],
             ),
         ];
         let fks = vec![
@@ -1171,12 +1315,26 @@ mod tests {
     #[test]
     fn a_table_with_its_own_data_is_not_a_junction_even_with_two_foreign_keys() {
         let s = shop();
-        assert!(!s.is_junction(3), "orders has a total and must not be a junction");
+        assert!(
+            !s.is_junction(3),
+            "orders has a total and must not be a junction"
+        );
     }
 
     #[test]
     fn the_has_naming_convention_marks_a_junction() {
-        let t = table("posts_has_tags", &[("a", "int", false), ("b", "int", false), ("c", "text", false), ("d", "text", false), ("e", "text", false), ("f", "text", false), ("g", "text", false)]);
+        let t = table(
+            "posts_has_tags",
+            &[
+                ("a", "int", false),
+                ("b", "int", false),
+                ("c", "text", false),
+                ("d", "text", false),
+                ("e", "text", false),
+                ("f", "text", false),
+                ("g", "text", false),
+            ],
+        );
         assert!(is_junction(&t, &HashSet::new()));
     }
 
@@ -1186,7 +1344,12 @@ mod tests {
         let kinds: Vec<_> = s.links.iter().map(|l| l.kind).collect();
         assert_eq!(
             kinds,
-            vec![Cardinality::ManyToMany, Cardinality::ManyToMany, Cardinality::OneToMany, Cardinality::OneToMany]
+            vec![
+                Cardinality::ManyToMany,
+                Cardinality::ManyToMany,
+                Cardinality::OneToMany,
+                Cardinality::OneToMany
+            ]
         );
         assert!(s.links[0].label.starts_with("M:N"), "{}", s.links[0].label);
         assert!(s.links[2].label.starts_with("1:N"), "{}", s.links[2].label);
@@ -1204,7 +1367,11 @@ mod tests {
     #[test]
     fn a_foreign_key_to_a_table_outside_the_scene_is_dropped() {
         let tables = vec![table("a", &[("id", "int", true)])];
-        let s = ErdScene::new(tables, vec![fk("a", &["x"], "elsewhere", &["id"])], &HashMap::new());
+        let s = ErdScene::new(
+            tables,
+            vec![fk("a", &["x"], "elsewhere", &["id"])],
+            &HashMap::new(),
+        );
         assert!(s.links.is_empty());
     }
 
@@ -1223,8 +1390,11 @@ mod tests {
 
     #[test]
     fn a_wide_table_shows_ten_columns_and_a_more_line() {
-        let cols: Vec<(String, &str, bool)> = (0..14).map(|i| (format!("c{}", i), "text", i == 0)).collect();
-        let refs: Vec<(&str, &str, bool)> = cols.iter().map(|(n, t, p)| (n.as_str(), *t, *p)).collect();
+        let cols: Vec<(String, &str, bool)> = (0..14)
+            .map(|i| (format!("c{}", i), "text", i == 0))
+            .collect();
+        let refs: Vec<(&str, &str, bool)> =
+            cols.iter().map(|(n, t, p)| (n.as_str(), *t, *p)).collect();
         let s = ErdScene::new(vec![table("wide", &refs)], vec![], &HashMap::new());
         assert_eq!(s.rows(0).len(), MAX_COLUMNS);
         assert_eq!(s.more_label(0), "+4 more columns");
@@ -1234,8 +1404,11 @@ mod tests {
 
     #[test]
     fn exactly_ten_columns_has_no_more_line() {
-        let cols: Vec<(String, &str, bool)> = (0..10).map(|i| (format!("c{}", i), "text", false)).collect();
-        let refs: Vec<(&str, &str, bool)> = cols.iter().map(|(n, t, p)| (n.as_str(), *t, *p)).collect();
+        let cols: Vec<(String, &str, bool)> = (0..10)
+            .map(|i| (format!("c{}", i), "text", false))
+            .collect();
+        let refs: Vec<(&str, &str, bool)> =
+            cols.iter().map(|(n, t, p)| (n.as_str(), *t, *p)).collect();
         let s = ErdScene::new(vec![table("ten", &refs)], vec![], &HashMap::new());
         assert_eq!(s.more_label(0), "");
     }
@@ -1265,8 +1438,14 @@ mod tests {
     #[test]
     fn parents_are_laid_out_above_children() {
         let s = shop();
-        assert!(s.position(0).y < s.position(3).y, "users should be above orders");
-        assert!(s.position(1).y < s.position(2).y, "roles should be above user_roles");
+        assert!(
+            s.position(0).y < s.position(3).y,
+            "users should be above orders"
+        );
+        assert!(
+            s.position(1).y < s.position(2).y,
+            "roles should be above user_roles"
+        );
     }
 
     #[test]
@@ -1276,7 +1455,11 @@ mod tests {
         let p0 = s.position(1);
         s.drag(1, 10.0, 5.0);
         let p = s.drag(1, 10.0, 5.0).unwrap();
-        assert_eq!(p, Point::new(p0.x + 20.0, p0.y + 10.0), "deltas must accumulate");
+        assert_eq!(
+            p,
+            Point::new(p0.x + 20.0, p0.y + 10.0),
+            "deltas must accumulate"
+        );
         assert!(s.pinned().contains_key("roles"));
         assert_eq!(s.pinned().len(), 1, "only the dragged table is pinned");
     }
@@ -1321,7 +1504,10 @@ mod tests {
         saved.insert("users".to_string(), Point::new(640.0, 320.0));
         saved.insert("dropped_table".to_string(), Point::new(1.0, 1.0));
         let s = ErdScene::new(
-            vec![table("users", &[("id", "int", true)]), table("roles", &[("id", "int", true)])],
+            vec![
+                table("users", &[("id", "int", true)]),
+                table("roles", &[("id", "int", true)]),
+            ],
             vec![],
             &saved,
         );
@@ -1348,9 +1534,42 @@ mod tests {
     }
 
     #[test]
+    fn describe_names_parents_children_and_junctions() {
+        let s = shop();
+        assert_eq!(
+            s.describe(3),
+            "orders \u{b7} 4 columns \u{b7} references users, roles"
+        );
+        assert_eq!(
+            s.describe(0),
+            "users \u{b7} 2 columns \u{b7} referenced by 2"
+        );
+        assert!(
+            s.describe(2).ends_with("junction table"),
+            "{}",
+            s.describe(2)
+        );
+    }
+
+    #[test]
+    fn export_names_cannot_escape_a_directory() {
+        assert_eq!(export_file_name("public"), "public-erd.svg");
+        assert_eq!(export_file_name("my schema/v2"), "my-schema-v2-erd.svg");
+        assert_eq!(export_file_name("../../etc"), "etc-erd.svg");
+        assert_eq!(export_file_name("  "), "diagram-erd.svg");
+        assert!(
+            !export_file_name("a/b\\c").contains('/') && !export_file_name("a/b\\c").contains('\\')
+        );
+    }
+
+    #[test]
     fn summary_pluralises() {
         assert_eq!(shop().summary(), "4 tables, 4 relationships");
-        let one = ErdScene::new(vec![table("a", &[("id", "int", true)])], vec![], &HashMap::new());
+        let one = ErdScene::new(
+            vec![table("a", &[("id", "int", true)])],
+            vec![],
+            &HashMap::new(),
+        );
         assert_eq!(one.summary(), "1 table, 0 relationships");
     }
 
@@ -1358,7 +1577,12 @@ mod tests {
 
     #[test]
     fn a_child_below_its_parent_is_joined_bottom_to_top() {
-        let r = route(Rect::new(0.0, 0.0, 200.0, 100.0), Rect::new(20.0, 300.0, 200.0, 100.0), Flow::Vertical, HEADER_H);
+        let r = route(
+            Rect::new(0.0, 0.0, 200.0, 100.0),
+            Rect::new(20.0, 300.0, 200.0, 100.0),
+            Flow::Vertical,
+            HEADER_H,
+        );
         assert_eq!(r.p[0], Point::new(100.0, 100.0));
         assert_eq!(r.p[3], Point::new(120.0, 300.0));
         assert_eq!(r.start_dir, Point::new(0.0, 1.0));
@@ -1367,28 +1591,56 @@ mod tests {
 
     #[test]
     fn a_child_dragged_above_its_parent_still_connects_sensibly() {
-        let r = route(Rect::new(0.0, 400.0, 200.0, 100.0), Rect::new(0.0, 0.0, 200.0, 100.0), Flow::Vertical, HEADER_H);
-        assert_eq!(r.p[0], Point::new(100.0, 400.0), "leaves the top of the parent");
-        assert_eq!(r.p[3], Point::new(100.0, 100.0), "enters the bottom of the child");
+        let r = route(
+            Rect::new(0.0, 400.0, 200.0, 100.0),
+            Rect::new(0.0, 0.0, 200.0, 100.0),
+            Flow::Vertical,
+            HEADER_H,
+        );
+        assert_eq!(
+            r.p[0],
+            Point::new(100.0, 400.0),
+            "leaves the top of the parent"
+        );
+        assert_eq!(
+            r.p[3],
+            Point::new(100.0, 100.0),
+            "enters the bottom of the child"
+        );
     }
 
     #[test]
     fn overlapping_rows_fall_back_to_side_to_side() {
-        let r = route(Rect::new(0.0, 0.0, 200.0, 100.0), Rect::new(260.0, 20.0, 200.0, 100.0), Flow::Vertical, HEADER_H);
+        let r = route(
+            Rect::new(0.0, 0.0, 200.0, 100.0),
+            Rect::new(260.0, 20.0, 200.0, 100.0),
+            Flow::Vertical,
+            HEADER_H,
+        );
         assert_eq!(r.start_dir, Point::new(1.0, 0.0));
         assert_eq!(r.end_dir, Point::new(-1.0, 0.0));
     }
 
     #[test]
     fn horizontal_flow_runs_right_edge_to_left_edge_at_header_height() {
-        let r = route(Rect::new(0.0, 0.0, 200.0, 61.0), Rect::new(400.0, 100.0, 200.0, 61.0), Flow::Horizontal, 30.0);
+        let r = route(
+            Rect::new(0.0, 0.0, 200.0, 61.0),
+            Rect::new(400.0, 100.0, 200.0, 61.0),
+            Flow::Horizontal,
+            30.0,
+        );
         assert_eq!(r.p[0], Point::new(200.0, 15.0));
         assert_eq!(r.p[3], Point::new(400.0, 115.0));
     }
 
     #[test]
     fn touching_boxes_still_get_a_curve_that_does_not_collapse() {
-        let r = route(Rect::new(0.0, 0.0, 200.0, 60.0), Rect::new(200.0, 0.0, 200.0, 60.0), Flow::Horizontal, 30.0);
+        let r = route(
+            Rect::new(0.0, 0.0, 200.0, 60.0),
+            Rect::new(200.0, 0.0, 200.0, 60.0),
+            Flow::Horizontal,
+            30.0,
+        );
         assert!(r.p[1].x - r.p[0].x >= 40.0 - f32::EPSILON);
     }
 
@@ -1404,45 +1656,83 @@ mod tests {
     // -- edge paths -----------------------------------------------------------
 
     fn numbers(cmd: &str) -> Vec<f32> {
-        cmd.split_whitespace().filter_map(|t| t.parse().ok()).collect()
+        cmd.split_whitespace()
+            .filter_map(|t| t.parse().ok())
+            .collect()
     }
 
     #[test]
     fn every_coordinate_of_a_path_lies_inside_its_box() {
-        let r = route(Rect::new(0.0, 0.0, 200.0, 100.0), Rect::new(300.0, 400.0, 200.0, 100.0), Flow::Vertical, HEADER_H);
+        let r = route(
+            Rect::new(0.0, 0.0, 200.0, 100.0),
+            Rect::new(300.0, 400.0, 200.0, 100.0),
+            Flow::Vertical,
+            HEADER_H,
+        );
         for (dashed, markers) in [(false, false), (false, true), (true, true)] {
             let e = edge_path(&r, dashed, markers);
             for pair in numbers(&e.commands).chunks(2) {
-                assert!(pair[0] >= 0.0 && pair[0] <= e.bounds.w, "x {} outside 0..{} ({dashed} {markers})", pair[0], e.bounds.w);
-                assert!(pair[1] >= 0.0 && pair[1] <= e.bounds.h, "y {} outside 0..{}", pair[1], e.bounds.h);
+                assert!(
+                    pair[0] >= 0.0 && pair[0] <= e.bounds.w,
+                    "x {} outside 0..{} ({dashed} {markers})",
+                    pair[0],
+                    e.bounds.w
+                );
+                assert!(
+                    pair[1] >= 0.0 && pair[1] <= e.bounds.h,
+                    "y {} outside 0..{}",
+                    pair[1],
+                    e.bounds.h
+                );
             }
         }
     }
 
     #[test]
     fn a_solid_edge_is_one_curve_and_a_dashed_edge_is_many_short_pieces() {
-        let r = route(Rect::new(0.0, 0.0, 200.0, 100.0), Rect::new(0.0, 400.0, 200.0, 100.0), Flow::Vertical, HEADER_H);
+        let r = route(
+            Rect::new(0.0, 0.0, 200.0, 100.0),
+            Rect::new(0.0, 400.0, 200.0, 100.0),
+            Flow::Vertical,
+            HEADER_H,
+        );
         let solid = edge_path(&r, false, false);
         assert_eq!(solid.commands.matches('C').count(), 1);
         assert_eq!(solid.commands.matches('M').count(), 1);
         let dashed = edge_path(&r, true, false);
-        assert!(dashed.commands.matches('M').count() > 10, "{}", dashed.commands);
+        assert!(
+            dashed.commands.matches('M').count() > 10,
+            "{}",
+            dashed.commands
+        );
         assert_eq!(dashed.commands.matches('C').count(), 0);
     }
 
     #[test]
     fn markers_add_a_bar_and_three_prongs() {
-        let r = route(Rect::new(0.0, 0.0, 200.0, 100.0), Rect::new(0.0, 400.0, 200.0, 100.0), Flow::Vertical, HEADER_H);
+        let r = route(
+            Rect::new(0.0, 0.0, 200.0, 100.0),
+            Rect::new(0.0, 400.0, 200.0, 100.0),
+            Flow::Vertical,
+            HEADER_H,
+        );
         let plain = edge_path(&r, false, false);
         let marked = edge_path(&r, false, true);
-        assert_eq!(marked.commands.matches('M').count(), plain.commands.matches('M').count() + 4);
+        assert_eq!(
+            marked.commands.matches('M').count(),
+            plain.commands.matches('M').count() + 4
+        );
     }
 
     // -- view -------------------------------------------------------------------
 
     #[test]
     fn zooming_about_a_point_keeps_the_world_point_under_it() {
-        let v = View { zoom: 1.0, pan_x: 30.0, pan_y: -20.0 };
+        let v = View {
+            zoom: 1.0,
+            pan_x: 30.0,
+            pan_y: -20.0,
+        };
         let (ax, ay) = (400.0, 300.0);
         let wx = (ax - v.pan_x) / v.zoom;
         let wy = (ay - v.pan_y) / v.zoom;
@@ -1473,7 +1763,12 @@ mod tests {
         let v = fit(b, 1000.0, 600.0);
         assert!(v.zoom < 1.0);
         let vis = v.visible(1000.0, 600.0);
-        assert!(vis.x <= b.x && vis.y <= b.y && vis.right() >= b.right() && vis.bottom() >= b.bottom(), "{:?} does not contain {:?}", vis, b);
+        assert!(
+            vis.x <= b.x && vis.y <= b.y && vis.right() >= b.right() && vis.bottom() >= b.bottom(),
+            "{:?} does not contain {:?}",
+            vis,
+            b
+        );
         // Centred: equal slack either side.
         assert!(((b.x - vis.x) - (vis.right() - b.right())).abs() < 0.01);
 
@@ -1484,12 +1779,20 @@ mod tests {
     #[test]
     fn fit_with_nothing_or_no_room_is_the_identity() {
         assert_eq!(fit(Rect::default(), 1000.0, 600.0), View::default());
-        assert_eq!(fit(Rect::new(0.0, 0.0, 10.0, 10.0), 0.0, 0.0), View::default());
+        assert_eq!(
+            fit(Rect::new(0.0, 0.0, 10.0, 10.0), 0.0, 0.0),
+            View::default()
+        );
     }
 
     #[test]
     fn center_on_puts_the_world_point_mid_viewport() {
-        let v = View { zoom: 0.5, pan_x: 0.0, pan_y: 0.0 }.center_on(1000.0, 400.0, 800.0, 600.0);
+        let v = View {
+            zoom: 0.5,
+            pan_x: 0.0,
+            pan_y: 0.0,
+        }
+        .center_on(1000.0, 400.0, 800.0, 600.0);
         assert_eq!(v.pan_x + 1000.0 * v.zoom, 400.0);
         assert_eq!(v.pan_y + 400.0 * v.zoom, 300.0);
     }
@@ -1517,7 +1820,11 @@ mod tests {
         // The diagram is inside the map, margin on every side.
         assert!(m.origin.x < 0.0 && m.origin.y < 0.0);
         let w = m.to_world(m.width / 2.0, m.height / 2.0);
-        assert!((w.x - 1000.0).abs() < 1.0 && (w.y - 500.0).abs() < 1.0, "{:?}", w);
+        assert!(
+            (w.x - 1000.0).abs() < 1.0 && (w.y - 500.0).abs() < 1.0,
+            "{:?}",
+            w
+        );
     }
 
     // -- persistence -----------------------------------------------------------
@@ -1539,7 +1846,9 @@ mod tests {
 
     #[test]
     fn the_web_diagrams_file_format_is_read() {
-        let v: Value = serde_json::from_str(r#"{"users":{"x":120,"y":40.5},"orders":{"x":300,"y":40}}"#).unwrap();
+        let v: Value =
+            serde_json::from_str(r#"{"users":{"x":120,"y":40.5},"orders":{"x":300,"y":40}}"#)
+                .unwrap();
         let p = positions_from_json(&v);
         assert_eq!(p["users"], Point::new(120.0, 40.5));
         assert_eq!(p.len(), 2);
@@ -1547,7 +1856,8 @@ mod tests {
 
     #[test]
     fn a_damaged_entry_is_skipped_without_losing_the_rest() {
-        let v: Value = serde_json::from_str(r#"{"ok":{"x":1,"y":2},"bad":{"x":"one"},"worse":7}"#).unwrap();
+        let v: Value =
+            serde_json::from_str(r#"{"ok":{"x":1,"y":2},"bad":{"x":"one"},"worse":7}"#).unwrap();
         let p = positions_from_json(&v);
         assert_eq!(p.len(), 1);
         assert!(p.contains_key("ok"));
@@ -1565,7 +1875,11 @@ mod tests {
         for t in ["users", "roles", "user_roles", "orders"] {
             assert!(svg.contains(&format!(">{}</text>", t)), "missing {}", t);
         }
-        assert_eq!(svg.matches("stroke-dasharray").count(), 2, "the two M:N edges are dashed");
+        assert_eq!(
+            svg.matches("stroke-dasharray").count(),
+            2,
+            "the two M:N edges are dashed"
+        );
         assert!(svg.contains("1:N"));
         assert!(svg.contains("M:N"));
     }
@@ -1584,7 +1898,10 @@ mod tests {
         let mut shop = shop();
         shop.options.show_relationships = false;
         let without = shop.to_svg(&DARK);
-        assert!(!without.contains("stroke-width=\"1.5\""), "relationships should be omitted");
+        assert!(
+            !without.contains("stroke-width=\"1.5\""),
+            "relationships should be omitted"
+        );
         assert!(!without.contains("1:N"), "labels belong to relationships");
     }
 

@@ -7,6 +7,8 @@ import { AboutDialog } from "dialogs/about.slint";
 import { ConfirmDialog } from "dialogs/confirm.slint";
 import { ConnectionEditorDialog, ConnectionFormData } from "dialogs/connection_editor.slint";
 import { HistoryState, HistoryOverlay } from "screens/history_panel.slint";
+import { ErdState, ErdOverlay } from "screens/er_diagram.slint";
+import { DesignerState, DesignerOverlay } from "screens/schema_designer.slint";
 import { PaletteDialog, PaletteItem } from "dialogs/command_palette.slint";
 import { ShortcutsDialog, ShortcutItem } from "dialogs/shortcuts.slint";
 import { SettingsDialog, SettingsData, ShortcutRowData } from "dialogs/settings.slint";
@@ -26,6 +28,8 @@ export { GridSpike } from "spikes/grid_spike.slint";
 export { DiagramSpike } from "spikes/diagram_spike.slint";
 export { KitGallery } from "spikes/kit_gallery.slint";
 export { HistoryState, PanelRow, RunParam, FormParam, PanelMode } from "screens/history_panel.slint";
+export { ErdState } from "screens/er_diagram.slint";
+export { DesignerState, DesignerColumnRow, DesignerResultRow } from "screens/schema_designer.slint";
 
 export enum Screen { connections, workspace }
 
@@ -304,6 +308,16 @@ export component AppWindow inherits Window {
                 shortcut: @keys(Control + Shift + H);
                 activated => { HistoryState.open-requested(); }
             }
+            MenuItem {
+                title: "ER Diagram";
+                enabled: root.screen == Screen.workspace;
+                activated => { root.run-command("go-er-diagram"); }
+            }
+            MenuItem {
+                title: "Schema Designer";
+                enabled: root.screen == Screen.workspace;
+                activated => { root.run-command("go-schema-designer"); }
+            }
             MenuSeparator { }
             MenuItem {
                 title: Theme.dark ? "Light Theme" : "Dark Theme";
@@ -485,6 +499,7 @@ export component AppWindow inherits Window {
             run-query => { root.workspace-run-query(); }
             retry => { root.workspace-retry(); }
             open-history => { HistoryState.open-requested(); }
+            open-diagram => { ErdState.open-requested(); }
         }
     }
     }
@@ -495,7 +510,7 @@ export component AppWindow inherits Window {
     // held focus goes away (its focused element is destroyed with it).
     property <bool> any-palette-overlay: root.show-palette || root.show-shortcuts;
     property <bool> any-overlay: root.show-about || root.show-confirm || root.show-connection-editor
-        || root.any-palette-overlay;
+        || root.any-palette-overlay || ErdState.visible || DesignerState.visible;
     init => { fs.focus(); }
     changed any-overlay => {
         if (!root.any-overlay) {
@@ -522,6 +537,11 @@ export component AppWindow inherits Window {
     // History, snippets and templates. Below the dialogs, so a confirmation
     // raised from the panel (clear history, delete a snippet) shows above it.
     if HistoryState.visible: HistoryOverlay { }
+
+    // The diagram and the designer fill the window, like the history panel
+    // they sit beside, and stay below the dialogs.
+    if ErdState.visible: ErdOverlay { }
+    if DesignerState.visible: DesignerOverlay { }
 
     if root.show-about || root.show-confirm || root.show-connection-editor || root.show-settings || root.any-palette-overlay: Rectangle {
         width: 100%;

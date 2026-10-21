@@ -155,6 +155,9 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             Box::new(c)
         }
         _ if name.starts_with("inspector") => inspector(name),
+        // The ER diagram and the schema designer, over the workspace.
+        _ if name == "er" || name.starts_with("er-") => er_window(name),
+        _ if name.starts_with("designer") => designer_window(name),
         // The command palette and shortcuts help over a real screen, drawn by
         // the same code the app uses (palette_view). Variants:
         //   palette, palette-workspace, palette-filtered, palette-theme,
@@ -789,6 +792,272 @@ fn command_overlay(name: &str) -> Box<dyn std::any::Any> {
     Box::new(c)
 }
 
+
+// -- ER diagram and schema designer ---------------------------------------------
+//
+// Variants: er, er-light, er-selected, er-zoomed, er-filter, er-collapsed,
+// er-no-relationships, er-loading, er-error, er-empty, er-export,
+// er-export-exists; designer, designer-light, designer-empty,
+// designer-applying, designer-problems, designer-varchar, designer-nosel,
+// designer-preview, designer-preview-light, designer-result.
+//
+// Both build their pictures with the same projection functions the app uses
+// (`erd_view::project`, `designer_view::project`), so a snapshot is what the
+// controller would show. The canvas size is the window less the title bar,
+// toolbar and legend strip.
+
+fn canvas_size() -> (f32, f32) {
+    let args: Vec<String> = std::env::args().collect();
+    let w: f32 = args.get(3).and_then(|v| v.parse().ok()).unwrap_or(1200.0);
+    let h: f32 = args.get(4).and_then(|v| v.parse().ok()).unwrap_or(760.0);
+    // The software renderer draws the menu bar inside the window (about 40px);
+    // the native macOS menu bar takes no window space.
+    (w, h - 40.0 - 48.0 - 44.0 - 30.0)
+}
+
+fn er_col(name: &str, ty: &str, pk: bool) -> dbhive_core::models::ColumnInfo {
+    dbhive_core::models::ColumnInfo {
+        name: name.into(),
+        data_type: ty.into(),
+        nullable: !pk,
+        default_value: None,
+        is_primary_key: pk,
+        is_auto_increment: false,
+    }
+}
+
+fn er_fk(table: &str, col: &str, parent: &str) -> dbhive_core::models::ForeignKeyInfo {
+    dbhive_core::models::ForeignKeyInfo {
+        name: format!("fk_{}_{}", table, col),
+        table: table.into(),
+        schema: "public".into(),
+        columns: vec![col.into()],
+        referenced_table: parent.into(),
+        referenced_schema: "public".into(),
+        referenced_columns: vec!["id".into()],
+        on_delete: None,
+        on_update: None,
+    }
+}
+
+fn sample_er_scene() -> dbhive_ui_model::erd_scene::ErdScene {
+    use dbhive_ui_model::er_diagram::DiagramTable;
+    let t = |name: &str, cols: Vec<dbhive_core::models::ColumnInfo>| DiagramTable { name: name.into(), columns: cols };
+    let tables = vec![
+        t("customers", vec![er_col("id", "integer", true), er_col("email", "varchar(255)", false), er_col("name", "text", false), er_col("created_at", "timestamp", false)]),
+        t("addresses", vec![er_col("id", "integer", true), er_col("customer_id", "integer", false), er_col("line1", "varchar(120)", false), er_col("city", "varchar(80)", false), er_col("country", "char(2)", false)]),
+        t("products", vec![er_col("id", "integer", true), er_col("sku", "varchar(32)", false), er_col("name", "varchar(120)", false), er_col("price", "numeric(10,2)", false), er_col("active", "boolean", false)]),
+        t("categories", vec![er_col("id", "integer", true), er_col("name", "text", false), er_col("parent_id", "integer", false)]),
+        t("product_categories", vec![er_col("product_id", "integer", true), er_col("category_id", "integer", true)]),
+        t("orders", vec![er_col("id", "integer", true), er_col("customer_id", "integer", false), er_col("address_id", "integer", false), er_col("status", "varchar(20)", false), er_col("total", "numeric(12,2)", false), er_col("placed_at", "timestamp", false)]),
+        t("order_items", vec![er_col("id", "integer", true), er_col("order_id", "integer", false), er_col("product_id", "integer", false), er_col("quantity", "integer", false), er_col("unit_price", "numeric(10,2)", false)]),
+        t("payments", vec![er_col("id", "integer", true), er_col("order_id", "integer", false), er_col("provider", "varchar(40)", false), er_col("amount", "numeric(12,2)", false), er_col("paid_at", "timestamp", false)]),
+        t("refunds", vec![er_col("id", "integer", true), er_col("payment_id", "integer", false), er_col("amount", "numeric(12,2)", false), er_col("reason", "text", false)]),
+        t("audit_log", (0..14).map(|i| er_col(if i == 0 { "id" } else { ["actor_id", "action", "entity", "entity_id", "before", "after", "ip", "user_agent", "session_id", "request_id", "created_at", "retention_until", "checksum"][i - 1] }, if i == 0 { "bigint" } else { "text" }, i == 0)).collect()),
+        t("a_table_with_a_very_long_name_that_must_be_elided_not_overflow_0001", vec![er_col("id", "integer", true), er_col("a_column_with_a_very_long_name_that_must_be_elided_too", "text", false)]),
+    ];
+    let fks = vec![
+        er_fk("addresses", "customer_id", "customers"),
+        er_fk("categories", "parent_id", "categories"),
+        er_fk("product_categories", "product_id", "products"),
+        er_fk("product_categories", "category_id", "categories"),
+        er_fk("orders", "customer_id", "customers"),
+        er_fk("orders", "address_id", "addresses"),
+        er_fk("order_items", "order_id", "orders"),
+        er_fk("order_items", "product_id", "products"),
+        er_fk("payments", "order_id", "orders"),
+        er_fk("refunds", "payment_id", "payments"),
+    ];
+    dbhive_ui_model::erd_scene::ErdScene::new(tables, fks, &std::collections::HashMap::new())
+}
+
+/// The workspace behind an overlay, the way the other panels snapshot it.
+fn workspace_behind(c: &AppWindow, light: bool) {
+    if light {
+        c.global::<Theme>().set_dark(false);
+    }
+    c.set_screen(Screen::Workspace);
+    c.set_workspace_connection_name("Production Postgres".into());
+    c.set_workspace_location_label("app \u{b7} public".into());
+}
+
+fn er_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_slint::diagram_model::Diagram;
+    use dbhive_ui_model::erd_scene::{fit, Flow, View};
+
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+    let c = AppWindow::new().expect("AppWindow");
+    workspace_behind(&c, light);
+
+    let mut scene = sample_er_scene();
+    let orders = scene.tables.iter().position(|t| t.name == "orders").unwrap();
+    match name {
+        "er-selected" | "er-zoomed" => scene.selected = Some(orders),
+        "er-filter" => scene.filter = "order".into(),
+        "er-collapsed" => scene.set_show_columns(false),
+        "er-no-relationships" => scene.options.show_relationships = false,
+        _ => {}
+    }
+    let mut diagram = Diagram::new(Vec::new(), Vec::new()).with_flow(Flow::Vertical, true);
+    diagram.hide_edges = !scene.options.show_relationships;
+    diagram.selected = scene.selected;
+    diagram.replace(dbhive_slint::erd_view::nodes(&scene), dbhive_slint::erd_view::links(&scene));
+
+    let (vw, vh) = canvas_size();
+    let view = if name == "er-zoomed" {
+        let r = scene.rect(orders);
+        View { zoom: 1.0, pan_x: 0.0, pan_y: 0.0 }.center_on(r.cx(), r.cy(), vw, vh)
+    } else {
+        fit(scene.bounds().unwrap(), vw, vh)
+    };
+
+    let st = c.global::<ErdState>();
+    st.set_visible(true);
+    let (loading, error) = match name {
+        "er-loading" => (true, "Could not read the schema: x"),
+        "er-error" => (false, "Could not read the schema: permission denied for schema public"),
+        _ => (false, ""),
+    };
+    let error = if name == "er-error" { error } else { "" };
+    let scene_ref = if name == "er-loading" || name == "er-error" || name == "er-empty" {
+        None
+    } else {
+        Some(&scene)
+    };
+    let empty_scene = dbhive_ui_model::erd_scene::ErdScene::new(vec![], vec![], &std::collections::HashMap::new());
+    let scene_ref = if name == "er-empty" { Some(&empty_scene) } else { scene_ref };
+    dbhive_slint::erd_view::project(&st, scene_ref, &diagram, view.zoom, loading, error, "public");
+    st.set_pan_x(view.pan_x);
+    st.set_pan_y(view.pan_y);
+    st.set_viewport_width(vw);
+    st.set_viewport_height(vh);
+    if name.starts_with("er-export") {
+        st.set_export_open(true);
+        st.set_export_path("/Users/me/Downloads/public-erd.svg".into());
+        if name == "er-export-exists" {
+            st.set_export_ok(false);
+            st.set_export_message("That file already exists. Save again to replace it.".into());
+        }
+    }
+    c.show().unwrap();
+    Box::new((c, diagram))
+}
+
+fn designer_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_slint::diagram_model::Diagram;
+    use dbhive_ui_model::designer_session::{action_index, type_index, Designer, Outcome, TableResult};
+    use dbhive_ui_model::erd_scene::{fit, Flow};
+    use dbhive_ui_model::table_editor::TypeKind;
+
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+    let c = AppWindow::new().expect("AppWindow");
+    workspace_behind(&c, light);
+
+    let mut d = Designer::new();
+    if name != "designer-empty" {
+        let users = d.add_table();
+        d.rename_table(users, "users");
+        let email = d.add_column(users).unwrap();
+        d.rename_column(users, email, "email");
+        d.set_column_type(users, email, type_index(TypeKind::Varchar));
+        d.toggle_nullable(users, email);
+        d.toggle_unique(users, email);
+
+        let products = d.add_table();
+        d.rename_table(products, "products");
+        let title = d.add_column(products).unwrap();
+        d.rename_column(products, title, "title");
+        d.set_column_type(products, title, type_index(TypeKind::Text));
+        let price = d.add_column(products).unwrap();
+        d.rename_column(products, price, "price");
+        d.set_column_type(products, price, type_index(TypeKind::Decimal));
+
+        let orders = d.add_table();
+        d.rename_table(orders, "orders");
+        let user_id = d.add_column(orders).unwrap();
+        d.rename_column(orders, user_id, "user_id");
+        d.set_column_type(orders, user_id, type_index(TypeKind::BigInt));
+        d.set_reference_table(orders, user_id, "users");
+        d.set_reference_column(orders, user_id, "id");
+        d.set_on_delete(orders, user_id, action_index(&dbhive_core::models::ForeignKeyAction::Cascade));
+        let placed = d.add_column(orders).unwrap();
+        d.rename_column(orders, placed, "placed_at");
+        d.set_column_type(orders, placed, type_index(TypeKind::Timestamp));
+
+        let items = d.add_table();
+        d.rename_table(items, "order_items");
+        let order_id = d.add_column(items).unwrap();
+        d.rename_column(items, order_id, "order_id");
+        d.set_column_type(items, order_id, type_index(TypeKind::BigInt));
+        d.set_reference_table(items, order_id, "orders");
+        let product_id = d.add_column(items).unwrap();
+        d.rename_column(items, product_id, "product_id");
+        d.set_column_type(items, product_id, type_index(TypeKind::BigInt));
+        d.set_reference_table(items, product_id, "products");
+        d.auto_layout();
+
+        match name {
+            "designer-nosel" => d.select_index(None),
+            "designer-varchar" => {
+                d.select_index(Some(0));
+                d.select_column(Some(email_index(&d)));
+            }
+            "designer-problems" => {
+                let extra = d.add_table(); // unnamed
+                let _ = extra;
+                d.select_index(Some(3));
+                d.select_column(Some(1));
+                d.set_reference_column(items, order_id, "missing");
+            }
+            _ => {
+                d.select_index(Some(2));
+                d.select_column(Some(1));
+            }
+        }
+    }
+
+    let mut diagram = Diagram::new(Vec::new(), Vec::new()).with_flow(Flow::Horizontal, true);
+    diagram.selected = d.selected_index();
+    diagram.replace(dbhive_slint::designer_view::nodes(&d), dbhive_slint::designer_view::links(&d));
+    let (vw, vh) = canvas_size();
+    let view = match d.bounds() {
+        Some(b) => fit(b, vw - 340.0, vh),
+        None => Default::default(),
+    };
+
+    let st = c.global::<DesignerState>();
+    st.set_visible(true);
+    dbhive_slint::designer_view::project(&st, &d, &diagram, view.zoom, name == "designer-applying", "Sqlite");
+    st.set_pan_x(view.pan_x);
+    st.set_pan_y(view.pan_y);
+    st.set_viewport_width(vw - 340.0);
+    st.set_viewport_height(vh);
+
+    if name.starts_with("designer-preview") {
+        let plan = d.plan(&dbhive_core::models::DbDriver::Sqlite, "").unwrap();
+        st.set_preview_sql(dbhive_ui_model::designer_session::script(&plan).into());
+        st.set_preview_open(true);
+    }
+    if name == "designer-result" {
+        let results = vec![
+            TableResult { name: "users".into(), outcome: Outcome::Created },
+            TableResult { name: "products".into(), outcome: Outcome::Created },
+            TableResult { name: "orders".into(), outcome: Outcome::Failed("table \"orders\" already exists".into()) },
+            TableResult { name: "order_items".into(), outcome: Outcome::Skipped("orders was not created".into()) },
+        ];
+        st.set_results(dbhive_slint::designer_view::result_rows(&results));
+        st.set_results_summary(dbhive_ui_model::designer_session::results_summary(&results).into());
+        st.set_preview_open(true);
+    }
+    c.show().unwrap();
+    Box::new((c, diagram))
+}
+
+fn email_index(d: &dbhive_ui_model::designer_session::Designer) -> usize {
+    d.tables[0].columns.iter().position(|c| c.base.name == "email").unwrap_or(0)
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
