@@ -48,6 +48,10 @@ use crate::{
 // The History / Snippets / Templates panel's controller half.
 mod history_glue;
 
+// The Import / Export and Backup / Restore panels' controller halves.
+mod backup;
+mod import_export;
+
 /// The connected workspace: which connection, which table, and its rows.
 #[derive(Default)]
 struct Workspace {
@@ -76,6 +80,8 @@ enum PendingAction {
     RunAnyway(u64),
     /// Clear history, or delete a snippet or template.
     History(history_glue::Pending),
+    /// Delete a backup file.
+    Backup(backup::Pending),
     /// Reset every setting to its default (Settings > Reset to defaults).
     ResetSettings,
     /// Close Settings and throw away its unsaved edits.
@@ -140,6 +146,8 @@ struct Session {
     pending_action: Option<PendingAction>,
     workspace: Workspace,
     history: history_glue::PanelSession,
+    data: crate::import_export_view::DataSession,
+    backups: backup::BackupSession,
     palette: PaletteState,
     shortcuts: ShortcutsState,
     settings: settings::SettingsState,
@@ -719,6 +727,8 @@ impl Ctx {
 
     fn leave_workspace(&self) {
         self.hide_history_panel();
+        self.hide_data_panel();
+        self.hide_backup_panel();
         self.session.borrow_mut().workspace = Workspace::default();
         if let Some(w) = self.window.upgrade() {
             w.set_screen(Screen::Connections);
@@ -1027,6 +1037,7 @@ impl Ctx {
             }
             Some(PendingAction::RunAnyway(id)) => self.run_tab(id, false),
             Some(PendingAction::History(pending)) => self.history_confirmed(pending),
+            Some(PendingAction::Backup(pending)) => self.backup_confirmed(pending),
             Some(PendingAction::ResetSettings) => self.reset_settings(),
             Some(PendingAction::DiscardSettings) => self.discard_settings_and_close(),
             None => self.delete_pending_connection(),
@@ -1168,6 +1179,8 @@ impl Ctx {
             CommandId::ThemeLight => self.set_theme_dark(false),
             CommandId::ThemeDark => self.set_theme_dark(true),
             CommandId::ThemeToggle => self.toggle_theme_mode(),
+            CommandId::GoImportExport => self.open_import_export(None),
+            CommandId::GoBackup => self.open_backup_panel(),
             // `status` only returns Enabled for the commands above.
             _ => return Outcome::Refused("Not available yet"),
         }
@@ -1578,6 +1591,8 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     }
 
     history_glue::wire(&window, &ctx);
+    import_export::wire(&window, &ctx);
+    backup::wire(&window, &ctx);
     inspector::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------

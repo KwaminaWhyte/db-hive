@@ -7,11 +7,13 @@
 slint::include_modules!();
 
 pub mod app;
+pub mod backup_view;
 pub mod connection_editor;
 pub mod connection_list;
 pub mod diagram_model;
 pub mod grid_model;
 pub mod history_view;
+pub mod import_export_view;
 pub mod palette_view;
 pub mod runtime;
 pub mod settings_view;

@@ -1,0 +1,1240 @@
+// The Import / Export panel, opened over the workspace.
+//
+// Four tabs: import a CSV or spreadsheet through a wizard, run a .sql file,
+// export a table, and write a SQL dump. All of the panel's data and intents
+// live in the `ImportExportState` global, so `app.slint` only mounts
+// `ImportExportOverlay`. Rust decides what every field says
+// (`dbhive_ui_model::import_wizard`, `data_forms`); this file lays it out.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Dropdown, Toggle, Divider, Banner, EmptyState, UnderlineTabs, Badge, StepBar, ProgressBar, CodeBlock, FormField, FactRow, SectionLabel, Card } from "../kit/kit.slint";
+import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
+
+// One file column of the mapping step.
+export struct MappingRow {
+    source: string,
+    // The first value in the file, so the user can tell columns apart.
+    sample: string,
+    // The table column it is written to; blank means not imported.
+    target: string,
+    type-label: string,
+    default-value: string,
+    skip: bool,
+}
+
+export global ImportExportState {
+    in-out property <bool> visible: false;
+    in property <int> tab: 0;
+    in property <[string]> tab-labels: ["Import data", "Run SQL file", "Export table", "SQL dump"];
+    // "Widgets · main", the connection and schema everything acts on.
+    in property <string> location;
+    in property <[string]> tables;
+    in property <bool> tables-loading: false;
+    in property <string> tables-error;
+
+    // -- Import wizard ---------------------------------------------------
+    in property <[string]> step-labels: ["File", "Preview", "Mapping", "Options", "Confirm", "Import", "Done"];
+    in property <int> step: 0;
+    in property <int> reachable-step: 0;
+    // Reading the preview, or building the plan.
+    in property <bool> busy: false;
+    in property <string> busy-text;
+    in-out property <string> import-path;
+    in property <string> import-path-error;
+    in property <bool> import-header: true;
+    in property <[string]> delimiter-options: ["Comma  ,", "Semicolon  ;", "Tab", "Pipe  |"];
+    in property <int> delimiter-index: 0;
+    in property <bool> spreadsheet: false;
+    in property <[string]> sheet-options;
+    in property <int> sheet-index: 0;
+    in property <string> preview-summary;
+    in property <[GridColumn]> preview-columns;
+    in property <[GridRow]> preview-rows;
+    in property <length> preview-width: 0px;
+    in property <string> table-value: "Choose a table";
+    in-out property <string> new-table-text;
+    in property <[MappingRow]> mapping;
+    in property <[string]> target-choices;
+    in property <[string]> type-options;
+    in property <string> mapping-summary;
+    in property <string> mapping-hint;
+    in property <bool> mapping-ready: false;
+    in property <bool> loading-columns: false;
+    in property <bool> truncate: false;
+    in-out property <string> skip-rows;
+    in-out property <string> batch-size;
+    in property <string> options-note;
+    in property <string> import-error;
+    in property <string> plan-target;
+    in property <string> plan-columns;
+    in property <string> plan-rows;
+    in property <string> plan-skipped;
+    in property <string> plan-source;
+    in property <string> plan-create;
+    in property <string> plan-truncate;
+    in property <string> plan-samples-label;
+    in property <[string]> plan-samples;
+    in property <bool> needs-typed: false;
+    in-out property <string> confirm-text;
+    in property <string> confirm-prompt;
+    in property <bool> can-import: false;
+    in property <string> import-label: "Write rows";
+    in property <string> running-text;
+    in property <Tone> result-tone: Tone.success;
+    in property <string> result-summary;
+    in property <[string]> result-errors;
+    in property <string> result-more;
+
+    // -- Run a SQL file ----------------------------------------------------
+    in-out property <string> sql-path;
+    in property <string> sql-path-error;
+    in property <bool> sql-transaction: true;
+    in property <bool> sql-continue: false;
+    in property <string> sql-note;
+    in property <bool> sql-running: false;
+    in property <bool> sql-has-result: false;
+    in property <Tone> sql-result-tone: Tone.success;
+    in property <string> sql-result-summary;
+    in property <string> sql-result-detail;
+    in property <string> sql-log-file;
+    in property <string> sql-error;
+
+    // -- Export a table ----------------------------------------------------
+    in property <string> export-table-value: "Choose a table";
+    in property <[string]> export-format-options;
+    in property <int> export-format-index: 0;
+    in-out property <string> export-path;
+    in property <bool> export-is-csv: true;
+    in property <int> export-delimiter-index: 0;
+    in property <bool> export-headers: true;
+    in-out property <string> export-limit;
+    in property <string> export-error;
+    in property <bool> export-running: false;
+    in property <string> export-result;
+
+    // -- SQL dump ----------------------------------------------------------
+    in property <bool> dump-drop: false;
+    in property <bool> dump-create: true;
+    in property <bool> dump-data: true;
+    in-out property <string> dump-tables;
+    in-out property <string> dump-path;
+    in property <string> dump-scope;
+    in property <string> dump-note;
+    in property <string> dump-error;
+    in property <bool> dump-running: false;
+    in property <string> dump-result;
+
+    // The View menu or the palette asked for the panel; the controller
+    // fills it and sets `visible`.
+    callback open-requested;
+    callback close;
+    callback tab-selected(int);
+    callback retry-tables;
+
+    callback step-picked(int);
+    callback import-path-edited(string);
+    callback import-header-toggled;
+    callback delimiter-picked(int);
+    callback sheet-picked(int);
+    callback import-read-preview;
+    callback import-back;
+    callback import-next;
+    callback import-review;
+    callback import-run;
+    callback import-stop;
+    callback import-again;
+    callback table-picked(int);
+    callback new-table-edited(string);
+    callback auto-map;
+    callback mapping-target(int, int);
+    callback mapping-type(int, int);
+    callback mapping-default(int, string);
+    callback mapping-skip(int);
+    callback truncate-toggled;
+    callback skip-rows-edited(string);
+    callback batch-size-edited(string);
+    callback confirm-edited(string);
+
+    callback sql-path-edited(string);
+    callback sql-transaction-toggled;
+    callback sql-continue-toggled;
+    callback sql-run;
+    callback sql-stop;
+    callback sql-again;
+
+    callback export-table-picked(int);
+    callback export-format-picked(int);
+    callback export-path-edited(string);
+    callback export-suggest;
+    callback export-delimiter-picked(int);
+    callback export-headers-toggled;
+    callback export-limit-edited(string);
+    callback export-run;
+
+    callback dump-drop-toggled;
+    callback dump-create-toggled;
+    callback dump-data-toggled;
+    callback dump-tables-edited(string);
+    callback dump-path-edited(string);
+    callback dump-suggest;
+    callback dump-run;
+}
+
+// A wizard step's footer: Back on the left, the step's one action on the
+// right, children (the action buttons) on the right.
+component Footer inherits VerticalLayout {
+    in property <bool> show-back: true;
+    spacing: 10px;
+    vertical-stretch: 0;
+    Divider { }
+    HorizontalLayout {
+        spacing: 8px;
+        if root.show-back: Button {
+            text: "Back";
+            clicked => { ImportExportState.import-back(); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        @children
+    }
+}
+
+// Text shown while a job with no progress figure runs.
+component Working inherits VerticalLayout {
+    in property <string> text;
+    spacing: 8px;
+    vertical-stretch: 0;
+    Text {
+        text: root.text;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-label;
+    }
+    ProgressBar { indeterminate: true; }
+}
+
+// ---------------------------------------------------------------------------
+// Import wizard steps
+// ---------------------------------------------------------------------------
+
+component FileStep inherits VerticalLayout {
+    alignment: start;
+    spacing: 14px;
+
+    FormField {
+        label: "File";
+        hint: "CSV, TSV, TXT, XLSX or XLS. There is no file picker in this build: type or paste the full path.";
+        error: ImportExportState.import-path-error;
+        TextField {
+            text <=> ImportExportState.import-path;
+            placeholder: "/Users/you/Downloads/data.csv";
+            has-icon: true;
+            icon: Icons.file-text;
+            edited(t) => { ImportExportState.import-path-edited(t); }
+            accepted(t) => { ImportExportState.import-read-preview(); }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 16px;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            Toggle {
+                text: "First row is a header";
+                checked: ImportExportState.import-header;
+                toggled => { ImportExportState.import-header-toggled(); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: "Delimiter";
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+            }
+        }
+        Dropdown {
+            width: 150px;
+            enabled: !ImportExportState.spreadsheet;
+            options: ImportExportState.delimiter-options;
+            value: ImportExportState.delimiter-options[ImportExportState.delimiter-index];
+            selected(i) => { ImportExportState.delimiter-picked(i); }
+        }
+    }
+
+    if ImportExportState.busy: Working { text: ImportExportState.busy-text; }
+
+    if ImportExportState.import-error != "": Banner {
+        message: ImportExportState.import-error;
+        dismissible: false;
+    }
+
+    Card {
+        VerticalLayout {
+            padding: 16px;
+            spacing: 8px;
+            Text {
+                text: "How an import works";
+                color: Theme.foreground;
+                font-size: Theme.size-label;
+                font-weight: 600;
+            }
+            Text {
+                text: "You see the first rows, choose the table and how each column maps, then review the exact INSERT statements. Nothing is written until you confirm on the last step. A row that fails is reported and does not stop the rest.";
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+                wrap: word-wrap;
+            }
+        }
+    }
+}
+
+component PreviewStep inherits VerticalLayout {
+    spacing: 10px;
+
+    HorizontalLayout {
+        spacing: 10px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            Text {
+                text: ImportExportState.preview-summary;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+                overflow: elide;
+            }
+        }
+        if ImportExportState.spreadsheet: HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "Sheet";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-label;
+                }
+            }
+            Dropdown {
+                width: 180px;
+                options: ImportExportState.sheet-options;
+                value: ImportExportState.sheet-options[ImportExportState.sheet-index];
+                selected(i) => { ImportExportState.sheet-picked(i); }
+            }
+        }
+    }
+
+    if ImportExportState.busy: Working { text: ImportExportState.busy-text; }
+
+    if ImportExportState.preview-rows.length > 0: ResultsGrid {
+        vertical-stretch: 1;
+        columns: ImportExportState.preview-columns;
+        rows: ImportExportState.preview-rows;
+        total-width: ImportExportState.preview-width;
+    }
+    if ImportExportState.preview-rows.length == 0 && !ImportExportState.busy: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.table;
+        title: "The file has no rows";
+        message: "Check the delimiter and the header setting, then read the file again.";
+    }
+
+    Text {
+        text: "The mapping step guesses a type for each column from these rows; you can change any of them.";
+        color: Theme.dim-foreground;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+}
+
+component MappingStep inherits VerticalLayout {
+    spacing: 10px;
+
+    HorizontalLayout {
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: "Table";
+                color: Theme.foreground;
+                font-size: Theme.size-label;
+                font-weight: 600;
+            }
+        }
+        Dropdown {
+            width: 220px;
+            options: ImportExportState.tables;
+            value: ImportExportState.table-value;
+            selected(i) => { ImportExportState.table-picked(i); }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: "or a new table";
+                color: Theme.muted-foreground;
+                font-size: Theme.size-label;
+            }
+        }
+        TextField {
+            width: 180px;
+            text <=> ImportExportState.new-table-text;
+            placeholder: "new_table_name";
+            edited(t) => { ImportExportState.new-table-edited(t); }
+        }
+        Rectangle { horizontal-stretch: 1; }
+        Button {
+            text: "Auto-map";
+            has-icon: true;
+            icon: Icons.zap;
+            enabled: !ImportExportState.loading-columns;
+            clicked => { ImportExportState.auto-map(); }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 10px;
+        Text {
+            text: ImportExportState.mapping-summary;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+        }
+        if ImportExportState.loading-columns: Text {
+            text: "Reading the table's columns…";
+            color: Theme.dim-foreground;
+            font-size: Theme.size-small;
+        }
+        if ImportExportState.mapping-hint != "": Text {
+            text: ImportExportState.mapping-hint;
+            color: Theme.warning;
+            font-size: Theme.size-small;
+        }
+    }
+
+    if ImportExportState.tables.length == 0 && !ImportExportState.tables-loading && ImportExportState.tables-error == "": Text {
+        text: "This schema has no tables yet. Type a new table name and the import creates it from the file's columns.";
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+    if ImportExportState.tables-error != "": Banner {
+        message: ImportExportState.tables-error;
+        dismissible: false;
+    }
+
+    // Column headings, aligned with the rows below.
+    HorizontalLayout {
+        spacing: 10px;
+        padding-left: 8px;
+        padding-right: 14px;
+        Text { horizontal-stretch: 1; text: "FILE COLUMN"; color: Theme.dim-foreground; font-size: Theme.size-small; font-weight: 600; letter-spacing: 0.6px; }
+        Text { width: 180px; text: "TABLE COLUMN"; color: Theme.dim-foreground; font-size: Theme.size-small; font-weight: 600; letter-spacing: 0.6px; }
+        Text { width: 130px; text: "TYPE"; color: Theme.dim-foreground; font-size: Theme.size-small; font-weight: 600; letter-spacing: 0.6px; }
+        Text { width: 130px; text: "DEFAULT IF EMPTY"; color: Theme.dim-foreground; font-size: Theme.size-small; font-weight: 600; letter-spacing: 0.6px; }
+        Text { width: 56px; text: "IMPORT"; color: Theme.dim-foreground; font-size: Theme.size-small; font-weight: 600; letter-spacing: 0.6px; }
+    }
+    Divider { }
+
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 6px;
+            padding-right: 14px;
+            for row[idx] in ImportExportState.mapping: HorizontalLayout {
+                spacing: 10px;
+                padding-left: 8px;
+                height: 40px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    min-width: 0px;
+                    alignment: center;
+                    Text {
+                        text: row.source;
+                        color: row.skip ? Theme.muted-foreground : Theme.foreground;
+                        font-size: Theme.size-label;
+                        font-weight: 600;
+                        overflow: elide;
+                    }
+                    if row.sample != "": Text {
+                        text: row.sample;
+                        color: Theme.dim-foreground;
+                        font-size: Theme.size-small;
+                        overflow: elide;
+                    }
+                }
+                VerticalLayout {
+                    width: 180px;
+                    alignment: center;
+                    Dropdown {
+                        options: ImportExportState.target-choices;
+                        value: row.target == "" ? "Not imported" : row.target;
+                        selected(i) => { ImportExportState.mapping-target(idx, i); }
+                    }
+                }
+                VerticalLayout {
+                    width: 130px;
+                    alignment: center;
+                    Dropdown {
+                        options: ImportExportState.type-options;
+                        value: row.type-label;
+                        enabled: !row.skip;
+                        selected(i) => { ImportExportState.mapping-type(idx, i); }
+                    }
+                }
+                VerticalLayout {
+                    width: 130px;
+                    alignment: center;
+                    TextField {
+                        text: row.default-value;
+                        placeholder: "NULL";
+                        enabled: !row.skip;
+                        edited(t) => { ImportExportState.mapping-default(idx, t); }
+                    }
+                }
+                VerticalLayout {
+                    width: 56px;
+                    alignment: center;
+                    Toggle {
+                        checked: !row.skip;
+                        toggled => { ImportExportState.mapping-skip(idx); }
+                    }
+                }
+            }
+        }
+    }
+}
+
+component OptionsStep inherits VerticalLayout {
+    alignment: start;
+    spacing: 14px;
+
+    Card {
+        VerticalLayout {
+            padding: 16px;
+            spacing: 14px;
+            VerticalLayout {
+                spacing: 4px;
+                Toggle {
+                    text: "Empty the table before importing";
+                    checked: ImportExportState.truncate;
+                    toggled => { ImportExportState.truncate-toggled(); }
+                }
+                Text {
+                    text: ImportExportState.truncate
+                        ? "Every existing row in the table is deleted first. You will be asked to type the table name to confirm."
+                        : "New rows are added after the rows already in the table.";
+                    color: ImportExportState.truncate ? Theme.destructive : Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    wrap: word-wrap;
+                }
+            }
+            Divider { }
+            HorizontalLayout {
+                spacing: 24px;
+                FormField {
+                    horizontal-stretch: 1;
+                    label: "Skip rows";
+                    hint: "Data rows dropped from the top, after any header row.";
+                    TextField {
+                        text <=> ImportExportState.skip-rows;
+                        placeholder: "0";
+                        edited(t) => { ImportExportState.skip-rows-edited(t); }
+                    }
+                }
+                FormField {
+                    horizontal-stretch: 1;
+                    label: "Rows per statement";
+                    hint: "A failed batch is retried row by row, so one bad row costs only itself.";
+                    TextField {
+                        text <=> ImportExportState.batch-size;
+                        placeholder: "1000";
+                        edited(t) => { ImportExportState.batch-size-edited(t); }
+                    }
+                }
+            }
+        }
+    }
+
+    if ImportExportState.options-note != "": Banner {
+        message: ImportExportState.options-note;
+        tone: Tone.accent;
+        dismissible: false;
+    }
+    if ImportExportState.busy: Working { text: ImportExportState.busy-text; }
+    if ImportExportState.import-error != "": Banner {
+        message: ImportExportState.import-error;
+        dismissible: false;
+    }
+}
+
+component ConfirmStep inherits VerticalLayout {
+    spacing: 10px;
+
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 10px;
+            padding-right: 14px;
+            SectionLabel { text: "THIS IS WHAT WILL BE WRITTEN"; }
+            Card {
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 8px;
+                    FactRow { label: "Target"; value: ImportExportState.plan-target; mono: true; }
+                    FactRow { label: "Columns"; value: ImportExportState.plan-columns; }
+                    FactRow { label: "Rows"; value: ImportExportState.plan-rows; }
+                    if ImportExportState.plan-skipped != "": FactRow { label: "Not imported"; value: ImportExportState.plan-skipped; }
+                    FactRow { label: "Source"; value: ImportExportState.plan-source; mono: true; }
+                }
+            }
+            if ImportExportState.plan-create != "": VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "Runs first, because the table does not exist yet:";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+                CodeBlock { text: ImportExportState.plan-create; max-lines: 6; }
+            }
+            if ImportExportState.plan-truncate != "": VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "Every existing row in this table is deleted first:";
+                    color: Theme.destructive;
+                    font-size: Theme.size-small;
+                    font-weight: 600;
+                }
+                CodeBlock { text: ImportExportState.plan-truncate; tone: Tone.danger; }
+            }
+            if ImportExportState.plan-samples.length > 0: VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: ImportExportState.plan-samples-label;
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+                for s in ImportExportState.plan-samples: CodeBlock { text: s; max-lines: 3; }
+            }
+        }
+    }
+
+    if ImportExportState.needs-typed: FormField {
+        label: ImportExportState.confirm-prompt;
+        TextField {
+            text <=> ImportExportState.confirm-text;
+            placeholder: "table name";
+            edited(t) => { ImportExportState.confirm-edited(t); }
+        }
+    }
+    if ImportExportState.import-error != "": Banner {
+        message: ImportExportState.import-error;
+        dismissible: false;
+    }
+}
+
+component RunningStep inherits VerticalLayout {
+    alignment: center;
+    spacing: 14px;
+
+    Text {
+        text: ImportExportState.running-text;
+        color: Theme.foreground;
+        font-size: Theme.size-subheading;
+        font-weight: 600;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    ProgressBar { indeterminate: true; }
+    Text {
+        text: "Rows already written stay written. Stopping leaves a partial import rather than rolling back.";
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        horizontal-alignment: center;
+        wrap: word-wrap;
+    }
+    HorizontalLayout {
+        alignment: center;
+        Button {
+            text: "Stop";
+            variant: ButtonVariant.danger;
+            clicked => { ImportExportState.import-stop(); }
+        }
+    }
+}
+
+component DoneStep inherits VerticalLayout {
+    alignment: start;
+    spacing: 12px;
+
+    Banner {
+        message: ImportExportState.result-summary;
+        tone: ImportExportState.result-tone;
+        dismissible: false;
+    }
+    Card {
+        VerticalLayout {
+            padding: 14px;
+            spacing: 8px;
+            FactRow { label: "Target"; value: ImportExportState.plan-target; mono: true; }
+            FactRow { label: "Source"; value: ImportExportState.plan-source; mono: true; }
+        }
+    }
+    if ImportExportState.result-errors.length > 0: VerticalLayout {
+        spacing: 6px;
+        Text {
+            text: "First failures";
+            color: Theme.foreground;
+            font-size: Theme.size-label;
+            font-weight: 600;
+        }
+        for e in ImportExportState.result-errors: Text {
+            text: e;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            wrap: word-wrap;
+        }
+        if ImportExportState.result-more != "": Text {
+            text: ImportExportState.result-more;
+            color: Theme.dim-foreground;
+            font-size: Theme.size-small;
+        }
+    }
+}
+
+component ImportPane inherits VerticalLayout {
+    spacing: 10px;
+
+    StepBar {
+        labels: ImportExportState.step-labels;
+        current: ImportExportState.step;
+        reachable: ImportExportState.reachable-step;
+        locked: ImportExportState.step >= 5 || ImportExportState.busy;
+        picked(i) => { ImportExportState.step-picked(i); }
+    }
+
+    if ImportExportState.step == 0: FileStep { vertical-stretch: 1; }
+    if ImportExportState.step == 1: PreviewStep { vertical-stretch: 1; }
+    if ImportExportState.step == 2: MappingStep { vertical-stretch: 1; }
+    if ImportExportState.step == 3: OptionsStep { vertical-stretch: 1; }
+    if ImportExportState.step == 4: ConfirmStep { vertical-stretch: 1; }
+    if ImportExportState.step == 5: RunningStep { vertical-stretch: 1; }
+    if ImportExportState.step == 6: DoneStep { vertical-stretch: 1; }
+
+    if ImportExportState.step == 0: Footer {
+        show-back: false;
+        Button {
+            text: "Read preview";
+            variant: ButtonVariant.primary;
+            enabled: ImportExportState.import-path != "" && !ImportExportState.busy;
+            clicked => { ImportExportState.import-read-preview(); }
+        }
+    }
+    if ImportExportState.step == 1: Footer {
+        Button {
+            text: "Re-read file";
+            variant: ButtonVariant.ghost;
+            enabled: !ImportExportState.busy;
+            clicked => { ImportExportState.import-read-preview(); }
+        }
+        Button {
+            text: "Continue to mapping";
+            variant: ButtonVariant.primary;
+            enabled: ImportExportState.preview-rows.length > 0 && !ImportExportState.busy;
+            clicked => { ImportExportState.import-next(); }
+        }
+    }
+    if ImportExportState.step == 2: Footer {
+        Button {
+            text: "Continue to options";
+            variant: ButtonVariant.primary;
+            enabled: ImportExportState.mapping-ready;
+            clicked => { ImportExportState.import-next(); }
+        }
+    }
+    if ImportExportState.step == 3: Footer {
+        Button {
+            text: "Review what will be written";
+            variant: ButtonVariant.primary;
+            enabled: !ImportExportState.busy;
+            clicked => { ImportExportState.import-review(); }
+        }
+    }
+    if ImportExportState.step == 4: Footer {
+        Button {
+            text: ImportExportState.import-label;
+            variant: ButtonVariant.primary;
+            has-icon: true;
+            icon: Icons.upload;
+            enabled: ImportExportState.can-import;
+            clicked => { ImportExportState.import-run(); }
+        }
+    }
+    if ImportExportState.step == 6: Footer {
+        show-back: false;
+        Button {
+            text: "Import another file";
+            clicked => { ImportExportState.import-again(); }
+        }
+        Button {
+            text: "Close";
+            variant: ButtonVariant.primary;
+            clicked => { ImportExportState.close(); }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Run a SQL file
+// ---------------------------------------------------------------------------
+
+component SqlFilePane inherits VerticalLayout {
+    spacing: 12px;
+
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 14px;
+            padding-right: 14px;
+
+            FormField {
+                label: "SQL file";
+                hint: "A dump from this app, mysqldump or pg_dump. Type or paste the full path.";
+                error: ImportExportState.sql-path-error;
+                TextField {
+                    text <=> ImportExportState.sql-path;
+                    placeholder: "/Users/you/Downloads/dump.sql";
+                    has-icon: true;
+                    icon: Icons.file-text;
+                    enabled: !ImportExportState.sql-running;
+                    edited(t) => { ImportExportState.sql-path-edited(t); }
+                    accepted(t) => { ImportExportState.sql-run(); }
+                }
+            }
+
+            Card {
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+                    Toggle {
+                        text: "Run inside a transaction";
+                        checked: ImportExportState.sql-transaction;
+                        enabled: !ImportExportState.sql-running;
+                        toggled => { ImportExportState.sql-transaction-toggled(); }
+                    }
+                    Toggle {
+                        text: "Continue after an error";
+                        checked: ImportExportState.sql-continue;
+                        enabled: !ImportExportState.sql-running;
+                        toggled => { ImportExportState.sql-continue-toggled(); }
+                    }
+                    Text {
+                        text: ImportExportState.sql-note;
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            if ImportExportState.sql-running: VerticalLayout {
+                spacing: 8px;
+                Working { text: "Running the file. Statements are streamed, so a large dump does not fill memory."; }
+                HorizontalLayout {
+                    alignment: start;
+                    Button {
+                        text: "Stop";
+                        variant: ButtonVariant.danger;
+                        clicked => { ImportExportState.sql-stop(); }
+                    }
+                }
+            }
+            if ImportExportState.sql-error != "": Banner {
+                message: ImportExportState.sql-error;
+                dismissible: false;
+            }
+            if ImportExportState.sql-has-result: VerticalLayout {
+                spacing: 8px;
+                Banner {
+                    message: ImportExportState.sql-result-summary;
+                    tone: ImportExportState.sql-result-tone;
+                    dismissible: false;
+                }
+                if ImportExportState.sql-result-detail != "": CodeBlock {
+                    text: ImportExportState.sql-result-detail;
+                    tone: Tone.danger;
+                    max-lines: 5;
+                }
+                if ImportExportState.sql-log-file != "": FactRow {
+                    label: "Error log";
+                    value: ImportExportState.sql-log-file;
+                    mono: true;
+                }
+            }
+        }
+    }
+
+    Divider { }
+    HorizontalLayout {
+        alignment: end;
+        spacing: 8px;
+        if ImportExportState.sql-has-result && !ImportExportState.sql-running: Button {
+            text: "Run another file";
+            clicked => { ImportExportState.sql-again(); }
+        }
+        Button {
+            text: "Run file";
+            variant: ButtonVariant.primary;
+            has-icon: true;
+            icon: Icons.play;
+            enabled: ImportExportState.sql-path != "" && !ImportExportState.sql-running;
+            clicked => { ImportExportState.sql-run(); }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Export a table
+// ---------------------------------------------------------------------------
+
+component ExportPane inherits VerticalLayout {
+    spacing: 12px;
+
+    if ImportExportState.tables-loading: Text {
+        vertical-stretch: 1;
+        text: "Loading tables…";
+        color: Theme.muted-foreground;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    if !ImportExportState.tables-loading && ImportExportState.tables-error != "": VerticalLayout {
+        vertical-stretch: 1;
+        alignment: start;
+        spacing: 8px;
+        Banner { message: ImportExportState.tables-error; dismissible: false; }
+        HorizontalLayout {
+            alignment: start;
+            Button {
+                text: "Retry";
+                has-icon: true;
+                icon: Icons.refresh-cw;
+                clicked => { ImportExportState.retry-tables(); }
+            }
+        }
+    }
+    if !ImportExportState.tables-loading && ImportExportState.tables-error == "" && ImportExportState.tables.length == 0: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.table;
+        title: "No tables to export";
+        message: "This schema has no tables. Create one, or import a file into a new table.";
+    }
+
+    if !ImportExportState.tables-loading && ImportExportState.tables-error == "" && ImportExportState.tables.length > 0: ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 14px;
+            padding-right: 14px;
+
+            HorizontalLayout {
+                spacing: 16px;
+                FormField {
+                    horizontal-stretch: 1;
+                    label: "Table";
+                    Dropdown {
+                        options: ImportExportState.tables;
+                        value: ImportExportState.export-table-value;
+                        enabled: !ImportExportState.export-running;
+                        selected(i) => { ImportExportState.export-table-picked(i); }
+                    }
+                }
+                FormField {
+                    horizontal-stretch: 1;
+                    label: "Format";
+                    Dropdown {
+                        options: ImportExportState.export-format-options;
+                        value: ImportExportState.export-format-options[ImportExportState.export-format-index];
+                        enabled: !ImportExportState.export-running;
+                        selected(i) => { ImportExportState.export-format-picked(i); }
+                    }
+                }
+            }
+
+            if ImportExportState.export-is-csv: HorizontalLayout {
+                spacing: 16px;
+                FormField {
+                    horizontal-stretch: 1;
+                    label: "Delimiter";
+                    Dropdown {
+                        options: ImportExportState.delimiter-options;
+                        value: ImportExportState.delimiter-options[ImportExportState.export-delimiter-index];
+                        selected(i) => { ImportExportState.export-delimiter-picked(i); }
+                    }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: end;
+                    padding-bottom: 6px;
+                    Toggle {
+                        text: "Write a header row";
+                        checked: ImportExportState.export-headers;
+                        toggled => { ImportExportState.export-headers-toggled(); }
+                    }
+                }
+            }
+
+            FormField {
+                label: "Row limit";
+                hint: "Leave blank to export every row.";
+                TextField {
+                    width: 200px;
+                    text <=> ImportExportState.export-limit;
+                    placeholder: "All rows";
+                    edited(t) => { ImportExportState.export-limit-edited(t); }
+                }
+            }
+
+            FormField {
+                label: "Save to";
+                hint: "The file is written when you press Export; the path is shown again when it is done.";
+                HorizontalLayout {
+                    spacing: 8px;
+                    TextField {
+                        horizontal-stretch: 1;
+                        text <=> ImportExportState.export-path;
+                        placeholder: "/Users/you/Downloads/orders_2026-10-21.csv";
+                        has-icon: true;
+                        icon: Icons.download;
+                        enabled: !ImportExportState.export-running;
+                        edited(t) => { ImportExportState.export-path-edited(t); }
+                        accepted(t) => { ImportExportState.export-run(); }
+                    }
+                    Button {
+                        text: "Suggest";
+                        variant: ButtonVariant.ghost;
+                        enabled: !ImportExportState.export-running;
+                        clicked => { ImportExportState.export-suggest(); }
+                    }
+                }
+            }
+
+            if ImportExportState.export-running: Working { text: "Reading the table and writing the file…"; }
+            if ImportExportState.export-error != "": Banner { message: ImportExportState.export-error; dismissible: false; }
+            if ImportExportState.export-result != "": Banner {
+                message: ImportExportState.export-result;
+                tone: Tone.success;
+                dismissible: false;
+            }
+        }
+    }
+
+    Divider { }
+    HorizontalLayout {
+        alignment: end;
+        Button {
+            text: "Export";
+            variant: ButtonVariant.primary;
+            has-icon: true;
+            icon: Icons.download;
+            enabled: ImportExportState.tables.length > 0 && !ImportExportState.export-running;
+            clicked => { ImportExportState.export-run(); }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SQL dump
+// ---------------------------------------------------------------------------
+
+component DumpPane inherits VerticalLayout {
+    spacing: 12px;
+
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 14px;
+            padding-right: 14px;
+
+            Card {
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+                    Text {
+                        text: "What to write";
+                        color: Theme.foreground;
+                        font-size: Theme.size-label;
+                        font-weight: 600;
+                    }
+                    HorizontalLayout {
+                        spacing: 24px;
+                        alignment: start;
+                        Toggle {
+                            text: "DROP TABLE";
+                            checked: ImportExportState.dump-drop;
+                            enabled: !ImportExportState.dump-running;
+                            toggled => { ImportExportState.dump-drop-toggled(); }
+                        }
+                        Toggle {
+                            text: "CREATE TABLE";
+                            checked: ImportExportState.dump-create;
+                            enabled: !ImportExportState.dump-running;
+                            toggled => { ImportExportState.dump-create-toggled(); }
+                        }
+                        Toggle {
+                            text: "INSERT rows";
+                            checked: ImportExportState.dump-data;
+                            enabled: !ImportExportState.dump-running;
+                            toggled => { ImportExportState.dump-data-toggled(); }
+                        }
+                    }
+                    if ImportExportState.dump-note != "": Text {
+                        text: ImportExportState.dump-note;
+                        color: Theme.warning;
+                        font-size: Theme.size-small;
+                        wrap: word-wrap;
+                    }
+                }
+            }
+
+            FormField {
+                label: "Tables";
+                hint: ImportExportState.dump-scope;
+                TextField {
+                    text <=> ImportExportState.dump-tables;
+                    placeholder: "Every table, or a comma separated list";
+                    enabled: !ImportExportState.dump-running;
+                    edited(t) => { ImportExportState.dump-tables-edited(t); }
+                }
+            }
+
+            FormField {
+                label: "Save to";
+                hint: "A date-stamped file name is suggested. The path is shown again when the dump is written.";
+                HorizontalLayout {
+                    spacing: 8px;
+                    TextField {
+                        horizontal-stretch: 1;
+                        text <=> ImportExportState.dump-path;
+                        placeholder: "/Users/you/Downloads/shop_2026-10-21.sql";
+                        has-icon: true;
+                        icon: Icons.download;
+                        enabled: !ImportExportState.dump-running;
+                        edited(t) => { ImportExportState.dump-path-edited(t); }
+                        accepted(t) => { ImportExportState.dump-run(); }
+                    }
+                    Button {
+                        text: "Suggest";
+                        variant: ButtonVariant.ghost;
+                        enabled: !ImportExportState.dump-running;
+                        clicked => { ImportExportState.dump-suggest(); }
+                    }
+                }
+            }
+
+            if ImportExportState.dump-running: Working { text: "Writing the dump…"; }
+            if ImportExportState.dump-error != "": Banner { message: ImportExportState.dump-error; dismissible: false; }
+            if ImportExportState.dump-result != "": Banner {
+                message: ImportExportState.dump-result;
+                tone: Tone.success;
+                dismissible: false;
+            }
+        }
+    }
+
+    Divider { }
+    HorizontalLayout {
+        alignment: end;
+        Button {
+            text: "Write dump";
+            variant: ButtonVariant.primary;
+            has-icon: true;
+            icon: Icons.download;
+            enabled: !ImportExportState.dump-running;
+            clicked => { ImportExportState.dump-run(); }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The panel and its overlay
+// ---------------------------------------------------------------------------
+
+export component ImportExportPanel inherits Rectangle {
+    // Set by the window so the footer buttons never fall off a short window.
+    in property <length> available-height: 640px;
+
+    width: 840px;
+    height: min(640px, root.available-height);
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    clip: true;
+
+    // Swallows clicks on the panel's own background, so they do not reach the
+    // overlay's backdrop and close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: 20px;
+        padding-top: 16px;
+        spacing: 10px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "Import and export";
+                    color: Theme.foreground;
+                    font-size: Theme.size-subheading;
+                    font-weight: 700;
+                }
+            }
+            if ImportExportState.location != "": VerticalLayout {
+                alignment: center;
+                Badge { text: ImportExportState.location; }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                has-icon: true;
+                icon: Icons.x;
+                variant: ButtonVariant.ghost;
+                accessible-label: "Close";
+                clicked => { ImportExportState.close(); }
+            }
+        }
+
+        UnderlineTabs {
+            labels: ImportExportState.tab-labels;
+            active: ImportExportState.tab;
+            selected(i) => { ImportExportState.tab-selected(i); }
+        }
+
+        if ImportExportState.tab == 0: ImportPane { vertical-stretch: 1; }
+        if ImportExportState.tab == 1: SqlFilePane { vertical-stretch: 1; }
+        if ImportExportState.tab == 2: ExportPane { vertical-stretch: 1; }
+        if ImportExportState.tab == 3: DumpPane { vertical-stretch: 1; }
+    }
+}
+
+// The panel over a dimmed workspace. A click on the backdrop does not close
+// it: every tab can hold typed work or a running job.
+export component ImportExportOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Theme.background.transparentize(0.25);
+
+    TouchArea { }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            ImportExportPanel {
+                available-height: root.height - 48px;
+            }
+        }
+    }
+}

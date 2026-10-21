@@ -1253,3 +1253,196 @@ export component SettingRow inherits VerticalLayout {
     }
     if !root.last: Divider { }
 }
+
+// -- Import / export and backup additions ---------------------------------
+
+// The numbered steps of a wizard. Steps before the current one show a check;
+// steps up to `reachable` can be jumped to (backwards, or to a step whose
+// input already exists). `locked` freezes the bar while work is running.
+export component StepBar inherits Rectangle {
+    in property <[string]> labels;
+    in property <int> current: 0;
+    in property <int> reachable: 0;
+    in property <bool> locked: false;
+    callback picked(int);
+
+    height: 34px;
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 2px;
+        for label[i] in root.labels: Rectangle {
+            property <bool> on: i == root.current;
+            property <bool> done: i < root.current;
+            property <bool> can: !root.locked && i <= root.reachable && i != root.current;
+            width: step-row.preferred-width;
+            border-radius: Theme.radius-control;
+            background: self.on ? Theme.primary-soft : step-touch.has-hover && self.can ? Theme.hover : transparent;
+            animate background { duration: 90ms; }
+
+            accessible-role: tab;
+            accessible-label: "Step " + (i + 1) + ", " + label;
+            accessible-action-default => {
+                if (self.can) {
+                    root.picked(i);
+                }
+            }
+
+            step-touch := TouchArea {
+                enabled: parent.can;
+                mouse-cursor: parent.can ? pointer : default;
+                clicked => { root.picked(i); }
+            }
+            step-row := HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 10px;
+                spacing: 6px;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 18px;
+                        height: 18px;
+                        border-radius: 9px;
+                        background: i == root.current ? Theme.primary : transparent;
+                        border-width: i == root.current ? 0px : 1px;
+                        border-color: i < root.current ? Theme.primary : Theme.border-strong;
+                        if i < root.current: Icon {
+                            source: Icons.check;
+                            tint: Theme.primary;
+                            width: 12px;
+                            height: 12px;
+                        }
+                        if i >= root.current: Text {
+                            text: i + 1;
+                            color: i == root.current ? Theme.primary-foreground : Theme.dim-foreground;
+                            font-size: Theme.size-small;
+                            font-weight: 600;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+                Text {
+                    text: label;
+                    color: i == root.current ? Theme.foreground : i < root.current ? Theme.muted-foreground : Theme.dim-foreground;
+                    font-size: Theme.size-label;
+                    font-weight: i == root.current ? 600 : 400;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+// A horizontal progress bar. With `indeterminate` a short segment sweeps
+// across, for work that reports no fraction.
+export component ProgressBar inherits Rectangle {
+    in property <float> value: 0;
+    in property <bool> indeterminate: false;
+    in property <Tone> tone: Tone.accent;
+
+    height: 6px;
+    border-radius: 3px;
+    background: Theme.secondary;
+    clip: true;
+
+    accessible-role: progress-indicator;
+    accessible-value: root.indeterminate ? "Working" : round(root.value * 100) + "%";
+
+    Rectangle {
+        height: parent.height;
+        border-radius: 3px;
+        background: root.tone == Tone.danger ? Theme.destructive
+            : root.tone == Tone.success ? Theme.success
+            : root.tone == Tone.warning ? Theme.warning
+            : Theme.primary;
+        width: root.indeterminate ? parent.width * 0.3 : parent.width * clamp(root.value, 0, 1);
+        x: root.indeterminate ? (parent.width + self.width) * mod(animation-tick() / 1.4s, 1) - self.width : 0px;
+        animate width { duration: 180ms; easing: ease-out; }
+    }
+}
+
+// A statement or path shown verbatim in the monospace face, in a framed box.
+// Long text wraps, then is cut after `max-lines`.
+export component CodeBlock inherits Rectangle {
+    in property <string> text;
+    in property <Tone> tone: Tone.neutral;
+    in property <int> max-lines: 4;
+
+    background: root.tone == Tone.danger ? Theme.destructive-soft : Theme.card;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: root.tone == Tone.danger ? Theme.destructive.transparentize(0.6) : Theme.border;
+
+    VerticalLayout {
+        padding: 8px;
+        padding-left: 10px;
+        padding-right: 10px;
+        Text {
+            text: root.text;
+            color: root.tone == Tone.danger ? Theme.destructive : Theme.foreground;
+            font-size: Theme.size-mono;
+            font-family: "Menlo";
+            wrap: word-wrap;
+            overflow: elide;
+            height: min(self.preferred-height, root.max-lines * Theme.size-mono * 1.45);
+        }
+    }
+}
+
+// A form field: a bold label, the control (the children), then a hint and,
+// in the danger colour, the error that belongs to this field.
+export component FormField inherits VerticalLayout {
+    in property <string> label;
+    in property <string> hint;
+    in property <string> error;
+    spacing: 4px;
+    vertical-stretch: 0;
+
+    if root.label != "": Text {
+        text: root.label;
+        color: Theme.foreground;
+        font-size: Theme.size-label;
+        font-weight: 600;
+    }
+    @children
+    if root.hint != "": Text {
+        text: root.hint;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+    if root.error != "": Text {
+        text: root.error;
+        color: Theme.destructive;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+}
+
+// One fact in a summary: a dim label on the left at a fixed width, the value
+// beside it. Long values wrap.
+export component FactRow inherits HorizontalLayout {
+    in property <string> label;
+    in property <string> value;
+    in property <bool> mono: false;
+    in property <length> label-width: 96px;
+    spacing: 12px;
+    vertical-stretch: 0;
+
+    Text {
+        width: root.label-width;
+        text: root.label;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        vertical-alignment: top;
+    }
+    Text {
+        horizontal-stretch: 1;
+        text: root.value;
+        color: Theme.foreground;
+        font-size: root.mono ? Theme.size-mono : Theme.size-label;
+        font-family: root.mono ? "Menlo" : "";
+        wrap: word-wrap;
+    }
+}

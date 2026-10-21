@@ -356,6 +356,8 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
         _ if name.starts_with("history") || name.starts_with("snippets") || name.starts_with("templates") => {
             history_panel_window(name)
         }
+        _ if name.starts_with("import") || name.starts_with("export") => import_export_window(name),
+        _ if name.starts_with("backup") => backup_window(name),
         other => {
             eprintln!("unknown component {:?}", other);
             std::process::exit(2);
@@ -789,6 +791,423 @@ fn command_overlay(name: &str) -> Box<dyn std::any::Any> {
     Box::new(c)
 }
 
+
+// -- Import / export and backup panels ---------------------------------------
+//
+// import, import-loading, import-error, import-preview, import-preview-sheet,
+// import-empty, import-mapping, import-mapping-new, import-mapping-empty,
+// import-options, import-confirm, import-confirm-destructive, import-running,
+// import-done, import-done-errors, import-sql, import-sql-running,
+// import-sql-result, import-sql-error;
+// export-table, export-done, export-error, export-empty, export-loading,
+// export-dump, export-dump-done; each with an optional `-light`.
+// backup, backup-empty, backup-loading, backup-error, backup-create,
+// backup-create-error, backup-restore, backup-restore-drop, backup-progress,
+// backup-done, backup-failed, backup-blocked; each with an optional `-light`.
+// The workspace sits behind the panel, as it does in the app.
+
+fn workspace_behind(c: &AppWindow, light: bool, connection: &str, location: &str) {
+    if light {
+        c.global::<Theme>().set_dark(false);
+    }
+    c.set_screen(Screen::Workspace);
+    c.set_workspace_connection_name(connection.into());
+    c.set_workspace_location_label(location.into());
+    let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products"]
+        .iter()
+        .map(|n| TableItem { name: (*n).into(), row_count: "~1240".into() })
+        .collect();
+    c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
+    c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![TabInfo {
+        title: "Query 1".into(),
+        query: true,
+        busy: false,
+    }])));
+    c.set_workspace_active_tab(0);
+    c.set_workspace_active_is_query(true);
+}
+
+fn sample_preview(rows: usize, sheets: bool) -> dbhive_core::service_import_export::ImportPreview {
+    use dbhive_core::service_import_export::ImportPreview;
+    let columns: Vec<String> = ["id", "full_name", "email", "plan", "signup_date", "monthly_spend"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let names = ["Ada Lovelace", "Grace Hopper", "Alan Turing", "Edsger Dijkstra", "Barbara Liskov", "Donald Knuth", "Margaret Hamilton", "Ken Thompson"];
+    let data: Vec<Vec<String>> = (0..rows)
+        .map(|i| {
+            let n = names[i % names.len()];
+            vec![
+                (i + 1).to_string(),
+                n.to_string(),
+                format!("{}@example.com", n.to_lowercase().replace(' ', ".")),
+                ["free", "pro", "team"][i % 3].to_string(),
+                format!("2026-0{}-{:02}", 1 + i % 9, 1 + (i * 3) % 27),
+                format!("{}.{:02}", 10 + i * 7, (i * 13) % 100),
+            ]
+        })
+        .collect();
+    ImportPreview {
+        detected_types: ["INTEGER", "TEXT", "TEXT", "TEXT", "DATE", "DECIMAL"].iter().map(|s| s.to_string()).collect(),
+        total_rows: sheets.then_some(940),
+        file_type: if sheets { "xlsx" } else { "csv" }.to_string(),
+        sheet_names: sheets.then(|| vec!["Customers".to_string(), "Churned".to_string(), "Notes".to_string()]),
+        columns,
+        rows: data,
+    }
+}
+
+fn target_columns() -> Vec<dbhive_core::service_import_export::TableColumnInfo> {
+    use dbhive_core::service_import_export::TableColumnInfo;
+    let col = |n: &str, t: &str, pk: bool| TableColumnInfo {
+        name: n.into(),
+        data_type: t.into(),
+        nullable: !pk,
+        default_value: None,
+        is_primary_key: pk,
+    };
+    vec![
+        col("id", "integer", true),
+        col("full_name", "text", false),
+        col("email", "text", false),
+        col("plan", "varchar(20)", false),
+        col("signup_date", "date", false),
+    ]
+}
+
+/// A wizard at the given step, filled the way a user would have filled it.
+fn wizard_at(step: &str) -> dbhive_ui_model::import_wizard::ImportWizard {
+    use dbhive_core::service_import_export as svc;
+    use dbhive_ui_model::import_export::Step;
+    use dbhive_ui_model::import_wizard::ImportWizard;
+
+    let mut w = ImportWizard::new("public");
+    w.set_file_path("/Users/me/Downloads/customers.csv");
+    w.set_tables(vec!["customers".into(), "order_items".into(), "orders".into(), "products".into()]);
+    if step == "file" {
+        return w;
+    }
+    let sheets = step == "preview-sheet";
+    if step == "empty" {
+        let mut p = sample_preview(0, false);
+        p.detected_types.clear();
+        w.apply_preview(p);
+        return w;
+    }
+    if sheets {
+        w.set_file_path("/Users/me/Downloads/customers-2026.xlsx");
+    }
+    w.apply_preview(sample_preview(8, sheets));
+    if step == "preview" || step == "preview-sheet" {
+        return w;
+    }
+    if step == "mapping-empty" {
+        w.set_tables(vec![]);
+        w.step = Step::Mapping;
+        return w;
+    }
+    if step == "mapping-new" {
+        w.set_typed_table("customers_2026");
+        w.step = Step::Mapping;
+        return w;
+    }
+    w.set_target_table("customers");
+    w.apply_target_columns(target_columns());
+    // The user skipped one column and gave another a default.
+    w.toggle_skip(0);
+    w.set_mapping_default(3, "free");
+    w.step = Step::Mapping;
+    if step == "mapping" {
+        return w;
+    }
+    w.step = Step::Options;
+    if step == "options" || step == "options-truncate" {
+        w.set_truncate(step == "options-truncate");
+        return w;
+    }
+    // Confirm and later: a real plan from a real source.
+    w.set_truncate(step == "confirm-destructive");
+    w.commit_options().unwrap();
+    let source = svc::ImportSource {
+        columns: w.preview.as_ref().unwrap().columns.clone(),
+        rows: {
+            let p = sample_preview(8, false);
+            let mut rows = Vec::new();
+            for _ in 0..30 {
+                rows.extend(p.rows.clone());
+            }
+            rows
+        },
+    };
+    w.options.batch_size = 100;
+    let plan = svc::build_import_plan(&dbhive_core::models::DbDriver::Postgres, &source, &w.options).unwrap();
+    w.apply_plan(source, plan);
+    w
+}
+
+fn import_export_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_core::service_import_export::{ImportResult, SqlImportResult};
+    use dbhive_slint::import_export_view::{project, set_preview, DataSession};
+
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+    let c = AppWindow::new().expect("AppWindow");
+    workspace_behind(&c, light, "Production Postgres", "app · public");
+    let g = c.global::<ImportExportState>();
+    g.set_visible(true);
+
+    let mut d = DataSession::default();
+    d.wizard = wizard_at("file");
+    d.sql.path = String::new();
+    let mut dump_note = true;
+
+    let step = name.strip_prefix("import-");
+    match step {
+        None => {}
+        Some("loading") => d.busy = "Reading the file…".into(),
+        Some("error") => {
+            d.import_path_error = String::new();
+            d.wizard.error = "Could not read the file: Failed to open CSV: No such file or directory (os error 2)".into();
+        }
+        Some("preview") => d.wizard = wizard_at("preview"),
+        Some("preview-sheet") => d.wizard = wizard_at("preview-sheet"),
+        Some("empty") => d.wizard = wizard_at("empty"),
+        Some("mapping") => d.wizard = wizard_at("mapping"),
+        Some("mapping-new") => d.wizard = wizard_at("mapping-new"),
+        Some("mapping-empty") => d.wizard = wizard_at("mapping-empty"),
+        Some("mapping-loading") => {
+            d.wizard = wizard_at("mapping");
+            d.columns_loading = true;
+        }
+        Some("options") => d.wizard = wizard_at("options"),
+        Some("options-truncate") => d.wizard = wizard_at("options-truncate"),
+        Some("confirm") => d.wizard = wizard_at("confirm"),
+        Some("confirm-destructive") => {
+            d.wizard = wizard_at("confirm-destructive");
+            d.wizard.confirm_input = "custom".into();
+        }
+        Some("running") => {
+            d.wizard = wizard_at("confirm");
+            d.wizard.import_started();
+        }
+        Some("done") | Some("done-errors") => {
+            d.wizard = wizard_at("confirm");
+            d.wizard.import_started();
+            let r = if step == Some("done") {
+                ImportResult { rows_imported: 240, rows_failed: 0, errors: vec![], success: true }
+            } else {
+                ImportResult {
+                    rows_imported: 232,
+                    rows_failed: 8,
+                    errors: (0..8)
+                        .map(|i| format!("Row {}: duplicate key value violates unique constraint \"customers_email_key\" (email)=(ada.lovelace@example.com)", 17 + i * 30))
+                        .collect(),
+                    success: false,
+                }
+            };
+            d.wizard.import_finished(r);
+        }
+        Some("sql") | Some("sql-running") | Some("sql-result") | Some("sql-error") | Some("sql-partial") => {
+            d.tab = 1;
+            d.sql.path = "/Users/me/Downloads/shop_2026-10-21.sql".into();
+            match step {
+                Some("sql-running") => d.sql_running = true,
+                Some("sql-result") => {
+                    d.sql_result = Some(SqlImportResult { executed: 1840, errors_count: 0, skipped: 12, first_error: None, cancelled: false, log_file: None });
+                }
+                Some("sql-partial") => {
+                    d.sql.continue_on_error = true;
+                    d.sql_result = Some(SqlImportResult {
+                        executed: 1790,
+                        errors_count: 3,
+                        skipped: 12,
+                        first_error: Some("ERROR: relation \"order_items\" already exists (statement 214)".into()),
+                        cancelled: false,
+                        log_file: Some("/Users/me/Downloads/shop_2026-10-21_import_errors.log".into()),
+                    });
+                }
+                Some("sql-error") => {
+                    d.sql_path_error = "No file exists at that path.".into();
+                    d.sql_error = "The SQL file could not be run: Failed to open SQL file: No such file or directory (os error 2)".into();
+                }
+                _ => {}
+            }
+        }
+        _ => {}
+    }
+
+    // Export and dump tabs.
+    if name.starts_with("export") {
+        d.wizard = wizard_at("file");
+        d.tab = if name.starts_with("export-dump") { 3 } else { 2 };
+        d.export.table = "customers".into();
+        d.export.path = "/Users/me/Downloads/customers_2026-10-21.csv".into();
+        d.dump.path = "/Users/me/Downloads/app_2026-10-21.sql".into();
+        match name {
+            "export-done" => d.export_result = "Exported 1,240 rows to /Users/me/Downloads/customers_2026-10-21.csv".into(),
+            "export-error" => d.export_error = "Export failed: permission denied for table customers".into(),
+            "export-empty" => d.wizard.set_tables(vec![]),
+            "export-loading" => {
+                d.wizard.set_tables(vec![]);
+                d.tables_loading = true;
+            }
+            "export-running" => d.export_running = true,
+            "export-dump-done" => d.dump_result = "Dumped 4 tables to /Users/me/Downloads/app_2026-10-21.sql".into(),
+            "export-dump-error" => d.dump_error = "The folder does not exist.".into(),
+            "export-dump" => {
+                d.dump.include_drop = true;
+                d.dump.tables_text = "customers, orders".into();
+            }
+            _ => {}
+        }
+        if name.starts_with("export-dump") {
+            dump_note = false;
+        }
+    }
+    let _ = dump_note;
+
+    let driver = dbhive_core::models::DbDriver::Postgres;
+    project(&g, &d, "Production Postgres · public", Some(&driver));
+    set_preview(&g, &d.wizard);
+    g.set_type_options(dbhive_slint::import_export_view::type_options());
+    g.set_import_path(d.wizard.file_path.clone().into());
+    g.set_sql_path(d.sql.path.clone().into());
+    g.set_export_path(d.export.path.clone().into());
+    g.set_dump_path(d.dump.path.clone().into());
+    g.set_dump_tables(d.dump.tables_text.clone().into());
+    if name == "import-mapping-new" {
+        g.set_new_table_text("customers_2026".into());
+    }
+    if name.starts_with("import-confirm-destructive") {
+        g.set_confirm_text(d.wizard.confirm_input.clone().into());
+    }
+    c.show().unwrap();
+    Box::new(c)
+}
+
+fn backup_entries() -> Vec<dbhive_core::models::backup::BackupEntry> {
+    use dbhive_core::models::backup::{BackupEntry, BackupStatus};
+    let now = chrono::Utc::now().timestamp();
+    let e = |file: &str, size: u64, mins: i64, note: Option<&str>, status: BackupStatus| BackupEntry {
+        id: file.into(),
+        connection_id: "c1".into(),
+        connection_name: "Production Postgres".into(),
+        driver: "Postgres".into(),
+        file_path: format!("/Users/me/Library/Application Support/com.kwamina.db-hive/backups/{file}"),
+        file_name: file.into(),
+        size_bytes: size,
+        created_at: now - mins * 60,
+        status,
+        note: note.map(str::to_string),
+    };
+    vec![
+        e("Production_Postgres_1761043800.sql", 48_234_112, 12, Some("before the orders migration"), BackupStatus::Completed),
+        e("Production_Postgres_1760957400.sql", 47_901_888, 60 * 24, None, BackupStatus::Completed),
+        e("Production_Postgres_1760871000.sql", 0, 60 * 48, None, BackupStatus::Failed("pg_dump: error: connection to server at \"db.internal\" (10.0.4.12), port 5432 failed: Connection refused".into())),
+        e("Production_Postgres_1760266200.sql", 46_120_448, 60 * 24 * 9, Some("quarterly"), BackupStatus::Completed),
+        e("a_connection_with_a_very_long_name_that_must_be_elided_rather_than_overflow_the_row_1759000000.sql", 1_024, 60 * 24 * 30, None, BackupStatus::Completed),
+    ]
+}
+
+fn backup_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_core::models::backup::BackupProgress;
+    use dbhive_slint::backup_view::{project, Context};
+    use dbhive_ui_model::backup_manager::{BackupManager, OpKind, View};
+
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+    let c = AppWindow::new().expect("AppWindow");
+    workspace_behind(&c, light, "Production Postgres", "app · public");
+    let g = c.global::<BackupState>();
+    g.set_visible(true);
+
+    let mut m = BackupManager::default();
+    m.directory = "/Users/me/Library/Application Support/com.kwamina.db-hive/backups".into();
+    let mut ctx = Context {
+        location: "Production Postgres · Postgres".into(),
+        driver: Some(dbhive_core::models::DbDriver::Postgres),
+        target_name: "Production Postgres".into(),
+        database_label: "app".into(),
+        blocker: String::new(),
+    };
+    if name != "backup-empty" && name != "backup-loading" && name != "backup-error" {
+        m.entries = backup_entries();
+    }
+    let progress = |stage: &str, msg: &str, done: bool, error: Option<&str>| BackupProgress {
+        stage: stage.into(),
+        message: msg.into(),
+        done,
+        error: error.map(str::to_string),
+    };
+    match name {
+        "backup-loading" => m.loading = true,
+        "backup-error" => m.list_error = "Could not read the backup folder: Cannot read backup dir: Permission denied (os error 13)".into(),
+        "backup-filtered" => m.filter = "quarterly".into(),
+        "backup-blocked" => {
+            ctx.driver = Some(dbhive_core::models::DbDriver::Redis);
+            ctx.location = "Cache · Redis".into();
+            ctx.blocker = "Backups are not supported for Redis connections.".into();
+        }
+        "backup-create" | "backup-create-error" | "backup-create-sqlite" => {
+            m.view = View::Create;
+            m.form.note = "before the orders migration".into();
+            if name == "backup-create-error" {
+                m.form_error = "Select at least schema or data; a backup with neither is empty".into();
+                m.form.include_schema = false;
+                m.form.include_data = false;
+            }
+            if name == "backup-create-sqlite" {
+                ctx.driver = Some(dbhive_core::models::DbDriver::Sqlite);
+                ctx.location = "Widgets · Sqlite".into();
+            }
+        }
+        "backup-restore" | "backup-restore-drop" | "backup-restore-sqlite" => {
+            // A restore needs the file to exist; make one next to the output.
+            let mut entry = m.entries[0].clone();
+            if let Some(dir) = std::env::args().nth(2).and_then(|o| std::path::Path::new(&o).parent().map(|p| p.to_path_buf())) {
+                let file = dir.join(&entry.file_name);
+                std::fs::write(&file, b"-- snapshot placeholder").unwrap();
+                entry.file_path = file.to_string_lossy().to_string();
+            }
+            m.open_restore(entry);
+            if name == "backup-restore-drop" {
+                m.drop_existing = true;
+            }
+            if name == "backup-restore-sqlite" {
+                ctx.driver = Some(dbhive_core::models::DbDriver::Sqlite);
+                ctx.location = "Widgets · Sqlite".into();
+                ctx.database_label = "widgets.sqlite".into();
+            }
+        }
+        "backup-progress" | "backup-restore-progress" => {
+            let kind = if name == "backup-progress" { OpKind::Backup } else { OpKind::Restore };
+            m.begin(kind);
+            let op = m.op.as_mut().unwrap();
+            op.apply(&progress("dumping", "Running pg_dump…", false, None));
+            op.elapsed = Some(std::time::Duration::from_millis(7400));
+        }
+        "backup-done" => {
+            m.begin(OpKind::Backup);
+            let op = m.op.as_mut().unwrap();
+            op.apply(&progress("done", "Wrote Production_Postgres_1761043800.sql", true, None));
+            op.message = "Backup written to /Users/me/Library/Application Support/com.kwamina.db-hive/backups/Production_Postgres_1761043800.sql".into();
+            op.elapsed = Some(std::time::Duration::from_millis(12_800));
+        }
+        "backup-failed" => {
+            m.begin(OpKind::Restore);
+            let op = m.op.as_mut().unwrap();
+            op.apply(&progress("done", "psql failed", true, Some("psql: error: connection to server at \"db.internal\" (10.0.4.12), port 5432 failed: Connection refused")));
+            op.elapsed = Some(std::time::Duration::from_millis(900));
+        }
+        _ => {}
+    }
+
+    project(&g, &m, &ctx);
+    g.set_note(m.form.note.clone().into());
+    g.set_filter(m.filter.clone().into());
+    c.show().unwrap();
+    Box::new(c)
+}
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
