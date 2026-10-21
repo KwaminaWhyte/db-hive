@@ -37,6 +37,7 @@ pub mod query_builder;
 pub mod results_grid;
 pub mod row_edits;
 pub mod schema_designer;
+pub mod schema_tree;
 pub mod settings;
 pub mod settings_editor;
 pub mod sql_completion;
