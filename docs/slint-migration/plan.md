@@ -95,14 +95,16 @@ partial (core installs only bundled plugins); AI 4 done and generate/explain/opt
   schemas as a tree.
 - **What ran against a real server.** SQLite is covered by the headless controller tests for every
   screen. Beyond that, `#[ignore]` live tests (run with `-- --ignored`, each in its own scratch
-  database, dropped afterwards) cover: PostgreSQL transactions, the PostgreSQL DDL generator, the
-  inspector, filter, sort, typed row edits, add, delete and a rejected commit on a table with
-  serial, numeric, boolean, timestamptz, uuid, jsonb and array columns, and the activity monitor's
-  server tab; MySQL transactions and its DDL generator; and string and identifier quoting
-  round trips on SQLite, PostgreSQL and MySQL. Not run against a server: the import, export and
-  backup tools on Postgres or MySQL, the query builder and the ER diagram on a non-default schema,
-  row editing on MySQL, SQL Server, MongoDB, Redis and Turso. None of it has been clicked through
-  in the real GPU window.
+  database, dropped afterwards) cover, on PostgreSQL: transactions, the DDL generator, the
+  inspector, filter, sort, typed row edits, add, delete and a rejected commit (serial, numeric,
+  boolean, timestamptz, uuid, jsonb, array columns), SQL dump export and replay, data import, and
+  the activity monitor's server tab. On MySQL: transactions, the DDL generator, the same inspector
+  and row-edit scenario (auto_increment, decimal, tinyint(1), datetime, json), SQL dump export and
+  replay, and data import. String and identifier quoting round trips run on SQLite, PostgreSQL and
+  MySQL. The first live import run found a real MySQL bug (boolean words into `TINYINT(1)`),
+  now fixed. Not run against a server: backup and restore (they shell out to the dump tools),
+  the query builder and the ER diagram on a non-default schema, SQL Server, MongoDB, Redis and
+  Turso. None of it has been clicked through in the real GPU window.
 - **Known defects and risks:**
   - Settings stored but not consumed: language, startup, update checks, editor font family,
     minimap, word wrap. Shortcut rebinding saves but is not dispatched. (Max rows now applies to
