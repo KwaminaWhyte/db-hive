@@ -170,6 +170,33 @@ pub async fn apply_migration(
     let mut executed: u32 = 0;
     let mut succeeded: u32 = 0;
 
+    // Where the driver can run a transaction on one pinned connection, use
+    // that: BEGIN, the statements and COMMIT issued as separate queries on a
+    // pool only work when the pool happens to hand back the same connection.
+    // (MySQL commits implicitly before DDL, so a rollback there covers only
+    // the statements since the last DDL; that is the server's rule.)
+    if use_transaction && driver.supports_transactions() {
+        let run: Vec<String> = statements
+            .iter()
+            .filter(|s| !is_noop_statement(s))
+            .cloned()
+            .collect();
+        return Ok(match driver.execute_transaction(&run).await {
+            Ok(_) => ApplyResult {
+                executed: run.len() as u32,
+                succeeded: run.len() as u32,
+                failed_statement: None,
+                error: None,
+            },
+            Err(f) => ApplyResult {
+                executed: f.index as u32 + 1,
+                succeeded: f.index as u32,
+                failed_statement: run.get(f.index).cloned(),
+                error: Some(f.error.to_string()),
+            },
+        });
+    }
+
     if use_transaction {
         if let Err(e) = driver.execute_query("BEGIN").await {
             return Ok(ApplyResult {

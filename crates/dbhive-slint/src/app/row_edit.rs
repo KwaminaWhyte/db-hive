@@ -22,7 +22,7 @@ use dbhive_core::models::DbDriver;
 use dbhive_ui_model::results_grid::cell_text;
 use dbhive_ui_model::row_edits::{CellEdit, EditSession, SqlQuoter, Statement, StatementKind};
 use dbhive_ui_model::table_inspector::qualified_name;
-use dbhive_ui_model::table_view::{sql_qualifier, Meta, TableView};
+use dbhive_ui_model::table_view::{rows_json, sql_qualifier, Meta, TableView};
 use dbhive_ui_model::workspace_tabs::{Tab, TabKind};
 use serde_json::Value;
 use slint::{ComponentHandle, ModelRc, VecModel};
@@ -84,20 +84,37 @@ fn value_text(v: &Value) -> String {
 }
 
 /// The page with every pending change applied, and a mark per row, for the
-/// grid to draw. `None` when nothing is pending, so an untouched table pays
-/// nothing.
+/// grid to draw (including which rows are ticked). `None` when nothing is
+/// pending or ticked, so an untouched table pays nothing.
 pub(super) fn overlay(tab: &Tab) -> Option<(Vec<Vec<Option<String>>>, Vec<RowMark>)> {
-    let sess = tab.inspector.as_ref()?.edit.session.as_ref()?;
+    let v = tab.inspector.as_ref()?;
     let page = tab.result.as_ref()?;
-    if sess.is_empty() {
-        return None;
-    }
     let ncols = page.columns.len();
-    let col_idx: Vec<Option<usize>> = page.columns.iter().map(|n| sess.column_index(n)).collect();
     let text_of = |v: &Value| {
         let (t, is_null) = cell_text(v);
         (!is_null).then_some(t)
     };
+    let Some(sess) = v.edit.session.as_ref().filter(|s| !s.is_empty()) else {
+        // Nothing pending: the page as it is, with only the ticks marked.
+        if v.checked.is_empty() {
+            return None;
+        }
+        let rows = page
+            .rows
+            .iter()
+            .map(|r| r.iter().map(text_of).collect())
+            .collect();
+        let marks = (0..page.rows.len())
+            .map(|i| RowMark {
+                checked: v.checked.contains(&i),
+                modified: vec![false; ncols],
+                placeholder: vec![false; ncols],
+                ..RowMark::default()
+            })
+            .collect();
+        return Some((rows, marks));
+    };
+    let col_idx: Vec<Option<usize>> = page.columns.iter().map(|n| sess.column_index(n)).collect();
 
     let mut rows = Vec::new();
     let mut marks = Vec::new();
@@ -116,12 +133,13 @@ pub(super) fn overlay(tab: &Tab) -> Option<(Vec<Vec<Option<String>>>, Vec<RowMar
         marks.push(RowMark {
             deleted: sess.is_deleted(&mrow),
             added: false,
+            checked: v.checked.contains(&r),
             modified,
             placeholder: vec![false; ncols],
         });
         rows.push(cells);
     }
-    for nr in sess.new_rows() {
+    for (k, nr) in sess.new_rows().iter().enumerate() {
         let mut cells = Vec::with_capacity(ncols);
         let mut placeholder = vec![false; ncols];
         for c in 0..ncols {
@@ -140,6 +158,7 @@ pub(super) fn overlay(tab: &Tab) -> Option<(Vec<Vec<Option<String>>>, Vec<RowMar
         marks.push(RowMark {
             deleted: false,
             added: true,
+            checked: v.checked.contains(&(page.rows.len() + k)),
             modified: vec![false; ncols],
             placeholder,
         });
@@ -185,6 +204,10 @@ pub(super) fn project(w: &AppWindow, ws: &Workspace, tab: &Tab) {
             .into(),
     );
     b.set_pending_count(e.pending_count() as i32);
+    let shown = tab.result.as_ref().map_or(0, |r| r.rows.len())
+        + e.session.as_ref().map_or(0, |s| s.new_rows().len());
+    b.set_checked_count(v.checked.len() as i32);
+    b.set_all_checked(v.all_checked(shown));
     b.set_review_open(e.review_open);
     b.set_committing(e.committing);
     b.set_review_items(ModelRc::new(VecModel::from(
@@ -422,6 +445,79 @@ impl Ctx {
         }
     }
 
+    pub(super) fn row_check_toggle(&self, row: usize) {
+        self.with_edit_view(|v, _| v.toggle_checked(row));
+        self.edit_changed(true);
+    }
+
+    pub(super) fn row_check_all(&self) {
+        self.with_edit_view(|v, page| {
+            let new_rows = v.edit.session.as_ref().map_or(0, |s| s.new_rows().len());
+            v.toggle_all_checked(page.map_or(0, |p| p.rows.len()) + new_rows);
+        });
+        self.edit_changed(true);
+    }
+
+    pub(super) fn row_check_clear(&self) {
+        self.with_edit_view(|v, _| v.checked.clear());
+        self.edit_changed(true);
+    }
+
+    /// The ticked rows of the page, as one JSON array, on the clipboard.
+    pub(super) fn row_check_copy_json(self: &Rc<Self>) {
+        let Some(w) = self.window.upgrade() else { return };
+        let copied = self
+            .with_edit_view(|v, page| {
+                let page = page?;
+                let n = v.checked.iter().filter(|&&r| r < page.rows.len()).count();
+                (n > 0).then(|| (rows_json(page, &v.checked), n))
+            })
+            .and_then(|(_, c)| c);
+        let Some((text, n)) = copied else {
+            self.edit_message("Only rows that are already saved can be copied.");
+            return;
+        };
+        w.invoke_copy_to_clipboard(text.as_str().into());
+        let noun = if n == 1 { "row" } else { "rows" };
+        self.toast(format!("Copied {n} {noun} as JSON"), Tone::Success);
+    }
+
+    /// Mark every ticked row for deletion. Nothing is deleted until the
+    /// review is committed; a ticked row that is not saved yet is just removed.
+    pub(super) fn row_check_delete(self: &Rc<Self>) {
+        let outcome = self.with_edit_view(|v, page| -> Result<(), String> {
+            ensure_session(v);
+            let (Some(page), Some(sess)) = (page, v.edit.session.as_mut()) else {
+                return Err("The table's structure is still loading".to_string());
+            };
+            let n = page.rows.len();
+            let picked: Vec<usize> = v.checked.iter().copied().collect();
+            if picked.iter().any(|&r| r < n) {
+                if let Some(r) = sess.refusal() {
+                    return Err(r.message().to_string());
+                }
+            }
+            for &r in picked.iter().filter(|&&r| r < n) {
+                let mrow = meta_row(sess, page, r);
+                if !sess.is_deleted(&mrow) {
+                    sess.toggle_delete(&mrow)?;
+                }
+            }
+            // Highest first, so removing one does not shift the next.
+            for &r in picked.iter().rev().filter(|&&r| r >= n) {
+                sess.remove_new_row(r - n);
+            }
+            v.clear_selection();
+            v.edit.message = None;
+            Ok(())
+        });
+        match outcome {
+            Some((_, Ok(()))) => self.edit_changed(true),
+            Some((_, Err(msg))) => self.edit_message(msg),
+            None => {}
+        }
+    }
+
     pub(super) fn row_edit_discard(&self) {
         self.with_edit_view(|v, _| {
             if let Some(s) = v.edit.session.as_mut() {
@@ -630,6 +726,11 @@ pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
     on!(on_add_row, |ctx| ctx.row_edit_add_row());
     on!(on_delete_selected, |ctx| ctx.row_edit_delete_selected());
     on!(on_discard_edits, |ctx| ctx.row_edit_discard());
+    on!(on_row_toggled, |ctx, r| ctx.row_check_toggle(r.max(0) as usize));
+    on!(on_toggle_all, |ctx| ctx.row_check_all());
+    on!(on_clear_checked, |ctx| ctx.row_check_clear());
+    on!(on_copy_checked_json, |ctx| ctx.row_check_copy_json());
+    on!(on_delete_checked, |ctx| ctx.row_check_delete());
     on!(on_open_review, |ctx| ctx.row_edit_open_review());
     on!(on_close_review, |ctx| ctx.row_edit_close_review());
     on!(on_commit_edits, |ctx| ctx.row_edit_commit());
