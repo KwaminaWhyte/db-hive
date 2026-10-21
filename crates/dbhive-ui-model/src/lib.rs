@@ -36,6 +36,7 @@ pub mod procedures;
 pub mod query_builder;
 pub mod results_grid;
 pub mod row_edits;
+pub mod saved_tabs;
 pub mod schema_designer;
 pub mod settings;
 pub mod settings_editor;

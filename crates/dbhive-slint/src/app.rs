@@ -37,6 +37,7 @@ mod designer;
 mod erd;
 mod inspector;
 mod row_edit;
+mod tab_persist;
 mod settings;
 mod table_dialog;
 
@@ -184,6 +185,7 @@ struct Session {
     completion: completion::CompletionSession,
     plugins: plugins_glue::PluginSession,
     ai: ai_glue::AiSession,
+    tab_persist: tab_persist::TabPersist,
 }
 
 struct Ctx {
@@ -758,6 +760,12 @@ impl Ctx {
             // Land on an empty query, ready to type into.
             s.workspace.tabs.open_query("");
         }
+        // The tabs this connection had last time come back once the table
+        // list has loaded.
+        self.tabs_persist_begin(dbhive_ui_model::saved_tabs::key(
+            &profile.id,
+            workspace_model::connected_database(&profile).as_deref(),
+        ));
         if let Some(w) = self.window.upgrade() {
             w.set_screen(Screen::Workspace);
         }
@@ -766,6 +774,8 @@ impl Ctx {
     }
 
     fn leave_workspace(&self) {
+        // Before anything below discards the tabs.
+        self.tabs_flush();
         self.ai_leave_workspace();
         self.hide_history_panel();
         self.hide_data_panel();
@@ -829,6 +839,7 @@ impl Ctx {
                 ws.loading_tables = false;
                 ws.database = Some(database);
                 ws.schema = Some(schema);
+                let loaded = tables.is_ok();
                 match tables {
                     Ok(t) => ws.tables = t,
                     Err(e) => ws.tables_error = format!("Could not list tables: {}", e),
@@ -837,6 +848,8 @@ impl Ctx {
                 // A reloaded schema means column lists may have changed.
                 ctx.completion_reset();
                 ctx.refresh_workspace();
+                // First load only: put back the tabs from the last session.
+                ctx.tabs_restore(loaded);
             }),
         );
     }
@@ -1687,6 +1700,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     designer::wire(&window, &ctx);
     completion::wire(&window, &ctx);
     row_edit::wire(&window, &ctx);
+    tab_persist::wire(&window, &ctx);
     plugins_glue::wire(&window, &ctx);
     ai_glue::wire(&window, &ctx);
 
