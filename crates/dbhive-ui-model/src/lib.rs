@@ -11,6 +11,7 @@
 pub mod activity_monitor;
 pub mod ai_assistant;
 pub mod backup;
+pub mod builder_editor;
 pub mod command_palette;
 pub mod connection_editor;
 pub mod er_diagram;
@@ -30,6 +31,7 @@ pub mod settings;
 pub mod settings_editor;
 pub mod sql_completion;
 pub mod sql_guard;
+pub mod table_dialog;
 pub mod table_editor;
 pub mod table_inspector;
 pub mod table_view;

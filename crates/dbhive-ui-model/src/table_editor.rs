@@ -14,7 +14,7 @@ use dbhive_core::models::{
 };
 
 /// One row of the column editor.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ColumnRow {
     pub name: String,
     pub type_kind: TypeKind,
@@ -52,7 +52,7 @@ impl Default for ColumnRow {
 /// would drop and recreate a column the user merely renamed, taking its data
 /// with it. New rows have no origin; that is exactly what marks them as
 /// additions.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct EditRow {
     pub col: ColumnRow,
     pub origin: Option<ColumnRow>,
