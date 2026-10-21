@@ -290,6 +290,44 @@ fn inspect_edit_add_delete_and_a_rejected_commit_on_postgres() {
                 let got = psql(&db, "SELECT name FROM gadgets WHERE id = 1");
                 expect!(got == "Widget Z", "the failed commit changed the first row: {got:?}");
                 b.invoke_discard_edits();
+                step2.set(30);
+            }
+
+            // -- filter and sort run as Postgres SQL ----------------------
+            30 if b.get_pending_count() == 0 && ready(3) => {
+                b.invoke_toggle_filters();
+                b.invoke_add_filter();
+                b.invoke_filter_column_picked(0, 1); // name
+                b.invoke_filter_value_edited(0, "ea".into());
+                b.invoke_apply_filters();
+                step2.set(31);
+            }
+            31 if ready(1) => {
+                expect!(cell(&w, 0, 1) == "Gear", "filter 'contains ea' kept {:?}", cell(&w, 0, 1));
+                // A quote in a filter value is data, not syntax.
+                b.invoke_filter_value_edited(0, "it's".into());
+                b.invoke_apply_filters();
+                step2.set(32);
+            }
+            32 if !w.get_workspace_running() && w.get_workspace_has_result() && rows(&w) == 0 => {
+                expect!(
+                    w.get_workspace_rows_error().is_empty(),
+                    "a quote in a filter value must not be an error: {:?}",
+                    w.get_workspace_rows_error()
+                );
+                b.invoke_clear_filters();
+                step2.set(33);
+            }
+            33 if ready(3) => {
+                // Sorting by a header is ORDER BY in SQL, descending on the second click.
+                b.invoke_sort_by(1);
+                step2.set(34);
+            }
+            34 if ready(3) && cell(&w, 0, 1) == "Flange" => {
+                b.invoke_sort_by(1);
+                step2.set(35);
+            }
+            35 if ready(3) && cell(&w, 0, 1) == "Widget Z" => {
                 step2.set(21);
             }
 
