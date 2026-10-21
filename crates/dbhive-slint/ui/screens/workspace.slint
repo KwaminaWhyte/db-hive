@@ -7,6 +7,7 @@ import { BuilderState } from "query_builder.slint";
 import { TableDialogState } from "table_dialog.slint";
 import { PluginsState, PluginToolbarHost } from "plugins_panel.slint";
 import { AiState, AiDock } from "ai_assistant.slint";
+import { ResultsState, ResultsModeBar, ResultsViewPane, ResultsErrorPanel } from "results_tools.slint";
 
 export struct TableItem {
     name: string,
@@ -432,6 +433,8 @@ export component WorkspaceScreen inherits VerticalLayout {
                         font-size: Theme.size-small;
                         vertical-alignment: center;
                     }
+                    // Table / JSON / Text and Export.
+                    if root.has-result && root.result-message == "" && root.rows-error == "": ResultsModeBar { }
                     if root.has-result && root.result-message == "": TextField {
                         width: 220px;
                         has-icon: true;
@@ -442,21 +445,13 @@ export component WorkspaceScreen inherits VerticalLayout {
                     }
                 }
 
-                if root.rows-error != "": VerticalLayout {
-                    spacing: 8px;
-                    alignment: start;
-                    Banner {
-                        message: root.rows-error;
-                        dismissible: false;
-                    }
-                    if !root.active-is-query: HorizontalLayout {
+                // A failed query: headline, the driver's message, the query
+                // behind a disclosure, Copy and Retry.
+                if root.rows-error != "": ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
                         alignment: start;
-                        Button {
-                            text: "Retry";
-                            has-icon: true;
-                            icon: Icons.refresh-cw;
-                            clicked => { root.retry(); }
-                        }
+                        ResultsErrorPanel { }
                     }
                 }
 
@@ -481,7 +476,7 @@ export component WorkspaceScreen inherits VerticalLayout {
                     dismissible: false;
                 }
 
-                if !root.running && root.rows-error == "" && root.has-result && root.result-message == "": ResultsGrid {
+                if !root.running && root.rows-error == "" && root.has-result && root.result-message == "" && root.visible-row-count > 0 && ResultsState.mode == 0: ResultsGrid {
                     vertical-stretch: 1;
                     columns: root.columns;
                     rows: root.rows;
@@ -489,9 +484,53 @@ export component WorkspaceScreen inherits VerticalLayout {
                     header-clicked(i) => { root.header-clicked(i); }
                 }
 
+                // The same rows as pretty JSON or aligned text.
+                if !root.running && root.rows-error == "" && root.has-result && root.result-message == "" && root.visible-row-count > 0 && ResultsState.mode != 0: ResultsViewPane {
+                    vertical-stretch: 1;
+                }
+
+                // The query ran and returned nothing, or the filter hides it all.
+                if !root.running && root.rows-error == "" && root.has-result && root.result-message == "" && root.row-count == 0: EmptyState {
+                    vertical-stretch: 1;
+                    icon: Icons.table;
+                    title: "No rows returned";
+                    message: "The query ran without error but matched no rows. The column headers can still be exported.";
+                }
+
+                if !root.running && root.rows-error == "" && root.has-result && root.result-message == "" && root.row-count > 0 && root.visible-row-count == 0: VerticalLayout {
+                    // Compact, so the button still fits in a short window.
+                    vertical-stretch: 1;
+                    alignment: center;
+                    spacing: 6px;
+                    Text {
+                        text: "No rows match the filter";
+                        color: Theme.foreground;
+                        font-size: Theme.size-subheading;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "None of the " + root.row-count + " rows in this result contain \"" + root.filter + "\".";
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Clear filter";
+                            clicked => {
+                                root.filter = "";
+                                root.filter-changed("");
+                            }
+                        }
+                    }
+                }
+
                 // A tab with a Banner or message but no grid would otherwise
                 // let the layout spread its slack as gaps; this takes it.
-                if !root.running && (root.result-message != "" || root.rows-error != ""): Rectangle {
+                if !root.running && root.result-message != "": Rectangle {
                     vertical-stretch: 1;
                 }
             }

@@ -34,6 +34,8 @@ pub mod plugins;
 pub mod plugins_panel;
 pub mod procedures;
 pub mod query_builder;
+pub mod result_chart;
+pub mod result_export;
 pub mod results_grid;
 pub mod row_edits;
 pub mod saved_tabs;

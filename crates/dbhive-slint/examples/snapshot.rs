@@ -426,6 +426,7 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
         _ if name.starts_with("tabledialog") => table_dialog_window(name),
         _ if name.starts_with("plugins") => plugins_window(name),
         _ if name.starts_with("ai-") => ai_window(name),
+        _ if name.starts_with("results_") => results_window(name),
         other => {
             eprintln!("unknown component {:?}", other);
             std::process::exit(2);
@@ -2665,6 +2666,213 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
         &view,
         &dbhive_slint::ai_view::Extras { sync_base_url: true, ..Default::default() },
     );
+    c.show().unwrap();
+    Box::new(c)
+}
+
+// -- Results area: view modes, query error, export dialog -----------------------
+//
+// Variants (add _light for the light theme): results_table, results_json,
+// results_text, results_json_truncated, results_text_truncated,
+// results_empty, results_filtered_out, results_running, results_error,
+// results_error_open, results_error_long, results_export, results_export_json,
+// results_export_error, results_export_replaces, results_export_running,
+// results_export_done, results_export_filtered, results_export_page.
+
+fn results_sample() -> (Vec<String>, Vec<Vec<serde_json::Value>>) {
+    use serde_json::json;
+    let cols = ["id", "name", "email", "active", "balance", "profile", "note"];
+    let rows = (1..=24)
+        .map(|i| {
+            vec![
+                json!(i),
+                json!(format!("Customer {i}")),
+                if i == 3 { json!(null) } else { json!(format!("user{i}@example.com")) },
+                json!(i % 2 == 0),
+                json!(4200.5 - (i as f64) * 31.25),
+                json!({"plan": if i % 2 == 0 { "pro" } else { "free" }, "seats": i}),
+                if i == 5 { json!("line one\nline \"two\", with comma") } else { json!("") },
+            ]
+        })
+        .collect();
+    (cols.iter().map(|s| s.to_string()).collect(), rows)
+}
+
+/// Project a sample result into the workspace properties, as the controller does.
+fn results_fill(c: &AppWindow, columns: &[String], rows: &[Vec<serde_json::Value>]) {
+    use dbhive_ui_model::results_grid::cell_text;
+    let widths: Vec<f32> = columns.iter().map(|_| 150.0f32).collect();
+    let (cols, width) = dbhive_slint::grid_model::layout_columns(columns, &widths);
+    c.set_workspace_columns(cols);
+    c.set_workspace_grid_width(width);
+    let grid: Vec<Vec<Option<String>>> = rows
+        .iter()
+        .map(|r| {
+            r.iter()
+                .map(|v| if v.is_null() { None } else { Some(cell_text(v).0) })
+                .collect()
+        })
+        .collect();
+    c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(grid))));
+    c.set_workspace_row_count(rows.len() as i32);
+    c.set_workspace_visible_row_count(rows.len() as i32);
+    c.set_workspace_has_result(true);
+    c.set_workspace_result_summary(format!("{} rows · 12ms", rows.len()).into());
+}
+
+fn results_view_fill(c: &AppWindow, mode: i32, columns: &[String], rows: &[Vec<serde_json::Value>]) {
+    use dbhive_slint::results_view::{lines_model, LineStyle};
+    use dbhive_ui_model::result_export as rx;
+    let g = c.global::<ResultsState>();
+    g.set_mode(mode);
+    let (mut view, style) = if mode == 2 {
+        (rx::text_view(columns, rows, rx::VIEW_ROW_CAP), LineStyle::Text)
+    } else {
+        (rx::json_view(columns, rows, rx::VIEW_ROW_CAP), LineStyle::Json)
+    };
+    view.total_rows = rows.len();
+    g.set_view_max_columns(view.max_columns() as i32);
+    g.set_view_notice(rx::truncation_notice(view.shown_rows, view.total_rows).unwrap_or_default().into());
+    g.set_view_lines(lines_model(view.lines, style));
+}
+
+fn results_window(name: &str) -> Box<dyn std::any::Any> {
+    let light = name.ends_with("_light");
+    let base = name.trim_end_matches("_light");
+    let c = AppWindow::new().expect("AppWindow");
+    workspace_behind(&c, light, "Production Postgres", "app · public");
+    c.set_workspace_editor_text(SAMPLE_SQL.into());
+    c.set_workspace_editor_lines(dbhive_slint::sql_highlight::to_model_for(SAMPLE_SQL, !light));
+    c.set_workspace_result_title("Results".into());
+
+    let (columns, mut rows) = results_sample();
+    if base.ends_with("_truncated") {
+        rows = (0..2500)
+            .map(|i| rows[i % rows.len()].iter().cloned().enumerate().map(|(k, v)| if k == 0 { serde_json::json!(i + 1) } else { v }).collect())
+            .collect();
+    }
+    let g = c.global::<ResultsState>();
+    let error_sql = "SELECT c.id, c.name\n  FROM customers c\n  JOIN orders o ON o.customer_id = c.id\n WHERE o.status = 'paid'\n ORDER BY c.id DESC;";
+    match base {
+        "results_empty" => {
+            results_fill(&c, &columns, &[]);
+            c.set_workspace_result_summary("0 rows · 3ms".into());
+            g.set_can_export(true);
+        }
+        "results_filtered_out" => {
+            results_fill(&c, &columns, &rows);
+            c.set_workspace_visible_row_count(0);
+            c.set_workspace_filter("zzz".into());
+            g.set_can_export(true);
+        }
+        "results_running" => c.set_workspace_running(true),
+        // results_chart_bar, results_chart_line, results_chart_empty,
+        // results_chart_many (100 groups, capped).
+        "results_chart_bar" | "results_chart_line" | "results_chart_empty" | "results_chart_many" => {
+            use dbhive_ui_model::result_chart as ch;
+            let (cols, data): (Vec<String>, Vec<Vec<serde_json::Value>>) = if base == "results_chart_many" {
+                (
+                    vec!["day".into(), "orders".into()],
+                    (1..=140).map(|i| vec![serde_json::json!(format!("2026-{:02}-{:02}", 1 + i / 30, 1 + i % 28)), serde_json::json!(40 + (i * 37) % 90)]).collect(),
+                )
+            } else if base == "results_chart_empty" {
+                (vec!["name".into(), "email".into()], (1..=6).map(|i| vec![serde_json::json!(format!("C{i}")), serde_json::json!("x")]).collect())
+            } else {
+                (
+                    vec!["region".into(), "revenue".into()],
+                    ["North", "South", "East", "West", "Central", "Islands", "Overseas"]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, r)| vec![serde_json::json!(r), serde_json::json!(12000 + (i as i64 * 7919) % 9000 - 2000)])
+                        .collect(),
+                )
+            };
+            results_fill(&c, &cols, &data);
+            g.set_can_export(true);
+            g.set_mode(3);
+            let refs: Vec<&Vec<serde_json::Value>> = data.iter().collect();
+            let numeric = ch::numeric_columns(&cols, &refs);
+            g.set_chart_x_options(slint::ModelRc::new(slint::VecModel::from(cols.iter().map(|s| s.as_str().into()).collect::<Vec<slint::SharedString>>())));
+            g.set_chart_y_options(slint::ModelRc::new(slint::VecModel::from(numeric.iter().map(|&i| cols[i].as_str().into()).collect::<Vec<slint::SharedString>>())));
+            match ch::default_spec(&cols, &refs) {
+                None => g.set_chart_message("This result has no numeric column. Chart a query that returns numbers, or cast a column to one.".into()),
+                Some(mut spec) => {
+                    if base == "results_chart_line" || base == "results_chart_many" {
+                        spec.kind = ch::ChartKind::Line;
+                    }
+                    let agg = ch::aggregate(&refs, spec);
+                    let v = ch::build(&cols, &agg, spec).unwrap();
+                    g.set_chart_kind(spec.kind.index());
+                    g.set_chart_x(cols[spec.x].as_str().into());
+                    g.set_chart_y(cols[spec.y].as_str().into());
+                    g.set_chart_commands(v.commands.into());
+                    g.set_chart_area(v.area.into());
+                    g.set_chart_y_top(v.y_top.into());
+                    g.set_chart_y_mid(v.y_mid.into());
+                    g.set_chart_y_bottom(v.y_bottom.into());
+                    g.set_chart_x_start(v.x_start.into());
+                    g.set_chart_x_end(v.x_end.into());
+                    g.set_chart_caption(v.caption.into());
+                    g.set_chart_notice(v.notice.into());
+                }
+            }
+        }
+        "results_error" | "results_error_open" | "results_error_long" => {
+            let raw = if base == "results_error_long" {
+                "Query execution failed: error returned from database: 42703: column \"c.nmae\" does not exist at character 8; hint: Perhaps you meant to reference the column \"c.name\". The planner could not build a plan for the statement because the column list of the relation \"customers\" does not include the requested name, and no other relation in the FROM clause provides it."
+            } else {
+                "Query execution failed: error returned from database: (code: 1) near \"FORM\": syntax error"
+            };
+            let v = dbhive_ui_model::result_export::describe_error(raw);
+            g.set_error_headline(v.headline.into());
+            g.set_error_detail(v.detail.into());
+            g.set_error_code(v.code.into());
+            g.set_error_query(error_sql.into());
+            g.set_error_query_open(base != "results_error");
+            c.set_workspace_rows_error(raw.into());
+        }
+        _ => {
+            results_fill(&c, &columns, &rows);
+            g.set_can_export(true);
+            if base.starts_with("results_json") {
+                results_view_fill(&c, 1, &columns, &rows);
+            } else if base.starts_with("results_text") {
+                results_view_fill(&c, 2, &columns, &rows);
+            }
+        }
+    }
+
+    if base.starts_with("results_export") {
+        use dbhive_ui_model::result_export::{format_hint, scope_note, ExportScope, ResultFormat};
+        let json = base == "results_export_json";
+        let format = if json { ResultFormat::Json } else { ResultFormat::Csv };
+        g.set_export_visible(true);
+        g.set_export_formats(slint::ModelRc::new(slint::VecModel::from(
+            ResultFormat::labels().into_iter().map(Into::into).collect::<Vec<slint::SharedString>>(),
+        )));
+        g.set_export_format(format.index());
+        g.set_export_hint(format_hint(format).into());
+        let ext = format.extension();
+        g.set_export_path(format!("/Users/ada/Downloads/query_results_2026-10-21.{ext}").into());
+        let (scope, exported, held) = match base {
+            "results_export_filtered" => (ExportScope::Query, 12, rows.len()),
+            "results_export_page" => (ExportScope::TablePage, 50, 50),
+            _ => (ExportScope::Query, rows.len(), rows.len()),
+        };
+        g.set_export_scope_note(scope_note(scope, exported, held, columns.len()).into());
+        match base {
+            "results_export_error" => g.set_export_path_error("The folder does not exist.".into()),
+            "results_export_replaces" => g.set_export_replaces(true),
+            "results_export_running" => g.set_export_running(true),
+            "results_export_done" => {
+                g.set_export_done(true);
+                g.set_export_done_message(
+                    format!("Exported 24 rows to /Users/ada/Downloads/query_results_2026-10-21.{ext}").into(),
+                );
+            }
+            _ => {}
+        }
+    }
     c.show().unwrap();
     Box::new(c)
 }

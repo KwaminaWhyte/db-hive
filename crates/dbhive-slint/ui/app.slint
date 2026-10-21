@@ -45,6 +45,11 @@ export { ActivityState, MonitorTile, MonitorBar, MonitorFact, MonitorChip, Monit
 export { MigrationsState, MigrationDiffRow } from "screens/migrations.slint";
 export { ChartLine } from "kit/kit.slint";
 
+// Results tools: view modes, structured query error and the export dialog.
+import { ResultsState, ResultsExportOverlay } from "screens/results_tools.slint";
+export { ResultsState } from "screens/results_tools.slint";
+export { ResultViewLine, ResultViewRun } from "kit/kit.slint";
+
 // Visual query builder and table create/edit dialogs: each is a state global
 // plus an overlay, so this window gains no properties for them.
 import { BuilderState, BuilderOverlay } from "screens/query_builder.slint";
@@ -593,7 +598,7 @@ export component AppWindow inherits Window {
     property <bool> any-overlay: root.show-about || root.show-confirm || root.show-connection-editor
         || root.any-palette-overlay || ActivityState.visible || MigrationsState.visible
         || BuilderState.visible || TableDialogState.visible || ErdState.visible
-        || DesignerState.visible || PluginsState.visible;
+        || DesignerState.visible || PluginsState.visible || ResultsState.export-visible;
     init => { fs.focus(); }
     changed any-overlay => {
         if (!root.any-overlay) {
@@ -635,6 +640,9 @@ export component AppWindow inherits Window {
     // they sit beside, and stay below the dialogs.
     if ErdState.visible: ErdOverlay { }
     if DesignerState.visible: DesignerOverlay { }
+
+    // Export results, over the workspace and below the dialogs.
+    if ResultsState.export-visible: ResultsExportOverlay { }
 
     if root.show-about || root.show-confirm || root.show-connection-editor || root.show-settings || root.any-palette-overlay: Rectangle {
         width: 100%;
