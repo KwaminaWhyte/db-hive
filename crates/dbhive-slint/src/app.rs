@@ -51,6 +51,9 @@ mod history_glue;
 // The Import / Export and Backup / Restore panels' controller halves.
 mod backup;
 mod import_export;
+// The Activity Monitor and Schema Migrations panels' controller halves.
+mod activity_glue;
+mod migrations_glue;
 
 /// The connected workspace: which connection, which table, and its rows.
 #[derive(Default)]
@@ -86,6 +89,12 @@ enum PendingAction {
     ResetSettings,
     /// Close Settings and throw away its unsaved edits.
     DiscardSettings,
+    /// Empty the activity log (Activity Monitor > Clear).
+    ClearActivityLog,
+    /// Cancel a running statement on the server by session pid.
+    KillProcess(i64),
+    /// Run the migration SQL against the target (Schema Migrations > Apply).
+    ApplyMigration,
 }
 
 /// The new/edit connection dialog's state.
@@ -151,6 +160,8 @@ struct Session {
     palette: PaletteState,
     shortcuts: ShortcutsState,
     settings: settings::SettingsState,
+    monitor: activity_glue::MonitorSession,
+    migrations: migrations_glue::MigrationSession,
 }
 
 struct Ctx {
@@ -1040,6 +1051,9 @@ impl Ctx {
             Some(PendingAction::Backup(pending)) => self.backup_confirmed(pending),
             Some(PendingAction::ResetSettings) => self.reset_settings(),
             Some(PendingAction::DiscardSettings) => self.discard_settings_and_close(),
+            Some(PendingAction::ClearActivityLog) => self.monitor_clear_confirmed(),
+            Some(PendingAction::KillProcess(pid)) => self.monitor_kill_confirmed(pid),
+            Some(PendingAction::ApplyMigration) => self.migration_apply_confirmed(),
             None => self.delete_pending_connection(),
         }
     }
@@ -1105,7 +1119,14 @@ impl Ctx {
             Overlay::Palette
         } else if w.get_show_shortcuts() {
             Overlay::Shortcuts
-        } else if w.get_show_about() || w.get_show_confirm() || w.get_show_connection_editor() {
+        } else if w.get_show_about()
+            || w.get_show_confirm()
+            || w.get_show_connection_editor()
+            // The monitor and migrations panels are modal: nothing runs from
+            // a menu or a key under them.
+            || w.global::<crate::ActivityState>().get_visible()
+            || w.global::<crate::MigrationsState>().get_visible()
+        {
             Overlay::Dialog
         } else {
             Overlay::None
@@ -1163,6 +1184,8 @@ impl Ctx {
             CommandId::NewConnection => self.open_new_connection(),
             CommandId::RefreshMetadata => self.load_tables(),
             CommandId::ShowShortcuts => self.open_shortcuts(),
+            CommandId::GoActivityMonitor => self.open_activity_monitor(),
+            CommandId::GoMigrations => self.open_migrations(),
             CommandId::OpenCommandPalette => self.open_palette(),
             CommandId::Disconnect => {
                 let connection = self.session.borrow().workspace.connection_id.clone();
@@ -1594,6 +1617,8 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     import_export::wire(&window, &ctx);
     backup::wire(&window, &ctx);
     inspector::wire(&window, &ctx);
+    activity_glue::wire(&window, &ctx);
+    migrations_glue::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {

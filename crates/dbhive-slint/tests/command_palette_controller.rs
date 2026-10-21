@@ -208,7 +208,7 @@ async fn scenario(w: AppWindow, settings_raised: Rc<Cell<u32>>, finished: Rc<Cel
     let nw = all.iter().find(|r| r.id == "new-window").unwrap();
     assert!(!nw.enabled && !nw.reason.is_empty());
     // The first thing Enter would run is the first command that can run.
-    assert_eq!(selected_title(&w), "Open Settings");
+    assert_eq!(selected_title(&w), "Go to Activity Monitor");
 
     // The pointer moves the highlight to the row it is over (enabled rows
     // only)...

@@ -250,6 +250,14 @@ pub fn split_statements(sql: &str) -> Vec<String> {
                 cur.push(chars[i]);
                 i += 1;
             }
+            // A comment on lines of its own is a statement of its own. The
+            // generator emits comment-only markers without a terminator, and
+            // left attached to the statement after it, the pair would start
+            // with `--` and be skipped as a no-op, silently dropping the real
+            // statement from the migration.
+            if cur.trim().lines().all(|l| l.trim_start().starts_with("--")) {
+                push_statement(&mut out, &mut cur);
+            }
             continue;
         }
 
@@ -689,6 +697,31 @@ mod tests {
         ];
         let text = statements_to_text(&statements);
         assert_eq!(split_statements(&text), statements);
+    }
+
+    #[test]
+    fn a_comment_marker_before_a_statement_does_not_swallow_it() {
+        // Regression: the marker and the DROP came back as one string that
+        // started with `--`, so apply skipped the DROP as a comment.
+        let statements = vec![
+            "-- cannot express this change".to_string(),
+            "DROP TABLE b".to_string(),
+            "-- another note".to_string(),
+            "CREATE TABLE a (id int)".to_string(),
+        ];
+        let split = split_statements(&statements_to_text(&statements));
+        assert_eq!(split, statements);
+        assert_eq!(executable_count(&split), 2);
+    }
+
+    #[test]
+    fn a_comment_written_above_a_statement_is_split_off_it() {
+        let split = split_statements("-- drop the old one\nDROP TABLE old;\nSELECT 1 -- keep; this\n");
+        assert_eq!(
+            split,
+            vec!["-- drop the old one", "DROP TABLE old", "SELECT 1 -- keep; this"]
+        );
+        assert_eq!(executable_count(&split), 2);
     }
 
     // --- statement splitting ---------------------------------------------

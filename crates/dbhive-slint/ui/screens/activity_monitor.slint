@@ -1,0 +1,822 @@
+// The Activity Monitor, opened over the workspace or the connection list.
+//
+// Like the History panel, all of its data and intents live in one global
+// (`ActivityState`), so `app.slint` only mounts `ActivityOverlay` and the
+// controller reaches the panel through `window.global::<ActivityState>()`.
+// Rust decides what every cell, tile and axis label says
+// (`dbhive_ui_model::activity_panel`); this file lays it out.
+//
+// Three tabs: the query log (what this app ran), statistics over that log,
+// and the server (live metrics and the process list).
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, Tone, ButtonVariant, Button, TextField, Dropdown, Toggle, Divider, Banner, EmptyState, UnderlineTabs, FilterChip, SectionLabel, Badge, Card, Segmented, LineChart, ChartLine, StatTile, MeterRow } from "../kit/kit.slint";
+import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
+
+// One figure with a caption.
+export struct MonitorTile {
+    label: string,
+    value: string,
+    tone: Tone,
+}
+
+// One bar of a breakdown. `fraction` is 0 to 1.
+export struct MonitorBar {
+    label: string,
+    value: string,
+    fraction: float,
+    tone: Tone,
+}
+
+// A label and a value in the detail pane.
+export struct MonitorFact {
+    label: string,
+    value: string,
+}
+
+// A filter checkbox rendered as a chip.
+export struct MonitorChip {
+    label: string,
+    selected: bool,
+}
+
+// Everything a LineChart needs.
+export struct MonitorChart {
+    lines: [ChartLine],
+    y-top: string,
+    y-mid: string,
+    x-start: string,
+    x-end: string,
+}
+
+// What the server tab can show. `none` means no connection is open.
+export enum MonitorServerState { none, loading, unsupported, error, ready }
+
+export global ActivityState {
+    in-out property <bool> visible: false;
+    in-out property <int> tab: 0;
+    in property <[string]> tab-labels: ["Queries", "Statistics", "Server"];
+
+    // -- Header: auto-refresh covers every tab.
+    in-out property <bool> auto-refresh: false;
+    in property <[string]> interval-options: ["Off", "5s", "10s", "30s", "60s"];
+    in property <int> interval-index: 2;
+
+    // -- Queries tab.
+    in property <string> error;
+    in property <bool> exporting: false;
+    in-out property <string> search;
+    in-out property <bool> filters-open: false;
+    in property <bool> filters-active: false;
+    in property <[string]> filter-connections: ["All connections"];
+    in property <int> filter-connection: 0;
+    in property <[string]> filter-databases: ["All databases"];
+    in property <int> filter-database: 0;
+    in property <[string]> filter-ranges: ["All time"];
+    in property <int> filter-range: 0;
+    in-out property <string> min-duration;
+    in-out property <string> max-duration;
+    in property <[MonitorChip]> type-chips;
+    in property <[MonitorChip]> status-chips;
+
+    in property <[GridColumn]> columns;
+    in property <[GridRow]> rows;
+    in property <length> grid-width: 0px;
+    in property <int> selected-row: -1;
+    in property <int> sort-column: 0;
+    in property <bool> sort-desc: true;
+    in property <string> summary;
+    in property <string> page-label;
+    in property <bool> can-prev: false;
+    in property <bool> can-next: false;
+    in property <[string]> page-sizes: ["25", "50", "100", "250"];
+    in property <string> page-size: "50";
+    in property <int> log-total: 0;
+
+    // The expanded row.
+    in property <bool> has-detail: false;
+    in property <string> detail-status;
+    in property <Tone> detail-tone: Tone.neutral;
+    in property <[MonitorFact]> detail-facts;
+    in property <string> detail-sql;
+    in property <string> detail-error;
+    // A query tab can only be opened from a workspace.
+    in property <bool> can-open-in-editor: false;
+
+    // -- Statistics tab.
+    in property <[MonitorTile]> tiles;
+    in property <[MonitorBar]> type-bars;
+    in property <[MonitorBar]> status-bars;
+
+    // -- Server tab.
+    in property <MonitorServerState> server-state: MonitorServerState.none;
+    in property <string> server-message;
+    in property <[string]> server-connections;
+    in property <int> server-connection: -1;
+    in property <[string]> span-options: ["1m", "5m", "15m", "All"];
+    in property <int> span-index: 1;
+    in property <[MonitorTile]> live-tiles;
+    in property <MonitorChart> sessions-chart;
+    in property <MonitorChart> tx-chart;
+    in property <string> updated-label;
+    in property <[GridColumn]> process-columns;
+    in property <[GridRow]> process-rows;
+    in property <length> process-width: 0px;
+    in property <int> process-selected: -1;
+    in property <string> process-summary;
+    in property <bool> can-cancel: false;
+    in property <string> cancel-label: "Cancel query";
+    in property <bool> server-busy: false;
+
+    // The workspace header button or the View menu asked for the panel; the
+    // controller fills it and sets `visible`.
+    callback open-requested;
+    callback close;
+    callback tab-selected(int);
+
+    callback refresh;
+    callback auto-toggled;
+    callback interval-selected(int);
+
+    callback search-edited(string);
+    callback filters-toggled;
+    callback connection-picked(int);
+    callback database-picked(int);
+    callback range-picked(int);
+    callback duration-edited;
+    callback type-toggled(int);
+    callback status-toggled(int);
+    callback filters-reset;
+    callback sort-clicked(int);
+    callback row-clicked(int);
+    callback prev-page;
+    callback next-page;
+    callback page-size-picked(int);
+    callback export-picked(int);
+    callback clear-requested;
+    callback copy-sql;
+    callback open-in-editor;
+    callback detail-close;
+
+    callback server-connection-picked(int);
+    callback span-picked(int);
+    callback process-clicked(int);
+    callback cancel-requested;
+    callback server-retry;
+}
+
+// -- Queries ----------------------------------------------------------------
+
+component FilterStrip inherits Card {
+    background: Theme.sidebar;
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+        HorizontalLayout {
+            spacing: 8px;
+            Dropdown {
+                horizontal-stretch: 1;
+                options: ActivityState.filter-connections;
+                value: ActivityState.filter-connections[ActivityState.filter-connection];
+                selected(i) => { ActivityState.connection-picked(i); }
+            }
+            Dropdown {
+                horizontal-stretch: 1;
+                options: ActivityState.filter-databases;
+                value: ActivityState.filter-databases[ActivityState.filter-database];
+                selected(i) => { ActivityState.database-picked(i); }
+            }
+            Dropdown {
+                horizontal-stretch: 1;
+                options: ActivityState.filter-ranges;
+                value: ActivityState.filter-ranges[ActivityState.filter-range];
+                selected(i) => { ActivityState.range-picked(i); }
+            }
+            TextField {
+                width: 110px;
+                placeholder: "Min ms";
+                text <=> ActivityState.min-duration;
+                edited(t) => { ActivityState.duration-edited(); }
+            }
+            TextField {
+                width: 110px;
+                placeholder: "Max ms";
+                text <=> ActivityState.max-duration;
+                edited(t) => { ActivityState.duration-edited(); }
+            }
+            Button {
+                text: "Reset";
+                variant: ButtonVariant.ghost;
+                enabled: ActivityState.filters-active;
+                clicked => { ActivityState.filters-reset(); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    width: 48px;
+                    text: "Type";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+            }
+            for chip[i] in ActivityState.type-chips: FilterChip {
+                text: chip.label;
+                selected: chip.selected;
+                clicked => { ActivityState.type-toggled(i); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    width: 48px;
+                    text: "Status";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+            }
+            for chip[i] in ActivityState.status-chips: FilterChip {
+                text: chip.label;
+                selected: chip.selected;
+                clicked => { ActivityState.status-toggled(i); }
+            }
+        }
+    }
+}
+
+component LogDetail inherits Card {
+    background: Theme.sidebar;
+    height: 156px;
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+        alignment: start;
+        HorizontalLayout {
+            height: 32px;
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Badge {
+                    text: ActivityState.detail-status;
+                    tone: ActivityState.detail-tone;
+                    dot: true;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "Copy SQL";
+                has-icon: true;
+                icon: Icons.copy;
+                clicked => { ActivityState.copy-sql(); }
+            }
+            Button {
+                text: "Open in editor";
+                has-icon: true;
+                icon: Icons.square-terminal;
+                enabled: ActivityState.can-open-in-editor;
+                accessible-label: "Open this statement in a new query tab";
+                clicked => { ActivityState.open-in-editor(); }
+            }
+            Button {
+                has-icon: true;
+                icon: Icons.x;
+                variant: ButtonVariant.ghost;
+                accessible-label: "Close details";
+                clicked => { ActivityState.detail-close(); }
+            }
+        }
+        HorizontalLayout {
+            spacing: 16px;
+            alignment: start;
+            for fact in ActivityState.detail-facts: HorizontalLayout {
+                spacing: 5px;
+                Text {
+                    text: fact.label;
+                    color: Theme.dim-foreground;
+                    font-size: Theme.size-small;
+                    vertical-alignment: center;
+                }
+                Text {
+                    text: fact.value;
+                    color: Theme.foreground;
+                    font-size: Theme.size-small;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        ScrollView {
+            height: 64px;
+            VerticalLayout {
+                alignment: start;
+                spacing: 4px;
+                Text {
+                    text: ActivityState.detail-sql;
+                    color: Theme.foreground;
+                    font-family: "Menlo";
+                    font-size: Theme.size-mono;
+                    wrap: word-wrap;
+                }
+                if ActivityState.detail-error != "": Text {
+                    text: ActivityState.detail-error;
+                    color: Theme.destructive;
+                    font-size: Theme.size-small;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}
+
+component QueriesPane inherits VerticalLayout {
+    spacing: 8px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        TextField {
+            horizontal-stretch: 1;
+            has-icon: true;
+            icon: Icons.search;
+            placeholder: "Search SQL";
+            text <=> ActivityState.search;
+            edited(t) => { ActivityState.search-edited(t); }
+        }
+        Button {
+            text: ActivityState.filters-active ? "Filters (on)" : "Filters";
+            has-icon: true;
+            icon: Icons.filter;
+            variant: ActivityState.filters-open ? ButtonVariant.primary : ButtonVariant.secondary;
+            accessible-label: "Show or hide filters";
+            clicked => { ActivityState.filters-toggled(); }
+        }
+        Button {
+            has-icon: true;
+            icon: Icons.refresh-cw;
+            variant: ButtonVariant.ghost;
+            accessible-label: "Refresh";
+            clicked => { ActivityState.refresh(); }
+        }
+        Dropdown {
+            width: 96px;
+            options: ["CSV", "JSON", "TXT"];
+            value: ActivityState.exporting ? "Exporting…" : "Export";
+            enabled: !ActivityState.exporting && ActivityState.log-total > 0;
+            selected(i) => { ActivityState.export-picked(i); }
+        }
+        Button {
+            text: "Clear";
+            has-icon: true;
+            icon: Icons.trash-2;
+            variant: ButtonVariant.danger;
+            enabled: ActivityState.log-total > 0;
+            clicked => { ActivityState.clear-requested(); }
+        }
+    }
+
+    if ActivityState.filters-open: FilterStrip { }
+
+    if ActivityState.error != "": Banner { message: ActivityState.error; dismissible: false; }
+
+    if ActivityState.rows.length == 0: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.activity;
+        title: ActivityState.filters-active ? "No queries match" : "No queries yet";
+        message: ActivityState.filters-active
+            ? "Nothing in the log fits these filters."
+            : "Every statement you run in a query tab shows up here, with its timing and result.";
+        if ActivityState.filters-active: Button {
+            text: "Reset filters";
+            clicked => { ActivityState.filters-reset(); }
+        }
+    }
+
+    if ActivityState.rows.length > 0: ResultsGrid {
+        vertical-stretch: 1;
+        min-height: 120px;
+        columns: ActivityState.columns;
+        rows: ActivityState.rows;
+        total-width: ActivityState.grid-width;
+        controlled: true;
+        selected-row: ActivityState.selected-row;
+        sort-column: ActivityState.sort-column;
+        sort-desc: ActivityState.sort-desc;
+        row-height: 26px;
+        header-clicked(c) => { ActivityState.sort-clicked(c); }
+        row-clicked(r) => { ActivityState.row-clicked(r); }
+    }
+
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            horizontal-stretch: 1;
+            text: ActivityState.summary;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        Text {
+            text: ActivityState.page-label;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            vertical-alignment: center;
+        }
+        Button {
+            has-icon: true;
+            icon: Icons.chevron-left;
+            variant: ButtonVariant.ghost;
+            enabled: ActivityState.can-prev;
+            accessible-label: "Previous page";
+            clicked => { ActivityState.prev-page(); }
+        }
+        Button {
+            has-icon: true;
+            icon: Icons.chevron-right;
+            variant: ButtonVariant.ghost;
+            enabled: ActivityState.can-next;
+            accessible-label: "Next page";
+            clicked => { ActivityState.next-page(); }
+        }
+        Dropdown {
+            width: 80px;
+            options: ActivityState.page-sizes;
+            value: ActivityState.page-size;
+            selected(i) => { ActivityState.page-size-picked(i); }
+        }
+    }
+
+    if ActivityState.has-detail: LogDetail { }
+}
+
+// -- Statistics -------------------------------------------------------------
+
+component StatisticsPane inherits VerticalLayout {
+    spacing: 12px;
+
+    if ActivityState.log-total == 0: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.activity;
+        title: "Nothing to summarise";
+        message: "Statistics appear once you have run a query in this session.";
+    }
+
+    if ActivityState.log-total > 0: VerticalLayout {
+        vertical-stretch: 1;
+        spacing: 12px;
+        alignment: start;
+
+        Text {
+            text: ActivityState.filters-active
+                ? "Over the queries that match the filters on the Queries tab."
+                : "Over every query in the log.";
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+        }
+        HorizontalLayout {
+            spacing: 10px;
+            for tile in ActivityState.tiles: StatTile {
+                horizontal-stretch: 1;
+                label: tile.label;
+                value: tile.value;
+                tone: tile.tone;
+            }
+        }
+        HorizontalLayout {
+            spacing: 16px;
+            Card {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 6px;
+                    alignment: start;
+                    Text {
+                        text: "By type";
+                        color: Theme.foreground;
+                        font-size: Theme.size-label;
+                        font-weight: 600;
+                    }
+                    for bar in ActivityState.type-bars: MeterRow {
+                        label: bar.label;
+                        value: bar.value;
+                        fraction: bar.fraction;
+                        tone: bar.tone;
+                    }
+                }
+            }
+            Card {
+                horizontal-stretch: 1;
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 6px;
+                    alignment: start;
+                    Text {
+                        text: "By status";
+                        color: Theme.foreground;
+                        font-size: Theme.size-label;
+                        font-weight: 600;
+                    }
+                    for bar in ActivityState.status-bars: MeterRow {
+                        label: bar.label;
+                        value: bar.value;
+                        fraction: bar.fraction;
+                        tone: bar.tone;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -- Server -----------------------------------------------------------------
+
+// The connection picker, window length and refresh button over the live view.
+component ServerToolbar inherits HorizontalLayout {
+    spacing: 8px;
+    VerticalLayout {
+        alignment: center;
+        Text {
+            text: "Connection";
+            color: Theme.muted-foreground;
+            font-size: Theme.size-label;
+        }
+    }
+    Dropdown {
+        width: 320px;
+        options: ActivityState.server-connections;
+        value: ActivityState.server-connection >= 0
+            ? ActivityState.server-connections[ActivityState.server-connection]
+            : "Choose a connection";
+        selected(i) => { ActivityState.server-connection-picked(i); }
+    }
+    Rectangle { horizontal-stretch: 1; }
+    if ActivityState.updated-label != "": VerticalLayout {
+        alignment: center;
+        Text {
+            text: ActivityState.updated-label;
+            color: Theme.dim-foreground;
+            font-size: Theme.size-small;
+        }
+    }
+    Segmented {
+        options: ActivityState.span-options;
+        selected: ActivityState.span-index;
+        picked(i) => { ActivityState.span-picked(i); }
+    }
+    Button {
+        has-icon: true;
+        icon: Icons.refresh-cw;
+        variant: ButtonVariant.ghost;
+        enabled: !ActivityState.server-busy;
+        accessible-label: "Refresh server activity";
+        clicked => { ActivityState.refresh(); }
+    }
+}
+
+component ServerPane inherits VerticalLayout {
+    spacing: 10px;
+
+    if ActivityState.server-state == MonitorServerState.none: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.server;
+        title: "No open connection";
+        message: "Connect to a PostgreSQL or MySQL database to watch its sessions and load here.";
+    }
+
+    if ActivityState.server-state == MonitorServerState.unsupported: VerticalLayout {
+        vertical-stretch: 1;
+        spacing: 10px;
+        ServerToolbar { }
+        EmptyState {
+            vertical-stretch: 1;
+            icon: Icons.server;
+            title: "Not available for this database";
+            message: ActivityState.server-message;
+        }
+    }
+
+    if ActivityState.server-state == MonitorServerState.loading: VerticalLayout {
+        vertical-stretch: 1;
+        spacing: 10px;
+        ServerToolbar { }
+        Text {
+            vertical-stretch: 1;
+            text: "Reading server activity…";
+            color: Theme.muted-foreground;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    if ActivityState.server-state == MonitorServerState.error: VerticalLayout {
+        vertical-stretch: 1;
+        spacing: 10px;
+        ServerToolbar { }
+        Banner { message: ActivityState.server-message; dismissible: false; }
+        HorizontalLayout {
+            alignment: start;
+            Button {
+                text: "Retry";
+                has-icon: true;
+                icon: Icons.refresh-cw;
+                clicked => { ActivityState.server-retry(); }
+            }
+        }
+        Rectangle { vertical-stretch: 1; }
+    }
+
+    if ActivityState.server-state == MonitorServerState.ready: ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 10px;
+            padding-right: 14px;
+            ServerToolbar { }
+            HorizontalLayout {
+                spacing: 10px;
+                for tile in ActivityState.live-tiles: StatTile {
+                    horizontal-stretch: 1;
+                    label: tile.label;
+                    value: tile.value;
+                    tone: tile.tone;
+                }
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                LineChart {
+                    horizontal-stretch: 3;
+                    height: 188px;
+                    plot-height: 100px;
+                    lines: ActivityState.sessions-chart.lines;
+                    y-top: ActivityState.sessions-chart.y-top;
+                    y-mid: ActivityState.sessions-chart.y-mid;
+                    x-start: ActivityState.sessions-chart.x-start;
+                    x-end: ActivityState.sessions-chart.x-end;
+                }
+                LineChart {
+                    horizontal-stretch: 2;
+                    height: 188px;
+                    plot-height: 100px;
+                    lines: ActivityState.tx-chart.lines;
+                    y-top: ActivityState.tx-chart.y-top;
+                    y-mid: ActivityState.tx-chart.y-mid;
+                    x-start: ActivityState.tx-chart.x-start;
+                    x-end: ActivityState.tx-chart.x-end;
+                }
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                Text {
+                    horizontal-stretch: 1;
+                    text: ActivityState.process-summary;
+                    color: Theme.foreground;
+                    font-size: Theme.size-label;
+                    font-weight: 600;
+                    vertical-alignment: center;
+                }
+                Button {
+                    text: ActivityState.cancel-label;
+                    has-icon: true;
+                    icon: Icons.zap;
+                    variant: ButtonVariant.danger;
+                    enabled: ActivityState.can-cancel && !ActivityState.server-busy;
+                    accessible-label: "Cancel the selected session's running query";
+                    clicked => { ActivityState.cancel-requested(); }
+                }
+            }
+            if ActivityState.process-rows.length == 0: Card {
+                height: 72px;
+                Text {
+                    text: "No active sessions";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-label;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            if ActivityState.process-rows.length > 0: ResultsGrid {
+                height: min(260px, 32px + 26px * ActivityState.process-rows.length + 2px);
+                columns: ActivityState.process-columns;
+                rows: ActivityState.process-rows;
+                total-width: ActivityState.process-width;
+                controlled: true;
+                selected-row: ActivityState.process-selected;
+                row-height: 26px;
+                row-clicked(r) => { ActivityState.process-clicked(r); }
+            }
+        }
+    }
+}
+
+// -- Panel ------------------------------------------------------------------
+
+export component ActivityPanel inherits Rectangle {
+    // Set by the window so the content never falls off a short window.
+    in property <length> available-height: 720px;
+    in property <length> available-width: 1120px;
+
+    width: min(1120px, root.available-width);
+    height: min(720px, root.available-height);
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    clip: true;
+
+    // Swallows clicks on the panel's own background, so they do not reach the
+    // overlay's backdrop and close it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: 20px;
+        padding-top: 16px;
+        spacing: 10px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: "Activity monitor";
+                    color: Theme.foreground;
+                    font-size: Theme.size-subheading;
+                    font-weight: 700;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                Toggle {
+                    text: "Auto-refresh";
+                    checked: ActivityState.auto-refresh;
+                    toggled => { ActivityState.auto-toggled(); }
+                }
+            }
+            Dropdown {
+                width: 76px;
+                options: ActivityState.interval-options;
+                value: ActivityState.interval-options[ActivityState.interval-index];
+                enabled: ActivityState.auto-refresh;
+                selected(i) => { ActivityState.interval-selected(i); }
+            }
+            Button {
+                has-icon: true;
+                icon: Icons.x;
+                variant: ButtonVariant.ghost;
+                accessible-label: "Close";
+                clicked => { ActivityState.close(); }
+            }
+        }
+
+        UnderlineTabs {
+            labels: ActivityState.tab-labels;
+            active: ActivityState.tab;
+            selected(i) => { ActivityState.tab-selected(i); }
+        }
+
+        if ActivityState.tab == 0: QueriesPane { vertical-stretch: 1; }
+        if ActivityState.tab == 1: StatisticsPane { vertical-stretch: 1; }
+        if ActivityState.tab == 2: ServerPane { vertical-stretch: 1; }
+    }
+}
+
+// The panel over a dimmed workspace. A click on the backdrop closes it.
+export component ActivityOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Theme.background.transparentize(0.25);
+
+    TouchArea {
+        clicked => { ActivityState.close(); }
+    }
+
+    // Escape closes the panel. Keys a focused field does not use bubble up to
+    // this scope, so it works from inside the search box too.
+    scope := FocusScope {
+        width: 100%;
+        height: 100%;
+        init => { self.focus(); }
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                ActivityState.close();
+                return accept;
+            }
+            return reject;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+                ActivityPanel {
+                    available-height: root.height - 32px;
+                    available-width: root.width - 32px;
+                }
+            }
+        }
+    }
+}

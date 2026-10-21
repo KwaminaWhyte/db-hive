@@ -60,6 +60,8 @@ export component WorkspaceScreen inherits VerticalLayout {
     callback run-query;
     callback retry;
     callback open-history;
+    callback open-activity;
+    callback open-migrations;
 
     spacing: 0;
 
@@ -109,6 +111,28 @@ export component WorkspaceScreen inherits VerticalLayout {
                     variant: ButtonVariant.ghost;
                     accessible-label: "History, snippets and templates";
                     clicked => { root.open-history(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "Activity";
+                    has-icon: true;
+                    icon: Icons.activity;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Activity monitor";
+                    clicked => { root.open-activity(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "Migrations";
+                    has-icon: true;
+                    icon: Icons.git-compare;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Schema migrations";
+                    clicked => { root.open-migrations(); }
                 }
             }
             VerticalLayout {

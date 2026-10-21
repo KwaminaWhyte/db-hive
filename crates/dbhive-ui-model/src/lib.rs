@@ -9,6 +9,7 @@
 //! `egui::` or `slint::` it belongs in a shell, not here.
 
 pub mod activity_monitor;
+pub mod activity_panel;
 pub mod ai_assistant;
 pub mod backup;
 pub mod backup_manager;
@@ -23,6 +24,7 @@ pub mod history_panel;
 pub mod import_export;
 pub mod import_wizard;
 pub mod migrations;
+pub mod migrations_panel;
 pub mod palette_session;
 pub mod plugins;
 pub mod procedures;

@@ -32,10 +32,30 @@ pub const APP_IDENTIFIER: &str = "com.kwamina.db-hive";
 /// overwrite the developer's own saved connections.
 pub const DATA_DIR_ENV: &str = "DBHIVE_DATA_DIR";
 
+/// Whether this process is a cargo test binary. Those live in
+/// `target/<profile>/deps`, unlike the app (`target/<profile>/dbhive*`) and
+/// examples (`target/<profile>/examples`).
+fn is_test_binary() -> bool {
+    std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().and_then(|d| d.file_name().map(|n| n == "deps")))
+        .unwrap_or(false)
+}
+
 /// Directory the stores live in, created if absent.
+///
+/// A test binary with no `DBHIVE_DATA_DIR` is refused: it would otherwise read
+/// and rewrite the developer's real saved connections, history and settings.
+/// That already happened once (a test replaced `profiles.json`), so the
+/// refusal is an error rather than a convention.
 pub fn app_data_dir() -> Result<PathBuf, DbError> {
     let dir = match std::env::var_os(DATA_DIR_ENV) {
         Some(over) if !over.is_empty() => PathBuf::from(over),
+        _ if is_test_binary() => {
+            return Err(DbError::InternalError(format!(
+                "refusing to use the real data directory from a test binary: set {DATA_DIR_ENV} to a temp dir"
+            )));
+        }
         _ => {
             let base = dirs::data_dir().ok_or_else(|| {
                 DbError::InternalError("Could not resolve the platform data directory".into())
@@ -140,6 +160,16 @@ impl JsonStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_test_binary_is_refused_the_real_data_dir_without_an_override() {
+        // Nothing in this crate's tests sets the override, so under cargo test
+        // it is unset and the guard must refuse.
+        assert!(std::env::var_os(DATA_DIR_ENV).is_none());
+        assert!(is_test_binary());
+        let err = app_data_dir().unwrap_err().to_string();
+        assert!(err.contains(DATA_DIR_ENV), "{err}");
+    }
 
     fn temp_path(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("dbhive-store-test-{}-{}", std::process::id(), name))
