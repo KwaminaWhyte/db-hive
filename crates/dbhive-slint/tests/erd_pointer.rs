@@ -206,6 +206,23 @@ fn pan_drag_a_table_and_zoom_with_real_pointer_events() {
                 if st.get_zoom_label() == "" {
                     return bail("zoom label empty".into());
                 }
+                // The wheel also works with the pointer over a table, whose own
+                // pointer handling must not swallow it.
+                let (_, n) = st
+                    .get_nodes()
+                    .iter()
+                    .enumerate()
+                    .find(|(_, n)| n.title == "customers")
+                    .unwrap();
+                let over = at(
+                    st.get_pan_x() + (n.x + n.width / 2.0) * z1,
+                    st.get_pan_y() + (n.y + n.height / 2.0) * z1,
+                );
+                moved(over);
+                win.dispatch_event(WindowEvent::PointerScrolled { position: over, delta_x: 0.0, delta_y: -120.0 });
+                if st.get_zoom() >= z1 {
+                    return bail(format!("wheel down over a table should zoom out: {z1} -> {}", st.get_zoom()));
+                }
                 // A click on empty canvas clears the selection.
                 let start = at(st.get_viewport_width() - 6.0, 6.0);
                 moved(start);
