@@ -179,13 +179,13 @@ pub fn support(id: CommandId) -> Support {
     match id {
         GoConnections | GoSettings | GoAbout | NewConnection | RefreshMetadata | ShowShortcuts
         | OpenCommandPalette | Disconnect | RunQuery | NewTab | CloseTab | ThemeLight
-        | ThemeDark | ThemeToggle => Support::Live,
+        | ThemeDark | ThemeToggle | GoActivityMonitor | GoMigrations => Support::Live,
 
         NewWindow => Support::Unsupported("Multiple windows are not supported yet"),
 
         GoQueryEditor | GoVisualQueryBuilder | GoSchemaDesigner | GoErDiagram
-        | GoTableInspector | GoActivityMonitor | GoHistory | GoAiAssistant | GoImportExport
-        | GoBackup | GoMigrations | GoPlugins | NewTable | ToggleSidebar | Connect
+        | GoTableInspector | GoHistory | GoAiAssistant | GoImportExport
+        | GoBackup | GoPlugins | NewTable | ToggleSidebar | Connect
         | ConnectionsBack | WindowMinimize | WindowMaximizeToggle | WindowClose => Support::Hidden,
     }
 }
@@ -825,7 +825,7 @@ mod tests {
     fn unbuilt_screens_are_hidden_and_new_window_is_unsupported_with_a_reason() {
         for id in [
             CommandId::GoErDiagram,
-            CommandId::GoMigrations,
+            CommandId::GoBackup,
             CommandId::GoPlugins,
             CommandId::ToggleSidebar,
             CommandId::WindowClose,
@@ -836,6 +836,17 @@ mod tests {
             status(CommandId::NewWindow, &ws()),
             Status::Unsupported("Multiple windows are not supported yet")
         );
+    }
+
+    #[test]
+    fn the_activity_monitor_and_migrations_open_from_either_screen_but_not_under_a_dialog() {
+        for id in [CommandId::GoActivityMonitor, CommandId::GoMigrations] {
+            assert_eq!(status(id, &conns()), Status::Enabled, "{:?}", id);
+            assert_eq!(status(id, &ws()), Status::Enabled, "{:?}", id);
+            let mut c = ws();
+            c.dialog_open = true;
+            assert_eq!(status(id, &c).reason(), "Close the open dialog first");
+        }
     }
 
     // ── keys ─────────────────────────────────────────────────────────────
