@@ -30,6 +30,7 @@ pub mod migrations;
 pub mod migrations_panel;
 pub mod palette_session;
 pub mod plugins;
+pub mod plugins_panel;
 pub mod procedures;
 pub mod query_builder;
 pub mod results_grid;
