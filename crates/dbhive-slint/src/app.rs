@@ -32,6 +32,8 @@ use dbhive_ui_model::settings_editor::{
 use dbhive_ui_model::workspace_tabs::{result_summary, TabKind, Tabs};
 
 mod builder;
+mod designer;
+mod erd;
 mod inspector;
 mod settings;
 mod table_dialog;
@@ -168,6 +170,8 @@ struct Session {
     migrations: migrations_glue::MigrationSession,
     builder: builder::BuilderSession,
     table_dialog: table_dialog::DialogSession,
+    erd: erd::ErdSession,
+    designer: designer::DesignerSession,
 }
 
 struct Ctx {
@@ -748,6 +752,11 @@ impl Ctx {
         self.hide_backup_panel();
         self.builder_close();
         self.table_dialog_close();
+        self.hide_erd();
+        self.hide_designer();
+        // A diagram or design belongs to one connection.
+        self.invalidate_erd();
+        self.session.borrow_mut().designer = designer::DesignerSession::default();
         self.session.borrow_mut().workspace = Workspace::default();
         if let Some(w) = self.window.upgrade() {
             w.set_screen(Screen::Connections);
@@ -1196,6 +1205,8 @@ impl Ctx {
             CommandId::RefreshMetadata => self.load_tables(),
             CommandId::GoVisualQueryBuilder => self.builder_open(),
             CommandId::NewTable => self.table_dialog_open_create(),
+            CommandId::GoErDiagram => self.open_erd(),
+            CommandId::GoSchemaDesigner => self.open_designer(),
             CommandId::ShowShortcuts => self.open_shortcuts(),
             CommandId::GoActivityMonitor => self.open_activity_monitor(),
             CommandId::GoMigrations => self.open_migrations(),
@@ -1634,6 +1645,8 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     migrations_glue::wire(&window, &ctx);
     builder::wire(&window, &ctx);
     table_dialog::wire(&window, &ctx);
+    erd::wire(&window, &ctx);
+    designer::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {

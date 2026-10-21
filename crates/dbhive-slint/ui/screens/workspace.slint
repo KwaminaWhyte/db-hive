@@ -64,6 +64,7 @@ export component WorkspaceScreen inherits VerticalLayout {
     callback open-history;
     callback open-activity;
     callback open-migrations;
+    callback open-diagram;
 
     spacing: 0;
 
@@ -146,6 +147,18 @@ export component WorkspaceScreen inherits VerticalLayout {
                     variant: ButtonVariant.ghost;
                     accessible-label: "Schema migrations";
                     clicked => { root.open-migrations(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "Diagram";
+                    has-icon: true;
+                    icon: Icons.workflow;
+                    variant: ButtonVariant.ghost;
+                    enabled: !root.loading-tables && root.tables-error == "";
+                    accessible-label: "ER diagram of this schema";
+                    clicked => { root.open-diagram(); }
                 }
             }
             VerticalLayout {

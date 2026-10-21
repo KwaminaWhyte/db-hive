@@ -2,17 +2,45 @@
 //
 // Nodes are positioned from the model; edges are SVG path commands built in
 // Rust, so curve maths lives where it can be unit tested. Dragging reports a
-// delta and lets Rust move the node and recompute its edges; the canvas holds
-// no geometry of its own beyond pan and zoom.
+// delta and lets Rust move the node and recompute its edges. Pan is held here
+// (it changes on every pointer move); zoom is set from Rust and every
+// coordinate and font size is multiplied by it, so the picture scales without
+// relying on item transforms the software renderer does not draw.
+//
+// Nothing here is a literal colour or size: the canvas reads the Theme, so it
+// follows light and dark like every other screen.
+
+import { Theme } from "../kit/kit.slint";
+
+export struct DiagramRow {
+    name: string,
+    // The type, and flags such as UNQ or NN.
+    detail: string,
+    // "PK", "FK" or empty.
+    badge: string,
+}
 
 export struct DiagramNode {
     title: string,
-    columns: [string],
+    // A small tag in the header ("M:N" on a junction table), or empty.
+    tag: string,
+    rows: [DiagramRow],
+    // "+3 more columns", or empty.
+    more: string,
     x: length,
     y: length,
     width: length,
     height: length,
+    header-height: length,
+    row-height: length,
+    // Width reserved on the right of a row for its detail text.
+    detail-width: length,
     selected: bool,
+    // Matches the highlight filter.
+    emphasis: bool,
+    // Does not match while a filter is active.
+    dimmed: bool,
+    junction: bool,
 }
 
 export struct DiagramEdge {
@@ -26,6 +54,13 @@ export struct DiagramEdge {
     width: length,
     height: length,
     highlighted: bool,
+    // A many-to-many relationship, drawn lighter (its line is also dashed).
+    muted: bool,
+    dimmed: bool,
+    label: string,
+    // Where the label's centre sits, in canvas coordinates.
+    label-x: length,
+    label-y: length,
 }
 
 export component DiagramCanvas inherits Rectangle {
@@ -34,106 +69,269 @@ export component DiagramCanvas inherits Rectangle {
     in-out property <length> pan-x: 0px;
     in-out property <length> pan-y: 0px;
     in property <float> zoom: 1.0;
-    // The canvas size edges are expressed in. Rust sizes this to the layout.
+    // Kept for the spikes; the canvas no longer needs a world rectangle.
     in property <length> canvas-width: 2000px;
     in property <length> canvas-height: 1400px;
     // Blurred shadows on every node are the most expensive thing drawn.
     in property <bool> shadows: true;
+    in property <bool> show-edges: true;
+    in property <bool> show-labels: true;
+    in property <string> accessible-name: "Diagram";
 
     callback node-dragged(int, length, length);
     callback node-clicked(int);
+    // The pointer was released on a node: a drag (if any) is over.
+    callback node-released(int);
+    callback background-clicked;
+    // A scroll: delta, then the pointer position inside the canvas.
+    callback wheel(length, length, length);
 
-    background: #090a0e;
+    background: Theme.background;
     clip: true;
+    accessible-role: groupbox;
+    accessible-label: root.accessible-name;
 
     // Panning: dragging empty space moves the whole canvas.
     pan := TouchArea {
         property <length> start-x;
         property <length> start-y;
+        property <bool> panned;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.down) {
                 self.start-x = root.pan-x;
                 self.start-y = root.pan-y;
+                self.panned = false;
             }
         }
         moved => {
+            self.panned = true;
             root.pan-x = self.start-x + (self.mouse-x - self.pressed-x);
             root.pan-y = self.start-y + (self.mouse-y - self.pressed-y);
         }
+        clicked => {
+            if (!self.panned) {
+                root.background-clicked();
+            }
+        }
+        scroll-event(e) => {
+            root.wheel(e.delta-y, self.mouse-x, self.mouse-y);
+            return accept;
+        }
     }
 
-    world := Rectangle {
-        x: root.pan-x;
-        y: root.pan-y;
-        width: root.canvas-width;
-        height: root.canvas-height;
-
+    if root.show-edges: Rectangle {
         for edge in root.edges: Path {
-            x: edge.x;
-            y: edge.y;
-            width: edge.width;
-            height: edge.height;
-            // Pin the viewbox to the element's own size, or Slint scales the
-            // path to fit its bounds and curves land in the wrong place.
+            x: root.pan-x + edge.x * root.zoom;
+            y: root.pan-y + edge.y * root.zoom;
+            width: edge.width * root.zoom;
+            height: edge.height * root.zoom;
+            // Pin the viewbox to the element's own unscaled size: Slint scales
+            // the path from the viewbox to the element, which is the zoom.
             viewbox-x: 0;
             viewbox-y: 0;
             viewbox-width: edge.width / 1px;
             viewbox-height: edge.height / 1px;
             commands: edge.commands;
-            stroke: edge.highlighted ? #f8b02a : #3a3d48;
+            stroke: edge.highlighted ? Theme.primary : edge.muted ? Theme.muted-foreground : Theme.dim-foreground;
             stroke-width: edge.highlighted ? 2px : 1.25px;
+            opacity: edge.dimmed ? 0.3 : 1;
         }
+    }
 
-        for node[i] in root.nodes: Rectangle {
-            x: node.x;
-            y: node.y;
-            width: node.width;
-            height: node.height;
-            background: #13141a;
-            border-radius: 10px;
-            border-width: node.selected ? 2px : 1px;
-            border-color: node.selected ? #f8b02a : #2a2c35;
-            // The dragged or selected table draws above its neighbours.
-            z: node.selected ? 1 : 0;
-            drop-shadow-blur: root.shadows ? 12px : 0;
-            drop-shadow-color: root.shadows ? #00000066 : transparent;
-            drop-shadow-offset-y: root.shadows ? 4px : 0;
+    if root.show-edges && root.show-labels && root.zoom >= 0.55: Rectangle {
+        for edge in root.edges: Rectangle {
+            visible: edge.label != "";
+            width: label-text.preferred-width + 12px * root.zoom;
+            height: 18px * root.zoom;
+            x: root.pan-x + edge.label-x * root.zoom - self.width / 2;
+            y: root.pan-y + edge.label-y * root.zoom - self.height / 2;
+            background: Theme.card;
+            border-radius: 4px;
+            border-width: 1px;
+            border-color: edge.highlighted ? Theme.primary : Theme.border;
+            opacity: edge.dimmed ? 0.3 : 1;
+            label-text := Text {
+                width: parent.width;
+                height: parent.height;
+                text: edge.label;
+                color: edge.highlighted ? Theme.primary : Theme.muted-foreground;
+                font-size: Theme.size-small * root.zoom;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+    }
 
-            // Header, which is also the drag handle.
-            header := TouchArea {
-                x: 0;
-                y: 0;
-                height: 30px;
-                clicked => { root.node-clicked(i); }
-                moved => {
-                    root.node-dragged(i, self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
-                }
-                Rectangle {
-                    background: #1a1c23;
-                    border-top-left-radius: 10px;
-                    border-top-right-radius: 10px;
-                    Text {
-                        x: 12px;
-                        text: node.title;
-                        color: #f0f1f4;
-                        font-size: 13px;
-                        font-weight: 600;
-                        vertical-alignment: center;
-                        overflow: elide;
-                        width: parent.width - 24px;
-                    }
+    for node[i] in root.nodes: Rectangle {
+        x: root.pan-x + node.x * root.zoom;
+        y: root.pan-y + node.y * root.zoom;
+        width: node.width * root.zoom;
+        height: node.height * root.zoom;
+        // Off-screen tables cost nothing to draw.
+        visible: self.x + self.width > 0px && self.x < root.width && self.y + self.height > 0px && self.y < root.height;
+        background: Theme.card;
+        border-radius: Theme.radius-card * root.zoom;
+        border-width: node.selected ? 2px : 1px;
+        border-color: node.selected ? Theme.primary
+            : node.emphasis ? Theme.primary.transparentize(0.35)
+            : Theme.border-strong;
+        opacity: node.dimmed ? 0.4 : 1;
+        // The dragged or selected table draws above its neighbours.
+        z: node.selected ? 1 : 0;
+        drop-shadow-blur: root.shadows ? 12px : 0;
+        drop-shadow-color: root.shadows ? Theme.shadow : transparent;
+        drop-shadow-offset-y: root.shadows ? 4px : 0;
+
+        // The whole table is the handle: drag it anywhere, click to select.
+        touch := TouchArea {
+            mouse-cursor: grab;
+            clicked => { root.node-clicked(i); }
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.up) {
+                    root.node-released(i);
                 }
             }
+            moved => {
+                root.node-dragged(i, self.mouse-x - self.pressed-x, self.mouse-y - self.pressed-y);
+            }
+        }
 
-            for col[c] in node.columns: Text {
-                x: 12px;
-                y: 36px + c * 19px;
-                width: parent.width - 24px;
-                text: col;
-                color: c == 0 ? #f8b02a : #c6c9d1;
-                font-size: 12px;
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: node.header-height * root.zoom;
+            background: node.junction ? Theme.secondary : Theme.elevated;
+            border-top-left-radius: Theme.radius-card * root.zoom;
+            border-top-right-radius: Theme.radius-card * root.zoom;
+            // A table with nothing under its header (columns hidden) is all header.
+            border-bottom-left-radius: node.rows.length == 0 ? Theme.radius-card * root.zoom : 0px;
+            border-bottom-right-radius: node.rows.length == 0 ? Theme.radius-card * root.zoom : 0px;
+            Text {
+                x: 12px * root.zoom;
+                width: parent.width - 24px * root.zoom - (node.tag != "" ? 40px * root.zoom : 0px);
+                height: parent.height;
+                text: node.title;
+                color: Theme.foreground;
+                font-size: Theme.size-label * root.zoom;
+                font-weight: 600;
+                vertical-alignment: center;
                 overflow: elide;
             }
+            if node.tag != "": Text {
+                x: parent.width - 52px * root.zoom;
+                width: 40px * root.zoom;
+                height: parent.height;
+                text: node.tag;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small * root.zoom;
+                font-weight: 600;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
         }
+
+        if root.zoom >= 0.3: Rectangle {
+            for row[r] in node.rows: Rectangle {
+                x: 0;
+                y: (node.header-height + r * node.row-height) * root.zoom;
+                width: node.width * root.zoom;
+                height: node.row-height * root.zoom;
+                if row.badge != "": Text {
+                    x: 12px * root.zoom;
+                    width: 22px * root.zoom;
+                    height: parent.height;
+                    text: row.badge;
+                    color: row.badge == "PK" ? Theme.primary : Theme.dim-foreground;
+                    font-size: Theme.size-small * 0.85 * root.zoom;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
+                Text {
+                    x: 36px * root.zoom;
+                    width: (node.width - node.detail-width - 40px) * root.zoom;
+                    height: parent.height;
+                    text: row.name;
+                    color: row.badge == "PK" ? Theme.primary : Theme.foreground;
+                    font-size: Theme.size-small * root.zoom;
+                    font-weight: row.badge == "PK" ? 600 : 400;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                Text {
+                    x: (node.width - node.detail-width - 12px) * root.zoom;
+                    width: node.detail-width * root.zoom;
+                    height: parent.height;
+                    text: row.detail;
+                    color: Theme.dim-foreground;
+                    font-size: Theme.size-small * 0.9 * root.zoom;
+                    horizontal-alignment: right;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+            if node.more != "": Text {
+                x: 36px * root.zoom;
+                y: (node.header-height + node.rows.length * node.row-height) * root.zoom;
+                width: (node.width - 48px) * root.zoom;
+                height: node.row-height * root.zoom;
+                text: node.more;
+                color: Theme.dim-foreground;
+                font-size: Theme.size-small * 0.9 * root.zoom;
+                font-italic: true;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+// A bird's-eye view: every table as a small box, the visible region as an
+// outlined rectangle. Clicking or dragging recentres the canvas.
+export component DiagramMinimap inherits Rectangle {
+    in property <[DiagramNode]> nodes;
+    // The canvas's pan, zoom and size, to place the visible region.
+    in property <length> pan-x;
+    in property <length> pan-y;
+    in property <float> zoom: 1.0;
+    in property <length> view-width;
+    in property <length> view-height;
+    // Minimap pixels per world pixel, and the world point at the top-left.
+    in property <float> scale: 0.1;
+    in property <length> origin-x;
+    in property <length> origin-y;
+    // A point in the minimap's own pixels.
+    callback navigate(length, length);
+
+    background: Theme.popover;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    clip: true;
+    accessible-role: groupbox;
+    accessible-label: "Diagram overview";
+
+    for node in root.nodes: Rectangle {
+        x: (node.x - root.origin-x) * root.scale;
+        y: (node.y - root.origin-y) * root.scale;
+        width: max(node.width * root.scale, 3px);
+        height: max(node.height * root.scale, 2px);
+        border-radius: 1px;
+        background: node.selected ? Theme.primary : node.junction ? Theme.muted-foreground : Theme.dim-foreground;
+    }
+
+    Rectangle {
+        x: (-root.pan-x / root.zoom - root.origin-x) * root.scale;
+        y: (-root.pan-y / root.zoom - root.origin-y) * root.scale;
+        width: root.view-width / root.zoom * root.scale;
+        height: root.view-height / root.zoom * root.scale;
+        border-width: 1.5px;
+        border-color: Theme.primary;
+        background: Theme.primary.transparentize(0.92);
+    }
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.navigate(self.mouse-x, self.mouse-y); }
+        moved => { root.navigate(self.mouse-x, self.mouse-y); }
     }
 }

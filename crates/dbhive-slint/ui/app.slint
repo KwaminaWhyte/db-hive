@@ -9,6 +9,8 @@ import { ConnectionEditorDialog, ConnectionFormData } from "dialogs/connection_e
 import { HistoryState, HistoryOverlay } from "screens/history_panel.slint";
 import { ImportExportState, ImportExportOverlay } from "screens/import_export_panel.slint";
 import { BackupState, BackupOverlay } from "screens/backup_panel.slint";
+import { ErdState, ErdOverlay } from "screens/er_diagram.slint";
+import { DesignerState, DesignerOverlay } from "screens/schema_designer.slint";
 import { PaletteDialog, PaletteItem } from "dialogs/command_palette.slint";
 import { ShortcutsDialog, ShortcutItem } from "dialogs/shortcuts.slint";
 import { SettingsDialog, SettingsData, ShortcutRowData } from "dialogs/settings.slint";
@@ -44,6 +46,8 @@ import { BuilderState, BuilderOverlay } from "screens/query_builder.slint";
 import { TableDialogState, TableDialogOverlay } from "screens/table_dialog.slint";
 export { BuilderState, QbSection, QbSource, QbAdded, QbJoin, QbColumn, QbFilter, QbHaving, QbOrder } from "screens/query_builder.slint";
 export { TableDialogState, TdChip, TdColumn, TdUnique, TdForeignKey, TdEditRow, TdStatement } from "screens/table_dialog.slint";
+export { ErdState } from "screens/er_diagram.slint";
+export { DesignerState, DesignerColumnRow, DesignerResultRow } from "screens/schema_designer.slint";
 
 export enum Screen { connections, workspace }
 
@@ -346,6 +350,16 @@ export component AppWindow inherits Window {
                 title: "New Table…";
                 activated => { root.run-command("new-table"); }
             }
+            MenuItem {
+                title: "ER Diagram";
+                enabled: root.screen == Screen.workspace;
+                activated => { root.run-command("go-er-diagram"); }
+            }
+            MenuItem {
+                title: "Schema Designer";
+                enabled: root.screen == Screen.workspace;
+                activated => { root.run-command("go-schema-designer"); }
+            }
             MenuSeparator { }
             MenuItem {
                 title: Theme.dark ? "Light Theme" : "Dark Theme";
@@ -529,6 +543,7 @@ export component AppWindow inherits Window {
             open-history => { HistoryState.open-requested(); }
             open-activity => { root.run-command("go-activity-monitor"); }
             open-migrations => { root.run-command("go-migrations"); }
+            open-diagram => { ErdState.open-requested(); }
         }
     }
     }
@@ -540,7 +555,8 @@ export component AppWindow inherits Window {
     property <bool> any-palette-overlay: root.show-palette || root.show-shortcuts;
     property <bool> any-overlay: root.show-about || root.show-confirm || root.show-connection-editor
         || root.any-palette-overlay || ActivityState.visible || MigrationsState.visible
-        || BuilderState.visible || TableDialogState.visible;
+        || BuilderState.visible || TableDialogState.visible || ErdState.visible
+        || DesignerState.visible;
     init => { fs.focus(); }
     changed any-overlay => {
         if (!root.any-overlay) {
@@ -576,6 +592,11 @@ export component AppWindow inherits Window {
     // The query builder and the table dialogs, on the same layer.
     if BuilderState.visible: BuilderOverlay { }
     if TableDialogState.visible: TableDialogOverlay { }
+
+    // The diagram and the designer fill the window, like the history panel
+    // they sit beside, and stay below the dialogs.
+    if ErdState.visible: ErdOverlay { }
+    if DesignerState.visible: DesignerOverlay { }
 
     if root.show-about || root.show-confirm || root.show-connection-editor || root.show-settings || root.any-palette-overlay: Rectangle {
         width: 100%;

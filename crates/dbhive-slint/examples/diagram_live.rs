@@ -27,14 +27,15 @@ fn main() {
                 y: 20.0 + (i / 10) as f32 * 230.0,
                 width: 210.0,
                 height: Node::height_for(n),
+                ..Default::default()
             }
         })
         .collect();
     let links: Vec<Link> = (1..TABLES)
         .flat_map(|i| {
-            let mut v = vec![Link { from: (i * 7) % i, to: i }];
+            let mut v = vec![Link::new((i * 7) % i, i)];
             if i % 2 == 0 {
-                v.push(Link { from: i / 2, to: i });
+                v.push(Link::new(i / 2, i));
             }
             v
         })

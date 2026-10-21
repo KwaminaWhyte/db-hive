@@ -1,0 +1,512 @@
+// The ER diagram, opened over the workspace.
+//
+// Everything the view needs and every intent it raises lives in the
+// `ErdState` global, so `app.slint` only mounts `ErdOverlay` and the
+// controller reaches it through `window.global::<ErdState>()`. Rust decides
+// what every table says and where it sits (`dbhive_ui_model::erd_scene`); this
+// file lays out the chrome around the shared diagram canvas.
+
+import { Theme, Icons, Icon, Tone, ButtonVariant, Button, TextField, Banner, EmptyState, FilterChip, Divider, Card } from "../kit/kit.slint";
+import { DiagramCanvas, DiagramMinimap, DiagramNode, DiagramEdge } from "../components/diagram.slint";
+
+export global ErdState {
+    in-out property <bool> visible: false;
+
+    // The four states of the view.
+    in property <bool> loading: false;
+    in property <string> error;
+    // Loaded, and the schema has no tables.
+    in property <bool> empty: false;
+
+    in property <string> subtitle;
+
+    // The diagram. `pan-x`/`pan-y` are written by the canvas as the user pans
+    // and by Rust on fit; `viewport-*` is written by the view so Rust can fit.
+    in property <[DiagramNode]> nodes;
+    in property <[DiagramEdge]> edges;
+    in property <float> zoom: 1.0;
+    in property <string> zoom-label: "100%";
+    in-out property <length> pan-x: 0px;
+    in-out property <length> pan-y: 0px;
+    in-out property <length> viewport-width: 0px;
+    in-out property <length> viewport-height: 0px;
+
+    // View options.
+    in property <bool> show-columns: true;
+    in property <bool> show-relationships: true;
+    in property <bool> show-labels: true;
+    in property <bool> snap: true;
+    in-out property <string> filter;
+
+    // Minimap placement (Rust computes it from the diagram's extent).
+    in property <float> map-scale: 0.1;
+    in property <length> map-origin-x: 0px;
+    in property <length> map-origin-y: 0px;
+    in property <length> map-width: 180px;
+    in property <length> map-height: 120px;
+
+    // What is selected, for the status strip.
+    in property <string> selection-label;
+
+    // SVG export. The path is typed: there is no file dialog.
+    in-out property <bool> export-open: false;
+    in-out property <string> export-path;
+    in property <string> export-message;
+    in property <bool> export-ok: false;
+    in property <bool> exporting: false;
+
+    // The workspace header button, the View menu or the palette asked for the
+    // diagram; the controller loads it and sets `visible`.
+    callback open-requested;
+    // The canvas exists and has reported its size, so a fit can be computed.
+    callback canvas-ready;
+    callback close;
+    callback retry;
+    callback refresh;
+    callback auto-layout;
+    callback fit;
+    callback zoom-in;
+    callback zoom-out;
+    callback wheel(length, length, length);
+    callback node-dragged(int, length, length);
+    callback node-clicked(int);
+    callback node-released(int);
+    callback background-clicked;
+    callback minimap-navigate(length, length);
+    callback filter-edited(string);
+    callback toggle-columns;
+    callback toggle-relationships;
+    callback toggle-labels;
+    callback toggle-snap;
+    callback export-open-requested;
+    callback export-save(string);
+    callback export-cancel;
+    callback open-designer;
+}
+
+// A line sample for the legend: solid, or three short dashes.
+component LegendLine inherits Rectangle {
+    in property <bool> dashed: false;
+    in property <color> stroke: Theme.dim-foreground;
+    width: 22px;
+    height: 10px;
+    if !root.dashed: Rectangle {
+        y: parent.height / 2 - 1px;
+        height: 2px;
+        background: root.stroke;
+    }
+    if root.dashed: HorizontalLayout {
+        spacing: 3px;
+        alignment: center;
+        for i in 3: VerticalLayout {
+            alignment: center;
+            Rectangle { width: 5px; height: 2px; background: root.stroke; }
+        }
+    }
+}
+
+component LegendText inherits Text {
+    color: Theme.muted-foreground;
+    font-size: Theme.size-small;
+    vertical-alignment: center;
+}
+
+export component ErdOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Theme.background;
+
+    // There is a diagram to act on: not loading, not failed, not empty.
+    property <bool> ready: !ErdState.loading && ErdState.error == "" && !ErdState.empty;
+
+    fs := FocusScope {
+        width: parent.width;
+        height: parent.height;
+        key-pressed(e) => {
+            if (e.text == Key.Escape) {
+                ErdState.close();
+                return accept;
+            }
+            if (e.text == "+" || e.text == "=") {
+                ErdState.zoom-in();
+                return accept;
+            }
+            if (e.text == "-") {
+                ErdState.zoom-out();
+                return accept;
+            }
+            if (e.text == "0") {
+                ErdState.fit();
+                return accept;
+            }
+            return reject;
+        }
+        init => { self.focus(); }
+
+        VerticalLayout {
+            width: parent.width;
+            height: parent.height;
+            spacing: 0;
+
+            // Title bar.
+            Rectangle {
+                height: 48px;
+                background: Theme.sidebar;
+                HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 14px;
+                    spacing: 10px;
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Workspace";
+                            has-icon: true;
+                            icon: Icons.chevron-left;
+                            variant: ButtonVariant.ghost;
+                            accessible-label: "Close the diagram and return to the workspace";
+                            clicked => { ErdState.close(); }
+                        }
+                    }
+                    Rectangle {
+                        width: 1px;
+                        background: Theme.border;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        spacing: 1px;
+                        Text {
+                            text: "ER Diagram";
+                            color: Theme.foreground;
+                            font-size: Theme.size-body;
+                            font-weight: 700;
+                        }
+                        if ErdState.subtitle != "": Text {
+                            text: ErdState.subtitle;
+                            color: Theme.muted-foreground;
+                            font-size: Theme.size-small;
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Schema designer";
+                            has-icon: true;
+                            icon: Icons.pencil;
+                            variant: ButtonVariant.ghost;
+                            clicked => { ErdState.open-designer(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Export SVG";
+                            has-icon: true;
+                            icon: Icons.download;
+                            enabled: root.ready;
+                            clicked => { ErdState.export-open-requested(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            has-icon: true;
+                            icon: Icons.refresh-cw;
+                            variant: ButtonVariant.ghost;
+                            enabled: !ErdState.loading;
+                            accessible-label: "Refresh the diagram from the database";
+                            clicked => { ErdState.refresh(); }
+                        }
+                    }
+                }
+                Divider { y: parent.height - 1px; }
+            }
+
+            // Toolbar.
+            Rectangle {
+                height: 44px;
+                background: Theme.background;
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 14px;
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        TextField {
+                            width: 220px;
+                            placeholder: "Highlight tables";
+                            has-icon: true;
+                            icon: Icons.search;
+                            enabled: root.ready;
+                            text <=> ErdState.filter;
+                            edited(t) => { ErdState.filter-edited(t); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        FilterChip {
+                            text: "Columns";
+                            selected: ErdState.show-columns;
+                            clicked => { ErdState.toggle-columns(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        FilterChip {
+                            text: "Relationships";
+                            selected: ErdState.show-relationships;
+                            clicked => { ErdState.toggle-relationships(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        FilterChip {
+                            text: "Labels";
+                            selected: ErdState.show-labels;
+                            clicked => { ErdState.toggle-labels(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        FilterChip {
+                            text: "Snap to grid";
+                            selected: ErdState.snap;
+                            clicked => { ErdState.toggle-snap(); }
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Auto layout";
+                            has-icon: true;
+                            icon: Icons.layout-grid;
+                            enabled: root.ready;
+                            clicked => { ErdState.auto-layout(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            has-icon: true;
+                            icon: Icons.minus;
+                            variant: ButtonVariant.ghost;
+                            accessible-label: "Zoom out";
+                            enabled: root.ready;
+                            clicked => { ErdState.zoom-out(); }
+                        }
+                    }
+                    Text {
+                        width: 44px;
+                        text: root.ready ? ErdState.zoom-label : "";
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-label;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            has-icon: true;
+                            icon: Icons.plus;
+                            variant: ButtonVariant.ghost;
+                            accessible-label: "Zoom in";
+                            enabled: root.ready;
+                            clicked => { ErdState.zoom-in(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Fit";
+                            enabled: root.ready;
+                            clicked => { ErdState.fit(); }
+                        }
+                    }
+                }
+                Divider { y: parent.height - 1px; }
+            }
+
+            // The diagram, or the reason there is none.
+            Rectangle {
+                vertical-stretch: 1;
+                background: Theme.background;
+
+                if root.ready: Rectangle {
+                    canvas := DiagramCanvas {
+                        width: parent.width;
+                        height: parent.height;
+                        nodes: ErdState.nodes;
+                        edges: ErdState.edges;
+                        zoom: ErdState.zoom;
+                        pan-x <=> ErdState.pan-x;
+                        pan-y <=> ErdState.pan-y;
+                        show-edges: ErdState.show-relationships;
+                        show-labels: ErdState.show-labels;
+                        shadows: false;
+                        accessible-name: "Entity relationship diagram";
+                        node-dragged(i, dx, dy) => { ErdState.node-dragged(i, dx, dy); }
+                        node-clicked(i) => { ErdState.node-clicked(i); }
+                        node-released(i) => { ErdState.node-released(i); }
+                        background-clicked => { ErdState.background-clicked(); }
+                        wheel(d, x, y) => { ErdState.wheel(d, x, y); }
+                        init => {
+                            ErdState.viewport-width = self.width;
+                            ErdState.viewport-height = self.height;
+                            ErdState.canvas-ready();
+                        }
+                        changed width => {
+                            ErdState.viewport-width = self.width;
+                            ErdState.canvas-ready();
+                        }
+                        changed height => { ErdState.viewport-height = self.height; }
+                    }
+
+                    DiagramMinimap {
+                        width: ErdState.map-width;
+                        height: ErdState.map-height;
+                        x: parent.width - self.width - 16px;
+                        y: parent.height - self.height - 16px;
+                        nodes: ErdState.nodes;
+                        pan-x: ErdState.pan-x;
+                        pan-y: ErdState.pan-y;
+                        zoom: ErdState.zoom;
+                        view-width: ErdState.viewport-width;
+                        view-height: ErdState.viewport-height;
+                        scale: ErdState.map-scale;
+                        origin-x: ErdState.map-origin-x;
+                        origin-y: ErdState.map-origin-y;
+                        navigate(x, y) => { ErdState.minimap-navigate(x, y); }
+                    }
+
+                    // Export panel, floating under the toolbar.
+                    if ErdState.export-open: Card {
+                        x: parent.width - self.width - 16px;
+                        y: 12px;
+                        width: 420px;
+                        height: export-column.preferred-height + 24px;
+                        background: Theme.popover;
+                        border-color: Theme.border-strong;
+                        export-column := VerticalLayout {
+                            padding: 12px;
+                            spacing: 8px;
+                            Text {
+                                text: "Export as SVG";
+                                color: Theme.foreground;
+                                font-size: Theme.size-label;
+                                font-weight: 600;
+                            }
+                            Text {
+                                text: "A vector file with the tables, columns and relationships as arranged.";
+                                color: Theme.muted-foreground;
+                                font-size: Theme.size-small;
+                                wrap: word-wrap;
+                            }
+                            path-field := TextField {
+                                text <=> ErdState.export-path;
+                                placeholder: "/path/to/diagram.svg";
+                                accepted(t) => { ErdState.export-save(t); }
+                            }
+                            if ErdState.export-message != "": Banner {
+                                message: ErdState.export-message;
+                                tone: ErdState.export-ok ? Tone.success : Tone.danger;
+                                dismissible: false;
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                alignment: end;
+                                Button {
+                                    text: "Close";
+                                    clicked => { ErdState.export-cancel(); }
+                                }
+                                Button {
+                                    text: ErdState.exporting ? "Saving" : "Save";
+                                    variant: ButtonVariant.primary;
+                                    enabled: !ErdState.exporting && ErdState.export-path != "";
+                                    clicked => { ErdState.export-save(ErdState.export-path); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if ErdState.loading: VerticalLayout {
+                    alignment: center;
+                    spacing: 10px;
+                    HorizontalLayout {
+                        alignment: center;
+                        Icon { source: Icons.refresh-cw; tint: Theme.primary; width: 22px; height: 22px; }
+                    }
+                    Text {
+                        text: "Reading tables, columns and foreign keys";
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-label;
+                        horizontal-alignment: center;
+                    }
+                }
+
+                if !ErdState.loading && ErdState.error != "": VerticalLayout {
+                    alignment: center;
+                    padding-left: 48px;
+                    padding-right: 48px;
+                    spacing: 12px;
+                    Banner {
+                        message: ErdState.error;
+                        dismissible: false;
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Retry";
+                            has-icon: true;
+                            icon: Icons.refresh-cw;
+                            clicked => { ErdState.retry(); }
+                        }
+                    }
+                }
+
+                if !ErdState.loading && ErdState.error == "" && ErdState.empty: EmptyState {
+                    icon: Icons.workflow;
+                    title: "Nothing to diagram";
+                    message: "This schema has no tables yet. Create some, or design them visually.";
+                    Button {
+                        text: "Open schema designer";
+                        variant: ButtonVariant.primary;
+                        has-icon: true;
+                        icon: Icons.pencil;
+                        clicked => { ErdState.open-designer(); }
+                    }
+                }
+            }
+
+            // Legend and hints.
+            Rectangle {
+                height: 30px;
+                background: Theme.sidebar;
+                Divider { y: 0px; }
+                HorizontalLayout {
+                    padding-left: 14px;
+                    padding-right: 14px;
+                    spacing: 6px;
+                    LegendText { text: "PK"; color: Theme.primary; font-weight: 700; }
+                    LegendText { text: "primary key"; }
+                    Rectangle { width: 10px; }
+                    LegendText { text: "FK"; color: Theme.dim-foreground; font-weight: 700; }
+                    LegendText { text: "foreign key"; }
+                    Rectangle { width: 10px; }
+                    VerticalLayout { alignment: center; LegendLine { } }
+                    LegendText { text: "1:N"; }
+                    Rectangle { width: 10px; }
+                    VerticalLayout { alignment: center; LegendLine { dashed: true; stroke: Theme.muted-foreground; } }
+                    LegendText { text: "M:N through a junction table"; }
+                    Rectangle { horizontal-stretch: 1; }
+                    LegendText {
+                        text: ErdState.selection-label != "" ? ErdState.selection-label : "Scroll to zoom, drag to pan, drag a table to move it";
+                        color: ErdState.selection-label != "" ? Theme.foreground : Theme.dim-foreground;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+    }
+}

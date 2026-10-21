@@ -180,12 +180,13 @@ pub fn support(id: CommandId) -> Support {
         GoConnections | GoSettings | GoAbout | NewConnection | RefreshMetadata | ShowShortcuts
         | OpenCommandPalette | Disconnect | RunQuery | NewTab | CloseTab | ThemeLight
         | ThemeDark | ThemeToggle | GoImportExport | GoBackup | GoActivityMonitor
-        | GoMigrations | GoVisualQueryBuilder | NewTable => Support::Live,
+        | GoMigrations | GoVisualQueryBuilder | NewTable | GoErDiagram | GoSchemaDesigner
+        => Support::Live,
 
         NewWindow => Support::Unsupported("Multiple windows are not supported yet"),
 
-        GoQueryEditor | GoSchemaDesigner | GoErDiagram | GoTableInspector | GoHistory
-        | GoAiAssistant | GoPlugins | ToggleSidebar | Connect
+        GoQueryEditor | GoTableInspector | GoHistory | GoAiAssistant | GoPlugins
+        | ToggleSidebar | Connect
         | ConnectionsBack | WindowMinimize | WindowMaximizeToggle | WindowClose => Support::Hidden,
     }
 }
@@ -818,13 +819,32 @@ mod tests {
             );
         }
         // Still hidden, still unsupported: the reason that matters wins.
-        assert_eq!(status(CommandId::GoErDiagram, &c), Status::Hidden);
+        assert_eq!(status(CommandId::GoAiAssistant, &c), Status::Hidden);
+    }
+
+    #[test]
+    fn the_diagram_and_designer_are_live_in_a_workspace_and_refused_elsewhere() {
+        for id in [CommandId::GoErDiagram, CommandId::GoSchemaDesigner] {
+            assert_eq!(status(id, &ws()), Status::Enabled, "{:?}", id);
+            assert_eq!(status(id, &conns()).reason(), "Open a connection first", "{:?}", id);
+            let mut c = ws();
+            c.dialog_open = true;
+            assert_eq!(status(id, &c).reason(), "Close the open dialog first", "{:?}", id);
+        }
+        // Offered in the workspace palette, not on the connection list.
+        let mut p = PaletteState::default();
+        p.open();
+        let titles = |ctx: &CommandContext| -> Vec<String> {
+            p.view(ctx, false).rows.iter().map(|r| r.title.clone()).collect()
+        };
+        assert!(titles(&ws()).contains(&"Go to ER Diagram".to_string()));
+        assert!(titles(&ws()).contains(&"Go to Schema Designer".to_string()));
+        assert!(!titles(&conns()).iter().any(|x| x.contains("ER Diagram")));
     }
 
     #[test]
     fn unbuilt_screens_are_hidden_and_new_window_is_unsupported_with_a_reason() {
         for id in [
-            CommandId::GoErDiagram,
             CommandId::GoAiAssistant,
             CommandId::GoPlugins,
             CommandId::ToggleSidebar,
@@ -1103,7 +1123,7 @@ mod tests {
         p.set_query("tab");
         let ctx = ws();
         // Commands whose titles or descriptions merely contain "tab" ("New
-        // Table", "Go to Import / Export": "a table") are drawn first, in
+        // Table", "Go to Schema Designer": "tables") are drawn first, in
         // earlier groups; "New Tab" is the real answer.
         let v = p.view(&ctx, false);
         let first_command = v.rows.iter().find(|r| !r.header).unwrap();
