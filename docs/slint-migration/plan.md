@@ -37,42 +37,52 @@ Tools this produced, kept for the rest of the migration:
 6. **Plugins, multi-window, updater.**
 7. **Cut over.** Interaction tests, smoke tests, memory, a human walkthrough of every screen, then delete `dbhive-app` and update docs, CI and packaging.
 
-## Parity (measured 2026-10-20)
+## Parity (measured 2026-10-21)
 
 Yardstick: the 167-item flat checklist in `docs/rust-ui-migration/01-frontend-inventory.md`
-section 4. Method: read the Slint code and snapshots, item by item. Done = built, wired and
-working. Partial = counts half. Nothing here was verified by clicking through the real window.
+section 4. Method: read the Slint code, tests and snapshots, item by item. Done = built, wired
+and tested. Partial = counts half. Not verified by clicking through the real GPU window; the
+controller tests drive the real window headlessly instead.
 
 | | Done | Partial | Missing |
 | --- | --- | --- | --- |
 | Connections (21) | 15 | 4 | 2 |
-| Titlebar / shell (10) | 1 | 5 | 4 |
-| Cross-cutting (14) | 2 | 7 | 5 |
+| Titlebar / shell (10) | 2 | 5 | 3 |
+| Cross-cutting (14) | 2 | 8 | 4 |
 | SQL editor (12) | 4 | 3 | 5 |
-| Results grid (16) | 0 | 4 | 12 |
+| Results grid (16) | 2 | 4 | 10 |
 | Schema browser (10) | 0 | 4 | 6 |
-| Settings (6) | 0 | 1 | 5 |
-| Multi-window, ER diagram, schema designer, table dialogs, query builder, migrations, backup, import/export, activity, plugins, AI, palette, shortcuts, history, snippets, templates (78) | 0 | 0 | 78 |
-| **Total (167)** | **22** | **28** | **117** |
+| Settings (6) | 2 | 4 | 0 |
+| Command palette (3) | 2 | 1 | 0 |
+| Keyboard shortcuts (3) | 2 | 1 | 0 |
+| History (3) | 3 | 0 | 0 |
+| Snippets (3) | 2 | 0 | 1 |
+| Query templates (5) | 4 | 1 | 0 |
+| Multi-window, ER diagram, schema designer, table dialogs, query builder, migrations, backup, import/export, activity, plugins, AI (61) | 0 | 0 | 61 |
+| **Total (167)** | **40** | **35** | **92** |
 
-Re-measured after the SQL editor and query tabs landed (was 18 / 26 / 123).
+History of this number: 18 / 26 / 123 (2026-10-20), 22 / 28 / 117 after the SQL editor, 40 / 35 / 92
+after the history panel, table inspector, command palette and settings landed.
 
-- **Feature coverage: about 22%** ((22 + 28/2) / 167).
-- **Ready for real work: about 25%, a judgement.** You can add a connection, connect, open table
-  previews and query tabs, write SQL with highlighting, run it (Cmd/Ctrl+Enter), get a guard on
-  destructive statements, and have each run recorded in history and the activity log. The
-  controller path is covered by `tests/workspace_controller.rs`. You still cannot: edit data in the
-  grid, autocomplete, export, browse history or snippets, open settings, or save tabs across
-  restarts.
-- **Dead controls (defects):** the gear button, the search/command box, and the File > Settings,
-  File > New Window and View > Command Palette items have no Rust handler. They look live and do
-  nothing.
-- **What makes this faster than it looks:** `dbhive-ui-model` already holds the logic for most
-  missing areas (phase 1). The ER diagram, SQL editor and grid exist as proven components. The
-  missing work is mostly screens, not logic.
-- **Order that gets to real work soonest:** SQL editor screen with tabs, run and history; then
-  settings and the command palette (they unblock the dead controls); then table editing; then
-  the rest.
+- **Feature coverage: about 34%** ((40 + 35/2) / 167).
+- **Ready for real work: about 40%, a judgement.** You can add and edit connections, connect, browse
+  tables with paging, sorting, filters and structure, write and run SQL in tabs with highlighting,
+  get a guard on destructive statements, re-run from history, keep snippets and templates, use
+  the command palette and shortcuts, and change settings. Every run is recorded. You cannot yet:
+  edit data in the grid, autocomplete, export results, see an ER diagram, import data, run
+  migrations or backups, or keep tabs across restarts.
+- **Defects found in this pass, not yet fixed:**
+  - Settings that are stored but not consumed: language, startup, update checks, max rows, editor
+    font family, minimap, word wrap. The dialog says so beside each.
+  - Shortcut rebinding saves, but the app still dispatches the fixed shortcuts.
+  - Page loads in the table inspector are not written to history or the activity log.
+  - SQLite `get_table_schema` does not escape quotes in a table name (core).
+- **Dead controls:** fixed. The gear, the command box, File > Settings and View > Command Palette
+  work. File > New Window was removed rather than left dead (one window per controller today).
+- **What is left is mostly screens, not logic:** `dbhive-ui-model` already holds the logic for most
+  missing areas, and the ER diagram canvas is a proven component.
+- **Order from here:** table editing and export (data you can change and take out), autocomplete,
+  then ER diagram, migrations, backup, import/export, activity monitor, query builder, plugins, AI.
 
 ## Status
 
