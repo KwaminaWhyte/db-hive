@@ -1,6 +1,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Badge, TextField, Dropdown, Divider, SectionLabel, Banner, EmptyState, Segmented, DataRow, SidePanel, Card } from "../kit/kit.slint";
 import { TableDialogState } from "table_dialog.slint";
+import { ResultsExportButton } from "results_tools.slint";
 import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
 
 // The table inspector: what a table tab shows. Two views, Data (a paged,
@@ -755,6 +756,10 @@ export component TableInspectorView inherits VerticalLayout {
                     variant: InspectorBridge.filters-open ? ButtonVariant.secondary : ButtonVariant.ghost;
                     clicked => { InspectorBridge.toggle-filters(); }
                 }
+            }
+            if InspectorBridge.view == 0: VerticalLayout {
+                alignment: center;
+                ResultsExportButton { }
             }
             VerticalLayout {
                 alignment: center;

@@ -75,6 +75,18 @@ impl ResultFormat {
     }
 }
 
+/// What to know about a format before writing it, shown under the path.
+pub fn format_hint(format: ResultFormat) -> &'static str {
+    match format {
+        ResultFormat::Csv => {
+            "NULL becomes an empty field. Values are written as they are, so a spreadsheet may run a cell that starts with =, +, - or @ as a formula."
+        }
+        ResultFormat::Json => {
+            "An array of objects, one per row, keyed by column name. NULL becomes null; repeated column names get _2, _3."
+        }
+    }
+}
+
 /// What an export covers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportScope {
@@ -166,6 +178,22 @@ pub fn check_path(path: &str, format: ResultFormat) -> PathCheck {
     } else {
         PathCheck::Free
     }
+}
+
+/// Write `body` to `path` without ever leaving a half-written file: the text
+/// goes to a sibling temp file first and is renamed over the target, so a
+/// failed write cannot clobber an existing export.
+pub fn write_export(path: &str, body: &str) -> Result<(), String> {
+    let target = std::path::PathBuf::from(expand_home(path));
+    let mut tmp = target.clone().into_os_string();
+    tmp.push(".dbhive-partial");
+    let tmp = std::path::PathBuf::from(tmp);
+    std::fs::write(&tmp, body.as_bytes())
+        .map_err(|e| format!("Could not write {}: {e}", target.display()))?;
+    std::fs::rename(&tmp, &target).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        format!("Could not write {}: {e}", target.display())
+    })
 }
 
 /// The program and arguments that show `path` selected in the file manager.
@@ -1017,6 +1045,26 @@ mod tests {
             check_path(dir.join("missing").join("a.csv").to_str().unwrap(), ResultFormat::Csv),
             PathCheck::Problem(_)
         ));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn write_export_replaces_atomically_and_reports_failure() {
+        let dir = std::env::temp_dir().join(format!("dbhive-write-export-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("out.csv");
+        std::fs::write(&file, "old").unwrap();
+        write_export(file.to_str().unwrap(), "a,b\n1,2\n").unwrap();
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "a,b\n1,2\n");
+        // No temp file is left behind.
+        let leftovers: Vec<_> = std::fs::read_dir(&dir).unwrap().flatten().collect();
+        assert_eq!(leftovers.len(), 1);
+        // A target in a missing folder fails and says where.
+        let bad = dir.join("missing").join("x.csv");
+        let err = write_export(bad.to_str().unwrap(), "x").unwrap_err();
+        assert!(err.contains("Could not write"), "{err}");
+        // The earlier file is untouched.
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), "a,b\n1,2\n");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

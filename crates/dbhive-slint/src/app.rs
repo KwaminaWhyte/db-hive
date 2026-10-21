@@ -36,6 +36,7 @@ mod completion;
 mod designer;
 mod erd;
 mod inspector;
+mod results;
 mod row_edit;
 mod settings;
 mod table_dialog;
@@ -184,6 +185,7 @@ struct Session {
     completion: completion::CompletionSession,
     plugins: plugins_glue::PluginSession,
     ai: ai_glue::AiSession,
+    results: results::ResultsSession,
 }
 
 struct Ctx {
@@ -610,6 +612,8 @@ impl Ctx {
     fn refresh_workspace(&self) {
         // The assistant shows the active tab's query and error.
         self.ai_refresh_for_editor();
+        // View mode, JSON / Text lines, the structured error and Export.
+        self.results_refresh();
         let Some(w) = self.window.upgrade() else { return };
         let s = self.session.borrow();
         let ws = &s.workspace;
@@ -1689,6 +1693,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     row_edit::wire(&window, &ctx);
     plugins_glue::wire(&window, &ctx);
     ai_glue::wire(&window, &ctx);
+    results::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {

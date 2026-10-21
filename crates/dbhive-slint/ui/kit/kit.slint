@@ -6,7 +6,7 @@
 
 import { Theme } from "theme.slint";
 import { Icons } from "icons.slint";
-import { ScrollView } from "std-widgets.slint";
+import { ScrollView, ListView } from "std-widgets.slint";
 
 export { Theme, Icons }
 
@@ -1832,6 +1832,336 @@ export component CollapseHeader inherits Rectangle {
             Badge { text: root.count; tone: Tone.accent; }
         }
         Rectangle { horizontal-stretch: 1; }
+    }
+}
+
+// -- Results: JSON and Text views, query error, export dialog ------------------
+
+// One coloured run on a line of the JSON or Text view. `kind` is
+// dbhive_ui_model::result_export::JsonKind: 0 plain, 1 key, 2 string,
+// 3 number, 4 bool, 5 null, 6 punctuation. `col` is the character column the
+// run starts at, so runs are placed by the monospace advance.
+export struct ResultViewRun {
+    text: string,
+    kind: int,
+    col: int,
+}
+
+export struct ResultViewLine {
+    runs: [ResultViewRun],
+}
+
+// A read-only, scrollable, virtualised block of monospace lines, coloured by
+// run. Rust supplies the lines through a lazy model, so a 2,000 row JSON view
+// only builds the lines on screen. Header and body scroll sideways together.
+export component ResultViewText inherits Rectangle {
+    in property <[ResultViewLine]> lines;
+    // Longest line in characters, for the sideways scroll.
+    in property <int> max-columns;
+    in property <string> mono-family: "Menlo";
+    in property <length> mono-size: Theme.size-mono;
+    in property <string> label: "Results as text";
+
+    property <length> pad: 12px;
+    property <length> line-height: root.mono-size * 1.7;
+    property <length> advance: measure.preferred-width / 10;
+
+    pure function kind-color(kind: int) -> color {
+        return kind == 1 ? Theme.foreground
+            : kind == 2 ? Theme.success
+            : kind == 3 || kind == 4 ? Theme.warning
+            : kind == 5 ? Theme.dim-foreground
+            : kind == 6 ? Theme.muted-foreground
+            : Theme.foreground;
+    }
+
+    min-width: 0px;
+    background: Theme.card;
+    border-radius: Theme.radius-card;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.label;
+
+    // Measures the monospace advance. Never visible.
+    measure := Text {
+        visible: false;
+        text: "0000000000";
+        font-family: root.mono-family;
+        font-size: root.mono-size;
+    }
+
+    Flickable {
+        content-width: max(self.width, root.max-columns * root.advance + 2 * root.pad);
+        content-height: self.height;
+
+        VerticalLayout {
+            width: max(parent.width, root.max-columns * root.advance + 2 * root.pad);
+            spacing: 0;
+            ListView {
+                padding-top: 6px;
+                padding-bottom: 6px;
+                for line in root.lines: Rectangle {
+                    height: root.line-height;
+                    for run in line.runs: Text {
+                        x: root.pad + run.col * root.advance;
+                        height: root.line-height;
+                        text: run.text;
+                        color: root.kind-color(run.kind);
+                        font-family: root.mono-family;
+                        font-size: root.mono-size;
+                        font-weight: run.kind == 1 ? 600 : 400;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// A failed query: a headline, the driver's own message, an optional code, and
+// the query that failed behind a disclosure. Copy puts all of it on the
+// clipboard; Retry runs the query again.
+export component ResultViewError inherits Rectangle {
+    in property <string> headline;
+    in property <string> detail;
+    in property <string> code;
+    in property <string> query;
+    in property <bool> query-open: false;
+    in property <bool> can-retry: true;
+    callback retry;
+    callback copy;
+    callback toggle-query;
+
+    background: Theme.destructive-soft;
+    border-radius: Theme.radius-card;
+    border-width: 1px;
+    border-color: Theme.destructive.transparentize(0.6);
+
+    VerticalLayout {
+        padding: 14px;
+        spacing: 10px;
+        alignment: start;
+
+        HorizontalLayout {
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Icon { source: Icons.triangle-alert; tint: Theme.destructive; }
+            }
+            VerticalLayout {
+                alignment: center;
+                Text {
+                    text: root.headline;
+                    color: Theme.foreground;
+                    font-size: Theme.size-subheading;
+                    font-weight: 700;
+                    overflow: elide;
+                }
+            }
+            if root.code != "": VerticalLayout {
+                alignment: center;
+                Badge { text: "Code " + root.code; }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "Copy";
+                    has-icon: true;
+                    icon: Icons.copy;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Copy the error and the query";
+                    clicked => { root.copy(); }
+                }
+            }
+            if root.can-retry: VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "Retry";
+                    has-icon: true;
+                    icon: Icons.refresh-cw;
+                    clicked => { root.retry(); }
+                }
+            }
+        }
+
+        Text {
+            text: root.detail;
+            color: Theme.foreground;
+            font-family: "Menlo";
+            font-size: Theme.size-mono;
+            wrap: word-wrap;
+        }
+
+        if root.query != "": VerticalLayout {
+            spacing: 4px;
+            HorizontalLayout {
+                CollapseHeader {
+                    horizontal-stretch: 0;
+                    title: "Query";
+                    open: root.query-open;
+                    clicked => { root.toggle-query(); }
+                }
+                Rectangle { horizontal-stretch: 1; }
+            }
+            if root.query-open: CodeBlock {
+                text: root.query;
+                max-lines: 10;
+            }
+        }
+    }
+}
+
+// The export dialog's card: what is being exported, the format, the path, and
+// afterwards where the file went. All state is passed in; the screen that
+// hosts it owns the logic.
+export component ExportDialog inherits Popover {
+    in property <string> title: "Export results";
+    in property <string> scope-note;
+    in property <[string]> formats;
+    in property <int> format;
+    in-out property <string> path;
+    in property <string> path-error;
+    // A file is already at the path: the first Export click only warns.
+    in property <bool> replaces;
+    in property <string> hint;
+    in property <bool> running;
+    in property <bool> done;
+    in property <string> done-message;
+    callback format-picked(int);
+    callback path-edited(string);
+    callback use-suggested;
+    callback export;
+    callback cancel;
+    callback reveal;
+
+    width: 540px;
+
+    // Keeps a click on the card from reaching the backdrop behind it.
+    TouchArea { }
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 14px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: 16px;
+                    background: Theme.primary-soft;
+                    Icon {
+                        source: Icons.download;
+                        tint: Theme.primary;
+                        width: 16px;
+                        height: 16px;
+                    }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 1;
+                Text {
+                    text: root.title;
+                    color: Theme.foreground;
+                    font-size: Theme.size-subheading;
+                    font-weight: 700;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    has-icon: true;
+                    icon: Icons.x;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Close";
+                    enabled: !root.running;
+                    clicked => { root.cancel(); }
+                }
+            }
+        }
+
+        if root.done: Banner {
+            message: root.done-message;
+            tone: Tone.success;
+            dismissible: false;
+        }
+
+        if !root.done: Banner {
+            message: root.scope-note;
+            tone: Tone.neutral;
+            dismissible: false;
+        }
+
+        if !root.done: FormField {
+            label: "Format";
+            Segmented {
+                horizontal-stretch: 0;
+                options: root.formats;
+                selected: root.format;
+                picked(i) => {
+                    if (!root.running) {
+                        root.format-picked(i);
+                    }
+                }
+            }
+        }
+
+        if !root.done: FormField {
+            label: "Save to";
+            hint: root.hint;
+            error: root.path-error;
+            TextField {
+                text <=> root.path;
+                placeholder: "/Users/you/Downloads/results.csv";
+                has-trailing-icon: true;
+                trailing-icon: Icons.refresh-cw;
+                enabled: !root.running;
+                edited(t) => { root.path-edited(t); }
+                accepted(t) => { root.export(); }
+                trailing-clicked => { root.use-suggested(); }
+            }
+        }
+
+        if !root.done && root.replaces && root.path-error == "": Banner {
+            message: "A file with this name already exists. Exporting will replace it.";
+            tone: Tone.warning;
+            dismissible: false;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            if root.done: Button {
+                text: "Reveal in folder";
+                has-icon: true;
+                icon: Icons.folder;
+                clicked => { root.reveal(); }
+            }
+            if !root.done: Button {
+                text: "Cancel";
+                enabled: !root.running;
+                clicked => { root.cancel(); }
+            }
+            if root.done: Button {
+                text: "Done";
+                variant: ButtonVariant.primary;
+                clicked => { root.cancel(); }
+            }
+            if !root.done: Button {
+                text: root.running ? "Exporting…" : root.replaces ? "Replace file" : "Export";
+                variant: ButtonVariant.primary;
+                has-icon: true;
+                icon: Icons.download;
+                enabled: !root.running;
+                clicked => { root.export(); }
+            }
+        }
     }
 }
 

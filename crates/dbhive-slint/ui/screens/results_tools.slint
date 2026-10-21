@@ -1,0 +1,168 @@
+import { Theme, Icons, Tone, ButtonVariant, Button, Segmented, Banner, ResultViewLine, ResultViewText, ResultViewError, ExportDialog } from "../kit/kit.slint";
+
+// What the results area adds around the grid: a Table / JSON / Text switch,
+// the JSON and Text views, a structured query error, and the export dialog.
+// Rust owns every value here (`app/results.rs`); this file draws it and
+// reports intents.
+
+export global ResultsState {
+    // The active query tab's view: 0 Table, 1 JSON, 2 Text.
+    in property <int> mode;
+    in property <[ResultViewLine]> view-lines;
+    // Longest line in characters, for the sideways scroll.
+    in property <int> view-max-columns;
+    // "Showing the first 2,000 of 2,500 rows", empty when nothing was cut.
+    in property <string> view-notice;
+    // The active tab holds a result with columns, and nothing is running.
+    in property <bool> can-export;
+
+    // The failed query, split into a headline and the driver's message.
+    in property <string> error-headline;
+    in property <string> error-detail;
+    in property <string> error-code;
+    in property <string> error-query;
+    in property <bool> error-query-open;
+
+    // The export dialog.
+    in property <bool> export-visible;
+    in property <string> export-scope-note;
+    in property <[string]> export-formats;
+    in property <int> export-format;
+    in-out property <string> export-path;
+    in property <string> export-path-error;
+    in property <bool> export-replaces;
+    in property <string> export-hint;
+    in property <bool> export-running;
+    in property <bool> export-done;
+    in property <string> export-done-message;
+
+    callback mode-picked(int);
+    callback view-copy;
+    callback error-retry;
+    callback error-copy;
+    callback error-toggle-query;
+    callback export-open;
+    callback export-close;
+    callback export-format-picked(int);
+    callback export-path-edited(string);
+    callback export-suggest;
+    callback export-run;
+    callback export-reveal;
+}
+
+// Table / JSON / Text and Export, for the results header of a query tab.
+export component ResultsModeBar inherits HorizontalLayout {
+    spacing: 8px;
+    VerticalLayout {
+        alignment: center;
+        Segmented {
+            options: ["Table", "JSON", "Text"];
+            selected: ResultsState.mode;
+            picked(i) => { ResultsState.mode-picked(i); }
+        }
+    }
+    VerticalLayout {
+        alignment: center;
+        Button {
+            text: "Export";
+            has-icon: true;
+            icon: Icons.download;
+            variant: ButtonVariant.ghost;
+            enabled: ResultsState.can-export;
+            accessible-label: "Export results to CSV or JSON";
+            clicked => { ResultsState.export-open(); }
+        }
+    }
+}
+
+// Just the Export button, for the table inspector's toolbar.
+export component ResultsExportButton inherits Button {
+    text: "Export";
+    has-icon: true;
+    icon: Icons.download;
+    variant: ButtonVariant.ghost;
+    enabled: ResultsState.can-export;
+    accessible-label: "Export this page to CSV or JSON";
+    clicked => { ResultsState.export-open(); }
+}
+
+// The JSON or Text view of a result, with the truncation notice and a Copy
+// button underneath.
+export component ResultsViewPane inherits VerticalLayout {
+    spacing: 8px;
+    ResultViewText {
+        vertical-stretch: 1;
+        lines: ResultsState.view-lines;
+        max-columns: ResultsState.view-max-columns;
+        label: ResultsState.mode == 1 ? "Results as JSON" : "Results as text";
+    }
+    HorizontalLayout {
+        spacing: 10px;
+        if ResultsState.view-notice != "": Banner {
+            horizontal-stretch: 1;
+            message: ResultsState.view-notice;
+            tone: Tone.warning;
+            dismissible: false;
+        }
+        if ResultsState.view-notice == "": Rectangle { horizontal-stretch: 1; }
+        VerticalLayout {
+            alignment: center;
+            Button {
+                text: ResultsState.mode == 1 ? "Copy JSON" : "Copy as TSV";
+                has-icon: true;
+                icon: Icons.copy;
+                clicked => { ResultsState.view-copy(); }
+            }
+        }
+    }
+}
+
+export component ResultsErrorPanel inherits ResultViewError {
+    headline: ResultsState.error-headline;
+    detail: ResultsState.error-detail;
+    code: ResultsState.error-code;
+    query: ResultsState.error-query;
+    query-open: ResultsState.error-query-open;
+    retry => { ResultsState.error-retry(); }
+    copy => { ResultsState.error-copy(); }
+    toggle-query => { ResultsState.error-toggle-query(); }
+}
+
+export component ResultsExportOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Theme.scrim;
+
+    TouchArea {
+        clicked => {
+            if (!ResultsState.export-running) {
+                ResultsState.export-close();
+            }
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            ExportDialog {
+                scope-note: ResultsState.export-scope-note;
+                formats: ResultsState.export-formats;
+                format: ResultsState.export-format;
+                path <=> ResultsState.export-path;
+                path-error: ResultsState.export-path-error;
+                replaces: ResultsState.export-replaces;
+                hint: ResultsState.export-hint;
+                running: ResultsState.export-running;
+                done: ResultsState.export-done;
+                done-message: ResultsState.export-done-message;
+                format-picked(i) => { ResultsState.export-format-picked(i); }
+                path-edited(t) => { ResultsState.export-path-edited(t); }
+                use-suggested => { ResultsState.export-suggest(); }
+                export => { ResultsState.export-run(); }
+                cancel => { ResultsState.export-close(); }
+                reveal => { ResultsState.export-reveal(); }
+            }
+        }
+    }
+}
