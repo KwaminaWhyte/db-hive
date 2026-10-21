@@ -1,7 +1,8 @@
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Card, ClickableCard, ListRow, SwatchPicker, Badge, TextField,
     ScreenHeader, SectionLabel, Banner, EmptyState, Divider, DetailRow, UnderlineTabs, FilterChip,
     Segmented, DataRow, SidePanel, ClipboardSink, KeyCap, KeyCaps, Popover, SettingRow, Toggle,
-    StepBar, ProgressBar, CodeBlock, FormField, FactRow, Stepper, StatTile, MeterRow, LineChart } from "../kit/kit.slint";
+    StepBar, ProgressBar, CodeBlock, FormField, FactRow, Stepper, StatTile, MeterRow, LineChart,
+    CollapseHeader, CheckBox, StepTabs, ChipStrip } from "../kit/kit.slint";
 
 export component KitGallery inherits Window {
     background: Theme.background;
@@ -289,6 +290,30 @@ export component KitGallery inherits Window {
                           commands: "M 0 900 L 250 850 L 500 880 L 750 800 L 1000 850",
                           area: "M 0 900 L 250 850 L 500 880 L 750 800 L 1000 850 L 1000 1000 L 0 1000 Z" },
                     ];
+                }
+            }
+            VerticalLayout {
+                spacing: 10px;
+                alignment: start;
+                SectionLabel { text: "QUERY BUILDER AND TABLE DIALOG PARTS"; }
+                StepTabs { labels: ["Basics", "Columns", "Constraints", "Preview"]; active: 1; }
+                CollapseHeader { title: "Tables"; count: 2; open: true; }
+                CollapseHeader { title: "Group by and having"; count: 0; open: false; }
+                HorizontalLayout {
+                    spacing: 18px;
+                    alignment: start;
+                    CheckBox { text: "Distinct"; checked: true; }
+                    CheckBox { text: "Auto"; checked: false; }
+                    CheckBox { text: "Null"; checked: true; enabled: false; }
+                }
+                ChipStrip {
+                    FilterChip { text: "id"; selected: false; }
+                    FilterChip { text: "customer_id"; selected: true; }
+                    FilterChip { text: "reference"; selected: false; }
+                    FilterChip { text: "amount"; selected: false; }
+                    FilterChip { text: "issued_at"; selected: true; }
+                    FilterChip { text: "a_column_that_runs_past_the_edge"; selected: false; }
+                    FilterChip { text: "and_another_one"; selected: false; }
                 }
             }
         }

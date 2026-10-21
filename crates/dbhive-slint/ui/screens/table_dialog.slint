@@ -1,0 +1,807 @@
+// The create-table wizard and the edit-table dialog, opened over the
+// workspace.
+//
+// Like the query builder, all state and intents live in the `TableDialogState`
+// global; `app.slint` only mounts `TableDialogOverlay`. Rust decides what each
+// row says (`dbhive_ui_model::table_dialog`); this file lays it out. Every edit
+// is one callback, `act(action, row, choice, text)`.
+
+import { ScrollView } from "std-widgets.slint";
+import { Theme, Icons, Icon, Tone, ButtonVariant, Button, TextField, Dropdown, Toggle, Divider, Banner, EmptyState, FilterChip, Badge, SectionLabel, CheckBox, StepTabs, ChipStrip } from "../kit/kit.slint";
+import { SqlEditor, HighlightLine } from "../components/sql_editor.slint";
+
+export struct TdChip {
+    label: string,
+    on: bool,
+}
+
+export struct TdColumn {
+    name: string,
+    preset-index: int,
+    preset-label: string,
+    show-param: bool,
+    param: string,
+    param-hint: string,
+    param-error: bool,
+    primary-key: bool,
+    auto-increment: bool,
+    auto-enabled: bool,
+    nullable: bool,
+    nullable-enabled: bool,
+}
+
+export struct TdUnique {
+    name: string,
+    chips: [TdChip],
+}
+
+export struct TdForeignKey {
+    name: string,
+    chips: [TdChip],
+    ref-table: string,
+    ref-table-index: int,
+    ref-chips: [TdChip],
+    ref-note: string,
+    on-delete: string,
+    on-update: string,
+}
+
+export struct TdEditRow {
+    name: string,
+    type-label: string,
+    nullable: bool,
+    nullable-enabled: bool,
+    primary-key: bool,
+    is-new: bool,
+    removed: bool,
+    badges: [string],
+    can-remove: bool,
+    remove-note: string,
+    name-enabled: bool,
+    type-pickable: bool,
+}
+
+// How one statement went when the dialog ran them: 0 ran, 1 failed, 2 skipped.
+export struct TdStatement {
+    sql: string,
+    status: int,
+    message: string,
+}
+
+export global TableDialogState {
+    in-out property <bool> visible: false;
+    // 0 create, 1 edit.
+    in property <int> mode: 0;
+    in property <string> title;
+    in property <string> subtitle;
+    in property <[string]> steps;
+    in property <int> step: 0;
+    in property <[string]> step-errors;
+    in property <bool> can-next: false;
+
+    // Edit mode: the live table is being read, or could not be.
+    in property <bool> loading: false;
+    in property <string> load-error;
+
+    // Create, step 1.
+    in-out property <string> name;
+    in-out property <string> description;
+    in property <bool> if-not-exists: false;
+    // Create, step 2.
+    in property <[TdColumn]> columns;
+    in property <[string]> preset-labels;
+    // Create, step 3.
+    in property <[TdUnique]> uniques;
+    in property <[TdForeignKey]> foreign-keys;
+    in property <[string]> fk-tables;
+    in property <[string]> action-labels;
+    // Edit.
+    in property <[TdEditRow]> edit-rows;
+    in property <int> pending: 0;
+
+    // The statements, or why there are none.
+    in property <string> sql;
+    in property <[HighlightLine]> sql-lines;
+    in property <string> sql-error;
+    in property <int> statement-count: 0;
+
+    // Running them.
+    in property <bool> running: false;
+    in property <[TdStatement]> results;
+    in property <string> result-summary;
+    in property <bool> result-ok: false;
+
+    // The sidebar's "+" or the palette asked for a new table.
+    callback open-create;
+    // The table tab's "Edit table" button.
+    callback open-edit-active;
+    callback close;
+    callback retry-load;
+    // action, row, choice, typed text. See `table_dialog`.
+    callback act(string, int, int, string);
+    callback apply;
+    callback copy-sql;
+}
+
+// -- Create wizard steps -----------------------------------------------------------
+
+component Label inherits Text {
+    color: Theme.muted-foreground;
+    font-size: Theme.size-small;
+}
+
+component RemoveButton inherits Button {
+    has-icon: true;
+    icon: Icons.x;
+    variant: ButtonVariant.ghost;
+    accessible-label: "Remove";
+}
+
+component BasicsStep inherits VerticalLayout {
+    spacing: 14px;
+    alignment: start;
+
+    VerticalLayout {
+        spacing: 4px;
+        Label { text: "Table name"; }
+        TextField {
+            placeholder: "orders";
+            text <=> TableDialogState.name;
+            edited(t) => { TableDialogState.act("name", 0, 0, t); }
+        }
+    }
+    VerticalLayout {
+        spacing: 4px;
+        Label { text: "Description (optional)"; }
+        TextField {
+            placeholder: "What this table holds";
+            text <=> TableDialogState.description;
+            edited(t) => { TableDialogState.act("desc", 0, 0, t); }
+        }
+    }
+    Toggle {
+        text: "Only create it if it does not already exist";
+        checked: TableDialogState.if-not-exists;
+        toggled => { TableDialogState.act("ine", 0, 0, ""); }
+    }
+    Label {
+        text: "Leave the existence check off to be told when the name is already taken.";
+        wrap: word-wrap;
+    }
+}
+
+component ColumnsStep inherits VerticalLayout {
+    spacing: 6px;
+
+    HorizontalLayout {
+        padding-right: 14px;
+        spacing: 6px;
+        Label { text: "Name"; horizontal-stretch: 1; }
+        Label { text: "Type"; width: 128px; }
+        Label { text: "Length / precision"; width: 124px; }
+        Label { text: "PK"; width: 44px; }
+        Label { text: "Auto"; width: 58px; }
+        Label { text: "Null"; width: 52px; }
+        Rectangle { width: 36px; }
+    }
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 6px;
+            padding-right: 14px;
+            for c[i] in TableDialogState.columns: HorizontalLayout {
+                height: 32px;
+                spacing: 6px;
+                TextField {
+                    horizontal-stretch: 1;
+                    min-width: 100px;
+                    placeholder: "column_name";
+                    text: c.name;
+                    edited(t) => { TableDialogState.act("col-name", i, 0, t); }
+                }
+                Dropdown {
+                    width: 128px;
+                    options: TableDialogState.preset-labels;
+                    value: c.preset-label;
+                    selected(k) => { TableDialogState.act("col-type", i, k, ""); }
+                }
+                if c.show-param: TextField {
+                    width: 124px;
+                    placeholder: c.param-hint;
+                    text: c.param;
+                    edited(t) => { TableDialogState.act("col-param", i, 0, t); }
+                }
+                if !c.show-param: Rectangle { width: 124px; }
+                VerticalLayout {
+                    width: 44px;
+                    alignment: center;
+                    CheckBox {
+                        checked: c.primary-key;
+                        accessible-label: "Primary key";
+                        toggled => { TableDialogState.act("col-pk", i, 0, ""); }
+                    }
+                }
+                VerticalLayout {
+                    width: 58px;
+                    alignment: center;
+                    CheckBox {
+                        checked: c.auto-increment;
+                        enabled: c.auto-enabled;
+                        accessible-label: "Auto increment";
+                        toggled => { TableDialogState.act("col-auto", i, 0, ""); }
+                    }
+                }
+                VerticalLayout {
+                    width: 52px;
+                    alignment: center;
+                    CheckBox {
+                        checked: c.nullable;
+                        enabled: c.nullable-enabled;
+                        accessible-label: "Nullable";
+                        toggled => { TableDialogState.act("col-null", i, 0, ""); }
+                    }
+                }
+                RemoveButton {
+                    width: 36px;
+                    accessible-label: "Remove column";
+                    clicked => { TableDialogState.act("col-remove", i, 0, ""); }
+                }
+            }
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: "Add column";
+                    has-icon: true;
+                    icon: Icons.plus;
+                    clicked => { TableDialogState.act("col-add", 0, 0, ""); }
+                }
+            }
+        }
+    }
+}
+
+component ChipRow inherits HorizontalLayout {
+    in property <[TdChip]> chips;
+    in property <string> empty-note;
+    callback toggled(int);
+    spacing: 8px;
+    height: 28px;
+
+    ChipStrip {
+        horizontal-stretch: 1;
+        for chip[k] in root.chips: FilterChip {
+            text: chip.label;
+            selected: chip.on;
+            clicked => { root.toggled(k); }
+        }
+    }
+    if root.chips.length == 0: Text {
+        text: root.empty-note;
+        color: Theme.dim-foreground;
+        font-size: Theme.size-small;
+        vertical-alignment: center;
+        horizontal-stretch: 1;
+    }
+}
+
+component ConstraintsStep inherits ScrollView {
+    VerticalLayout {
+        alignment: start;
+        spacing: 10px;
+        padding-right: 14px;
+
+        SectionLabel { text: "UNIQUE CONSTRAINTS"; }
+        if TableDialogState.uniques.length == 0: Label { text: "None. Add one to make a combination of columns unique."; }
+        for u[i] in TableDialogState.uniques: Rectangle {
+            border-radius: Theme.radius-control;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.card;
+            VerticalLayout {
+                padding: 8px;
+                spacing: 6px;
+                HorizontalLayout {
+                    spacing: 6px;
+                    TextField {
+                        horizontal-stretch: 1;
+                        placeholder: "Constraint name (optional)";
+                        text: u.name;
+                        edited(t) => { TableDialogState.act("uq-name", i, 0, t); }
+                    }
+                    RemoveButton { clicked => { TableDialogState.act("uq-remove", i, 0, ""); } }
+                }
+                Label { text: "Columns that must be unique together"; }
+                ChipRow {
+                    chips: u.chips;
+                    empty-note: "Name some columns first.";
+                    toggled(k) => { TableDialogState.act("uq-col", i, k, ""); }
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            Button {
+                text: "Add unique constraint";
+                has-icon: true;
+                icon: Icons.plus;
+                clicked => { TableDialogState.act("uq-add", 0, 0, ""); }
+            }
+        }
+
+        Divider { }
+        SectionLabel { text: "FOREIGN KEYS"; }
+        if TableDialogState.foreign-keys.length == 0: Label { text: "None. Add one to link columns to another table."; }
+        for f[i] in TableDialogState.foreign-keys: Rectangle {
+            border-radius: Theme.radius-control;
+            border-width: 1px;
+            border-color: Theme.border;
+            background: Theme.card;
+            VerticalLayout {
+                padding: 8px;
+                spacing: 6px;
+                HorizontalLayout {
+                    spacing: 6px;
+                    TextField {
+                        horizontal-stretch: 1;
+                        placeholder: "Constraint name (optional)";
+                        text: f.name;
+                        edited(t) => { TableDialogState.act("fk-name", i, 0, t); }
+                    }
+                    RemoveButton { clicked => { TableDialogState.act("fk-remove", i, 0, ""); } }
+                }
+                Label { text: "Columns in this table"; }
+                ChipRow {
+                    chips: f.chips;
+                    empty-note: "Name some columns first.";
+                    toggled(k) => { TableDialogState.act("fk-col", i, k, ""); }
+                }
+                Label { text: "References"; }
+                HorizontalLayout {
+                    spacing: 8px;
+                    height: 32px;
+                    Dropdown {
+                        width: 180px;
+                        options: TableDialogState.fk-tables;
+                        value: f.ref-table;
+                        selected(k) => { TableDialogState.act("fk-table", i, k, ""); }
+                    }
+                    if f.ref-note != "": Text {
+                        text: f.ref-note;
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+                    if f.ref-note == "": ChipRow {
+                        horizontal-stretch: 1;
+                        chips: f.ref-chips;
+                        empty-note: "Pick a table.";
+                        toggled(k) => { TableDialogState.act("fk-rcol", i, k, ""); }
+                    }
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    height: 32px;
+                    alignment: start;
+                    VerticalLayout {
+                        horizontal-stretch: 0;
+                        alignment: center;
+                        Label { text: "On delete"; }
+                    }
+                    Dropdown {
+                        width: 140px;
+                        options: TableDialogState.action-labels;
+                        value: f.on-delete;
+                        selected(k) => { TableDialogState.act("fk-del", i, k, ""); }
+                    }
+                    Rectangle { width: 12px; }
+                    VerticalLayout {
+                        horizontal-stretch: 0;
+                        alignment: center;
+                        Label { text: "On update"; }
+                    }
+                    Dropdown {
+                        width: 140px;
+                        options: TableDialogState.action-labels;
+                        value: f.on-update;
+                        selected(k) => { TableDialogState.act("fk-upd", i, k, ""); }
+                    }
+                }
+            }
+        }
+        HorizontalLayout {
+            alignment: start;
+            Button {
+                text: "Add foreign key";
+                has-icon: true;
+                icon: Icons.plus;
+                clicked => { TableDialogState.act("fk-add", 0, 0, ""); }
+            }
+        }
+    }
+}
+
+// -- Edit dialog step ---------------------------------------------------------------
+
+component EditColumnsStep inherits VerticalLayout {
+    spacing: 6px;
+
+    HorizontalLayout {
+        padding-right: 14px;
+        spacing: 6px;
+        Label { text: "Name"; horizontal-stretch: 1; }
+        Label { text: "Type"; width: 128px; }
+        Label { text: "Null"; width: 52px; }
+        Label { text: "Status"; width: 100px; }
+        Rectangle { width: 84px; }
+    }
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 6px;
+            padding-right: 14px;
+            for r[i] in TableDialogState.edit-rows: HorizontalLayout {
+                height: 32px;
+                spacing: 6px;
+                opacity: r.removed ? 0.55 : 1;
+                TextField {
+                    horizontal-stretch: 1;
+                    min-width: 100px;
+                    enabled: r.name-enabled;
+                    placeholder: "column_name";
+                    text: r.name;
+                    edited(t) => { TableDialogState.act("col-name", i, 0, t); }
+                }
+                if r.type-pickable: Dropdown {
+                    width: 128px;
+                    options: TableDialogState.preset-labels;
+                    value: r.type-label;
+                    selected(k) => { TableDialogState.act("col-type", i, k, ""); }
+                }
+                if !r.type-pickable: Text {
+                    width: 128px;
+                    text: r.type-label;
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-mono;
+                    font-family: "Menlo";
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+                VerticalLayout {
+                    width: 52px;
+                    alignment: center;
+                    CheckBox {
+                        checked: r.nullable;
+                        enabled: r.nullable-enabled;
+                        accessible-label: "Nullable";
+                        toggled => { TableDialogState.act("col-null", i, 0, ""); }
+                    }
+                }
+                HorizontalLayout {
+                    width: 100px;
+                    spacing: 4px;
+                    alignment: start;
+                    VerticalLayout {
+                        alignment: center;
+                        if r.primary-key: Badge { text: "key"; tone: Tone.accent; }
+                    }
+                    for b in r.badges: VerticalLayout {
+                        alignment: center;
+                        Badge { text: b; tone: b == "will drop" ? Tone.danger : b == "new" ? Tone.success : Tone.warning; }
+                    }
+                }
+                if !r.removed: Button {
+                    width: 84px;
+                    text: "Drop";
+                    variant: ButtonVariant.ghost;
+                    enabled: r.can-remove;
+                    accessible-label: r.can-remove ? "Drop column" : r.remove-note;
+                    clicked => { TableDialogState.act("col-remove", i, 0, ""); }
+                }
+                if r.removed: Button {
+                    width: 84px;
+                    text: "Restore";
+                    clicked => { TableDialogState.act("col-restore", i, 0, ""); }
+                }
+            }
+            HorizontalLayout {
+                alignment: start;
+                spacing: 12px;
+                Button {
+                    text: "Add column";
+                    has-icon: true;
+                    icon: Icons.plus;
+                    clicked => { TableDialogState.act("col-add", 0, 0, ""); }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Label {
+                        text: "Key columns cannot be dropped. A column's type cannot be changed here.";
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -- Preview and results -----------------------------------------------------------
+
+component PreviewStep inherits VerticalLayout {
+    spacing: 8px;
+
+    if TableDialogState.results.length == 0: VerticalLayout {
+        spacing: 8px;
+        HorizontalLayout {
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                Label {
+                    text: TableDialogState.statement-count == 0
+                        ? "Nothing to run"
+                        : "Runs in this order. " + TableDialogState.statement-count + (TableDialogState.statement-count == 1 ? " statement." : " statements.");
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            Button {
+                text: "Copy";
+                has-icon: true;
+                icon: Icons.copy;
+                variant: ButtonVariant.ghost;
+                enabled: TableDialogState.sql != "";
+                clicked => { TableDialogState.copy-sql(); }
+            }
+        }
+        if TableDialogState.sql-error != "": Banner {
+            vertical-stretch: 0;
+            message: TableDialogState.sql-error;
+            dismissible: false;
+        }
+        // With the error and no statement, nothing else claims the height.
+        if TableDialogState.sql == "" && TableDialogState.sql-error != "": Rectangle { vertical-stretch: 1; }
+        if TableDialogState.sql == "" && TableDialogState.sql-error == "": Rectangle {
+            vertical-stretch: 1;
+            border-width: 1px;
+            border-color: Theme.border;
+            border-radius: Theme.radius-card;
+            background: Theme.card;
+            EmptyState {
+                icon: Icons.code;
+                title: "No changes yet";
+                message: "Edit, add or drop a column and the ALTER statements appear here.";
+            }
+        }
+        if TableDialogState.sql != "": SqlEditor {
+            vertical-stretch: 1;
+            read-only: true;
+            text: TableDialogState.sql;
+            lines: TableDialogState.sql-lines;
+        }
+    }
+
+    if TableDialogState.results.length > 0: VerticalLayout {
+        spacing: 8px;
+        Banner {
+            message: TableDialogState.result-summary;
+            tone: TableDialogState.result-ok ? Tone.success : Tone.danger;
+            dismissible: false;
+        }
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                alignment: start;
+                spacing: 6px;
+                padding-right: 14px;
+                for r in TableDialogState.results: Rectangle {
+                    border-radius: Theme.radius-control;
+                    border-width: 1px;
+                    border-color: r.status == 1 ? Theme.destructive.transparentize(0.5) : Theme.border;
+                    background: Theme.card;
+                    opacity: r.status == 2 ? 0.6 : 1;
+                    HorizontalLayout {
+                        padding: 8px;
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: start;
+                            padding-top: 2px;
+                            Icon {
+                                source: r.status == 0 ? Icons.circle-check : r.status == 1 ? Icons.triangle-alert : Icons.circle;
+                                tint: r.status == 0 ? Theme.success : r.status == 1 ? Theme.destructive : Theme.dim-foreground;
+                                width: 15px;
+                                height: 15px;
+                            }
+                        }
+                        VerticalLayout {
+                            spacing: 3px;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: r.sql;
+                                color: Theme.foreground;
+                                font-size: Theme.size-mono;
+                                font-family: "Menlo";
+                                wrap: word-wrap;
+                            }
+                            if r.status == 1: Text {
+                                text: r.message;
+                                color: Theme.destructive;
+                                font-size: Theme.size-small;
+                                wrap: word-wrap;
+                            }
+                            if r.status == 2: Text {
+                                text: "Skipped because an earlier statement failed.";
+                                color: Theme.dim-foreground;
+                                font-size: Theme.size-small;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// -- The panel ------------------------------------------------------------------------
+
+export component TableDialogPanel inherits Rectangle {
+    in property <length> available-width: 900px;
+    in property <length> available-height: 640px;
+
+    // On the preview step: Create / Apply. Earlier: Next.
+    property <bool> last-step: TableDialogState.step == TableDialogState.steps.length - 1;
+    property <bool> finished: TableDialogState.results.length > 0 && TableDialogState.result-ok;
+
+    width: min(900px, root.available-width);
+    height: min(640px, root.available-height);
+    background: Theme.popover;
+    border-radius: Theme.radius-window;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    clip: true;
+
+    TouchArea { }
+
+    VerticalLayout {
+        padding: 20px;
+        padding-top: 16px;
+        spacing: 10px;
+
+        HorizontalLayout {
+            spacing: 10px;
+            VerticalLayout {
+                alignment: center;
+                spacing: 1px;
+                Text {
+                    text: TableDialogState.title;
+                    color: Theme.foreground;
+                    font-size: Theme.size-subheading;
+                    font-weight: 700;
+                }
+                if TableDialogState.subtitle != "": Text {
+                    text: TableDialogState.subtitle;
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    overflow: elide;
+                }
+            }
+            Rectangle { horizontal-stretch: 1; }
+            if TableDialogState.mode == 1 && TableDialogState.pending > 0 && !root.finished: VerticalLayout {
+                alignment: center;
+                Badge {
+                    text: TableDialogState.pending + (TableDialogState.pending == 1 ? " pending change" : " pending changes");
+                    tone: Tone.accent;
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    has-icon: true;
+                    icon: Icons.x;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Close";
+                    clicked => { TableDialogState.close(); }
+                }
+            }
+        }
+
+        if !TableDialogState.loading && TableDialogState.load-error == "": StepTabs {
+            labels: TableDialogState.steps;
+            active: TableDialogState.step;
+            picked(i) => { TableDialogState.act("step", i, 0, ""); }
+        }
+        if !TableDialogState.loading && TableDialogState.load-error == "": Divider { }
+
+        if TableDialogState.loading: Text {
+            vertical-stretch: 1;
+            text: "Reading the table…";
+            color: Theme.muted-foreground;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+        if !TableDialogState.loading && TableDialogState.load-error != "": VerticalLayout {
+            vertical-stretch: 1;
+            alignment: start;
+            spacing: 8px;
+            Banner { message: TableDialogState.load-error; dismissible: false; }
+            HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: "Retry";
+                    has-icon: true;
+                    icon: Icons.refresh-cw;
+                    clicked => { TableDialogState.retry-load(); }
+                }
+            }
+        }
+
+        if !TableDialogState.loading && TableDialogState.load-error == "": VerticalLayout {
+            vertical-stretch: 1;
+            spacing: 8px;
+            if TableDialogState.mode == 0 && TableDialogState.step == 0: BasicsStep { vertical-stretch: 1; }
+            if TableDialogState.mode == 0 && TableDialogState.step == 1: ColumnsStep { vertical-stretch: 1; }
+            if TableDialogState.mode == 0 && TableDialogState.step == 2: ConstraintsStep { vertical-stretch: 1; }
+            if TableDialogState.mode == 1 && TableDialogState.step == 0: EditColumnsStep { vertical-stretch: 1; }
+            if TableDialogState.step == TableDialogState.steps.length - 1: PreviewStep { vertical-stretch: 1; }
+
+            if !root.last-step && TableDialogState.step-errors.length > 0: VerticalLayout {
+                spacing: 2px;
+                for e in TableDialogState.step-errors: Text {
+                    text: e;
+                    color: Theme.destructive;
+                    font-size: Theme.size-small;
+                    wrap: word-wrap;
+                }
+            }
+        }
+
+        Divider { }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            Button {
+                text: root.finished ? "Close" : "Cancel";
+                clicked => { TableDialogState.close(); }
+            }
+            if !TableDialogState.loading && TableDialogState.load-error == "" && TableDialogState.step > 0 && !root.finished: Button {
+                text: "Back";
+                enabled: !TableDialogState.running;
+                clicked => { TableDialogState.act("back", 0, 0, ""); }
+            }
+            if !TableDialogState.loading && TableDialogState.load-error == "" && !root.last-step: Button {
+                text: "Next";
+                variant: ButtonVariant.primary;
+                enabled: TableDialogState.can-next;
+                clicked => { TableDialogState.act("next", 0, 0, ""); }
+            }
+            if !TableDialogState.loading && TableDialogState.load-error == "" && root.last-step && !root.finished: Button {
+                text: TableDialogState.mode == 0 ? "Create table" : "Apply changes";
+                variant: ButtonVariant.primary;
+                has-icon: true;
+                icon: Icons.play;
+                enabled: TableDialogState.sql != "" && !TableDialogState.running;
+                clicked => { TableDialogState.apply(); }
+            }
+        }
+    }
+}
+
+export component TableDialogOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Theme.background.transparentize(0.25);
+
+    // A click outside does not close it: the forms hold typed work.
+    TouchArea { }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            TableDialogPanel {
+                available-width: root.width - 48px;
+                available-height: root.height - 48px;
+            }
+        }
+    }
+}

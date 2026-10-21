@@ -52,6 +52,10 @@ export component SqlEditor inherits Rectangle {
     in property <length> mono-size: Theme.editor-font-size;
     in property <bool> show-line-numbers: Theme.editor-line-numbers;
 
+    // A statement shown for reading and copying, not editing (the query
+    // builder's preview, the table dialogs' DDL).
+    in property <bool> read-only: false;
+
     callback edited(string);
 
     property <length> pad: 12px;
@@ -121,6 +125,7 @@ export component SqlEditor inherits Rectangle {
             height: max(self.preferred-height, flick.height - 2 * root.pad);
             text <=> root.text;
             single-line: false;
+            read-only: root.read-only;
             wrap: no-wrap;
             font-family: root.mono-family;
             font-size: root.mono-size;
@@ -142,7 +147,7 @@ export component SqlEditor inherits Rectangle {
             width: 2px;
             height: root.line-height;
             background: root.caret-color;
-            visible: input.has-focus;
+            visible: input.has-focus && !root.read-only;
         }
     }
 

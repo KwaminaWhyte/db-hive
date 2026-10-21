@@ -38,6 +38,13 @@ export { ActivityState, MonitorTile, MonitorBar, MonitorFact, MonitorChip, Monit
 export { MigrationsState, MigrationDiffRow } from "screens/migrations.slint";
 export { ChartLine } from "kit/kit.slint";
 
+// Visual query builder and table create/edit dialogs: each is a state global
+// plus an overlay, so this window gains no properties for them.
+import { BuilderState, BuilderOverlay } from "screens/query_builder.slint";
+import { TableDialogState, TableDialogOverlay } from "screens/table_dialog.slint";
+export { BuilderState, QbSection, QbSource, QbAdded, QbJoin, QbColumn, QbFilter, QbHaving, QbOrder } from "screens/query_builder.slint";
+export { TableDialogState, TdChip, TdColumn, TdUnique, TdForeignKey, TdEditRow, TdStatement } from "screens/table_dialog.slint";
+
 export enum Screen { connections, workspace }
 
 export struct ToastItem {
@@ -331,6 +338,14 @@ export component AppWindow inherits Window {
                 title: "Schema Migrations…";
                 activated => { root.run-command("go-migrations"); }
             }
+            MenuItem {
+                title: "Visual Query Builder";
+                activated => { root.run-command("go-visual-query-builder"); }
+            }
+            MenuItem {
+                title: "New Table…";
+                activated => { root.run-command("new-table"); }
+            }
             MenuSeparator { }
             MenuItem {
                 title: Theme.dark ? "Light Theme" : "Dark Theme";
@@ -524,7 +539,8 @@ export component AppWindow inherits Window {
     // held focus goes away (its focused element is destroyed with it).
     property <bool> any-palette-overlay: root.show-palette || root.show-shortcuts;
     property <bool> any-overlay: root.show-about || root.show-confirm || root.show-connection-editor
-        || root.any-palette-overlay || ActivityState.visible || MigrationsState.visible;
+        || root.any-palette-overlay || ActivityState.visible || MigrationsState.visible
+        || BuilderState.visible || TableDialogState.visible;
     init => { fs.focus(); }
     changed any-overlay => {
         if (!root.any-overlay) {
@@ -556,6 +572,10 @@ export component AppWindow inherits Window {
     if BackupState.visible: BackupOverlay { }
     if ActivityState.visible: ActivityOverlay { }
     if MigrationsState.visible: MigrationsOverlay { }
+
+    // The query builder and the table dialogs, on the same layer.
+    if BuilderState.visible: BuilderOverlay { }
+    if TableDialogState.visible: TableDialogOverlay { }
 
     if root.show-about || root.show-confirm || root.show-connection-editor || root.show-settings || root.any-palette-overlay: Rectangle {
         width: 100%;

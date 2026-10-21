@@ -180,13 +180,12 @@ pub fn support(id: CommandId) -> Support {
         GoConnections | GoSettings | GoAbout | NewConnection | RefreshMetadata | ShowShortcuts
         | OpenCommandPalette | Disconnect | RunQuery | NewTab | CloseTab | ThemeLight
         | ThemeDark | ThemeToggle | GoImportExport | GoBackup | GoActivityMonitor
-        | GoMigrations => Support::Live,
+        | GoMigrations | GoVisualQueryBuilder | NewTable => Support::Live,
 
         NewWindow => Support::Unsupported("Multiple windows are not supported yet"),
 
-        GoQueryEditor | GoVisualQueryBuilder | GoSchemaDesigner | GoErDiagram
-        | GoTableInspector | GoHistory | GoAiAssistant | GoPlugins | NewTable
-        | ToggleSidebar | Connect
+        GoQueryEditor | GoSchemaDesigner | GoErDiagram | GoTableInspector | GoHistory
+        | GoAiAssistant | GoPlugins | ToggleSidebar | Connect
         | ConnectionsBack | WindowMinimize | WindowMaximizeToggle | WindowClose => Support::Hidden,
     }
 }
@@ -1103,9 +1102,9 @@ mod tests {
         p.open();
         p.set_query("tab");
         let ctx = ws();
-        // Commands whose descriptions merely contain "tab" ("Go to Import /
-        // Export": "a table"; "New Connection": "database") are drawn first,
-        // in earlier groups; "New Tab" is the real answer.
+        // Commands whose titles or descriptions merely contain "tab" ("New
+        // Table", "Go to Import / Export": "a table") are drawn first, in
+        // earlier groups; "New Tab" is the real answer.
         let v = p.view(&ctx, false);
         let first_command = v.rows.iter().find(|r| !r.header).unwrap();
         assert_ne!(first_command.slug, "new-tab");
