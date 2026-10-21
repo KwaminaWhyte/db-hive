@@ -128,11 +128,30 @@ impl ProgressSink {
 // ---------------------------------------------------------------------------
 
 /// The default backup directory, created if missing.
+///
+/// `DBHIVE_DATA_DIR`, when set, moves it under that directory like every
+/// other store (tests set it to a temp dir so a backup never lands in the
+/// developer's own data folder).
 pub fn backup_dir() -> Result<PathBuf, DbError> {
-    let dir = dirs::data_dir()
-        .ok_or_else(|| DbError::InternalError("Cannot locate data directory".to_string()))?
-        .join("db-hive")
-        .join("backups");
+    let over = std::env::var_os(crate::storage::DATA_DIR_ENV)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from);
+    backup_dir_in(over, dirs::data_dir())
+}
+
+/// [`backup_dir`] with its two inputs given, so the choice can be tested
+/// without touching the environment.
+pub fn backup_dir_in(
+    override_dir: Option<PathBuf>,
+    data_dir: Option<PathBuf>,
+) -> Result<PathBuf, DbError> {
+    let dir = match override_dir {
+        Some(base) => base.join("backups"),
+        None => data_dir
+            .ok_or_else(|| DbError::InternalError("Cannot locate data directory".to_string()))?
+            .join("db-hive")
+            .join("backups"),
+    };
     std::fs::create_dir_all(&dir)
         .map_err(|e| DbError::InternalError(format!("Cannot create backup dir: {}", e)))?;
     Ok(dir)
@@ -360,6 +379,18 @@ pub fn target_database(profile: &ConnectionProfile) -> String {
             .filter(|d| !d.is_empty())
             .unwrap_or_else(|| "postgres".to_string()),
         _ => profile.database.clone().unwrap_or_default(),
+    }
+}
+
+/// The database file of a SQLite profile.
+///
+/// The connection editor stores the path in `database` and leaves `host`
+/// blank; profiles from before that held it in `host`. Reading only `host`
+/// made every backup of an editor-made SQLite connection copy "".
+pub fn sqlite_file(profile: &ConnectionProfile) -> String {
+    match profile.database.as_deref().map(str::trim) {
+        Some(d) if !d.is_empty() => d.to_string(),
+        _ => profile.host.clone(),
     }
 }
 
@@ -679,8 +710,7 @@ fn run_dump(
         }
 
         DbDriver::Sqlite => {
-            // For SQLite the "host" field holds the database file path.
-            std::fs::copy(&profile.host, output_path)
+            std::fs::copy(sqlite_file(profile), output_path)
                 .map_err(|e| DbError::InternalError(format!("Copy failed: {}", e)))?;
         }
 
@@ -944,8 +974,7 @@ fn run_restore(
         }
 
         DbDriver::Sqlite => {
-            // "host" is the database file path for SQLite.
-            std::fs::copy(&options.file_path, &profile.host)
+            std::fs::copy(&options.file_path, sqlite_file(profile))
                 .map_err(|e| DbError::InternalError(format!("Copy failed: {}", e)))?;
         }
 
@@ -988,6 +1017,33 @@ mod tests {
         );
         p.database = Some("shop".to_string());
         p
+    }
+
+    #[test]
+    fn the_data_dir_override_moves_the_backup_folder_under_it() {
+        let base = std::env::temp_dir().join(format!("dbhive-backup-dir-{}", std::process::id()));
+        let got = backup_dir_in(Some(base.clone()), Some(PathBuf::from("/never/used"))).unwrap();
+        assert_eq!(got, base.join("backups"));
+        assert!(got.is_dir(), "the folder is created");
+        // Without an override the platform data dir is used.
+        let other = base.join("platform");
+        let got = backup_dir_in(None, Some(other.clone())).unwrap();
+        assert_eq!(got, other.join("db-hive").join("backups"));
+        assert!(backup_dir_in(None, None).is_err());
+    }
+
+    #[test]
+    fn a_sqlite_backup_copies_the_database_field_not_the_blank_host() {
+        let mut p = profile(DbDriver::Sqlite);
+        p.host = String::new();
+        p.database = Some("/data/shop.sqlite".to_string());
+        assert_eq!(sqlite_file(&p), "/data/shop.sqlite");
+        // Older profiles kept the path in host.
+        p.database = None;
+        p.host = "/old/shop.sqlite".to_string();
+        assert_eq!(sqlite_file(&p), "/old/shop.sqlite");
+        p.database = Some("  ".to_string());
+        assert_eq!(sqlite_file(&p), "/old/shop.sqlite");
     }
 
     #[test]

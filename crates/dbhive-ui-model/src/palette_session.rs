@@ -179,13 +179,13 @@ pub fn support(id: CommandId) -> Support {
     match id {
         GoConnections | GoSettings | GoAbout | NewConnection | RefreshMetadata | ShowShortcuts
         | OpenCommandPalette | Disconnect | RunQuery | NewTab | CloseTab | ThemeLight
-        | ThemeDark | ThemeToggle => Support::Live,
+        | ThemeDark | ThemeToggle | GoImportExport | GoBackup => Support::Live,
 
         NewWindow => Support::Unsupported("Multiple windows are not supported yet"),
 
         GoQueryEditor | GoVisualQueryBuilder | GoSchemaDesigner | GoErDiagram
-        | GoTableInspector | GoActivityMonitor | GoHistory | GoAiAssistant | GoImportExport
-        | GoBackup | GoMigrations | GoPlugins | NewTable | ToggleSidebar | Connect
+        | GoTableInspector | GoActivityMonitor | GoHistory | GoAiAssistant
+        | GoMigrations | GoPlugins | NewTable | ToggleSidebar | Connect
         | ConnectionsBack | WindowMinimize | WindowMaximizeToggle | WindowClose => Support::Hidden,
     }
 }
@@ -1091,11 +1091,12 @@ mod tests {
         p.open();
         p.set_query("tab");
         let ctx = ws();
-        // "New Connection" (description: "database") is drawn first, in the
-        // Actions group; "New Tab" is the real answer.
+        // Commands whose descriptions merely contain "tab" ("Go to Import /
+        // Export": "a table"; "New Connection": "database") are drawn first,
+        // in earlier groups; "New Tab" is the real answer.
         let v = p.view(&ctx, false);
         let first_command = v.rows.iter().find(|r| !r.header).unwrap();
-        assert_eq!(first_command.slug, "new-connection");
+        assert_ne!(first_command.slug, "new-tab");
         assert_eq!(p.selected_id(&ctx), Some(CommandId::NewTab));
         assert!(v.rows.iter().find(|r| r.selected).unwrap().slug == "new-tab");
 

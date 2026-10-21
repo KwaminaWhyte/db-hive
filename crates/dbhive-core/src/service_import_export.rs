@@ -106,6 +106,24 @@ pub fn qualify(driver: &DbDriver, schema: &str, table: &str) -> String {
     }
 }
 
+/// The schema to put in front of a table name for `driver`, given the one the
+/// workspace is on (a schema, a database name, a file path or blank).
+///
+/// Only Postgres-family databases and MySQL qualify with it. SQLite and Turso
+/// address one file and reject `"path"."table"`; SQL Server's workspace
+/// "schema" is really the database, which `[db].[table]` would read as a
+/// schema. Blank on Postgres means `public`.
+pub fn effective_schema(driver: &DbDriver, requested: &str) -> String {
+    let requested = requested.trim();
+    match driver {
+        DbDriver::Sqlite | DbDriver::Turso | DbDriver::SqlServer => String::new(),
+        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon if requested.is_empty() => {
+            "public".to_string()
+        }
+        _ => requested.to_string(),
+    }
+}
+
 /// What a driver can express in a SQL dump.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DumpSupport {
@@ -776,6 +794,16 @@ pub async fn export_to_sql(
     write_sql(&mut out, &dump_header(&kind, &stamp))?;
 
     let schema = options.schema.clone().unwrap_or_else(|| "public".to_string());
+    // What table names are qualified with in the file. SQLite has no schema
+    // to name, and the shell hands over the database path or "main" there.
+    let qualifier = effective_schema(&kind, &schema);
+    let shown = |table: &str| {
+        if qualifier.is_empty() {
+            table.to_string()
+        } else {
+            format!("{}.{}", qualifier, table)
+        }
+    };
     let tables: Vec<String> = if options.tables.is_empty() {
         driver
             .get_tables(&schema)
@@ -788,10 +816,10 @@ pub async fn export_to_sql(
     };
 
     for table in &tables {
-        write_sql(&mut out, &format!("\n-- Table: {}.{}\n", schema, table))?;
+        write_sql(&mut out, &format!("\n-- Table: {}\n", shown(table)))?;
 
         if options.include_drop {
-            write_sql(&mut out, &format!("{}\n", drop_statement(&kind, &schema, table)))?;
+            write_sql(&mut out, &format!("{}\n", drop_statement(&kind, &qualifier, table)))?;
         }
 
         if options.include_create {
@@ -801,7 +829,7 @@ pub async fn export_to_sql(
                     &mut out,
                     &format!(
                         "{}\n",
-                        create_table_statement(&kind, &schema, table, &table_schema.columns)
+                        create_table_statement(&kind, &qualifier, table, &table_schema.columns)
                     ),
                 )?;
             } else {
@@ -815,21 +843,21 @@ pub async fn export_to_sql(
         }
 
         if options.include_data && support.data {
-            let sql = format!("SELECT * FROM {}", qualify(&kind, &schema, table));
+            let sql = format!("SELECT * FROM {}", qualify(&kind, &qualifier, table));
             let result = driver.execute_query(&sql).await?;
             if result.rows.is_empty() {
                 write_sql(&mut out, "-- No data in table\n")?;
             } else {
                 write_sql(
                     &mut out,
-                    &format!("\n-- Data for table {}.{}\n", schema, table),
+                    &format!("\n-- Data for table {}\n", shown(table)),
                 )?;
                 let cols: Vec<String> = result
                     .columns
                     .iter()
                     .map(|c| quote_ident(&kind, c))
                     .collect();
-                let target = qualify(&kind, &schema, table);
+                let target = qualify(&kind, &qualifier, table);
                 for row in &result.rows {
                     let values: Vec<String> =
                         row.iter().map(|v| sql_value_to_string(&kind, v)).collect();
@@ -2161,6 +2189,21 @@ pub fn mapping_index(mappings: &[ColumnMapping]) -> HashMap<String, &ColumnMappi
 }
 
 // ---------------------------------------------------------------------------
+// Default locations
+// ---------------------------------------------------------------------------
+
+/// Where a suggested import or export path points: the Downloads folder if
+/// the platform has one, else the home directory, else the working directory.
+///
+/// There is no native file dialog in this workspace, so shells fill path
+/// fields with a suggestion built from this and let the user edit it.
+pub fn suggested_directory() -> std::path::PathBuf {
+    dirs::download_dir()
+        .or_else(dirs::home_dir)
+        .unwrap_or_else(|| std::path::PathBuf::from("."))
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -2168,6 +2211,25 @@ pub fn mapping_index(mappings: &[ColumnMapping]) -> HashMap<String, &ColumnMappi
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn only_postgres_and_mysql_qualify_tables_with_the_workspace_schema() {
+        assert_eq!(effective_schema(&DbDriver::Sqlite, "/data/shop.sqlite"), "");
+        assert_eq!(effective_schema(&DbDriver::Sqlite, "main"), "");
+        assert_eq!(effective_schema(&DbDriver::Turso, "x"), "");
+        assert_eq!(effective_schema(&DbDriver::SqlServer, "shop"), "");
+        assert_eq!(effective_schema(&DbDriver::Postgres, ""), "public");
+        assert_eq!(effective_schema(&DbDriver::Postgres, " app "), "app");
+        assert_eq!(effective_schema(&DbDriver::MySql, "shop"), "shop");
+        // A path that went through qualify would not run on SQLite.
+        let t = qualify(&DbDriver::Sqlite, &effective_schema(&DbDriver::Sqlite, "/d/x.db"), "t");
+        assert_eq!(t, "\"t\"");
+    }
+
+    #[test]
+    fn the_suggested_directory_is_never_empty() {
+        assert!(!suggested_directory().as_os_str().is_empty());
+    }
 
     fn mapping(source: &str, target: &str) -> ColumnMapping {
         ColumnMapping {

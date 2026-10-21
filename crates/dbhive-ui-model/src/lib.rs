@@ -11,14 +11,17 @@
 pub mod activity_monitor;
 pub mod ai_assistant;
 pub mod backup;
+pub mod backup_manager;
 pub mod command_palette;
 pub mod connection_editor;
+pub mod data_forms;
 pub mod er_diagram;
 pub mod format;
 pub mod graph_layout;
 pub mod history;
 pub mod history_panel;
 pub mod import_export;
+pub mod import_wizard;
 pub mod migrations;
 pub mod palette_session;
 pub mod plugins;

@@ -459,17 +459,23 @@ pub const COMMANDS: &[Command] = &[
         "Generate and explain SQL",
         Group::Navigation,
     ),
-    cmd(
-        CommandId::GoImportExport,
-        "Go to Import / Export",
-        "Move data in and out of a table",
-        Group::Navigation,
+    scoped(
+        cmd(
+            CommandId::GoImportExport,
+            "Go to Import / Export",
+            "Move data in and out of a table",
+            Group::Navigation,
+        ),
+        Scope::Workspace,
     ),
-    cmd(
-        CommandId::GoBackup,
-        "Go to Backup Manager",
-        "Create and restore backups",
-        Group::Navigation,
+    scoped(
+        cmd(
+            CommandId::GoBackup,
+            "Go to Backup Manager",
+            "Create and restore backups",
+            Group::Navigation,
+        ),
+        Scope::Workspace,
     ),
     cmd(
         CommandId::GoMigrations,
