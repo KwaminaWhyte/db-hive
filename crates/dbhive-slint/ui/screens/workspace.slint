@@ -3,6 +3,8 @@ import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Divider, ListRow,
 import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
 import { SqlEditor, HighlightLine } from "../components/sql_editor.slint";
 import { TableInspectorView } from "table_inspector.slint";
+import { BuilderState } from "query_builder.slint";
+import { TableDialogState } from "table_dialog.slint";
 
 export struct TableItem {
     name: string,
@@ -103,6 +105,17 @@ export component WorkspaceScreen inherits VerticalLayout {
             VerticalLayout {
                 alignment: center;
                 Button {
+                    text: "Builder";
+                    has-icon: true;
+                    icon: Icons.workflow;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "Visual query builder";
+                    clicked => { BuilderState.open-requested(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
                     text: "History";
                     has-icon: true;
                     icon: Icons.history;
@@ -137,12 +150,24 @@ export component WorkspaceScreen inherits VerticalLayout {
                 padding: 10px;
                 spacing: 6px;
 
-                Text {
-                    text: "TABLES" + (root.tables.length > 0 ? " (" + root.tables.length + ")" : "");
-                    color: Theme.muted-foreground;
-                    font-size: Theme.size-small;
-                    font-weight: 600;
-                    letter-spacing: 0.6px;
+                HorizontalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: "TABLES" + (root.tables.length > 0 ? " (" + root.tables.length + ")" : "");
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        font-weight: 600;
+                        letter-spacing: 0.6px;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                    Button {
+                        has-icon: true;
+                        icon: Icons.plus;
+                        variant: ButtonVariant.ghost;
+                        accessible-label: "New table";
+                        clicked => { TableDialogState.open-create(); }
+                    }
                 }
 
                 // Claims the leftover height itself and packs its children at

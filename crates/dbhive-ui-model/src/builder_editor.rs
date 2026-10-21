@@ -20,7 +20,7 @@
 use dbhive_core::models::ForeignKeyInfo;
 
 use crate::query_builder::{
-    count_conditions, generate_sql, join_suggestions, pagination_summary, validate, Aggregate,
+    active_aliases, count_conditions, generate_sql, join_suggestions, pagination_summary, validate, Aggregate,
     BuilderState, CompareOp, Condition, ConditionGroup, DialectRules, GroupByClause,
     HavingCondition, Join, JoinType, Logical, OrderByClause, QueryTable, SelectedColumn, SortDir,
     ValueKind, MAX_GROUP_DEPTH, STAR,
@@ -373,7 +373,7 @@ pub struct BuilderView {
     pub pagination: String,
     /// The statement, or empty when there is not enough to build one.
     pub sql: String,
-    /// Every other warning, in the order to fix them.
+    /// Every warning, in the order to fix them.
     pub warnings: Vec<String>,
     pub table_search: String,
 }
@@ -504,8 +504,45 @@ impl BuilderEditor {
         true
     }
 
+    /// Joins the schema's foreign keys imply, written so they resolve.
+    ///
+    /// A foreign key reads child to parent, but a statement can only join a
+    /// new table onto one already in it. When the parent is the table already
+    /// placed (FROM customers, then add orders), the sides are swapped, so
+    /// the suggestion is `customers.id = orders.customer_id` rather than a
+    /// join the generator would leave out as unreachable. A pair already
+    /// joined, in either orientation, is not offered again.
     pub fn suggestions(&self, keys: &[ForeignKeyInfo]) -> Vec<Join> {
-        join_suggestions(&self.state, keys)
+        let active = active_aliases(&self.state);
+        let mut out: Vec<Join> = Vec::new();
+        for mut j in join_suggestions(&self.state, keys) {
+            if !active.contains(&j.left_table) && active.contains(&j.right_table) {
+                std::mem::swap(&mut j.left_table, &mut j.right_table);
+                std::mem::swap(&mut j.left_column, &mut j.right_column);
+            }
+            let same = |a: &Join, b: &Join| {
+                a.left_table == b.left_table
+                    && a.left_column == b.left_column
+                    && a.right_table == b.right_table
+                    && a.right_column == b.right_column
+            };
+            let flipped = Join {
+                left_table: j.right_table.clone(),
+                left_column: j.right_column.clone(),
+                right_table: j.left_table.clone(),
+                right_column: j.left_column.clone(),
+                ..j.clone()
+            };
+            let taken = self
+                .state
+                .joins
+                .iter()
+                .any(|e| same(e, &j) || same(e, &flipped));
+            if !taken && !out.iter().any(|o| same(o, &j)) {
+                out.push(j);
+            }
+        }
+        out
     }
 
     fn accept_suggestion(&mut self, k: usize, keys: &[ForeignKeyInfo]) -> bool {
@@ -1195,7 +1232,8 @@ impl BuilderEditor {
             })
             .collect();
 
-        let suggestion_labels = join_suggestions(s, keys)
+        let suggestion_labels = self
+            .suggestions(keys)
             .iter()
             .map(|j| {
                 format!(
@@ -1277,10 +1315,14 @@ impl BuilderEditor {
             })
             .collect();
 
-        let all_warnings = self.warnings(rules);
-        let (group_issues, warnings): (Vec<String>, Vec<String>) = all_warnings
-            .into_iter()
-            .partition(|w| w.contains("GROUP BY") || w.contains("HAVING"));
+        // Every warning is listed beside the preview. The GROUP BY and HAVING
+        // ones are repeated inside their own section, where they are fixed.
+        let warnings = self.warnings(rules);
+        let group_issues: Vec<String> = warnings
+            .iter()
+            .filter(|w| w.contains("GROUP BY") || w.contains("HAVING"))
+            .cloned()
+            .collect();
 
         let sql = self.sql(quote, escape, rules).unwrap_or_default();
 
@@ -1526,11 +1568,16 @@ mod tests {
         let mut e = two_tables();
         let keys = vec![fk()];
         let v = e.view(&[], &keys, &q, &esc, pg());
-        assert_eq!(v.join_suggestions, vec!["orders.user_id = users.id".to_string()]);
+        // users is the FROM table, so the join is written from users to orders.
+        assert_eq!(v.join_suggestions, vec!["users.id = orders.user_id".to_string()]);
 
         assert_eq!(e.apply("join-suggest", 0, 0, "", &keys), Change::Structure);
         assert_eq!(e.state.joins.len(), 1);
         assert!(e.state.joins[0].is_complete());
+        // It must actually reach the statement, not be left out as unreachable.
+        let s = sql(&e);
+        assert!(s.contains("INNER JOIN \"public\".\"orders\" AS \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\""), "{s}");
+        assert!(e.warnings(pg()).iter().all(|w| !w.contains("not joined")));
         // Accepted, so no longer offered.
         assert!(e.view(&[], &keys, &q, &esc, pg()).join_suggestions.is_empty());
         assert_eq!(e.apply("join-suggest", 0, 0, "", &keys), Change::None);
@@ -1781,7 +1828,9 @@ mod tests {
         e.apply("gb-add", 0, 0, "", &[]); // group by id
         let v = e.view(&[], &[], &q, &esc, pg());
         assert!(v.group_issues.iter().any(|w| w.contains("users.name must be in GROUP BY")));
-        assert!(v.warnings.iter().all(|w| !w.contains("GROUP BY")));
+        // The same problem also reaches the warnings beside the preview, so it
+        // is seen even with the section folded away.
+        assert!(v.warnings.iter().any(|w| w.contains("users.name must be in GROUP BY")));
 
         e.apply("gb-add", 0, 1, "", &[]);
         assert!(e.view(&[], &[], &q, &esc, pg()).group_issues.is_empty());

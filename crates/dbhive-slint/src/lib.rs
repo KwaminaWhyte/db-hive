@@ -7,6 +7,7 @@
 slint::include_modules!();
 
 pub mod app;
+pub mod builder_view;
 pub mod connection_editor;
 pub mod connection_list;
 pub mod diagram_model;
@@ -16,4 +17,5 @@ pub mod palette_view;
 pub mod runtime;
 pub mod settings_view;
 pub mod sql_highlight;
+pub mod table_dialog_view;
 pub mod workspace_model;

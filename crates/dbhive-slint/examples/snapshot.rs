@@ -356,6 +356,8 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
         _ if name.starts_with("history") || name.starts_with("snippets") || name.starts_with("templates") => {
             history_panel_window(name)
         }
+        _ if name.starts_with("builder") => builder_window(name),
+        _ if name.starts_with("tabledialog") => table_dialog_window(name),
         other => {
             eprintln!("unknown component {:?}", other);
             std::process::exit(2);
@@ -786,6 +788,256 @@ fn command_overlay(name: &str) -> Box<dyn std::any::Any> {
     let view = p.view(&ctx, IS_MAC);
     dbhive_slint::palette_view::apply_palette(&c, true, p.query(), &view);
     c.set_palette_scroll(view.reveal_offset(0.0));
+    Box::new(c)
+}
+
+// -- Visual query builder and table dialogs ------------------------------------
+//
+// Builder variants: builder, builder-light, builder-empty, builder-loading,
+// builder-error, builder-open (every section open), builder-open-light.
+// Table dialog variants (each also with -light): tabledialog-basics,
+// tabledialog-basics-empty, tabledialog-columns, tabledialog-constraints,
+// tabledialog-preview, tabledialog-preview-error, tabledialog-edit,
+// tabledialog-edit-preview, tabledialog-edit-loading, tabledialog-edit-error,
+// tabledialog-edit-failed, tabledialog-edit-done.
+// The workspace sits behind the panel, as it does in the app.
+
+fn workspace_behind(light: bool, loading: bool) -> AppWindow {
+    let c = AppWindow::new().expect("AppWindow");
+    if light {
+        c.global::<Theme>().set_dark(false);
+    }
+    c.set_screen(Screen::Workspace);
+    c.set_workspace_connection_name("Production Postgres".into());
+    c.set_workspace_location_label("app · public".into());
+    let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products"]
+        .iter()
+        .map(|n| TableItem { name: (*n).into(), row_count: "~1240".into() })
+        .collect();
+    c.set_workspace_loading_tables(loading);
+    if !loading {
+        c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
+    }
+    c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![TabInfo {
+        title: "Query 1".into(),
+        query: true,
+        busy: false,
+    }])));
+    c.set_workspace_active_tab(0);
+    c.set_workspace_active_is_query(true);
+    c
+}
+
+fn builder_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_core::models::ForeignKeyInfo;
+    use dbhive_ui_model::builder_editor::{BuilderEditor, Change};
+    use dbhive_ui_model::query_builder::rules_for;
+
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+    let c = workspace_behind(light, name == "builder-loading");
+    let dark = !light;
+
+    let q = |x: &str| format!("\"{}\"", x.replace('"', "\"\""));
+    let esc = |x: &str| x.replace('\'', "''");
+    let pg = rules_for(&dbhive_core::models::DbDriver::Postgres);
+    let cols = |l: &[(&str, &str)]| l.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect::<Vec<_>>();
+    let catalog: Vec<String> =
+        ["customers", "orders", "order_items", "products", "refunds"].iter().map(|s| s.to_string()).collect();
+    let keys = vec![ForeignKeyInfo {
+        name: "orders_customer_fk".into(),
+        table: "orders".into(),
+        schema: "public".into(),
+        columns: vec!["customer_id".into()],
+        referenced_table: "customers".into(),
+        referenced_schema: "public".into(),
+        referenced_columns: vec!["id".into()],
+        on_delete: None,
+        on_update: None,
+    }];
+
+    let mut e = BuilderEditor::new();
+    if name != "builder-empty" && name != "builder-loading" {
+        e.add_table("public", "customers", cols(&[("id", "integer"), ("name", "text"), ("plan", "text"), ("active", "boolean")]));
+        e.add_table("public", "orders", cols(&[("id", "integer"), ("customer_id", "integer"), ("total", "numeric"), ("status", "text")]));
+        let k = &keys;
+        if name != "builder-error" {
+            e.apply("join-suggest", 0, 0, "", k);
+            e.apply("col-add", 0, 2, "", k); // customers.name
+            e.apply("col-add", 1, 3, "", k); // orders.total
+            e.apply("col-agg", 1, 2, "", k); // SUM
+            e.apply("col-alias", 1, 0, "revenue", k);
+            e.apply("f-cond-add", 0, 0, "", k);
+            e.apply("f-col", 1, 2, "", k); // plan
+            e.apply("f-val", 1, 0, "pro", k);
+            e.apply("f-group-add", 0, 0, "", k);
+            e.apply("f-cond-add", 2, 0, "", k);
+            e.apply("f-alias", 3, 1, "", k); // orders
+            e.apply("f-col", 3, 2, "", k); // total
+            e.apply("f-val", 3, 0, "100", k);
+            e.apply("f-cond-add", 2, 0, "", k);
+            e.apply("f-alias", 4, 1, "", k);
+            e.apply("f-col", 4, 3, "", k); // status
+            e.apply("f-val", 4, 0, "paid", k);
+            e.apply("f-op", 2, 0, "", k); // OR
+            e.apply("gb-add", 0, 1, "", k);
+            e.apply("ob-add", 0, 1, "", k);
+            e.apply("limit", 0, 0, "25", k);
+        } else {
+            // A half-built query with problems to warn about.
+            e.apply("join-add", 0, 0, "", k);
+            e.apply("col-add", 0, 1, "", k);
+            e.apply("col-add", 0, 2, "", k);
+            e.apply("gb-add", 0, 0, "", k);
+            e.apply("limit", 0, 0, "lots", k);
+        }
+        if name == "builder-open" {
+            // The upper sections fold away so the lower ones fit on screen.
+            for sec in [0, 1, 2, 4, 5, 6] {
+                e.apply("section", sec, 0, "", k);
+            }
+            e.apply("hv-add", 0, 0, "", k);
+            e.apply("hv-val", 0, 0, "1000", k);
+        }
+    }
+
+    let view = e.view(&catalog, &keys, &q, &esc, pg);
+    let b = c.global::<BuilderState>();
+    b.set_visible(true);
+    b.set_scope_label("Production Postgres / app".into());
+    b.set_loading(name == "builder-loading");
+    if name == "builder-loading" {
+        b.set_pending_note("Reading the columns of orders…".into());
+    }
+    if name == "builder-error" {
+        b.set_error("Could not read the columns of refunds: relation \"public.refunds\" does not exist".into());
+        b.set_error_retry(true);
+    }
+    let can_use = !view.sql.is_empty() && view.limit_error.is_empty() && view.offset_error.is_empty();
+    dbhive_slint::builder_view::apply(&c, &view, Change::Structure, can_use, dark);
+    dbhive_slint::builder_view::reset_fields(&c, &view);
+    c.show().unwrap();
+    Box::new(c)
+}
+
+fn table_dialog_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_core::models::{ColumnInfo, DbDriver, TableInfo, TableSchema};
+    use dbhive_ui_model::builder_editor::Change;
+    use dbhive_ui_model::table_dialog::{report, AlterEditor, CreateWizard, RefColumns};
+
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+    let c = workspace_behind(light, false);
+    let dark = !light;
+    let pg = DbDriver::Postgres;
+    let tables: Vec<String> = ["customers", "orders", "order_items", "products"].iter().map(|s| s.to_string()).collect();
+
+    let d = c.global::<TableDialogState>();
+    d.set_visible(true);
+
+    if name.starts_with("tabledialog-edit") {
+        let mut id = ColumnInfo::new("id".into(), "integer".into(), false);
+        id.is_primary_key = true;
+        id.is_auto_increment = true;
+        let schema = TableSchema::new(
+            TableInfo::new("customers".into(), "public".into(), "TABLE".into()),
+            vec![
+                id,
+                ColumnInfo::new("name".into(), "character varying(120)".into(), false),
+                ColumnInfo::new("email".into(), "text".into(), true),
+                ColumnInfo::new("plan".into(), "text".into(), true),
+                ColumnInfo::new("legacy_code".into(), "integer".into(), true),
+            ],
+            vec![],
+        );
+        let mut e = AlterEditor::from_schema("public", "customers", &schema);
+        match name {
+            "tabledialog-edit-loading" => {
+                d.set_loading(true);
+                d.set_mode(1);
+                d.set_title("Edit table".into());
+                d.set_subtitle("public.customers".into());
+            }
+            "tabledialog-edit-error" => {
+                d.set_load_error("Could not read customers: permission denied for table customers".into());
+                d.set_mode(1);
+                d.set_title("Edit table".into());
+                d.set_subtitle("public.customers".into());
+            }
+            _ => {
+                if name != "tabledialog-edit-clean" {
+                    e.apply("col-name", 2, 0, "contact_email");
+                    e.apply("col-null", 3, 0, "");
+                    e.apply("col-remove", 4, 0, "");
+                    e.apply("col-add", 0, 0, "");
+                    e.apply("col-name", 5, 0, "signup_date");
+                    e.apply("col-type", 5, 5, "");
+                    // The key cannot be dropped; this is refused and shows.
+                    e.apply("col-remove", 0, 0, "");
+                }
+                let mut rep = Vec::new();
+                if name == "tabledialog-edit-preview" || name == "tabledialog-edit-failed" || name == "tabledialog-edit-done" {
+                    e.step = 1;
+                }
+                let stmts = e.statements(&pg).unwrap_or_default();
+                if name == "tabledialog-edit-failed" {
+                    rep = report(&stmts, &[Ok(()), Err("column \"signup_date\" of relation \"customers\" already exists".into())]);
+                }
+                if name == "tabledialog-edit-done" {
+                    let ok: Vec<Result<(), String>> = stmts.iter().map(|_| Ok(())).collect();
+                    rep = report(&stmts, &ok);
+                }
+                let v = e.view(&pg);
+                dbhive_slint::table_dialog_view::apply(&c, &v, Change::Structure, &rep, dark);
+            }
+        }
+    } else {
+        let mut w = CreateWizard::new("public");
+        if name != "tabledialog-basics-empty" {
+            w.apply("name", 0, 0, "invoices", &tables);
+            w.apply("desc", 0, 0, "One row per invoice sent to a customer", &tables);
+        }
+        if name == "tabledialog-basics" || name == "tabledialog-basics-empty" {
+            // Step one as it opens.
+        } else {
+            w.apply("col-add", 0, 0, "", &tables);
+            w.apply("col-name", 1, 0, "customer_id", &tables);
+            w.apply("col-type", 1, 1, "", &tables); // BIGINT
+            w.apply("col-null", 1, 0, "", &tables);
+            w.apply("col-add", 0, 0, "", &tables);
+            w.apply("col-name", 2, 0, "reference", &tables);
+            w.apply("col-type", 2, 2, "", &tables); // VARCHAR
+            w.apply("col-param", 2, 0, "40", &tables);
+            w.apply("col-add", 0, 0, "", &tables);
+            w.apply("col-name", 3, 0, "amount", &tables);
+            w.apply("col-type", 3, 7, "", &tables); // DECIMAL
+            w.apply("col-add", 0, 0, "", &tables);
+            w.apply("col-name", 4, 0, "issued_at", &tables);
+            w.apply("col-type", 4, 6, "", &tables); // TIMESTAMP
+            w.step = 1;
+        }
+        if name == "tabledialog-constraints" || name.starts_with("tabledialog-preview") {
+            w.apply("uq-add", 0, 0, "", &tables);
+            w.apply("uq-name", 0, 0, "uq_invoice_reference", &tables);
+            w.apply("uq-col", 0, 2, "", &tables); // reference
+            w.apply("fk-add", 0, 0, "", &tables);
+            w.apply("fk-col", 0, 1, "", &tables); // customer_id
+            w.apply("fk-table", 0, 0, "", &tables); // customers
+            w.ref_columns.insert("customers".into(), RefColumns::Loaded(vec!["id".into(), "name".into(), "plan".into()]));
+            w.apply("fk-rcol", 0, 0, "", &tables);
+            w.apply("fk-del", 0, 2, "", &tables);
+            w.step = 2;
+        }
+        if name.starts_with("tabledialog-preview") {
+            if name == "tabledialog-preview-error" {
+                w.apply("name", 0, 0, "", &tables);
+            }
+            w.step = 3;
+        }
+        let v = w.view(&pg, &tables);
+        dbhive_slint::table_dialog_view::apply(&c, &v, Change::Structure, &[], dark);
+    }
+    c.show().unwrap();
     Box::new(c)
 }
 

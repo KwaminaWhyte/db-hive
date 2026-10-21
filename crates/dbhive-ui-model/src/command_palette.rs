@@ -417,11 +417,14 @@ pub const COMMANDS: &[Command] = &[
         "Write and execute queries",
         Group::Navigation,
     ),
-    cmd(
-        CommandId::GoVisualQueryBuilder,
-        "Go to Visual Query Builder",
-        "Build queries without writing SQL",
-        Group::Navigation,
+    scoped(
+        cmd(
+            CommandId::GoVisualQueryBuilder,
+            "Go to Visual Query Builder",
+            "Build queries without writing SQL",
+            Group::Navigation,
+        ),
+        Scope::Workspace,
     ),
     cmd(
         CommandId::GoSchemaDesigner,
@@ -738,7 +741,9 @@ pub fn score(cmd: &Command, needle: &str) -> Option<i32> {
         return Some(900 - slack);
     }
     if title.split_whitespace().any(|w| w.starts_with(&needle)) {
-        return Some(700);
+        // Same rule as above: "New Tab" ranks above "New Table" for "tab".
+        let slack = (title.len() - needle.len()).min(99) as i32;
+        return Some(700 - slack);
     }
     if title.contains(&needle) {
         return Some(600);

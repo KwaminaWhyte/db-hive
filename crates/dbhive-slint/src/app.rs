@@ -31,8 +31,10 @@ use dbhive_ui_model::settings_editor::{
 };
 use dbhive_ui_model::workspace_tabs::{result_summary, TabKind, Tabs};
 
+mod builder;
 mod inspector;
 mod settings;
+mod table_dialog;
 
 use crate::connection_editor as editor_view;
 use crate::connection_list::{self, EnvTone};
@@ -80,6 +82,8 @@ enum PendingAction {
     ResetSettings,
     /// Close Settings and throw away its unsaved edits.
     DiscardSettings,
+    /// Run the edit-table dialog's ALTER statements, which drop columns.
+    ApplyTableDialog,
 }
 
 /// The new/edit connection dialog's state.
@@ -143,6 +147,8 @@ struct Session {
     palette: PaletteState,
     shortcuts: ShortcutsState,
     settings: settings::SettingsState,
+    builder: builder::BuilderSession,
+    table_dialog: table_dialog::DialogSession,
 }
 
 struct Ctx {
@@ -719,6 +725,8 @@ impl Ctx {
 
     fn leave_workspace(&self) {
         self.hide_history_panel();
+        self.builder_close();
+        self.table_dialog_close();
         self.session.borrow_mut().workspace = Workspace::default();
         if let Some(w) = self.window.upgrade() {
             w.set_screen(Screen::Connections);
@@ -1029,6 +1037,7 @@ impl Ctx {
             Some(PendingAction::History(pending)) => self.history_confirmed(pending),
             Some(PendingAction::ResetSettings) => self.reset_settings(),
             Some(PendingAction::DiscardSettings) => self.discard_settings_and_close(),
+            Some(PendingAction::ApplyTableDialog) => self.table_dialog_apply_confirmed(),
             None => self.delete_pending_connection(),
         }
     }
@@ -1094,7 +1103,12 @@ impl Ctx {
             Overlay::Palette
         } else if w.get_show_shortcuts() {
             Overlay::Shortcuts
-        } else if w.get_show_about() || w.get_show_confirm() || w.get_show_connection_editor() {
+        } else if w.get_show_about()
+            || w.get_show_confirm()
+            || w.get_show_connection_editor()
+            || self.builder_open_now()
+            || self.table_dialog_open_now()
+        {
             Overlay::Dialog
         } else {
             Overlay::None
@@ -1151,6 +1165,8 @@ impl Ctx {
             CommandId::GoAbout => w.set_show_about(true),
             CommandId::NewConnection => self.open_new_connection(),
             CommandId::RefreshMetadata => self.load_tables(),
+            CommandId::GoVisualQueryBuilder => self.builder_open(),
+            CommandId::NewTable => self.table_dialog_open_create(),
             CommandId::ShowShortcuts => self.open_shortcuts(),
             CommandId::OpenCommandPalette => self.open_palette(),
             CommandId::Disconnect => {
@@ -1579,6 +1595,8 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
 
     history_glue::wire(&window, &ctx);
     inspector::wire(&window, &ctx);
+    builder::wire(&window, &ctx);
+    table_dialog::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {

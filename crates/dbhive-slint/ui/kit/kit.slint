@@ -1253,3 +1253,209 @@ export component SettingRow inherits VerticalLayout {
     }
     if !root.last: Divider { }
 }
+
+// -- Visual query builder and table dialogs additions -------------------------
+
+// The header of a collapsible form section: a chevron, the title and a count
+// badge. The whole row is the click target, so there is no tiny arrow to hit.
+export component CollapseHeader inherits Rectangle {
+    in property <string> title;
+    // Items in the section; 0 hides the badge.
+    in property <int> count: 0;
+    in property <bool> open: true;
+    callback clicked;
+
+    height: 34px;
+    border-radius: Theme.radius-control;
+    background: touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: 90ms; }
+
+    accessible-role: button;
+    accessible-label: root.title;
+    accessible-expandable: true;
+    accessible-expanded: root.open;
+    accessible-action-default => { root.clicked(); }
+
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+    HorizontalLayout {
+        padding-left: 6px;
+        padding-right: 8px;
+        spacing: 6px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.open ? Icons.chevron-down : Icons.chevron-right;
+                tint: Theme.muted-foreground;
+                width: 14px;
+                height: 14px;
+            }
+        }
+        Text {
+            text: root.title;
+            color: Theme.foreground;
+            font-size: Theme.size-label;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-stretch: 0;
+        }
+        if root.count > 0: VerticalLayout {
+            alignment: center;
+            Badge { text: root.count; tone: Tone.accent; }
+        }
+        Rectangle { horizontal-stretch: 1; }
+    }
+}
+
+// A small labelled checkbox, for the dense rows of a column editor where a
+// full switch would dwarf the field beside it.
+export component CheckBox inherits Rectangle {
+    in property <string> text;
+    in property <bool> checked;
+    in property <bool> enabled: true;
+    callback toggled;
+
+    height: 24px;
+    horizontal-stretch: 0;
+    opacity: root.enabled ? 1 : 0.4;
+
+    accessible-role: checkbox;
+    accessible-label: root.text;
+    accessible-checkable: true;
+    accessible-checked: root.checked;
+    accessible-action-default => {
+        if (root.enabled) {
+            root.toggled();
+        }
+    }
+
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+        clicked => { root.toggled(); }
+    }
+    HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 16px;
+                height: 16px;
+                border-radius: 4px;
+                background: root.checked ? Theme.primary : Theme.card;
+                border-width: 1px;
+                border-color: root.checked ? Theme.primary : Theme.border-strong;
+                animate background { duration: 90ms; }
+                if root.checked: Icon {
+                    source: Icons.check;
+                    tint: Theme.primary-foreground;
+                    width: 12px;
+                    height: 12px;
+                }
+            }
+        }
+        if root.text != "": Text {
+            text: root.text;
+            color: Theme.foreground;
+            font-size: Theme.size-label;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// The numbered steps of a wizard. A step already passed shows a tick; the
+// current one is filled. Every step is a button, and the caller decides
+// whether a click may go there.
+export component Stepper inherits Rectangle {
+    in property <[string]> labels;
+    in property <int> active: 0;
+    callback picked(int);
+
+    height: 36px;
+
+    HorizontalLayout {
+        alignment: start;
+        spacing: 8px;
+        for label[i] in root.labels: HorizontalLayout {
+            spacing: 8px;
+            if i > 0: VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 24px;
+                    height: 1px;
+                    background: i <= root.active ? Theme.primary : Theme.border-strong;
+                }
+            }
+            Rectangle {
+                width: step-row.preferred-width + 12px;
+                border-radius: Theme.radius-control;
+                background: step-touch.has-hover ? Theme.hover : transparent;
+                animate background { duration: 90ms; }
+
+                accessible-role: tab;
+                accessible-label: "Step " + (i + 1) + ", " + label;
+                accessible-action-default => { root.picked(i); }
+
+                step-touch := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.picked(i); }
+                }
+                step-row := HorizontalLayout {
+                    padding-left: 6px;
+                    padding-right: 6px;
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 22px;
+                            height: 22px;
+                            border-radius: 11px;
+                            background: i == root.active ? Theme.primary : i < root.active ? Theme.primary-soft : transparent;
+                            border-width: i > root.active ? 1px : 0px;
+                            border-color: Theme.border-strong;
+                            if i < root.active: Icon {
+                                source: Icons.check;
+                                tint: Theme.primary;
+                                width: 13px;
+                                height: 13px;
+                            }
+                            if i >= root.active: Text {
+                                text: i + 1;
+                                color: i == root.active ? Theme.primary-foreground : Theme.muted-foreground;
+                                font-size: Theme.size-small;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                    Text {
+                        text: label;
+                        color: i == root.active ? Theme.foreground : Theme.muted-foreground;
+                        font-size: Theme.size-label;
+                        font-weight: i == root.active ? 600 : 400;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// A single row of chips that scrolls sideways when there are more than fit,
+// since Slint has no wrapping layout. Put FilterChips inside.
+export component ChipStrip inherits Flickable {
+    height: 28px;
+    content-width: strip.preferred-width;
+    content-height: self.height;
+    interactive: false;
+
+    strip := HorizontalLayout {
+        spacing: 6px;
+        alignment: start;
+        @children
+    }
+}
