@@ -63,6 +63,11 @@ pub struct TableView {
     /// The requested page was past `MAX_SAFE_OFFSET` and was pulled back.
     pub deep_offset_blocked: bool,
     pub selection: Option<CellRef>,
+    /// Rows ticked in the grid's checkbox column, as indexes into the shown
+    /// page (new unsaved rows come after the page's own). A new page, sort or
+    /// filter drops them, like the selection, because the indexes would then
+    /// point at different rows.
+    pub checked: std::collections::BTreeSet<usize>,
     pub panel_open: bool,
     pub filters_open: bool,
     /// Row editing: pending changes, the cell being typed in, the review page.
@@ -85,6 +90,7 @@ impl Default for TableView {
             meta: Meta::Idle,
             deep_offset_blocked: false,
             selection: None,
+            checked: std::collections::BTreeSet::new(),
             panel_open: false,
             filters_open: false,
             edit: crate::row_edits::EditUi::default(),
@@ -183,6 +189,7 @@ impl TableView {
         let changed = page != self.page;
         self.page = page;
         self.selection = None;
+        self.checked.clear();
         changed
     }
 
@@ -216,6 +223,7 @@ impl TableView {
         self.page_size = size;
         self.page = 1;
         self.selection = None;
+        self.checked.clear();
         true
     }
 
@@ -280,6 +288,7 @@ impl TableView {
         self.page = 1;
         self.total = None;
         self.selection = None;
+        self.checked.clear();
         true
     }
 
@@ -320,6 +329,7 @@ impl TableView {
         };
         self.page = 1;
         self.selection = None;
+        self.checked.clear();
     }
 
     /// Index of the sorted column among `columns`, for the header arrow.
@@ -378,6 +388,29 @@ impl TableView {
 
     pub fn clear_selection(&mut self) {
         self.selection = None;
+        self.checked.clear();
+    }
+
+    /// Tick or untick one row of the checkbox column.
+    pub fn toggle_checked(&mut self, row: usize) {
+        if !self.checked.remove(&row) {
+            self.checked.insert(row);
+        }
+    }
+
+    /// The header checkbox: tick every one of `rows` rows, or, when they are
+    /// all ticked already, none.
+    pub fn toggle_all_checked(&mut self, rows: usize) {
+        if rows > 0 && (0..rows).all(|r| self.checked.contains(&r)) {
+            self.checked.clear();
+        } else {
+            self.checked = (0..rows).collect();
+        }
+    }
+
+    /// Whether every one of `rows` rows is ticked (false for no rows).
+    pub fn all_checked(&self, rows: usize) -> bool {
+        rows > 0 && (0..rows).all(|r| self.checked.contains(&r))
     }
 
     /// Column names for the filter dropdown: the schema's when it has
@@ -554,6 +587,24 @@ pub fn row_json(result: &QueryResult, row: usize) -> Option<String> {
     }
     out.push('}');
     Some(out)
+}
+
+/// The ticked rows as one pretty JSON array of objects keyed by column name,
+/// in grid order. Indexes past the page (new unsaved rows) are skipped: they
+/// have no stored values to copy.
+pub fn rows_json(result: &QueryResult, rows: &std::collections::BTreeSet<usize>) -> String {
+    // Built from `row_json` so keys keep the column order (serde_json's map
+    // would sort them).
+    let objects: Vec<String> = rows
+        .iter()
+        .filter_map(|&i| row_json(result, i))
+        .map(|o| format!("  {}", o.replace('\n', "\n  ")))
+        .collect();
+    if objects.is_empty() {
+        "[]".to_string()
+    } else {
+        format!("[\n{}\n]", objects.join(",\n"))
+    }
 }
 
 /// "id · 42" style caption for the selected cell, shown above the JSON.
@@ -1181,6 +1232,48 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&row_json(&odd, 0).unwrap()).unwrap();
         assert_eq!(parsed["a\"b"], "x");
         assert_eq!(row_json(&r, 3), None);
+    }
+
+    #[test]
+    fn rows_json_is_an_array_in_grid_order_skipping_rows_that_are_not_stored() {
+        let r = QueryResult::with_data(
+            vec!["zeta".into(), "alpha".into()],
+            vec![
+                vec![json!(1), json!("a")],
+                vec![json!(2), json!(null)],
+                vec![json!(3), json!("c")],
+            ],
+        );
+        let pick: std::collections::BTreeSet<usize> = [2, 0, 9].into_iter().collect();
+        let j = rows_json(&r, &pick);
+        let parsed: serde_json::Value = serde_json::from_str(&j).unwrap();
+        assert_eq!(parsed.as_array().unwrap().len(), 2, "row 9 is not on the page");
+        assert_eq!(parsed[0]["zeta"], 1);
+        assert_eq!(parsed[1]["alpha"], "c");
+        assert!(j.find("zeta").unwrap() < j.find("alpha").unwrap(), "column order kept");
+        assert_eq!(rows_json(&r, &Default::default()), "[]");
+    }
+
+    #[test]
+    fn checking_rows_toggles_one_or_all_and_a_new_page_drops_them() {
+        let mut v = TableView::default();
+        v.toggle_checked(1);
+        v.toggle_checked(3);
+        assert_eq!(v.checked.iter().copied().collect::<Vec<_>>(), vec![1, 3]);
+        v.toggle_checked(1);
+        assert_eq!(v.checked.iter().copied().collect::<Vec<_>>(), vec![3]);
+        // The header box ticks everything, then clears when everything is ticked.
+        v.toggle_all_checked(4);
+        assert!(v.all_checked(4));
+        v.toggle_all_checked(4);
+        assert!(v.checked.is_empty());
+        assert!(!v.all_checked(0), "no rows is not 'all ticked'");
+        v.toggle_all_checked(0);
+        assert!(v.checked.is_empty());
+        v.toggle_checked(2);
+        v.total = Some(1000);
+        assert!(v.next(50));
+        assert!(v.checked.is_empty(), "row 2 of page 1 is not row 2 of page 2");
     }
 
     #[test]

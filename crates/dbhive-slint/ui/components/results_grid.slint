@@ -1,5 +1,5 @@
 import { ListView } from "std-widgets.slint";
-import { Theme, Icon, Icons } from "../kit/kit.slint";
+import { Theme, Icon, Icons, CheckBox } from "../kit/kit.slint";
 
 // Virtualised results grid.
 //
@@ -32,6 +32,8 @@ export struct GridRow {
     deleted: bool,
     // A new row, not yet inserted.
     added: bool,
+    // Ticked in the checkbox column.
+    checked: bool,
 }
 
 export component ResultsGrid inherits Rectangle {
@@ -60,6 +62,14 @@ export component ResultsGrid inherits Rectangle {
     in property <int> editing-col: -1;
     in property <string> edit-initial;
 
+    // A checkbox column at the left, for picking rows to act on together.
+    // The caller owns which rows are ticked, as with the selection.
+    in property <bool> selectable: false;
+    in property <bool> all-checked: false;
+    callback row-toggled(int);
+    callback all-toggled;
+    property <length> gutter: root.selectable ? 36px : 0px;
+
     callback row-clicked(int);
     callback cell-clicked(int, int);
     callback cell-double-clicked(int, int);
@@ -77,19 +87,30 @@ export component ResultsGrid inherits Rectangle {
     clip: true;
 
     Flickable {
-        content-width: max(self.width, root.total-width);
+        content-width: max(self.width, root.total-width + root.gutter);
         content-height: self.height;
 
         VerticalLayout {
-            width: max(parent.width, root.total-width);
+            width: max(parent.width, root.total-width + root.gutter);
             spacing: 0;
 
             // Header.
             Rectangle {
                 height: root.header-height;
                 background: Theme.sidebar;
+                if root.selectable: Rectangle {
+                    x: 0px;
+                    width: root.gutter;
+                    CheckBox {
+                        x: 10px;
+                        y: (parent.height - self.height) / 2;
+                        checked: root.all-checked;
+                        toggled => { root.all-toggled(); }
+                        accessible-label: "Select all rows";
+                    }
+                }
                 for col[index] in root.columns: TouchArea {
-                    x: col.x;
+                    x: root.gutter + col.x;
                     width: col.width;
                     clicked => { root.header-clicked(index); }
                     HorizontalLayout {
@@ -131,9 +152,21 @@ export component ResultsGrid inherits Rectangle {
                     background: row.deleted ? Theme.destructive-soft
                         : r == root.selected-row ? Theme.primary-soft
                         : row.added ? Theme.success-soft
+                        : row.checked ? Theme.primary-soft.transparentize(0.5)
                         : (mod(r, 2) == 0 ? transparent : Theme.hover.transparentize(0.5));
+                    if root.selectable: Rectangle {
+                        x: 0px;
+                        width: root.gutter;
+                        CheckBox {
+                            x: 10px;
+                            y: (parent.height - self.height) / 2;
+                            checked: row.checked;
+                            toggled => { root.row-toggled(r); }
+                            accessible-label: "Select row";
+                        }
+                    }
                     for cell[c] in row.cells: TouchArea {
-                        x: root.columns[c].x;
+                        x: root.gutter + root.columns[c].x;
                         width: root.columns[c].width;
                         clicked => {
                             if (!root.controlled) {

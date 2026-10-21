@@ -21,6 +21,8 @@ pub type Cell = Option<String>;
 pub struct RowMark {
     pub deleted: bool,
     pub added: bool,
+    /// Ticked in the checkbox column.
+    pub checked: bool,
     /// Per cell: holds an uncommitted edit.
     pub modified: Vec<bool>,
     /// Per cell: shown as a hint ("default"), not a value.
@@ -89,6 +91,7 @@ impl Model for LazyRows {
             cells: ModelRc::new(VecModel::from(cells)),
             deleted: mark.is_some_and(|m| m.deleted),
             added: mark.is_some_and(|m| m.added),
+            checked: mark.is_some_and(|m| m.checked),
         })
     }
 

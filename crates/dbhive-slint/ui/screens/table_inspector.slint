@@ -62,6 +62,14 @@ export global InspectorBridge {
     in property <string> edit-message;
     in property <int> pending-count;
     in property <bool> selected-deleted;
+    // Rows ticked in the checkbox column, for acting on together.
+    in property <int> checked-count;
+    in property <bool> all-checked;
+    callback row-toggled(int);
+    callback toggle-all;
+    callback copy-checked-json;
+    callback delete-checked;
+    callback clear-checked;
     in property <bool> review-open;
     in property <bool> committing;
     in property <[ReviewItem]> review-items;
@@ -843,6 +851,58 @@ export component TableInspectorView inherits VerticalLayout {
                 }
             }
 
+            // Rows ticked in the grid: act on them together.
+            if InspectorBridge.checked-count > 0: Rectangle {
+                height: 44px;
+                background: Theme.primary-soft;
+                border-radius: Theme.radius-control;
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 8px;
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: InspectorBridge.checked-count == 1
+                                ? "1 row selected"
+                                : InspectorBridge.checked-count + " rows selected";
+                            color: Theme.foreground;
+                            font-size: Theme.size-label;
+                            font-weight: 600;
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Copy as JSON";
+                            variant: ButtonVariant.ghost;
+                            has-icon: true;
+                            icon: Icons.copy;
+                            clicked => { InspectorBridge.copy-checked-json(); }
+                        }
+                    }
+                    if InspectorBridge.editable: VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Delete";
+                            variant: ButtonVariant.danger;
+                            has-icon: true;
+                            icon: Icons.trash-2;
+                            clicked => { InspectorBridge.delete-checked(); }
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Clear";
+                            variant: ButtonVariant.ghost;
+                            clicked => { InspectorBridge.clear-checked(); }
+                        }
+                    }
+                }
+            }
+
             if InspectorBridge.edit-message != "": Banner {
                 message: InspectorBridge.edit-message;
                 dismissible: false;
@@ -912,6 +972,10 @@ export component TableInspectorView inherits VerticalLayout {
                 editing-row: InspectorBridge.editing-row;
                 editing-col: InspectorBridge.editing-col;
                 edit-initial: InspectorBridge.edit-initial;
+                selectable: true;
+                all-checked: InspectorBridge.all-checked;
+                row-toggled(r) => { InspectorBridge.row-toggled(r); }
+                all-toggled => { InspectorBridge.toggle-all(); }
                 header-clicked(i) => { InspectorBridge.sort-by(i); }
                 cell-clicked(r, c) => { InspectorBridge.cell-clicked(r, c); }
                 cell-double-clicked(r, c) => { InspectorBridge.cell-double-clicked(r, c); }

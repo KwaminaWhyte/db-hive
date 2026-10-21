@@ -708,6 +708,7 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
                     .map(|r| RowMark {
                         deleted: false,
                         added: false,
+                        checked: false,
                         modified: vec![false; r.len()],
                         placeholder: vec![false; r.len()],
                     })
@@ -760,6 +761,25 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
                         },
                     ])));
                 }
+            } else if v == "inspector-select" {
+                // Two rows ticked in the checkbox column, nothing pending.
+                use dbhive_slint::grid_model::RowMark;
+                let marks: Vec<RowMark> = (0..data.len())
+                    .map(|i| RowMark {
+                        checked: i == 1 || i == 2,
+                        modified: vec![false; 5],
+                        placeholder: vec![false; 5],
+                        ..RowMark::default()
+                    })
+                    .collect();
+                c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::with_marks(
+                    std::rc::Rc::new(data),
+                    std::rc::Rc::new(marks),
+                )));
+                c.set_workspace_row_count(n as i32);
+                c.set_workspace_visible_row_count(n as i32);
+                b.set_editable(true);
+                b.set_checked_count(2);
             } else {
                 c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(data))));
                 c.set_workspace_row_count(n as i32);

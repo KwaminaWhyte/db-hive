@@ -380,7 +380,59 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                 expect!(rows(&w) == 3, "discard should drop the added row, got {}", rows(&w));
                 expect!(!cell_modified(&w, 1, 1), "discard should clear marks");
 
-                // -- a table with no primary key refuses edits ------------
+                // -- tick rows: copy them, tick all, delete them ---------
+                b.invoke_row_toggled(0);
+                b.invoke_row_toggled(2);
+                step2.set(40);
+            }
+            40 => {
+                expect!(b.get_checked_count() == 2, "ticked {}", b.get_checked_count());
+                expect!(!b.get_all_checked(), "two of three is not all");
+                expect!(
+                    w.get_workspace_rows().row_data(0).is_some_and(|r| r.checked)
+                        && w.get_workspace_rows().row_data(2).is_some_and(|r| r.checked)
+                        && !w.get_workspace_rows().row_data(1).is_some_and(|r| r.checked),
+                    "the grid should mark rows 0 and 2 as ticked"
+                );
+                b.invoke_copy_checked_json();
+                step2.set(41);
+            }
+            41 => {
+                expect!(
+                    w.get_toasts().iter().any(|t| t.text.contains("Copied 2 rows as JSON")),
+                    "copying ticked rows should say so"
+                );
+                b.invoke_toggle_all();
+                step2.set(42);
+            }
+            42 => {
+                expect!(b.get_checked_count() == 3 && b.get_all_checked(), "header box should tick all three");
+                b.invoke_toggle_all();
+                step2.set(43);
+            }
+            43 => {
+                expect!(b.get_checked_count() == 0 && !b.get_all_checked(), "header box again should clear");
+                b.invoke_row_toggled(0);
+                b.invoke_row_toggled(1);
+                step2.set(44);
+            }
+            44 => {
+                b.invoke_delete_checked();
+                step2.set(45);
+            }
+            45 => {
+                expect!(row_deleted(&w, 0) && row_deleted(&w, 1) && !row_deleted(&w, 2), "rows 0 and 1 should be marked deleted");
+                expect!(b.get_pending_count() == 2, "pending {}", b.get_pending_count());
+                expect!(b.get_checked_count() == 0, "ticks should clear after marking");
+                let stored = db_rows(&db2, "SELECT COUNT(*) FROM items");
+                expect!(stored == vec![vec!["3".to_string()]], "bulk delete wrote early: {stored:?}");
+                b.invoke_discard_edits();
+                step2.set(46);
+            }
+
+            // -- a table with no primary key refuses edits ------------
+            46 => {
+                expect!(b.get_pending_count() == 0, "pending {}", b.get_pending_count());
                 w.invoke_workspace_select_table("loose".into());
                 step2.set(31);
             }
