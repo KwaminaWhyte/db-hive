@@ -1863,7 +1863,7 @@ export component ResultViewText inherits Rectangle {
     in property <string> label: "Results as text";
 
     property <length> pad: 12px;
-    property <length> line-height: root.mono-size * 1.7;
+    property <length> line-height: root.mono-size * 1.5;
     property <length> advance: measure.preferred-width / 10;
 
     pure function kind-color(kind: int) -> color {
@@ -2100,13 +2100,15 @@ export component ExportDialog inherits Popover {
 
         if !root.done: FormField {
             label: "Format";
-            Segmented {
-                horizontal-stretch: 0;
-                options: root.formats;
-                selected: root.format;
-                picked(i) => {
-                    if (!root.running) {
-                        root.format-picked(i);
+            HorizontalLayout {
+                alignment: start;
+                Segmented {
+                    options: root.formats;
+                    selected: root.format;
+                    picked(i) => {
+                        if (!root.running) {
+                            root.format-picked(i);
+                        }
                     }
                 }
             }

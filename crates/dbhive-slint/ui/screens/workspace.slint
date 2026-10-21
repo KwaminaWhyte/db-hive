@@ -447,10 +447,12 @@ export component WorkspaceScreen inherits VerticalLayout {
 
                 // A failed query: headline, the driver's message, the query
                 // behind a disclosure, Copy and Retry.
-                if root.rows-error != "": VerticalLayout {
-                    spacing: 8px;
-                    alignment: start;
-                    ResultsErrorPanel { }
+                if root.rows-error != "": ScrollView {
+                    vertical-stretch: 1;
+                    VerticalLayout {
+                        alignment: start;
+                        ResultsErrorPanel { }
+                    }
                 }
 
                 if root.running: Text {
@@ -492,26 +494,43 @@ export component WorkspaceScreen inherits VerticalLayout {
                     vertical-stretch: 1;
                     icon: Icons.table;
                     title: "No rows returned";
-                    message: "The query ran without error but matched no rows. " + root.result-summary + ".";
+                    message: "The query ran without error but matched no rows. The column headers can still be exported.";
                 }
 
-                if !root.running && root.rows-error == "" && root.has-result && root.result-message == "" && root.row-count > 0 && root.visible-row-count == 0: EmptyState {
+                if !root.running && root.rows-error == "" && root.has-result && root.result-message == "" && root.row-count > 0 && root.visible-row-count == 0: VerticalLayout {
+                    // Compact, so the button still fits in a short window.
                     vertical-stretch: 1;
-                    icon: Icons.search;
-                    title: "No rows match the filter";
-                    message: "None of the " + root.row-count + " rows in this result contain \"" + root.filter + "\".";
-                    Button {
-                        text: "Clear filter";
-                        clicked => {
-                            root.filter = "";
-                            root.filter-changed("");
+                    alignment: center;
+                    spacing: 6px;
+                    Text {
+                        text: "No rows match the filter";
+                        color: Theme.foreground;
+                        font-size: Theme.size-subheading;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                    }
+                    Text {
+                        text: "None of the " + root.row-count + " rows in this result contain \"" + root.filter + "\".";
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                    }
+                    HorizontalLayout {
+                        alignment: center;
+                        Button {
+                            text: "Clear filter";
+                            clicked => {
+                                root.filter = "";
+                                root.filter-changed("");
+                            }
                         }
                     }
                 }
 
                 // A tab with a Banner or message but no grid would otherwise
                 // let the layout spread its slack as gaps; this takes it.
-                if !root.running && (root.result-message != "" || root.rows-error != ""): Rectangle {
+                if !root.running && root.result-message != "": Rectangle {
                     vertical-stretch: 1;
                 }
             }

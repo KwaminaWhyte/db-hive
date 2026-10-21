@@ -61,6 +61,16 @@ export component ResultsModeBar inherits HorizontalLayout {
             picked(i) => { ResultsState.mode-picked(i); }
         }
     }
+    if ResultsState.mode != 0: VerticalLayout {
+        alignment: center;
+        Button {
+            has-icon: true;
+            icon: Icons.copy;
+            variant: ButtonVariant.ghost;
+            accessible-label: ResultsState.mode == 1 ? "Copy as JSON" : "Copy as TSV";
+            clicked => { ResultsState.view-copy(); }
+        }
+    }
     VerticalLayout {
         alignment: center;
         Button {
@@ -75,9 +85,9 @@ export component ResultsModeBar inherits HorizontalLayout {
     }
 }
 
-// Just the Export button, for the table inspector's toolbar.
+// Just the Export button, for the table inspector's toolbar. Icon only: that
+// toolbar is already full in an editing state at a narrow window.
 export component ResultsExportButton inherits Button {
-    text: "Export";
     has-icon: true;
     icon: Icons.download;
     variant: ButtonVariant.ghost;
@@ -86,8 +96,8 @@ export component ResultsExportButton inherits Button {
     clicked => { ResultsState.export-open(); }
 }
 
-// The JSON or Text view of a result, with the truncation notice and a Copy
-// button underneath.
+// The JSON or Text view of a result, with the truncation notice underneath.
+// Its Copy button lives in the mode bar, to keep the pane's height.
 export component ResultsViewPane inherits VerticalLayout {
     spacing: 8px;
     ResultViewText {
@@ -96,24 +106,10 @@ export component ResultsViewPane inherits VerticalLayout {
         max-columns: ResultsState.view-max-columns;
         label: ResultsState.mode == 1 ? "Results as JSON" : "Results as text";
     }
-    HorizontalLayout {
-        spacing: 10px;
-        if ResultsState.view-notice != "": Banner {
-            horizontal-stretch: 1;
-            message: ResultsState.view-notice;
-            tone: Tone.warning;
-            dismissible: false;
-        }
-        if ResultsState.view-notice == "": Rectangle { horizontal-stretch: 1; }
-        VerticalLayout {
-            alignment: center;
-            Button {
-                text: ResultsState.mode == 1 ? "Copy JSON" : "Copy as TSV";
-                has-icon: true;
-                icon: Icons.copy;
-                clicked => { ResultsState.view-copy(); }
-            }
-        }
+    if ResultsState.view-notice != "": Banner {
+        message: ResultsState.view-notice;
+        tone: Tone.warning;
+        dismissible: false;
     }
 }
 
