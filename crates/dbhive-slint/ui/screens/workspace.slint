@@ -5,6 +5,7 @@ import { SqlEditor, HighlightLine } from "../components/sql_editor.slint";
 import { TableInspectorView } from "table_inspector.slint";
 import { BuilderState } from "query_builder.slint";
 import { TableDialogState } from "table_dialog.slint";
+import { AiState, AiDock } from "ai_assistant.slint";
 
 export struct TableItem {
     name: string,
@@ -114,6 +115,23 @@ export component WorkspaceScreen inherits VerticalLayout {
                     variant: ButtonVariant.ghost;
                     accessible-label: "Visual query builder";
                     clicked => { BuilderState.open-requested(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                Button {
+                    text: "AI";
+                    has-icon: true;
+                    icon: Icons.sparkles;
+                    variant: AiState.visible ? ButtonVariant.secondary : ButtonVariant.ghost;
+                    accessible-label: "AI assistant";
+                    clicked => {
+                        if (AiState.visible) {
+                            AiState.close();
+                        } else {
+                            AiState.open-requested();
+                        }
+                    }
                 }
             }
             VerticalLayout {
@@ -439,6 +457,12 @@ export component WorkspaceScreen inherits VerticalLayout {
                 rows-error: root.rows-error;
                 has-result: root.has-result;
             }
+        }
+
+        // The assistant, beside the editor and results it works on. It sits
+        // below the header, so the header keeps its full width.
+        if AiState.visible: AiDock {
+            width: min(400px, root.width * 0.4);
         }
     }
 }

@@ -55,6 +55,9 @@ mod history_glue;
 // The Import / Export and Backup / Restore panels' controller halves.
 mod backup;
 mod import_export;
+// The AI assistant panel's controller half.
+mod ai_glue;
+pub use ai_glue::use_ai_key_store;
 // The Activity Monitor and Schema Migrations panels' controller halves.
 mod activity_glue;
 mod migrations_glue;
@@ -172,6 +175,7 @@ struct Session {
     table_dialog: table_dialog::DialogSession,
     erd: erd::ErdSession,
     designer: designer::DesignerSession,
+    ai: ai_glue::AiSession,
 }
 
 struct Ctx {
@@ -596,6 +600,8 @@ impl Ctx {
     }
 
     fn refresh_workspace(&self) {
+        // The assistant shows the active tab's query and error.
+        self.ai_refresh_for_editor();
         let Some(w) = self.window.upgrade() else { return };
         let s = self.session.borrow();
         let ws = &s.workspace;
@@ -747,6 +753,7 @@ impl Ctx {
     }
 
     fn leave_workspace(&self) {
+        self.ai_leave_workspace();
         self.hide_history_panel();
         self.hide_data_panel();
         self.hide_backup_panel();
@@ -1228,6 +1235,7 @@ impl Ctx {
             CommandId::ThemeToggle => self.toggle_theme_mode(),
             CommandId::GoImportExport => self.open_import_export(None),
             CommandId::GoBackup => self.open_backup_panel(),
+            CommandId::GoAiAssistant => self.ai_open(),
             // `status` only returns Enabled for the commands above.
             _ => return Outcome::Refused("Not available yet"),
         }
@@ -1647,6 +1655,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     table_dialog::wire(&window, &ctx);
     erd::wire(&window, &ctx);
     designer::wire(&window, &ctx);
+    ai_glue::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {

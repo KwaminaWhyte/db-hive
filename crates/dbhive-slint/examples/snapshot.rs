@@ -365,6 +365,7 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
         _ if name.starts_with("migrations") => migrations_window(name),
         _ if name.starts_with("builder") => builder_window(name),
         _ if name.starts_with("tabledialog") => table_dialog_window(name),
+        _ if name.starts_with("ai-") => ai_window(name),
         other => {
             eprintln!("unknown component {:?}", other);
             std::process::exit(2);
@@ -2090,6 +2091,225 @@ fn designer_window(name: &str) -> Box<dyn std::any::Any> {
 
 fn email_index(d: &dbhive_ui_model::designer_session::Designer) -> usize {
     d.tables[0].columns.iter().position(|c| c.base.name == "email").unwrap_or(0)
+}
+
+// -- AI assistant -----------------------------------------------------------------
+//
+// Variants: ai-answers (a conversation: generate, fix, explain), ai-empty (ready, no
+// conversation yet), ai-no-sql (empty editor), ai-busy, ai-failed (a provider
+// error in the conversation), ai-context (the schema viewer open),
+// ai-context-off (the schema switched off), ai-context-error, ai-models-error,
+// ai-models-loading, ai-key (no API key, settings open), ai-key-saved (settings
+// open with a key saved), ai-checking, ai-ollama (not running),
+// ai-unavailable, ai-long (long strings); each with an optional `-light`.
+// The panel is docked in the workspace, so the workspace is the backdrop.
+
+const AI_EDITOR_SQL: &str = "SELECT c.name, SUM(o.total) AS revenue\n  FORM orders o\n  JOIN customers c ON c.id = o.customer_id\n GROUP BY c.name\n ORDER BY revenue DESC;";
+const AI_EDITOR_ERROR: &str = "syntax error at or near \"FORM\" (position 41)";
+
+fn ai_models() -> Vec<dbhive_core::ai::AiModel> {
+    use dbhive_core::ai::{AiModel, AiProviderType};
+    ["gpt-4o", "gpt-4o-mini", "o1-mini"]
+        .iter()
+        .map(|id| AiModel {
+            id: (*id).into(),
+            name: id.to_uppercase().replace("GPT-4O", "GPT-4o").replace("-MINI", " Mini"),
+            provider: AiProviderType::OpenAI,
+            description: Some("128K context".into()),
+            context_window: Some(128_000),
+        })
+        .collect()
+}
+
+fn ai_sample_context() -> String {
+    use dbhive_core::service_ai::{build_schema_context, SchemaColumn, SchemaTable};
+    let col = |n: &str, t: &str| SchemaColumn { name: n.into(), data_type: t.into() };
+    let tables = vec![
+        SchemaTable {
+            schema: "public".into(),
+            table: "customers".into(),
+            columns: vec![col("id", "integer"), col("name", "text"), col("email", "text"), col("created_at", "timestamp")],
+        },
+        SchemaTable {
+            schema: "public".into(),
+            table: "orders".into(),
+            columns: vec![col("id", "integer"), col("customer_id", "integer"), col("total", "numeric"), col("status", "text")],
+        },
+    ];
+    build_schema_context("app", &tables)
+}
+
+fn ai_response(content: &str, ms: u64) -> dbhive_core::service_ai::AiResponse {
+    dbhive_core::service_ai::AiResponse {
+        content: content.into(),
+        model: "gpt-4o".into(),
+        provider: dbhive_core::ai::AiProviderType::OpenAI,
+        duration_ms: ms,
+    }
+}
+
+/// A panel on OpenAI that is connected, with models and the schema loaded.
+fn ai_ready_panel() -> dbhive_ui_model::ai_panel::AiPanel {
+    use dbhive_core::ai::AiProviderType::OpenAI;
+    use dbhive_core::service_ai::{AiSettings, ProviderStatus};
+    let mut p = dbhive_ui_model::ai_panel::AiPanel::default();
+    let mut settings = AiSettings::default();
+    settings.active_provider = OpenAI;
+    settings.openai.default_model = "gpt-4o".into();
+    p.settings_result(Ok(settings));
+    p.status_result(OpenAI, ProviderStatus { provider: OpenAI, available: true, configured: true });
+    p.begin_models();
+    p.models_result(OpenAI, Ok(ai_models()));
+    let key = ("conn".to_string(), "app".to_string());
+    p.begin_context(key.clone());
+    p.context_result(&key, Ok(ai_sample_context()));
+    p
+}
+
+fn ai_window(name: &str) -> Box<dyn std::any::Any> {
+    use dbhive_core::ai::AiProviderType::{self, OpenAI};
+    use dbhive_core::service_ai::ProviderStatus;
+    use dbhive_ui_model::ai_assistant::Kind;
+    use dbhive_ui_model::ai_panel::Inputs;
+
+    let light = name.ends_with("-light");
+    let base = name.strip_suffix("-light").unwrap_or(name);
+
+    let c = AppWindow::new().expect("AppWindow");
+    if light {
+        c.global::<Theme>().set_dark(false);
+    }
+    c.set_screen(Screen::Workspace);
+    c.set_workspace_connection_name("Production Postgres".into());
+    c.set_workspace_location_label("app · public".into());
+    let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products"]
+        .iter()
+        .map(|n| TableItem { name: (*n).into(), row_count: "~1240".into() })
+        .collect();
+    c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
+    c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![TabInfo {
+        title: "Query 1".into(),
+        query: true,
+        busy: false,
+    }])));
+    c.set_workspace_active_tab(0);
+    c.set_workspace_active_is_query(true);
+    c.set_workspace_result_title("Results".into());
+
+    // The editor holds a query with a typo, which failed, unless a variant
+    // says otherwise.
+    let blank_editor = base == "ai-no-sql";
+    let (sql, error): (&str, Option<&str>) = if blank_editor {
+        ("", None)
+    } else if base == "ai-long" {
+        (
+            "SELECT a_really_long_column_name_that_keeps_going_and_going_and_going_without_a_single_break_0001 FROM a_table_with_a_very_long_name_that_must_wrap_or_clip_not_overflow_the_panel",
+            Some("column \"a_really_long_column_name_that_keeps_going_and_going_and_going_without_a_single_break_0001\" does not exist and this message is long enough that it must be clipped to four lines at most in the panel so it never pushes the controls off the screen at all"),
+        )
+    } else {
+        (AI_EDITOR_SQL, Some(AI_EDITOR_ERROR))
+    };
+    if !sql.is_empty() {
+        let dark = c.global::<Theme>().get_dark();
+        c.set_workspace_editor_text(sql.into());
+        c.set_workspace_editor_lines(dbhive_slint::sql_highlight::to_model_for(sql, dark));
+    }
+    if let Some(e) = error {
+        c.set_workspace_rows_error(e.into());
+    }
+
+    let mut p = ai_ready_panel();
+    let mut prompt: &'static str = "";
+    let inputs = |prompt: &'static str| Inputs { current_sql: sql, last_error: error, prompt };
+
+    match base {
+        "ai-answers" | "ai-long" => {
+            // Generate, then fix the failed query, then explain it.
+            p.start(Kind::Generate, inputs("top customers by revenue"));
+            p.finish(
+                OpenAI,
+                Kind::Generate,
+                Ok(ai_response("```sql\nSELECT c.name, SUM(o.total) AS revenue\n  FROM orders o\n  JOIN customers c ON c.id = o.customer_id\n GROUP BY c.name\n ORDER BY revenue DESC\n LIMIT 10;\n```", 1240)),
+            );
+            if base == "ai-answers" {
+                p.start(Kind::Fix, inputs(""));
+                p.finish(
+                    OpenAI,
+                    Kind::Fix,
+                    Ok(ai_response("```sql\nSELECT c.name, SUM(o.total) AS revenue\n  FROM orders o\n  JOIN customers c ON c.id = o.customer_id\n GROUP BY c.name\n ORDER BY revenue DESC;\n```\nThe keyword is FROM, not FORM.", 880)),
+                );
+                p.start(Kind::Explain, inputs(""));
+                p.finish(
+                    OpenAI,
+                    Kind::Explain,
+                    Ok(ai_response("Totals every customer's paid orders and lists the biggest spenders first.\nThe join keeps only customers who have at least one order.", 2410)),
+                );
+            }
+            prompt = "top customers by revenue";
+        }
+        "ai-empty" | "ai-no-sql" => {}
+        "ai-busy" => {
+            p.start(Kind::Fix, inputs(""));
+        }
+        "ai-failed" => {
+            p.start(Kind::Optimize, inputs(""));
+            p.finish(OpenAI, Kind::Optimize, Err("OpenAI API error: Rate limit reached for gpt-4o. Please try again in 20s.".into()));
+        }
+        "ai-context" | "ai-context-off" => {
+            p.toggle_context_viewer();
+            if base == "ai-context-off" {
+                p.set_include_schema(false);
+            }
+        }
+        "ai-context-error" => {
+            let key = ("conn".to_string(), "other".to_string());
+            p.begin_context(key.clone());
+            p.context_result(&key, Err("permission denied for schema public".into()));
+            p.toggle_context_viewer();
+        }
+        "ai-models-error" => {
+            p.refresh_models();
+            p.begin_models();
+            p.models_result(OpenAI, Err("OpenAI API error: Incorrect API key provided".into()));
+        }
+        "ai-models-loading" => {
+            p.refresh_models();
+            p.begin_models();
+        }
+        "ai-key" | "ai-key-saved" => {
+            p.show_settings(true);
+            if base == "ai-key" {
+                p.status_result(OpenAI, ProviderStatus { provider: OpenAI, available: false, configured: false });
+            }
+        }
+        "ai-checking" => p.begin_status_check(),
+        "ai-ollama" => {
+            p.change_provider(AiProviderType::Ollama);
+            p.status_result(
+                AiProviderType::Ollama,
+                ProviderStatus { provider: AiProviderType::Ollama, available: false, configured: true },
+            );
+        }
+        "ai-unavailable" => {
+            p.status_result(OpenAI, ProviderStatus { provider: OpenAI, available: false, configured: true });
+        }
+        other => {
+            eprintln!("unknown AI variant {:?}", other);
+            std::process::exit(2);
+        }
+    }
+
+    let s = c.global::<AiState>();
+    s.set_visible(true);
+    s.set_prompt(prompt.into());
+    let view = p.view(inputs(prompt));
+    dbhive_slint::ai_view::apply(
+        &c,
+        &view,
+        &dbhive_slint::ai_view::Extras { sync_base_url: true, ..Default::default() },
+    );
+    c.show().unwrap();
+    Box::new(c)
 }
 
 fn main() {

@@ -7,6 +7,7 @@
 slint::include_modules!();
 
 pub mod activity_view;
+pub mod ai_view;
 pub mod app;
 pub mod backup_view;
 pub mod builder_view;
