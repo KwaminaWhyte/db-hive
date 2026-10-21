@@ -2729,6 +2729,57 @@ fn results_window(name: &str) -> Box<dyn std::any::Any> {
             g.set_can_export(true);
         }
         "results_running" => c.set_workspace_running(true),
+        // results_chart_bar, results_chart_line, results_chart_empty,
+        // results_chart_many (100 groups, capped).
+        "results_chart_bar" | "results_chart_line" | "results_chart_empty" | "results_chart_many" => {
+            use dbhive_ui_model::result_chart as ch;
+            let (cols, data): (Vec<String>, Vec<Vec<serde_json::Value>>) = if base == "results_chart_many" {
+                (
+                    vec!["day".into(), "orders".into()],
+                    (1..=140).map(|i| vec![serde_json::json!(format!("2026-{:02}-{:02}", 1 + i / 30, 1 + i % 28)), serde_json::json!(40 + (i * 37) % 90)]).collect(),
+                )
+            } else if base == "results_chart_empty" {
+                (vec!["name".into(), "email".into()], (1..=6).map(|i| vec![serde_json::json!(format!("C{i}")), serde_json::json!("x")]).collect())
+            } else {
+                (
+                    vec!["region".into(), "revenue".into()],
+                    ["North", "South", "East", "West", "Central", "Islands", "Overseas"]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, r)| vec![serde_json::json!(r), serde_json::json!(12000 + (i as i64 * 7919) % 9000 - 2000)])
+                        .collect(),
+                )
+            };
+            results_fill(&c, &cols, &data);
+            g.set_can_export(true);
+            g.set_mode(3);
+            let refs: Vec<&Vec<serde_json::Value>> = data.iter().collect();
+            let numeric = ch::numeric_columns(&cols, &refs);
+            g.set_chart_x_options(slint::ModelRc::new(slint::VecModel::from(cols.iter().map(|s| s.as_str().into()).collect::<Vec<slint::SharedString>>())));
+            g.set_chart_y_options(slint::ModelRc::new(slint::VecModel::from(numeric.iter().map(|&i| cols[i].as_str().into()).collect::<Vec<slint::SharedString>>())));
+            match ch::default_spec(&cols, &refs) {
+                None => g.set_chart_message("This result has no numeric column. Chart a query that returns numbers, or cast a column to one.".into()),
+                Some(mut spec) => {
+                    if base == "results_chart_line" || base == "results_chart_many" {
+                        spec.kind = ch::ChartKind::Line;
+                    }
+                    let agg = ch::aggregate(&refs, spec);
+                    let v = ch::build(&cols, &agg, spec).unwrap();
+                    g.set_chart_kind(spec.kind.index());
+                    g.set_chart_x(cols[spec.x].as_str().into());
+                    g.set_chart_y(cols[spec.y].as_str().into());
+                    g.set_chart_commands(v.commands.into());
+                    g.set_chart_area(v.area.into());
+                    g.set_chart_y_top(v.y_top.into());
+                    g.set_chart_y_mid(v.y_mid.into());
+                    g.set_chart_y_bottom(v.y_bottom.into());
+                    g.set_chart_x_start(v.x_start.into());
+                    g.set_chart_x_end(v.x_end.into());
+                    g.set_chart_caption(v.caption.into());
+                    g.set_chart_notice(v.notice.into());
+                }
+            }
+        }
         "results_error" | "results_error_open" | "results_error_long" => {
             let raw = if base == "results_error_long" {
                 "Query execution failed: error returned from database: 42703: column \"c.nmae\" does not exist at character 8; hint: Perhaps you meant to reference the column \"c.name\". The planner could not build a plan for the statement because the column list of the relation \"customers\" does not include the requested name, and no other relation in the FROM clause provides it."

@@ -12,6 +12,9 @@ use std::rc::Rc;
 
 use dbhive_core::drivers::QueryResult;
 use dbhive_ui_model::data_forms::expand_home;
+use dbhive_ui_model::result_chart::{
+    aggregate, build as chart_build, default_spec, numeric_columns, ChartKind, ChartSpec,
+};
 use dbhive_ui_model::result_export::{
     self as rx, check_path, describe_error, error_clipboard, json_view, scope_note, text_tsv,
     text_view, truncation_notice, ExportScope, PathCheck, ResultFormat, ViewMode, VIEW_ROW_CAP,
@@ -35,6 +38,8 @@ struct ViewKey {
     mode: ViewMode,
     filter: String,
     sort: Option<(usize, bool)>,
+    /// The chart's columns and kind, for Chart mode.
+    chart: Option<ChartSpec>,
 }
 
 /// The export dialog's state.
@@ -72,6 +77,9 @@ pub(super) struct ResultsSession {
     /// The view each query tab was left in.
     modes: HashMap<u64, ViewMode>,
     built: Option<ViewKey>,
+    /// Each query tab's chart: the run it was chosen for, the spec, and which
+    /// columns are numeric (what the Sum-of picker offers).
+    chart: HashMap<u64, (u64, ChartSpec, Vec<usize>)>,
     /// Which failed run the error panel last showed, so a new failure starts
     /// with the query folded away again.
     error_for: Option<(u64, u64)>,
@@ -193,14 +201,76 @@ impl Ctx {
             return;
         }
         let Some(result) = &tab.result else { return };
-        let key = ViewKey {
+        let stored = s
+            .results
+            .chart
+            .get(&tab.id)
+            .filter(|c| c.0 == tab.run_seq)
+            .map(|c| c.1);
+        let mut key = ViewKey {
             tab: tab.id,
             run_seq: tab.run_seq,
             mode,
             filter: tab.grid.filter.clone(),
             sort: tab.grid.sort,
+            chart: if mode == ViewMode::Chart { stored } else { None },
         };
         if s.results.built.as_ref() == Some(&key) {
+            return;
+        }
+        if mode == ViewMode::Chart {
+            let order = visible_rows(result, &tab.grid);
+            let rows: Vec<&Vec<Value>> = order.iter().map(|&i| &result.rows[i]).collect();
+            let numeric = numeric_columns(&result.columns, &rows);
+            let spec = stored.or_else(|| default_spec(&result.columns, &rows));
+            g.set_view_lines(no_lines());
+            g.set_view_notice("".into());
+            g.set_chart_x_options(string_model(&result.columns));
+            g.set_chart_y_options(string_model(
+                &numeric.iter().map(|&c| result.columns[c].clone()).collect::<Vec<_>>(),
+            ));
+            let mut message = String::new();
+            match spec {
+                None => {
+                    message = "This result has no numeric column. Chart a query that returns numbers, or cast a column to one.".into();
+                    g.set_chart_x("".into());
+                    g.set_chart_y("".into());
+                }
+                Some(sp) => {
+                    s.results.chart.insert(tab.id, (tab.run_seq, sp, numeric));
+                    g.set_chart_kind(sp.kind.index());
+                    g.set_chart_x(result.columns[sp.x].as_str().into());
+                    g.set_chart_y(result.columns[sp.y].as_str().into());
+                    let data = aggregate(&rows, sp);
+                    match chart_build(&result.columns, &data, sp) {
+                        Some(v) => {
+                            g.set_chart_commands(v.commands.into());
+                            g.set_chart_area(v.area.into());
+                            g.set_chart_y_top(v.y_top.into());
+                            g.set_chart_y_mid(v.y_mid.into());
+                            g.set_chart_y_bottom(v.y_bottom.into());
+                            g.set_chart_x_start(v.x_start.into());
+                            g.set_chart_x_end(v.x_end.into());
+                            g.set_chart_caption(v.caption.into());
+                            g.set_chart_notice(v.notice.into());
+                        }
+                        None => {
+                            message = format!(
+                                "Every row has an empty {} to add up, or the result has no rows.",
+                                result.columns[sp.y]
+                            );
+                        }
+                    }
+                }
+            }
+            if !message.is_empty() {
+                g.set_chart_commands("".into());
+                g.set_chart_area("".into());
+                g.set_chart_notice("".into());
+            }
+            g.set_chart_message(message.into());
+            key.chart = spec;
+            s.results.built = Some(key);
             return;
         }
         let (lines, style, max_columns, notice) = build_view(result, tab, mode);
@@ -289,13 +359,31 @@ impl Ctx {
             match mode {
                 ViewMode::Json => Some((json_view(&columns, &rows, VIEW_ROW_CAP).joined(), "JSON")),
                 ViewMode::Text => Some((text_tsv(&columns, &rows, VIEW_ROW_CAP), "text")),
-                ViewMode::Table => None,
+                ViewMode::Table | ViewMode::Chart => None,
             }
         };
         if let Some((text, what)) = copied {
             w.invoke_copy_to_clipboard(text.as_str().into());
             self.toast(format!("Copied the {what} view"), Tone::Success);
         }
+    }
+
+    // -- Chart --------------------------------------------------------------------
+
+    /// Change the active tab's chart spec, then redraw. `f` gets the spec and
+    /// the numeric column indices the Sum-of picker offers.
+    fn results_chart_edit(&self, f: impl FnOnce(&mut ChartSpec, &[usize])) {
+        {
+            let mut guard = self.session.borrow_mut();
+            let s = &mut *guard;
+            let Some(tab) = s.workspace.tabs.active() else { return };
+            let Some((seq, spec, numeric)) = s.results.chart.get_mut(&tab.id) else { return };
+            if *seq != tab.run_seq {
+                return;
+            }
+            f(spec, numeric);
+        }
+        self.results_refresh();
     }
 
     // -- Error --------------------------------------------------------------------
@@ -478,6 +566,12 @@ impl Ctx {
     }
 }
 
+fn string_model(items: &[String]) -> ModelRc<slint::SharedString> {
+    ModelRc::new(VecModel::from(
+        items.iter().map(|s| s.as_str().into()).collect::<Vec<slint::SharedString>>(),
+    ))
+}
+
 /// The columns and the first [`VIEW_ROW_CAP`] rows of the grid's order.
 fn capped_rows(result: &QueryResult, tab: &Tab) -> (Vec<String>, Vec<Vec<Value>>) {
     let order = visible_rows(result, &tab.grid);
@@ -521,6 +615,13 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
 
     on!(on_mode_picked, |c, i| c.results_mode_picked(i));
     on!(on_view_copy, |c| c.results_view_copy());
+    on!(on_chart_kind_picked, |c, i| c.results_chart_edit(|s, _| s.kind = ChartKind::at(i)));
+    on!(on_chart_x_picked, |c, i| c.results_chart_edit(|s, _| s.x = i.max(0) as usize));
+    on!(on_chart_y_picked, |c, i| c.results_chart_edit(|s, numeric| {
+        if let Some(&col) = usize::try_from(i).ok().and_then(|i| numeric.get(i)) {
+            s.y = col;
+        }
+    }));
     on!(on_error_retry, |c| c.run_active_tab());
     on!(on_error_copy, |c| c.results_error_copy());
     on!(on_error_toggle_query, |c| {

@@ -1,4 +1,4 @@
-import { Theme, Icons, Tone, ButtonVariant, Button, Segmented, Banner, ResultViewLine, ResultViewText, ResultViewError, ExportDialog } from "../kit/kit.slint";
+import { Theme, Icons, Tone, ButtonVariant, Button, Segmented, Banner, Dropdown, EmptyState, ChartPlot, ResultViewLine, ResultViewText, ResultViewError, ExportDialog } from "../kit/kit.slint";
 
 // What the results area adds around the grid: a Table / JSON / Text switch,
 // the JSON and Text views, a structured query error, and the export dialog.
@@ -15,6 +15,24 @@ export global ResultsState {
     in property <string> view-notice;
     // The active tab holds a result with columns, and nothing is running.
     in property <bool> can-export;
+
+    // Chart mode (mode 3): a bar or line of one numeric column per group.
+    in property <int> chart-kind;
+    in property <[string]> chart-x-options;
+    in property <[string]> chart-y-options;
+    in property <string> chart-x;
+    in property <string> chart-y;
+    in property <string> chart-commands;
+    in property <string> chart-area;
+    in property <string> chart-y-top;
+    in property <string> chart-y-mid;
+    in property <string> chart-y-bottom;
+    in property <string> chart-x-start;
+    in property <string> chart-x-end;
+    in property <string> chart-caption;
+    in property <string> chart-notice;
+    // Set instead of a plot when there is nothing to draw.
+    in property <string> chart-message;
 
     // The failed query, split into a headline and the driver's message.
     in property <string> error-headline;
@@ -38,6 +56,9 @@ export global ResultsState {
 
     callback mode-picked(int);
     callback view-copy;
+    callback chart-kind-picked(int);
+    callback chart-x-picked(int);
+    callback chart-y-picked(int);
     callback error-retry;
     callback error-copy;
     callback error-toggle-query;
@@ -56,12 +77,12 @@ export component ResultsModeBar inherits HorizontalLayout {
     VerticalLayout {
         alignment: center;
         Segmented {
-            options: ["Table", "JSON", "Text"];
+            options: ["Table", "JSON", "Text", "Chart"];
             selected: ResultsState.mode;
             picked(i) => { ResultsState.mode-picked(i); }
         }
     }
-    if ResultsState.mode != 0: VerticalLayout {
+    if ResultsState.mode == 1 || ResultsState.mode == 2: VerticalLayout {
         alignment: center;
         Button {
             has-icon: true;
@@ -96,17 +117,101 @@ export component ResultsExportButton inherits Button {
     clicked => { ResultsState.export-open(); }
 }
 
-// The JSON or Text view of a result, with the truncation notice underneath.
-// Its Copy button lives in the mode bar, to keep the pane's height.
+// A bar or line chart of one numeric column per group, with its pickers.
+component ResultsChartPane inherits VerticalLayout {
+    spacing: 8px;
+    HorizontalLayout {
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            Segmented {
+                options: ["Bar", "Line"];
+                selected: ResultsState.chart-kind;
+                picked(i) => { ResultsState.chart-kind-picked(i); }
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: "Group by";
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+            }
+        }
+        Dropdown {
+            width: 150px;
+            options: ResultsState.chart-x-options;
+            value: ResultsState.chart-x;
+            selected(i) => { ResultsState.chart-x-picked(i); }
+        }
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: "Sum of";
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+            }
+        }
+        Dropdown {
+            width: 150px;
+            enabled: ResultsState.chart-y-options.length > 0;
+            options: ResultsState.chart-y-options;
+            value: ResultsState.chart-y;
+            selected(i) => { ResultsState.chart-y-picked(i); }
+        }
+        // What is plotted, in the pickers' row to save height.
+        if ResultsState.chart-message == "": Text {
+            horizontal-stretch: 1;
+            text: ResultsState.chart-caption;
+            color: Theme.muted-foreground;
+            font-size: Theme.size-small;
+            horizontal-alignment: right;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if ResultsState.chart-message != "": Rectangle { horizontal-stretch: 1; }
+    }
+    if ResultsState.chart-message != "": EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.layout-grid;
+        title: "Nothing to chart";
+        message: ResultsState.chart-message;
+    }
+    if ResultsState.chart-message == "": ChartPlot {
+        vertical-stretch: 1;
+        plot-height: 64px;
+        kind: ResultsState.chart-kind;
+        commands: ResultsState.chart-commands;
+        area: ResultsState.chart-area;
+        y-top: ResultsState.chart-y-top;
+        y-mid: ResultsState.chart-y-mid;
+        y-bottom: ResultsState.chart-y-bottom;
+        x-start: ResultsState.chart-x-start;
+        x-end: ResultsState.chart-x-end;
+        label: ResultsState.chart-caption;
+    }
+    if ResultsState.chart-notice != "": Banner {
+        message: ResultsState.chart-notice;
+        tone: Tone.warning;
+        dismissible: false;
+    }
+}
+
+// The JSON, Text or Chart view of a result. JSON and Text show a truncation
+// notice underneath; their Copy button lives in the mode bar, to keep the
+// pane's height.
 export component ResultsViewPane inherits VerticalLayout {
     spacing: 8px;
-    ResultViewText {
+    if ResultsState.mode == 3: ResultsChartPane {
+        vertical-stretch: 1;
+    }
+    if ResultsState.mode != 3: ResultViewText {
         vertical-stretch: 1;
         lines: ResultsState.view-lines;
         max-columns: ResultsState.view-max-columns;
         label: ResultsState.mode == 1 ? "Results as JSON" : "Results as text";
     }
-    if ResultsState.view-notice != "": Banner {
+    if ResultsState.mode != 3 && ResultsState.view-notice != "": Banner {
         message: ResultsState.view-notice;
         tone: Tone.warning;
         dismissible: false;

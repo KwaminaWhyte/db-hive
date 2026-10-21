@@ -359,16 +359,19 @@ pub enum ViewMode {
     Table,
     Json,
     Text,
+    /// A bar or line chart (`result_chart`).
+    Chart,
 }
 
 impl ViewMode {
-    pub const ALL: [ViewMode; 3] = [ViewMode::Table, ViewMode::Json, ViewMode::Text];
+    pub const ALL: [ViewMode; 4] = [ViewMode::Table, ViewMode::Json, ViewMode::Text, ViewMode::Chart];
 
     pub fn label(self) -> &'static str {
         match self {
             ViewMode::Table => "Table",
             ViewMode::Json => "JSON",
             ViewMode::Text => "Text",
+            ViewMode::Chart => "Chart",
         }
     }
 
@@ -944,6 +947,7 @@ mod tests {
         }
         assert_eq!(ViewMode::at(-1), ViewMode::Table);
         assert_eq!(ViewMode::at(9), ViewMode::Table);
+        assert_eq!(ViewMode::at(3), ViewMode::Chart);
     }
 
     // -- Highlighting -------------------------------------------------------------

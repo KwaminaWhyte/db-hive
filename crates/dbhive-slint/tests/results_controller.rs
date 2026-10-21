@@ -138,6 +138,29 @@ fn view_modes_error_state_and_export_on_a_real_database() {
                 let runs: Vec<(String, i32)> = line.runs.iter().map(|r| (r.text.to_string(), r.kind)).collect();
                 expect!(runs.contains(&("\"name\"".into(), 1)), "the key should be coloured as a key: {runs:?}");
                 expect!(runs.contains(&("\"plain\"".into(), 2)), "the value should be coloured as a string: {runs:?}");
+                g.invoke_mode_picked(3);
+                step2.set(30);
+            }
+
+            // -- Chart: defaults, kind, X column -----------------------------------
+            30 if g.get_mode() == 3 && !g.get_chart_commands().is_empty() => {
+                // id is the only numeric column; name is the first text one.
+                expect!(g.get_chart_x() == "name" && g.get_chart_y() == "id", "defaults were {} / {}", g.get_chart_x(), g.get_chart_y());
+                expect!(g.get_chart_caption() == "Sum of id by name, 6 groups", "caption was {:?}", g.get_chart_caption());
+                expect!(g.get_chart_commands().matches('Z').count() == 6, "one bar per group: {}", g.get_chart_commands());
+                expect!(g.get_chart_y_options().row_count() == 1, "only id can be summed");
+                expect!(g.get_chart_x_options().row_count() == 3, "any column can be grouped by");
+                expect!(g.get_chart_message().is_empty(), "there is something to draw");
+                g.invoke_chart_kind_picked(1);
+                step2.set(31);
+            }
+            31 if g.get_chart_kind() == 1 && !g.get_chart_area().is_empty() => {
+                expect!(g.get_chart_commands().starts_with("M ") && !g.get_chart_commands().contains('Z'), "a line, not bars: {}", g.get_chart_commands());
+                g.invoke_chart_x_picked(2);
+                step2.set(32);
+            }
+            32 if g.get_chart_x() == "note" => {
+                expect!(g.get_chart_caption() == "Sum of id by note, 6 groups", "caption was {:?}", g.get_chart_caption());
                 g.invoke_mode_picked(2);
                 step2.set(4);
             }
@@ -375,6 +398,18 @@ fn view_modes_error_state_and_export_on_a_real_database() {
             }
             28 if w.get_workspace_active_is_query() => {
                 expect!(g.get_mode() == 1, "the query tab should still be in JSON mode, got {}", g.get_mode());
+                run_sql("SELECT name FROM items");
+                step2.set(40);
+            }
+
+            // -- A result with no number cannot be charted, and says so ----------------
+            40 if settled(&w) && w.get_workspace_row_count() == 6 && w.get_workspace_has_result() => {
+                g.invoke_mode_picked(3);
+                step2.set(41);
+            }
+            41 if g.get_mode() == 3 => {
+                expect!(g.get_chart_message().contains("no numeric column"), "message was {:?}", g.get_chart_message());
+                expect!(g.get_chart_commands().is_empty(), "nothing is drawn without a number");
                 step2.set(99);
                 slint::quit_event_loop().unwrap();
             }
