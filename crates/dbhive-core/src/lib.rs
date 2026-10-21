@@ -27,6 +27,7 @@ pub mod service_import_export;
 pub mod service_migrations;
 pub mod service_monitoring;
 pub mod service_procedures;
+pub mod service_schema;
 pub mod service_updater;
 pub mod settings;
 pub mod ssh;
