@@ -4,13 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## READ FIRST: which UI is current
 
-The UI stack has changed twice (Tauri+React, then egui, then Slint). This
-file's architecture sections below still describe the **egui shell**
-(`crates/dbhive-app`), which is the feature-complete app until the Slint
-cutover. The **Slint shell** (`crates/dbhive-slint`, branch `slint-ui`, plan in
-`docs/slint-migration/plan.md`) is the target and is partly built (Phase 3 of
-7: connections screen and a read-only table preview; no SQL editor screen,
-inspector or diagram wired yet).
+The UI stack has changed twice (Tauri+React, then egui, then Slint). The
+**egui shell** (`crates/dbhive-app`) is the feature-complete app until the
+Slint cutover. The **Slint shell** (`crates/dbhive-slint`, branch `slint-ui`)
+is the target; status per phase is in `docs/slint-migration/plan.md`.
 
 - **Do not change UI toolkit again.** The toolkit was never the cause of the
   "looks bad" problem. Read `docs/ui-guidelines.md` section 1 before proposing it.
@@ -20,29 +17,34 @@ inspector or diagram wired yet).
   with logic in `crates/dbhive-ui-model` (no UI types) and `dbhive-core`.
   Do not add screens to `dbhive-app` unless fixing a bug there.
 
+## Verify
+
+Run before saying a change is done:
+
+```bash
+cargo fmt --all --check                             # ~1s; tree is clean, keep it that way
+cargo check --workspace                             # <1s warm
+cargo clippy --workspace                            # ~100s warm, ~220 warnings today; do not add new ones
+cargo test --workspace -- --skip credentials::tests # ~4.5min warm, 1696 pass; same filter as CI
+```
+
+Hooks in `.claude/settings.json`: `rustfmt --edition 2021` on every edited
+`.rs` file, and `cargo check --workspace` on Stop.
+
 ## Project Overview
 
 DB Hive is a cross-platform database client: a **native Rust desktop app**
-(egui today, Slint in progress), supporting PostgreSQL, MySQL, SQLite, MongoDB,
-Redis, SQL Server and Turso.
-
-It was originally Tauri 2.0 + React 19 and was migrated to a single native
-binary. The reason was measured, not aesthetic: the Tauri build ran four
-processes and 400-650 MB idle, of which the WebView and its two helpers were
-about 90%. The native build runs one process at 111-130 MB. See
-`docs/rust-ui-migration/` for the measurements, the plan and the parity
-inventory.
+supporting PostgreSQL, MySQL, SQLite, MongoDB, Redis, SQL Server and Turso.
+It was Tauri 2.0 + React 19 and moved to one native binary to cut idle memory
+from 400-650 MB to 111-130 MB (`docs/rust-ui-migration/`).
 
 ## Commands
 
 ```bash
-cargo run -p dbhive-app              # run the app
+cargo run -p dbhive-slint            # run the Slint shell (target)
+cargo run -p dbhive-app              # run the egui shell
 cargo build --release -p dbhive-app  # release binary at target/release/dbhive
 ./packaging/build-macos-app.sh       # assemble and sign DB Hive.app
-
-cargo check --workspace
-cargo test --workspace
-cargo fmt
 
 cargo run -p dbhive-app --example smoke -- "Local MySQL"   # end-to-end check
 ```
@@ -50,53 +52,41 @@ cargo run -p dbhive-app --example smoke -- "Local MySQL"   # end-to-end check
 There is no Node, npm or bundler. Do not add one.
 
 Three `credentials::tests::*` failures are expected on macOS: they exercise
-the real OS keyring, which the system denies to an unsigned test binary. They
-fail identically at commit c57b24e, before the migration. Do not "fix" them
-by weakening the tests.
+the real OS keyring, which the system denies to an unsigned test binary. Do
+not "fix" them by weakening the tests; skip them as in Verify.
 
 Development aids, all unset in normal use: `DBHIVE_AUTOCONNECT`,
 `DBHIVE_AUTODB`, `DBHIVE_AUTOQUERY`, `DBHIVE_AUTOSCREEN`,
-`DBHIVE_AUTOWINDOWS`, `DBHIVE_DEV_WINDOW`, `DBHIVE_LOG_VIEWPORTS`.
+`DBHIVE_AUTOWINDOWS`, `DBHIVE_DEV_WINDOW`, `DBHIVE_LOG_VIEWPORTS`,
+`DBHIVE_PLUGIN_SOURCES`.
 
 ## Architecture
 
 ```
-crates/dbhive-core   UI-agnostic. drivers, DDL, SSH, credentials,
-                     migrations, AI, plugins, AppState, storage, and the
-                     service_* layer. No egui, no UI types.
-crates/dbhive-app    the egui shell. screens/, widgets/, task, theme.
+crates/dbhive-core      UI-agnostic. drivers, DDL, SSH, credentials,
+                        migrations, AI, plugins, AppState, storage, and the
+                        service_* layer. No UI types.
+crates/dbhive-ui-model  UI-independent view logic shared by both shells:
+                        SQL builders, validation, layout, formatting, panel
+                        state machines. Depends on dbhive-core only. Unit
+                        tested; no Slint or egui types.
+crates/dbhive-slint     the Slint shell (target). ui/ holds .slint files
+                        (kit/, screens/, dialogs/, icons/); src/ holds the
+                        controllers. build.rs generates theme.slint from
+                        dbhive-ui-model/src/tokens.rs and icons.slint from
+                        ui/icons/*.svg. tests/*_controller.rs drive real
+                        windows against real SQLite files.
+crates/dbhive-app       the egui shell (maintenance only).
 ```
 
-**Read `docs/rust-ui-migration/03-conventions.md` before adding a screen.**
-The rules there are not style preferences; each exists because the
-alternative broke something. The three that matter most:
+Business logic belongs in `dbhive-core` or `dbhive-ui-model`, never in a
+screen or controller. Operations both shells need live in
+`dbhive_core::service*`.
 
-1. **Never block the frame.** `eframe::App::update` runs every frame. All
-   database work goes through `crate::task::Job`, which spawns on Tokio and
-   is polled from the frame loop, and requests a repaint on completion.
-2. **Never hold the `AppState` lock across drawing.** Copy what you need,
-   drop the guard, then draw. Clone the `Arc<dyn DatabaseDriver>` out of
-   state and drop the guard before any await.
-3. **Never use `RichText::strong()` directly.** egui resolves it from
-   `widgets.active.fg_stroke`, which this palette uses for text on the honey
-   primary, so bold text comes out near-invisible on dark cards. Use
-   `theme::text::{strong, heading, muted}`.
-
-Business logic belongs in `dbhive-core`, never in a screen. Operations both
-the UI and any future shell need live in `dbhive_core::service*`.
-
-### Multi-window
-
-Extra windows are egui **immediate viewports**, rendered inside the same
-`update()` call, which is what lets them borrow the app. Per-window state
-(screen, workspace, screens, connections, toasts) is swapped in and out
-around each viewport's frame, so the active window's state stays inline on
-`DbHiveApp` as ordinary fields and screens keep their `app.screens` field
-access.
-
-The Tokio runtime and `AppState` are shared across windows, deliberately:
-two windows on the same connection reuse one pool rather than opening a
-second. Do not make connections per window.
+Never block the UI thread: database work spawns on the shared Tokio runtime.
+Never hold the `AppState` lock across an await or a redraw: clone the
+`Arc<dyn DatabaseDriver>` out and drop the guard. For the egui shell, read
+`docs/rust-ui-migration/03-conventions.md` before touching a screen.
 
 ### Persistence
 
@@ -106,8 +96,9 @@ location `tauri_plugin_store` used
 equivalents), so an existing installation keeps its connections, history and
 snippets. Do not change `APP_IDENTIFIER`; it orphans every user's data.
 
-Passwords go to the OS keyring via `credentials::CredentialManager`, never
-to the JSON stores.
+Passwords and API keys go to the OS keyring via
+`credentials::CredentialManager`, never to the JSON stores, a view, a toast
+or a log.
 
 ### SQL construction
 
@@ -118,127 +109,43 @@ test that builds a table named `t"; DROP TABLE users; --` and asserts
 nothing escapes the quoting in any of the four dialects. Do not build SQL by
 concatenating user text.
 
-## Sub-Agents System
+## Agents and skills
 
-`.claude/agents/` holds specialised sub-agents. They were written for the
-Tauri + React codebase and were updated for the native stack:
+`.claude/agents/`: `rust-backend-dev`, `db-driver-specialist`,
+`test-engineer`, `tech-writer`. `.claude/skills/`: `database-driver`.
 
-| Agent | Use for |
-| --- | --- |
-| `rust-backend-dev` | `dbhive-core` logic and `dbhive-app` screens |
-| `db-driver-specialist` | drivers, metadata queries, dialect differences |
-| `test-engineer` | unit and integration tests |
-| `tech-writer` | documentation |
-| `react-ui-dev` | **obsolete**, there is no React in this project |
-
-When farming a screen out to an agent, give it
-`docs/rust-ui-migration/03-conventions.md` and tell it which single file it
-may edit. Parallel agents editing shared files (`app.rs`, `screens/mod.rs`,
-`lib.rs`, `Cargo.toml`) will collide; have them report the wiring they need
-instead and apply it yourself.
-
-## Skills System
-
-`.claude/skills/` holds reusable patterns. `database-driver` still applies.
-`react-component` is obsolete. `tauri-command` is obsolete: its replacement
-is a plain function in `dbhive_core::service*` taking `&Mutex<AppState>`.
+When farming work out to parallel agents, tell each which files it may edit.
+Shared files (`app.rs`, `lib.rs`, `ui/app.slint`, `Cargo.toml`) collide; have
+agents report the wiring they need and apply it yourself.
 
 ## Security Model
 
-1. **Credentials**: Stored in OS keyring (via `keyring` crate), never in plaintext
-2. **State**: Sensitive data only in Rust (Core process), never in frontend
-3. **Validation**: All user input validated before SQL execution
-4. **Network**: TLS/SSL support for DB connections, SSH tunneling for remote access
-
-## Error Handling Pattern
-
-Custom error types with serialization for IPC:
-
-```rust
-#[derive(Debug, thiserror::Error)]
-pub enum DbError {
-    #[error("Connection failed: {0}")]
-    ConnectionError(String),
-    #[error("Query failed: {0}")]
-    QueryError(String),
-    // ...
-}
-
-impl serde::Serialize for DbError {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        // Serialize as { kind: "connection", message: "..." }
-    }
-}
-```
-
-Frontend receives typed errors:
-```typescript
-interface DbError {
-    kind: 'connection' | 'query' | 'auth' | ...;
-    message: string;
-}
-```
+1. **Credentials**: OS keyring (via `keyring` crate), never in plaintext.
+2. **Validation**: all user input validated before SQL execution.
+3. **Network**: TLS/SSL for DB connections, SSH tunneling for remote access.
+4. **Plugins**: JavaScript on boa_engine that declares its UI as data; the
+   host renders it natively, so a plugin cannot draw arbitrary UI.
 
 ## Development Workflow
 
-1. **Logic first, in `crates/dbhive-core`.** Models, drivers, and the
-   `service*` operations, with unit tests.
-2. **Then the screen, in `crates/dbhive-app/src/screens/`.** Compose the
-   shared widgets (`results_grid`, `sql_editor`, `file_dialog`, `toast`);
-   do not write a second table or editor.
-3. **Wire it in `app.rs`**: the screen dispatch chain, a `CommandId` arm,
-   and a menu entry if it deserves one.
-4. **Verify against a real database.** `cargo test` does not prove a driver
-   works; the smoke example does.
+1. **Logic first**, in `dbhive-core` or `dbhive-ui-model`, with unit tests.
+2. **Then the screen**, in `crates/dbhive-slint/ui/screens/`, from kit parts
+   only, plus its controller in `src/`.
+3. **Verify against a real database.** `cargo test` does not prove a driver
+   works; the controller tests and the smoke example do. Screenshot the
+   screen and look at it.
 
 ## Important Configuration
 
-- **Workspace root `Cargo.toml`** holds the release profile. Cargo ignores
-  profiles declared on non-root workspace members, so it must live there.
-- **`crates/dbhive-app/Cargo.toml`**: eframe with `accesskit` (screen
-  reader support, deliberately kept), `wgpu` and `persistence`.
+- **Workspace root `Cargo.toml`** holds the build profiles. Cargo ignores
+  profiles declared on non-root workspace members.
 - **Rust**: edition 2021.
-
-## Testing Strategy
-
-- Pure logic (SQL generation, filtering, sorting, parsing, validation) is
-  unit tested in the same file. Drawing code is not tested.
-- If a function is hard to test because it is tangled with `ui`, split the
-  logic out. That is the point.
-- `cargo run -p dbhive-app --example smoke` exercises the real path end to
-  end against a live database.
-
-```bash
-cargo test --workspace
-cargo run -p dbhive-app --example smoke -- "Local MySQL"
-```
-
-## Key Design Decisions
-
-1. **egui + eframe**: one native binary, no WebView. Chosen for what it
-   already ships that this app needs: `egui_extras::TableBuilder` for the
-   results grid, `egui_plot` for charts, AccessKit for screen readers, and
-   multi-viewport for the multi-window model.
-2. **One shared core**: `dbhive-core` has no UI dependency, so the logic is
-   testable without a window and reusable by any other shell.
-3. **Async through a Job, never a block**: see the conventions doc.
-4. **Layered graph layout in `widgets::graph_layout`** replaces dagre for
-   the ER diagram and schema designer. There is no Rust equivalent to lean
-   on, so it is hand written and unit tested.
-5. **Schema-driven plugin UI**: plugins are JavaScript on boa_engine and
-   declare their UI as data, which the host renders natively. They cannot
-   render arbitrary UI, which is also a security property.
-6. **Streaming and pagination over unbounded reads**: results are capped at
-   `MAX_RESULT_ROWS` (50,000) and the table inspector pages.
+- Results are capped at `MAX_RESULT_ROWS` (50,000); table views page.
 
 ## Documentation References
 
-- **Migration record**: `docs/rust-ui-migration/`
-  - `00-baseline-measurements.md` measured memory, before and after
-  - `01-frontend-inventory.md` what parity meant, referenced from the screens
-  - `03-conventions.md` **read before adding a screen**
-  - `04-plan.md` status and the parity items that cannot be met as specified
-- **Original design**: `docs/base-plan.md`
+- `docs/slint-migration/plan.md`: Slint cutover plan and status
+- `docs/ui-guidelines.md`: UI rules, read before any UI work
+- `docs/rust-ui-migration/`: Tauri to native record (measurements, parity
+  inventory, egui conventions)
+- `docs/plugin-development.md`, `docs/user-guide.md`
