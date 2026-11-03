@@ -116,6 +116,15 @@ fn generate_icons(manifest_dir: &std::path::Path) -> String {
     s
 }
 
+/// slint_build emits `rerun-if-changed` for every file it reads, including
+/// these generated ones. Cargo compares them against the build start time,
+/// so rewriting them unconditionally made the script rerun on every check.
+fn write_if_changed(path: &std::path::Path, contents: &str) {
+    if std::fs::read_to_string(path).ok().as_deref() != Some(contents) {
+        std::fs::write(path, contents).unwrap();
+    }
+}
+
 fn main() {
     println!("cargo:rerun-if-changed=../dbhive-ui-model/src/tokens.rs");
     println!("cargo:rerun-if-changed=ui");
@@ -123,9 +132,9 @@ fn main() {
     let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let generated = out_dir.join("generated");
     std::fs::create_dir_all(&generated).unwrap();
-    std::fs::write(generated.join("theme.slint"), generate_theme()).unwrap();
+    write_if_changed(&generated.join("theme.slint"), &generate_theme());
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    std::fs::write(generated.join("icons.slint"), generate_icons(&manifest_dir)).unwrap();
+    write_if_changed(&generated.join("icons.slint"), &generate_icons(&manifest_dir));
 
     let config =
         slint_build::CompilerConfiguration::new().with_include_paths(vec![generated]);
