@@ -34,7 +34,22 @@ fn user() -> String {
 /// Run SQL through psql, returning the rows as `a|b|c` lines. Panics on error.
 fn psql(db: &str, sql: &str) -> String {
     let out = Command::new("psql")
-        .args(["-h", "localhost", "-U", &user(), "-d", db, "-X", "-A", "-t", "-q", "-v", "ON_ERROR_STOP=1", "-c", sql])
+        .args([
+            "-h",
+            "localhost",
+            "-U",
+            &user(),
+            "-d",
+            db,
+            "-X",
+            "-A",
+            "-t",
+            "-q",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            sql,
+        ])
         .output()
         .expect("psql must be on the PATH");
     assert!(
@@ -52,7 +67,15 @@ impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = Command::new("psql")
             .args([
-                "-h", "localhost", "-U", &user(), "-d", "postgres", "-X", "-q", "-c",
+                "-h",
+                "localhost",
+                "-U",
+                &user(),
+                "-d",
+                "postgres",
+                "-X",
+                "-q",
+                "-c",
                 &format!("DROP DATABASE IF EXISTS \"{}\" WITH (FORCE)", self.0),
             ])
             .output();
@@ -82,7 +105,10 @@ fn inspect_edit_add_delete_and_a_rejected_commit_on_postgres() {
     std::env::set_var(dbhive_core::storage::DATA_DIR_ENV, &dir);
 
     let name = format!("dbhive_ui_{}", std::process::id());
-    psql("postgres", &format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"));
+    psql(
+        "postgres",
+        &format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"),
+    );
     psql("postgres", &format!("CREATE DATABASE \"{name}\""));
     let _guard = Scratch(name.clone());
     psql(

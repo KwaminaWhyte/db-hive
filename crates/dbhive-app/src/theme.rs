@@ -249,11 +249,26 @@ pub fn apply_with_accent(ctx: &egui::Context, mode: Mode, accent: Color32, mono_
     let mut style = (*ctx.style()).clone();
 
     style.text_styles = [
-        (TextStyle::Heading, FontId::new(size::HEADING, FontFamily::Proportional)),
-        (TextStyle::Body, FontId::new(size::BODY, FontFamily::Proportional)),
-        (TextStyle::Button, FontId::new(size::LABEL, FontFamily::Proportional)),
-        (TextStyle::Small, FontId::new(size::SMALL, FontFamily::Proportional)),
-        (TextStyle::Monospace, FontId::new(mono_size, FontFamily::Monospace)),
+        (
+            TextStyle::Heading,
+            FontId::new(size::HEADING, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Body,
+            FontId::new(size::BODY, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Button,
+            FontId::new(size::LABEL, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Small,
+            FontId::new(size::SMALL, FontFamily::Proportional),
+        ),
+        (
+            TextStyle::Monospace,
+            FontId::new(mono_size, FontFamily::Monospace),
+        ),
     ]
     .into();
 
@@ -448,5 +463,4 @@ mod tests {
             missing.join(", ")
         );
     }
-
 }

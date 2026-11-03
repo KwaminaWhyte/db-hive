@@ -17,7 +17,7 @@ use dbhive_core::models::{ActivityStats, QueryLog, QueryStatus};
 use dbhive_core::service_monitoring as mon;
 
 use crate::activity_monitor::{
-    format_count, format_clock_ms, format_duration, format_duration_i64, format_timestamp,
+    format_clock_ms, format_count, format_duration, format_duration_i64, format_timestamp,
     one_line_sql, percentage, remaining_until_tick, status_tone, SortField, StatusTone,
     SQL_CELL_CHARS,
 };
@@ -76,10 +76,7 @@ pub fn column_for_sort_field(field: SortField) -> usize {
 /// Clicking the sorted column flips its direction. Clicking another starts in
 /// the direction a reader wants first: newest, slowest and largest at the top,
 /// connection names A to Z.
-pub fn sort_after_click(
-    current: (SortField, bool),
-    column: usize,
-) -> Option<(SortField, bool)> {
+pub fn sort_after_click(current: (SortField, bool), column: usize) -> Option<(SortField, bool)> {
     let field = sort_field_for_column(column)?;
     if field == current.0 {
         return Some((field, !current.1));
@@ -191,7 +188,11 @@ pub fn log_summary(matching: usize, overall: usize, filtered: bool) -> String {
             format_count(overall as u64),
             noun(overall)
         ),
-        (_, false) => format!("{} {} in the log", format_count(overall as u64), noun(overall)),
+        (_, false) => format!(
+            "{} {} in the log",
+            format_count(overall as u64),
+            noun(overall)
+        ),
     }
 }
 
@@ -279,7 +280,14 @@ pub fn type_breakdown(stats: &ActivityStats) -> Vec<BarRow> {
         .iter()
         .filter_map(|t| {
             let n = stats.queries_by_type.get(t).copied().unwrap_or(0);
-            (n > 0).then(|| bar(mon::query_type_key(*t), n, stats.total_queries, StatusTone::Primary))
+            (n > 0).then(|| {
+                bar(
+                    mon::query_type_key(*t),
+                    n,
+                    stats.total_queries,
+                    StatusTone::Primary,
+                )
+            })
         })
         .collect();
     // Stable sort: ties keep the filter panel's order.
@@ -326,7 +334,10 @@ pub fn log_detail(log: &QueryLog) -> LogDetail {
             "Rows".to_string(),
             log.row_count.map_or("-".to_string(), |n| n.to_string()),
         ),
-        ("Type".to_string(), mon::query_type_key(log.query_type).to_string()),
+        (
+            "Type".to_string(),
+            mon::query_type_key(log.query_type).to_string(),
+        ),
         ("Connection".to_string(), log.connection_name.clone()),
     ];
     if let Some(db) = log.database.as_deref().filter(|d| !d.is_empty()) {
@@ -525,7 +536,9 @@ fn chart_of(
                 name,
                 commands,
                 area,
-                last: window.last().map_or("-".to_string(), |s| format_axis_value(pick(s))),
+                last: window
+                    .last()
+                    .map_or("-".to_string(), |s| format_axis_value(pick(s))),
                 tone: *tone,
             }
         })
@@ -665,7 +678,7 @@ pub fn kill_message(pid: i64, user: Option<&str>, query: Option<&str>) -> String
 #[cfg(test)]
 mod tests {
     use super::*;
-    use dbhive_core::models::{QueryType, QueryStatus};
+    use dbhive_core::models::{QueryStatus, QueryType};
     use std::collections::HashMap;
 
     fn log(sql: &str) -> QueryLog {
@@ -695,7 +708,10 @@ mod tests {
     #[test]
     fn every_sortable_column_round_trips_through_its_field() {
         for field in SortField::ALL {
-            assert_eq!(sort_field_for_column(column_for_sort_field(field)), Some(field));
+            assert_eq!(
+                sort_field_for_column(column_for_sort_field(field)),
+                Some(field)
+            );
         }
     }
 
@@ -753,7 +769,10 @@ mod tests {
             query_text: q.map(str::to_string),
             duration_ms: d,
         };
-        let grid = process_grid(&[p(7, Some(2_500), Some("SELECT 1")), p(8, Some(-5), Some("  "))]);
+        let grid = process_grid(&[
+            p(7, Some(2_500), Some("SELECT 1")),
+            p(8, Some(-5), Some("  ")),
+        ]);
         assert_eq!(grid.columns.len(), PROCESS_COLUMNS.len());
         assert_eq!(grid.rows[0][0], serde_json::json!("7"));
         assert_eq!(grid.rows[0][4], serde_json::json!("2.50s"));
@@ -784,8 +803,14 @@ mod tests {
         assert_eq!(log_summary(0, 0, false), "");
         assert_eq!(log_summary(1, 1, false), "1 query in the log");
         assert_eq!(log_summary(40, 40, false), "40 queries in the log");
-        assert_eq!(log_summary(3, 40, true), "3 of 40 queries match the filters");
-        assert_eq!(log_summary(0, 40, true), "0 of 40 queries match the filters");
+        assert_eq!(
+            log_summary(3, 40, true),
+            "3 of 40 queries match the filters"
+        );
+        assert_eq!(
+            log_summary(0, 40, true),
+            "0 of 40 queries match the filters"
+        );
     }
 
     #[test]
@@ -964,7 +989,10 @@ mod tests {
     fn a_degenerate_time_span_does_not_divide_by_zero() {
         let (line, _) = plot_path(&[[3.0, 1.0], [3.0, 2.0]], 3.0, 3.0, 2.0);
         assert!(!line.contains("NaN") && !line.contains("inf"), "{line}");
-        assert_eq!(plot_path(&[], 0.0, 1.0, 1.0), (String::new(), String::new()));
+        assert_eq!(
+            plot_path(&[], 0.0, 1.0, 1.0),
+            (String::new(), String::new())
+        );
     }
 
     fn samples(n: i64) -> Vec<mon::MetricsSample> {
@@ -1080,7 +1108,10 @@ mod tests {
         assert!(!gate.is_busy());
         gate.finish_one();
         assert!(!gate.is_busy());
-        assert!(!gate.try_begin(TEN, 0, Instant::now()), "zero requests is not a poll");
+        assert!(
+            !gate.try_begin(TEN, 0, Instant::now()),
+            "zero requests is not a poll"
+        );
     }
 
     // -- confirmations ----------------------------------------------------
@@ -1098,7 +1129,10 @@ mod tests {
 
     #[test]
     fn status_labels_are_distinct() {
-        let labels: Vec<_> = mon::QUERY_STATUSES.iter().map(|s| status_label(*s)).collect();
+        let labels: Vec<_> = mon::QUERY_STATUSES
+            .iter()
+            .map(|s| status_label(*s))
+            .collect();
         for (i, a) in labels.iter().enumerate() {
             assert!(labels[i + 1..].iter().all(|b| b != a));
         }

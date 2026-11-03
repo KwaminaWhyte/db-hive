@@ -68,7 +68,9 @@ pub struct Metadata {
 
 impl Metadata {
     pub fn find_table(&self, name: &str) -> Option<&TableMeta> {
-        self.tables.iter().find(|t| t.name.eq_ignore_ascii_case(name))
+        self.tables
+            .iter()
+            .find(|t| t.name.eq_ignore_ascii_case(name))
     }
 
     /// Record the columns of a table once they have been fetched.
@@ -104,19 +106,98 @@ const MAX_ITEMS: usize = 10;
 
 /// Roughly most to least common, which is also the order they are offered in.
 const KEYWORDS: &[&str] = &[
-    "SELECT", "FROM", "WHERE", "AND", "OR", "JOIN", "LEFT", "INNER", "ON", "GROUP", "BY", "ORDER",
-    "LIMIT", "AS", "INSERT", "INTO", "VALUES", "UPDATE", "SET", "DELETE", "HAVING", "DISTINCT",
-    "NOT", "NULL", "IS", "IN", "LIKE", "ILIKE", "BETWEEN", "EXISTS", "CASE", "WHEN", "THEN", "ELSE",
-    "END", "ASC", "DESC", "OFFSET", "UNION", "ALL", "RIGHT", "OUTER", "FULL", "CROSS", "CREATE",
-    "TABLE", "ALTER", "DROP", "INDEX", "VIEW", "PRIMARY", "KEY", "FOREIGN", "REFERENCES",
-    "DEFAULT", "UNIQUE", "CONSTRAINT", "WITH", "RETURNING", "EXPLAIN", "ANALYZE", "TRUNCATE",
-    "TRUE", "FALSE",
+    "SELECT",
+    "FROM",
+    "WHERE",
+    "AND",
+    "OR",
+    "JOIN",
+    "LEFT",
+    "INNER",
+    "ON",
+    "GROUP",
+    "BY",
+    "ORDER",
+    "LIMIT",
+    "AS",
+    "INSERT",
+    "INTO",
+    "VALUES",
+    "UPDATE",
+    "SET",
+    "DELETE",
+    "HAVING",
+    "DISTINCT",
+    "NOT",
+    "NULL",
+    "IS",
+    "IN",
+    "LIKE",
+    "ILIKE",
+    "BETWEEN",
+    "EXISTS",
+    "CASE",
+    "WHEN",
+    "THEN",
+    "ELSE",
+    "END",
+    "ASC",
+    "DESC",
+    "OFFSET",
+    "UNION",
+    "ALL",
+    "RIGHT",
+    "OUTER",
+    "FULL",
+    "CROSS",
+    "CREATE",
+    "TABLE",
+    "ALTER",
+    "DROP",
+    "INDEX",
+    "VIEW",
+    "PRIMARY",
+    "KEY",
+    "FOREIGN",
+    "REFERENCES",
+    "DEFAULT",
+    "UNIQUE",
+    "CONSTRAINT",
+    "WITH",
+    "RETURNING",
+    "EXPLAIN",
+    "ANALYZE",
+    "TRUNCATE",
+    "TRUE",
+    "FALSE",
 ];
 
 const FUNCTIONS: &[&str] = &[
-    "COUNT", "SUM", "AVG", "MIN", "MAX", "COALESCE", "NULLIF", "CAST", "UPPER", "LOWER", "LENGTH",
-    "TRIM", "SUBSTRING", "CONCAT", "REPLACE", "ROUND", "ABS", "NOW", "CURRENT_DATE",
-    "CURRENT_TIMESTAMP", "DATE_TRUNC", "EXTRACT", "ROW_NUMBER", "RANK", "STRING_AGG",
+    "COUNT",
+    "SUM",
+    "AVG",
+    "MIN",
+    "MAX",
+    "COALESCE",
+    "NULLIF",
+    "CAST",
+    "UPPER",
+    "LOWER",
+    "LENGTH",
+    "TRIM",
+    "SUBSTRING",
+    "CONCAT",
+    "REPLACE",
+    "ROUND",
+    "ABS",
+    "NOW",
+    "CURRENT_DATE",
+    "CURRENT_TIMESTAMP",
+    "DATE_TRUNC",
+    "EXTRACT",
+    "ROW_NUMBER",
+    "RANK",
+    "STRING_AGG",
 ];
 
 /// What kind of name is due at the cursor.
@@ -326,7 +407,12 @@ pub fn suggest(text: &str, cursor: usize, meta: &Metadata) -> Option<Suggestions
     let prefix = &text[word_start..cursor];
     let prefix_lower = prefix.to_lowercase();
     // A word that starts with a digit is a number, not a name.
-    if prefix.chars().next().map(|c| c.is_ascii_digit()).unwrap_or(false) {
+    if prefix
+        .chars()
+        .next()
+        .map(|c| c.is_ascii_digit())
+        .unwrap_or(false)
+    {
         return None;
     }
 
@@ -385,7 +471,11 @@ pub fn suggest(text: &str, cursor: usize, meta: &Metadata) -> Option<Suggestions
                     None => note_missing(&tm.name, &mut missing),
                 }
             }
-        } else if meta.schemas.iter().any(|s| s.eq_ignore_ascii_case(&qualifier)) {
+        } else if meta
+            .schemas
+            .iter()
+            .any(|s| s.eq_ignore_ascii_case(&qualifier))
+        {
             // A schema: its tables.
             for t in &meta.tables {
                 let in_schema = t
@@ -473,7 +563,13 @@ pub fn suggest(text: &str, cursor: usize, meta: &Metadata) -> Option<Suggestions
     // follow the user's casing.
     let lowercase = prefix.chars().any(|c| c.is_ascii_lowercase())
         && !prefix.chars().any(|c| c.is_ascii_uppercase());
-    let case = |s: &str| if lowercase { s.to_lowercase() } else { s.to_string() };
+    let case = |s: &str| {
+        if lowercase {
+            s.to_lowercase()
+        } else {
+            s.to_string()
+        }
+    };
     let keywords: Vec<Suggestion> = KEYWORDS
         .iter()
         .filter(|k| matches_prefix(k, &prefix_lower))
@@ -603,7 +699,11 @@ mod tests {
             "UPDATE cu",
         ] {
             let l = labels(sql, &m);
-            assert_eq!(l.first().map(String::as_str), Some("customers"), "{sql}: {l:?}");
+            assert_eq!(
+                l.first().map(String::as_str),
+                Some("customers"),
+                "{sql}: {l:?}"
+            );
         }
     }
 
@@ -622,7 +722,11 @@ mod tests {
             let cursor = sql.rfind(" na").unwrap() + 3;
             let s = suggest(sql, cursor, &m).unwrap_or_else(|| panic!("{sql}"));
             let first = &s.items[0];
-            assert_eq!((first.label.as_str(), first.kind), ("name", Kind::Column), "{sql}");
+            assert_eq!(
+                (first.label.as_str(), first.kind),
+                ("name", Kind::Column),
+                "{sql}"
+            );
             assert_eq!(first.detail, "text");
         }
     }
@@ -680,7 +784,10 @@ mod tests {
     #[test]
     fn keywords_lead_at_the_start_of_a_statement_and_after_a_table_name() {
         let m = meta();
-        assert_eq!(labels("sel", &m).first().map(String::as_str), Some("select"));
+        assert_eq!(
+            labels("sel", &m).first().map(String::as_str),
+            Some("select")
+        );
         // After a table name the next word is a keyword (WHERE, JOIN, ...), not another table.
         let l = labels("SELECT * FROM customers wh", &m);
         assert_eq!(l.first().map(String::as_str), Some("where"), "{l:?}");
@@ -691,8 +798,14 @@ mod tests {
     #[test]
     fn keyword_case_follows_what_the_user_typed() {
         let m = meta();
-        assert_eq!(labels("SEL", &m).first().map(String::as_str), Some("SELECT"));
-        assert_eq!(labels("sel", &m).first().map(String::as_str), Some("select"));
+        assert_eq!(
+            labels("SEL", &m).first().map(String::as_str),
+            Some("SELECT")
+        );
+        assert_eq!(
+            labels("sel", &m).first().map(String::as_str),
+            Some("select")
+        );
     }
 
     #[test]

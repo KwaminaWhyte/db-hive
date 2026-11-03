@@ -35,7 +35,10 @@ fn mysql(db: Option<&str>, sql: &str) -> String {
     if let Some(db) = db {
         cmd.args(["-D", db]);
     }
-    let out = cmd.args(["-e", sql]).output().expect("mysql must be on the PATH");
+    let out = cmd
+        .args(["-e", sql])
+        .output()
+        .expect("mysql must be on the PATH");
     assert!(
         out.status.success(),
         "mysql failed for {sql:?}: {}",
@@ -50,7 +53,12 @@ struct Scratch(String);
 impl Drop for Scratch {
     fn drop(&mut self) {
         let _ = Command::new("mysql")
-            .args(["-uroot", "-h127.0.0.1", "-e", &format!("DROP DATABASE IF EXISTS `{}`", self.0)])
+            .args([
+                "-uroot",
+                "-h127.0.0.1",
+                "-e",
+                &format!("DROP DATABASE IF EXISTS `{}`", self.0),
+            ])
             .output();
     }
 }

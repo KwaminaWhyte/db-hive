@@ -38,8 +38,16 @@ fn run_a_query_guard_a_delete_record_history_and_close_the_tab() {
     let db = dir.join("widgets.sqlite");
     {
         let conn = rusqlite::Connection::open(&db).unwrap();
-        conn.execute("CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)", []).unwrap();
-        conn.execute("INSERT INTO widgets (name) VALUES ('sprocket'), ('gizmo')", []).unwrap();
+        conn.execute(
+            "CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO widgets (name) VALUES ('sprocket'), ('gizmo')",
+            [],
+        )
+        .unwrap();
     }
 
     // Seed the saved connection the way the app would have stored it.
@@ -64,8 +72,13 @@ fn run_a_query_guard_a_delete_record_history_and_close_the_tab() {
     let started = Instant::now();
     let timer = Timer::default();
 
-    let (weak, fail, step2, db2, dir2) =
-        (w.as_weak(), failure.clone(), step.clone(), db.clone(), dir.clone());
+    let (weak, fail, step2, db2, dir2) = (
+        w.as_weak(),
+        failure.clone(),
+        step.clone(),
+        db.clone(),
+        dir.clone(),
+    );
     timer.start(TimerMode::Repeated, Duration::from_millis(20), move || {
         let w = weak.upgrade().unwrap();
         let bail = |msg: String| {
@@ -97,10 +110,16 @@ fn run_a_query_guard_a_delete_record_history_and_close_the_tab() {
             }
             2 if w.get_workspace_has_result() && !w.get_workspace_running() => {
                 if w.get_workspace_row_count() != 2 {
-                    return bail(format!("expected 2 rows, got {}", w.get_workspace_row_count()));
+                    return bail(format!(
+                        "expected 2 rows, got {}",
+                        w.get_workspace_row_count()
+                    ));
                 }
                 if !w.get_workspace_result_summary().starts_with("2 rows") {
-                    return bail(format!("summary was {:?}", w.get_workspace_result_summary()));
+                    return bail(format!(
+                        "summary was {:?}",
+                        w.get_workspace_result_summary()
+                    ));
                 }
                 // A destructive statement must stop at the confirmation.
                 w.invoke_workspace_editor_edited("DELETE FROM widgets".into());
@@ -131,7 +150,9 @@ fn run_a_query_guard_a_delete_record_history_and_close_the_tab() {
                 w.set_show_confirm(false);
                 step2.set(5);
             }
-            5 if !w.get_workspace_running() && w.get_workspace_result_message().contains("affected") => {
+            5 if !w.get_workspace_running()
+                && w.get_workspace_result_message().contains("affected") =>
+            {
                 if sqlite_count(&db2) != 0 {
                     return bail("confirming did not run the DELETE".into());
                 }
@@ -139,8 +160,11 @@ fn run_a_query_guard_a_delete_record_history_and_close_the_tab() {
             }
             // History is persisted asynchronously; wait for it to land.
             6 => {
-                let history = std::fs::read_to_string(dir2.join("history.json")).unwrap_or_default();
-                if history.contains("DELETE FROM widgets") && history.contains("SELECT name FROM widgets") {
+                let history =
+                    std::fs::read_to_string(dir2.join("history.json")).unwrap_or_default();
+                if history.contains("DELETE FROM widgets")
+                    && history.contains("SELECT name FROM widgets")
+                {
                     // Closing a tab that has SQL in it asks first.
                     w.invoke_workspace_tab_closed(0);
                     step2.set(7);
@@ -150,7 +174,10 @@ fn run_a_query_guard_a_delete_record_history_and_close_the_tab() {
             }
             7 if w.get_show_confirm() => {
                 if w.get_confirm_title() != "Close this tab?" {
-                    return bail(format!("close confirmation was {:?}", w.get_confirm_title()));
+                    return bail(format!(
+                        "close confirmation was {:?}",
+                        w.get_confirm_title()
+                    ));
                 }
                 if w.get_workspace_tabs().row_count() != 1 {
                     return bail("the tab closed before it was confirmed".into());

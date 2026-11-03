@@ -262,7 +262,9 @@ pub fn extract_sql(content: &str) -> String {
             .unwrap_or(after_start);
 
         if let Some(end) = content[content_start..].find("```") {
-            return content[content_start..content_start + end].trim().to_string();
+            return content[content_start..content_start + end]
+                .trim()
+                .to_string();
         }
     }
 

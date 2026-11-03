@@ -639,7 +639,9 @@ pub fn paste_connection_string(
 ) -> Result<PastedConnection, String> {
     let Some(parsed) = parse_connection_string(&form.driver, raw) else {
         let hint = connection_string_placeholder(&form.driver);
-        return Err(format!("Not a connection string for this driver. Expected e.g. {hint}"));
+        return Err(format!(
+            "Not a connection string for this driver. Expected e.g. {hint}"
+        ));
     };
     let password = apply_connection_string(form, &parsed);
     Ok(PastedConnection { password })
@@ -1367,7 +1369,10 @@ mod tests {
             assert!(parse_hex_color(p).is_some(), "{p}");
             assert_eq!(color_preset_index(p), Some(i));
         }
-        assert_eq!(color_preset_index(&COLOR_PRESETS[2].to_uppercase()), Some(2));
+        assert_eq!(
+            color_preset_index(&COLOR_PRESETS[2].to_uppercase()),
+            Some(2)
+        );
         assert_eq!(color_preset_index(""), None);
         assert_eq!(color_preset_index("#123456"), None);
     }
@@ -1377,9 +1382,11 @@ mod tests {
     #[test]
     fn pasting_fills_the_form_and_returns_the_password() {
         let mut form = ConnectionForm::new_for(DbDriver::Postgres);
-        let pasted =
-            paste_connection_string(&mut form, "postgresql://app:s3cret@db.example.com:6543/shop")
-                .unwrap();
+        let pasted = paste_connection_string(
+            &mut form,
+            "postgresql://app:s3cret@db.example.com:6543/shop",
+        )
+        .unwrap();
         assert_eq!(form.host, "db.example.com");
         assert_eq!(form.port, "6543");
         assert_eq!(form.username, "app");

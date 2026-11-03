@@ -120,7 +120,11 @@ impl fmt::Display for UiError {
             ),
             UiError::Malformed(m) => write!(f, "plugin UI descriptor is not valid: {}", m),
             UiError::TooMany { what, count, limit } => {
-                write!(f, "plugin UI declares {} {}, limit is {}", count, what, limit)
+                write!(
+                    f,
+                    "plugin UI declares {} {}, limit is {}",
+                    count, what, limit
+                )
             }
             UiError::BadId(id) => write!(f, "'{}' is not a usable control id", id),
             UiError::DuplicateId(id) => write!(f, "control id '{}' is used twice", id),
@@ -760,7 +764,10 @@ impl PluginUi {
         }
         for panel in &self.panels {
             for item in &panel.items {
-                if let Item::Button { id: bid, action, .. } = item {
+                if let Item::Button {
+                    id: bid, action, ..
+                } = item
+                {
                     if bid == id {
                         return Some(action.as_deref());
                     }
@@ -962,7 +969,10 @@ fn clamp_text(s: &mut String, max_chars: usize) {
 /// Property order is whatever `serde_json` yields (alphabetical, since the
 /// `preserve_order` feature is off). `enum` becomes a select, `boolean` a
 /// checkbox, `number`/`integer` a number field, anything else a text input.
-pub fn config_schema_panel(schema: &serde_json::Value, current: Option<&serde_json::Value>) -> Panel {
+pub fn config_schema_panel(
+    schema: &serde_json::Value,
+    current: Option<&serde_json::Value>,
+) -> Panel {
     let mut panel = Panel {
         id: "config".to_string(),
         title: "Settings".to_string(),
@@ -991,7 +1001,10 @@ pub fn config_schema_panel(schema: &serde_json::Value, current: Option<&serde_js
             .or(default)
             .cloned()
             .unwrap_or(serde_json::Value::Null);
-        let ty = spec.get("type").and_then(|v| v.as_str()).unwrap_or("string");
+        let ty = spec
+            .get("type")
+            .and_then(|v| v.as_str())
+            .unwrap_or("string");
         let enum_values = spec.get("enum").and_then(|v| v.as_array());
 
         let item = if let Some(values) = enum_values {

@@ -716,10 +716,15 @@ mod tests {
 
     #[test]
     fn a_comment_written_above_a_statement_is_split_off_it() {
-        let split = split_statements("-- drop the old one\nDROP TABLE old;\nSELECT 1 -- keep; this\n");
+        let split =
+            split_statements("-- drop the old one\nDROP TABLE old;\nSELECT 1 -- keep; this\n");
         assert_eq!(
             split,
-            vec!["-- drop the old one", "DROP TABLE old", "SELECT 1 -- keep; this"]
+            vec![
+                "-- drop the old one",
+                "DROP TABLE old",
+                "SELECT 1 -- keep; this"
+            ]
         );
         assert_eq!(executable_count(&split), 2);
     }

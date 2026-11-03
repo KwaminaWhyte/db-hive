@@ -56,7 +56,8 @@ pub fn status_badge(ui: &mut Ui, p: &Palette, label: impl Into<String>, tone: To
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 5.0;
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(6.0_f32, 6.0_f32), Sense::hover());
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(6.0_f32, 6.0_f32), Sense::hover());
                 ui.painter().circle_filled(rect.center(), 3.0, fg);
                 ui.label(RichText::new(label).size(size::SMALL).color(fg));
             });
@@ -154,7 +155,11 @@ pub fn section_label(ui: &mut Ui, p: &Palette, label: impl Into<String>) {
 pub fn soft_separator(ui: &mut Ui, p: &Palette) {
     let width = ui.available_width();
     let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 1.0_f32), Sense::hover());
-    ui.painter().hline(rect.x_range(), rect.center().y, egui::Stroke::new(1.0_f32, p.border));
+    ui.painter().hline(
+        rect.x_range(),
+        rect.center().y,
+        egui::Stroke::new(1.0_f32, p.border),
+    );
 }
 
 /// A filled, brand-coloured button. egui has no notion of a primary action.
@@ -177,7 +182,10 @@ pub fn danger_button(ui: &mut Ui, p: &Palette, label: impl Into<String>) -> Resp
     ui.add(
         egui::Button::new(text)
             .fill(p.destructive_soft)
-            .stroke(egui::Stroke::new(1.0_f32, p.destructive.gamma_multiply(0.5)))
+            .stroke(egui::Stroke::new(
+                1.0_f32,
+                p.destructive.gamma_multiply(0.5),
+            ))
             .rounding(radius::CONTROL),
     )
 }
@@ -242,7 +250,8 @@ pub fn empty_state(
     ui.vertical_centered(|ui| {
         // A tinted disc keeps the glyph from floating in space.
         let (rect, _) = ui.allocate_exact_size(egui::vec2(56.0_f32, 56.0_f32), Sense::hover());
-        ui.painter().circle_filled(rect.center(), 28.0, p.primary_soft);
+        ui.painter()
+            .circle_filled(rect.center(), 28.0, p.primary_soft);
         ui.painter().text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -260,7 +269,12 @@ pub fn empty_state(
 }
 
 /// A labelled form row: caption above, control below.
-pub fn field<R>(ui: &mut Ui, p: &Palette, label: impl Into<String>, add: impl FnOnce(&mut Ui) -> R) -> R {
+pub fn field<R>(
+    ui: &mut Ui,
+    p: &Palette,
+    label: impl Into<String>,
+    add: impl FnOnce(&mut Ui) -> R,
+) -> R {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 4.0;
         ui.label(text::label(p, label));
@@ -270,12 +284,7 @@ pub fn field<R>(ui: &mut Ui, p: &Palette, label: impl Into<String>, add: impl Fn
 }
 
 /// A chrome strip: toolbars, tab rows, status bars.
-pub fn bar<R>(
-    ui: &mut Ui,
-    p: &Palette,
-    height: f32,
-    add: impl FnOnce(&mut Ui) -> R,
-) -> R {
+pub fn bar<R>(ui: &mut Ui, p: &Palette, height: f32, add: impl FnOnce(&mut Ui) -> R) -> R {
     egui::Frame::none()
         .fill(p.sidebar)
         .inner_margin(egui::Margin::symmetric(12.0_f32, 0.0_f32))

@@ -452,9 +452,7 @@ impl PluginRuntimeSync {
                         let raw = arg_string(args, 0, ctx)?;
                         let title = serde_json::from_str::<JsonValue>(&raw)
                             .ok()
-                            .and_then(|v| {
-                                v.get("title").and_then(|t| t.as_str()).map(String::from)
-                            })
+                            .and_then(|v| v.get("title").and_then(|t| t.as_str()).map(String::from))
                             .unwrap_or_else(|| plugin_id.clone());
                         push_call(HostCall::OpenTab {
                             title: clamp(title, 120),
@@ -803,8 +801,8 @@ fn clamp(mut s: String, max_chars: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use super::super::manifest::{PluginManifest, PluginStats};
+    use super::*;
 
     // The JavaScript these tests run is written here, in the test. Nothing
     // reads a plugin, a manifest or a script off disk: a test that executes
@@ -853,7 +851,11 @@ mod tests {
         }
     }
 
-    fn runtime(permissions: &[PluginPermission], scratch: &Scratch, code: &str) -> PluginRuntimeSync {
+    fn runtime(
+        permissions: &[PluginPermission],
+        scratch: &Scratch,
+        code: &str,
+    ) -> PluginRuntimeSync {
         let p = plugin(permissions, &scratch.0);
         let mut rt = PluginRuntimeSync::new(&p, scratch.0.join("data")).unwrap();
         rt.initialize().unwrap();
@@ -896,7 +898,10 @@ mod tests {
     fn a_plugin_describes_an_interface_and_receives_its_events() {
         let scratch = Scratch::new("render");
         let mut rt = runtime(
-            &[PluginPermission::ModifyUi, PluginPermission::ShowNotification],
+            &[
+                PluginPermission::ModifyUi,
+                PluginPermission::ShowNotification,
+            ],
             &scratch,
             UI_PLUGIN,
         );
@@ -919,7 +924,10 @@ mod tests {
         };
         let call = ui::dispatch_for(&descriptor, &event).unwrap();
         assert_eq!(call.function, ui::DEFAULT_HANDLER);
-        let next = rt.dispatch(&call).unwrap().expect("a replacement interface");
+        let next = rt
+            .dispatch(&call)
+            .unwrap()
+            .expect("a replacement interface");
         match &next.panels[0].items[0] {
             ui::Item::Text { text, .. } => assert_eq!(text, "pressed run with out.csv"),
             other => panic!("expected text, got {:?}", other),
@@ -970,7 +978,11 @@ mod tests {
 
         assert!(rt.render_ui().is_err(), "setUi needs modifyUI");
         for f in ["writeIt", "readIt", "net", "notify"] {
-            assert!(rt.call(f, &JsonValue::Null).is_err(), "{} should be denied", f);
+            assert!(
+                rt.call(f, &JsonValue::Null).is_err(),
+                "{} should be denied",
+                f
+            );
         }
         assert!(rt.take_outbox().is_empty());
     }
@@ -979,7 +991,10 @@ mod tests {
     fn a_plugin_cannot_reach_the_database() {
         let scratch = Scratch::new("nodb");
         let mut rt = runtime(
-            &[PluginPermission::ExecuteQuery, PluginPermission::ReadMetadata],
+            &[
+                PluginPermission::ExecuteQuery,
+                PluginPermission::ReadMetadata,
+            ],
             &scratch,
             "__plugin_exports__ = {
                q: function () { return DBHive.executeQuery('SELECT 1', 'c'); },
@@ -1068,7 +1083,11 @@ mod tests {
             "ftp://example.com/",
         ];
         for url in blocked {
-            assert!(validate_outbound_url(url).is_err(), "{} should be blocked", url);
+            assert!(
+                validate_outbound_url(url).is_err(),
+                "{} should be blocked",
+                url
+            );
         }
     }
 

@@ -179,7 +179,10 @@ fn header(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
     let mut close = false;
 
     ui.horizontal(|ui| {
-        ui.label(crate::theme::text::heading(palette, "Procedures & functions"));
+        ui.label(crate::theme::text::heading(
+            palette,
+            "Procedures & functions",
+        ));
         if !schema.is_empty() {
             ui.label(crate::theme::text::muted(palette, schema));
         }
@@ -193,7 +196,10 @@ fn header(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
             if ui.button("Close").clicked() {
                 close = true;
             }
-            if ui.add_enabled(!busy, egui::Button::new("Refresh")).clicked() {
+            if ui
+                .add_enabled(!busy, egui::Button::new("Refresh"))
+                .clicked()
+            {
                 refresh = true;
             }
         });
@@ -316,7 +322,11 @@ fn arguments(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, selected
         }
         for (i, name) in names.iter().enumerate() {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(name).monospace().color(palette.muted_foreground));
+                ui.label(
+                    egui::RichText::new(name)
+                        .monospace()
+                        .color(palette.muted_foreground),
+                );
                 ui.add(
                     egui::TextEdit::singleline(&mut p.args[i])
                         .hint_text("42, \"text\", true, or empty for NULL")
@@ -362,7 +372,11 @@ fn arguments(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, selected
                 .rounding(egui::Rounding::same(6.0))
                 .inner_margin(egui::Margin::same(6.0))
                 .show(ui, |ui| {
-                    ui.label(egui::RichText::new(sql).monospace().color(palette.foreground));
+                    ui.label(
+                        egui::RichText::new(sql)
+                            .monospace()
+                            .color(palette.foreground),
+                    );
                 });
         }
         Err(e) => {
@@ -419,7 +433,13 @@ fn definition(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
         let schema_index = sql_editor::SchemaIndex::default();
         let p = &mut app.screens.procedures;
         let mut text = std::mem::take(&mut p.definition);
-        sql_editor::show(ui, palette, &mut p.definition_editor, &schema_index, &mut text);
+        sql_editor::show(
+            ui,
+            palette,
+            &mut p.definition_editor,
+            &schema_index,
+            &mut text,
+        );
         p.definition = text;
     }
 

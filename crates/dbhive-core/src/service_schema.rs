@@ -10,7 +10,9 @@
 
 use crate::ddl::get_ddl_generator;
 use crate::drivers::DatabaseDriver;
-use crate::models::{ColumnInfo, DbDriver, DbError, DdlResult, DropTableDefinition, ForeignKeyInfo};
+use crate::models::{
+    ColumnInfo, DbDriver, DbError, DdlResult, DropTableDefinition, ForeignKeyInfo,
+};
 use crate::service_procedures::qualify;
 
 /// Most schemas whose foreign keys are read when looking for what depends on
@@ -172,9 +174,8 @@ pub fn referencing_tables(
 ) -> Vec<TableRef> {
     let mut out: Vec<TableRef> = Vec::new();
     for fk in foreign_keys {
-        let schema_matches = fk.referenced_schema.is_empty()
-            || schema.is_empty()
-            || fk.referenced_schema == schema;
+        let schema_matches =
+            fk.referenced_schema.is_empty() || schema.is_empty() || fk.referenced_schema == schema;
         if fk.referenced_table != table || !schema_matches {
             continue;
         }
@@ -324,7 +325,12 @@ mod tests {
             sql,
             "SELECT *\nFROM \"public\".\"t\"\"; DROP TABLE users; --\"\nLIMIT 100;"
         );
-        let mysql = generate_select(&DbDriver::MySql, &q_mysql, "app", "t`; DROP TABLE users; --");
+        let mysql = generate_select(
+            &DbDriver::MySql,
+            &q_mysql,
+            "app",
+            "t`; DROP TABLE users; --",
+        );
         assert!(mysql.contains("`t``; DROP TABLE users; --`"), "{mysql}");
     }
 
@@ -396,13 +402,19 @@ mod tests {
         let fks = vec![fk("", "orders", "", "customers")];
         assert_eq!(referencing_tables(&fks, "", "customers").len(), 1);
         // Reported schema empty, asked-for schema a path: still the same table.
-        assert_eq!(referencing_tables(&fks, "/tmp/shop.sqlite", "customers").len(), 1);
+        assert_eq!(
+            referencing_tables(&fks, "/tmp/shop.sqlite", "customers").len(),
+            1
+        );
     }
 
     #[test]
     fn drop_sql_quotes_and_cascades_only_when_asked() {
         let plain = drop_table_sql(&DbDriver::Postgres, "public", "t", false).unwrap();
-        assert!(plain[0].contains("DROP TABLE \"public\".\"t\""), "{plain:?}");
+        assert!(
+            plain[0].contains("DROP TABLE \"public\".\"t\""),
+            "{plain:?}"
+        );
         assert!(!plain[0].contains("CASCADE"));
         let cascade = drop_table_sql(&DbDriver::Postgres, "public", "t", true).unwrap();
         assert!(cascade[0].contains("CASCADE"));
@@ -413,7 +425,10 @@ mod tests {
     fn drop_sql_keeps_a_hostile_name_inside_the_quotes() {
         let name = "t\"; DROP TABLE users; --";
         let sql = drop_table_sql(&DbDriver::Postgres, "public", name, false).unwrap();
-        assert!(sql[0].contains("\"t\"\"; DROP TABLE users; --\""), "{sql:?}");
+        assert!(
+            sql[0].contains("\"t\"\"; DROP TABLE users; --\""),
+            "{sql:?}"
+        );
     }
 
     #[test]
@@ -445,7 +460,10 @@ mod tests {
     }
 
     fn temp_db(tag: &str) -> std::path::PathBuf {
-        let dir = std::env::temp_dir().join(format!("dbhive-service-schema-{tag}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!(
+            "dbhive-service-schema-{tag}-{}",
+            std::process::id()
+        ));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         dir.join("t.sqlite")
@@ -464,18 +482,30 @@ mod tests {
         }
         let schemas = vec!["main".to_string()];
 
-        let deps = find_dependents(&db, &schemas, "main", "customers").await.unwrap();
-        assert_eq!(deps.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(), vec!["orders"]);
-        assert!(find_dependents(&db, &schemas, "main", "scratch").await.unwrap().is_empty());
+        let deps = find_dependents(&db, &schemas, "main", "customers")
+            .await
+            .unwrap();
+        assert_eq!(
+            deps.iter().map(|d| d.name.as_str()).collect::<Vec<_>>(),
+            vec!["orders"]
+        );
+        assert!(find_dependents(&db, &schemas, "main", "scratch")
+            .await
+            .unwrap()
+            .is_empty());
 
-        let res = drop_table(&db, &DbDriver::Sqlite, "", "scratch", false).await.unwrap();
+        let res = drop_table(&db, &DbDriver::Sqlite, "", "scratch", false)
+            .await
+            .unwrap();
         assert_eq!(res.sql.len(), 1);
         let tables = db.get_tables("main").await.unwrap();
         assert!(tables.iter().all(|t| t.name != "scratch"));
         assert!(tables.iter().any(|t| t.name == "customers"));
 
         // Dropping a table that is gone is an error, not a silent no-op.
-        assert!(drop_table(&db, &DbDriver::Sqlite, "", "scratch", false).await.is_err());
+        assert!(drop_table(&db, &DbDriver::Sqlite, "", "scratch", false)
+            .await
+            .is_err());
     }
 
     #[tokio::test]

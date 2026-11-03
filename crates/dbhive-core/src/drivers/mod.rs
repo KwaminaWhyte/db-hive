@@ -7,9 +7,7 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
-use crate::models::{
-    DatabaseInfo, DbError, ForeignKeyInfo, SchemaInfo, TableInfo, TableSchema,
-};
+use crate::models::{DatabaseInfo, DbError, ForeignKeyInfo, SchemaInfo, TableInfo, TableSchema};
 
 pub mod mongodb;
 pub mod mysql;

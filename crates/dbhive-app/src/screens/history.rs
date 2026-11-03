@@ -205,7 +205,6 @@ enum Intent {
     ImportTemplates(String),
 }
 
-
 // ===========================================================================
 // Screen
 // ===========================================================================
@@ -243,7 +242,11 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) -> HistoryAction {
     if !app.screens.history.snippets_loaded {
         reload_snippets(app);
     }
-    let key = (connection_id.clone(), database.clone(), app.screens.history.limit);
+    let key = (
+        connection_id.clone(),
+        database.clone(),
+        app.screens.history.limit,
+    );
     if app.screens.history.loaded_key.as_ref() != Some(&key) {
         reload_history(app, &connection_id, &database);
     }
@@ -286,7 +289,14 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) -> HistoryAction {
         }
 
         // Dialogs are drawn last so they sit above the list.
-        clear_history_dialog(h, &ctx, palette, connection_id.as_deref(), database.as_deref(), &mut intents);
+        clear_history_dialog(
+            h,
+            &ctx,
+            palette,
+            connection_id.as_deref(),
+            database.as_deref(),
+            &mut intents,
+        );
         snippet_form_dialog(h, &ctx, palette, &mut intents);
         confirm_delete_dialog(h, &ctx, palette, &mut intents);
         template_form_dialog(h, &ctx, palette, &mut intents);
@@ -354,9 +364,12 @@ fn apply(
                 };
                 guard.query_history.clone()
             };
-            app.screens.history.save_job.start(app.rt.handle(), ctx, async move {
-                AppState::save_history_to_store(&snapshot).map_err(|e| e.to_string())
-            });
+            app.screens
+                .history
+                .save_job
+                .start(app.rt.handle(), ctx, async move {
+                    AppState::save_history_to_store(&snapshot).map_err(|e| e.to_string())
+                });
             reload_history(app, connection_id, database);
             app.toasts.success("Query history cleared");
         }
@@ -390,13 +403,19 @@ fn apply(
             app.screens
                 .history
                 .save_job
-                .start(app.rt.handle(), ctx, async move { save_templates(&snapshot) });
+                .start(
+                    app.rt.handle(),
+                    ctx,
+                    async move { save_templates(&snapshot) },
+                );
         }
 
         Intent::ExportTemplates => {
             let snapshot = app.screens.history.templates.clone();
             match export_templates_now(&snapshot) {
-                Ok(path) => app.toasts.success(format!("Exported to {}", path.display())),
+                Ok(path) => app
+                    .toasts
+                    .success(format!("Exported to {}", path.display())),
                 Err(e) => {
                     app.screens.history.error = Some(e.clone());
                     app.toasts.error(e);
@@ -430,12 +449,14 @@ fn apply(
 /// inside it is safe; it just must not happen on the UI thread.
 fn persist_snippets(app: &mut DbHiveApp, ctx: &egui::Context) {
     let state = app.state.clone();
-    app.screens.history.save_job.start(app.rt.handle(), ctx, async move {
-        let guard = state.lock().unwrap();
-        guard.save_snippets_to_store().map_err(|e| e.to_string())
-    });
+    app.screens
+        .history
+        .save_job
+        .start(app.rt.handle(), ctx, async move {
+            let guard = state.lock().unwrap();
+            guard.save_snippets_to_store().map_err(|e| e.to_string())
+        });
 }
-
 
 // ===========================================================================
 // History tab
@@ -682,14 +703,11 @@ fn snippets_tab(
     }
     ui.add_space(6.0);
 
-    let visible: Vec<QuerySnippet> = filter_snippets(
-        &h.snippets,
-        &h.snippet_search,
-        h.snippet_tag.as_deref(),
-    )
-    .into_iter()
-    .cloned()
-    .collect();
+    let visible: Vec<QuerySnippet> =
+        filter_snippets(&h.snippets, &h.snippet_search, h.snippet_tag.as_deref())
+            .into_iter()
+            .cloned()
+            .collect();
 
     if visible.is_empty() {
         ui.add_space(24.0);
@@ -781,10 +799,7 @@ fn snippets_tab(
                         );
                         if let Some(tags) = &snippet.tags {
                             if !tags.is_empty() {
-                                ui.label(crate::theme::text::muted(
-                                    palette,
-                                    tags.join(" · "),
-                                ));
+                                ui.label(crate::theme::text::muted(palette, tags.join(" · ")));
                             }
                         }
                     });
@@ -810,67 +825,64 @@ fn snippet_form_dialog(
     let mut open = true;
     let mut close = false;
 
-    egui::Window::new(if editing { "Edit snippet" } else { "New snippet" })
-        .collapsible(false)
-        .resizable(true)
-        .default_width(460.0)
-        .open(&mut open)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(ctx, |ui| {
-            ui.label(crate::theme::text::muted(palette, "Name"));
-            ui.add(
-                egui::TextEdit::singleline(&mut form.name)
-                    .hint_text("e.g. Active users")
-                    .desired_width(f32::INFINITY),
-            );
-            ui.add_space(6.0);
+    egui::Window::new(if editing {
+        "Edit snippet"
+    } else {
+        "New snippet"
+    })
+    .collapsible(false)
+    .resizable(true)
+    .default_width(460.0)
+    .open(&mut open)
+    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+    .show(ctx, |ui| {
+        ui.label(crate::theme::text::muted(palette, "Name"));
+        ui.add(
+            egui::TextEdit::singleline(&mut form.name)
+                .hint_text("e.g. Active users")
+                .desired_width(f32::INFINITY),
+        );
+        ui.add_space(6.0);
 
-            ui.label(crate::theme::text::muted(palette, "Description"));
-            ui.add(
-                egui::TextEdit::singleline(&mut form.description)
-                    .desired_width(f32::INFINITY),
-            );
-            ui.add_space(6.0);
+        ui.label(crate::theme::text::muted(palette, "Description"));
+        ui.add(egui::TextEdit::singleline(&mut form.description).desired_width(f32::INFINITY));
+        ui.add_space(6.0);
 
-            ui.label(crate::theme::text::muted(palette, "Tags (comma separated)"));
-            ui.add(egui::TextEdit::singleline(&mut form.tags).desired_width(f32::INFINITY));
-            ui.add_space(6.0);
+        ui.label(crate::theme::text::muted(palette, "Tags (comma separated)"));
+        ui.add(egui::TextEdit::singleline(&mut form.tags).desired_width(f32::INFINITY));
+        ui.add_space(6.0);
 
-            ui.label(crate::theme::text::muted(palette, "SQL"));
-            ui.add(
-                egui::TextEdit::multiline(&mut form.query)
-                    .code_editor()
-                    .desired_rows(8)
-                    .desired_width(f32::INFINITY),
-            );
-            ui.add_space(8.0);
+        ui.label(crate::theme::text::muted(palette, "SQL"));
+        ui.add(
+            egui::TextEdit::multiline(&mut form.query)
+                .code_editor()
+                .desired_rows(8)
+                .desired_width(f32::INFINITY),
+        );
+        ui.add_space(8.0);
 
-            ui.horizontal(|ui| {
-                let valid = !form.name.trim().is_empty() && !form.query.trim().is_empty();
-                if ui
-                    .add_enabled(valid, egui::Button::new("Save"))
-                    .clicked()
-                {
-                    let tags = parse_tags(&form.tags);
-                    let mut snippet = QuerySnippet::new(
-                        form.name.trim().to_string(),
-                        form.query.clone(),
-                        Some(form.description.trim().to_string())
-                            .filter(|d| !d.is_empty()),
-                        if tags.is_empty() { None } else { Some(tags) },
-                    );
-                    if let Some(id) = &form.id {
-                        // Keep the id so this updates rather than duplicates.
-                        snippet.id = id.clone();
-                    }
-                    intents.push(Intent::SaveSnippet(snippet));
-                    close = true;
+        ui.horizontal(|ui| {
+            let valid = !form.name.trim().is_empty() && !form.query.trim().is_empty();
+            if ui.add_enabled(valid, egui::Button::new("Save")).clicked() {
+                let tags = parse_tags(&form.tags);
+                let mut snippet = QuerySnippet::new(
+                    form.name.trim().to_string(),
+                    form.query.clone(),
+                    Some(form.description.trim().to_string()).filter(|d| !d.is_empty()),
+                    if tags.is_empty() { None } else { Some(tags) },
+                );
+                if let Some(id) = &form.id {
+                    // Keep the id so this updates rather than duplicates.
+                    snippet.id = id.clone();
                 }
-                if ui.button("Cancel").clicked() {
-                    close = true;
-                }
-            });
+                intents.push(Intent::SaveSnippet(snippet));
+                close = true;
+            }
+            if ui.button("Cancel").clicked() {
+                close = true;
+            }
         });
+    });
 
     if close || !open {
         h.snippet_form = None;
@@ -1180,191 +1192,184 @@ fn template_form_dialog(
     let mut close = false;
     let mut saved: Option<QueryTemplate> = None;
 
-    egui::Window::new(if editing { "Edit template" } else { "New template" })
-        .collapsible(false)
-        .resizable(true)
-        .default_width(560.0)
-        .default_height(520.0)
-        .open(&mut open)
-        .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-        .show(ctx, |ui| {
-            egui::ScrollArea::vertical()
-                .auto_shrink([false, false])
-                .show(ui, |ui| {
-                    ui.label(crate::theme::text::muted(palette, "Name"));
-                    ui.add(
-                        egui::TextEdit::singleline(&mut form.name)
-                            .hint_text("e.g. Find Users by Status")
-                            .desired_width(f32::INFINITY),
-                    );
-                    ui.add_space(6.0);
+    egui::Window::new(if editing {
+        "Edit template"
+    } else {
+        "New template"
+    })
+    .collapsible(false)
+    .resizable(true)
+    .default_width(560.0)
+    .default_height(520.0)
+    .open(&mut open)
+    .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+    .show(ctx, |ui| {
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| {
+                ui.label(crate::theme::text::muted(palette, "Name"));
+                ui.add(
+                    egui::TextEdit::singleline(&mut form.name)
+                        .hint_text("e.g. Find Users by Status")
+                        .desired_width(f32::INFINITY),
+                );
+                ui.add_space(6.0);
 
-                    ui.label(crate::theme::text::muted(palette, "Description"));
-                    ui.add(
-                        egui::TextEdit::singleline(&mut form.description)
-                            .desired_width(f32::INFINITY),
-                    );
-                    ui.add_space(6.0);
+                ui.label(crate::theme::text::muted(palette, "Description"));
+                ui.add(
+                    egui::TextEdit::singleline(&mut form.description).desired_width(f32::INFINITY),
+                );
+                ui.add_space(6.0);
 
-                    ui.horizontal(|ui| {
-                        ui.vertical(|ui| {
-                            ui.label(crate::theme::text::muted(palette, "Category"));
-                            ui.add(
-                                egui::TextEdit::singleline(&mut form.category)
-                                    .desired_width(180.0),
-                            );
-                        });
-                        ui.vertical(|ui| {
-                            ui.label(crate::theme::text::muted(
-                                palette,
-                                "Tags (comma separated)",
-                            ));
-                            ui.add(
-                                egui::TextEdit::singleline(&mut form.tags).desired_width(240.0),
-                            );
-                        });
+                ui.horizontal(|ui| {
+                    ui.vertical(|ui| {
+                        ui.label(crate::theme::text::muted(palette, "Category"));
+                        ui.add(egui::TextEdit::singleline(&mut form.category).desired_width(180.0));
                     });
-                    ui.add_space(6.0);
+                    ui.vertical(|ui| {
+                        ui.label(crate::theme::text::muted(palette, "Tags (comma separated)"));
+                        ui.add(egui::TextEdit::singleline(&mut form.tags).desired_width(240.0));
+                    });
+                });
+                ui.add_space(6.0);
 
+                ui.label(crate::theme::text::muted(
+                    palette,
+                    "SQL: use {{name}} or {{name:type}} for parameters",
+                ));
+                ui.add(
+                    egui::TextEdit::multiline(&mut form.sql)
+                        .code_editor()
+                        .desired_rows(8)
+                        .desired_width(f32::INFINITY),
+                );
+
+                // Two-way live sync: the parameter list follows the SQL,
+                // keeping whatever the user configured for parameters
+                // that survived the edit.
+                if form.sql != form.synced_sql {
+                    form.parameters = sync_parameters(&form.sql, &form.parameters);
+                    form.synced_sql = form.sql.clone();
+                }
+
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.label(crate::theme::text::strong(palette, "Parameters"));
+                    if ui.small_button("Add").clicked() {
+                        let n = form.parameters.len() + 1;
+                        form.parameters.push(TemplateParameter {
+                            name: format!("param_{}", n),
+                            label: format!("Parameter {}", n),
+                            param_type: ParamType::String,
+                            default_value: None,
+                            required: false,
+                            description: None,
+                        });
+                    }
+                });
+
+                if form.parameters.is_empty() {
                     ui.label(crate::theme::text::muted(
                         palette,
-                        "SQL: use {{name}} or {{name:type}} for parameters",
+                        "No parameters detected in the SQL.",
                     ));
-                    ui.add(
-                        egui::TextEdit::multiline(&mut form.sql)
-                            .code_editor()
-                            .desired_rows(8)
-                            .desired_width(f32::INFINITY),
-                    );
+                }
 
-                    // Two-way live sync: the parameter list follows the SQL,
-                    // keeping whatever the user configured for parameters
-                    // that survived the edit.
-                    if form.sql != form.synced_sql {
-                        form.parameters = sync_parameters(&form.sql, &form.parameters);
-                        form.synced_sql = form.sql.clone();
-                    }
-
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        ui.label(crate::theme::text::strong(palette, "Parameters"));
-                        if ui.small_button("Add").clicked() {
-                            let n = form.parameters.len() + 1;
-                            form.parameters.push(TemplateParameter {
-                                name: format!("param_{}", n),
-                                label: format!("Parameter {}", n),
-                                param_type: ParamType::String,
-                                default_value: None,
-                                required: false,
-                                description: None,
+                let mut remove: Option<usize> = None;
+                for (idx, param) in form.parameters.iter_mut().enumerate() {
+                    egui::Frame::none()
+                        .fill(palette.muted)
+                        .rounding(egui::Rounding::same(6.0))
+                        .inner_margin(egui::Margin::same(8.0))
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut param.name)
+                                        .hint_text("name")
+                                        .desired_width(140.0),
+                                );
+                                egui::ComboBox::from_id_salt(("param_type", idx))
+                                    .selected_text(param.param_type.as_str())
+                                    .width(110.0)
+                                    .show_ui(ui, |ui| {
+                                        for ty in ParamType::ALL {
+                                            ui.selectable_value(
+                                                &mut param.param_type,
+                                                ty,
+                                                ty.as_str(),
+                                            );
+                                        }
+                                    });
+                                ui.checkbox(&mut param.required, "Required");
+                                if ui.small_button("Remove").clicked() {
+                                    remove = Some(idx);
+                                }
                             });
-                        }
-                    });
-
-                    if form.parameters.is_empty() {
-                        ui.label(crate::theme::text::muted(
-                            palette,
-                            "No parameters detected in the SQL.",
-                        ));
-                    }
-
-                    let mut remove: Option<usize> = None;
-                    for (idx, param) in form.parameters.iter_mut().enumerate() {
-                        egui::Frame::none()
-                            .fill(palette.muted)
-                            .rounding(egui::Rounding::same(6.0))
-                            .inner_margin(egui::Margin::same(8.0))
-                            .show(ui, |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut param.name)
-                                            .hint_text("name")
-                                            .desired_width(140.0),
-                                    );
-                                    egui::ComboBox::from_id_salt(("param_type", idx))
-                                        .selected_text(param.param_type.as_str())
-                                        .width(110.0)
-                                        .show_ui(ui, |ui| {
-                                            for ty in ParamType::ALL {
-                                                ui.selectable_value(
-                                                    &mut param.param_type,
-                                                    ty,
-                                                    ty.as_str(),
-                                                );
-                                            }
-                                        });
-                                    ui.checkbox(&mut param.required, "Required");
-                                    if ui.small_button("Remove").clicked() {
-                                        remove = Some(idx);
-                                    }
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.add(
-                                        egui::TextEdit::singleline(&mut param.label)
-                                            .hint_text("label")
-                                            .desired_width(160.0),
-                                    );
-                                    let mut default =
-                                        param.default_value.clone().unwrap_or_default();
-                                    if ui
-                                        .add(
-                                            egui::TextEdit::singleline(&mut default)
-                                                .hint_text("default value")
-                                                .desired_width(160.0),
-                                        )
-                                        .changed()
-                                    {
-                                        param.default_value =
-                                            if default.is_empty() { None } else { Some(default) };
-                                    }
-                                });
-                                let mut desc = param.description.clone().unwrap_or_default();
+                            ui.horizontal(|ui| {
+                                ui.add(
+                                    egui::TextEdit::singleline(&mut param.label)
+                                        .hint_text("label")
+                                        .desired_width(160.0),
+                                );
+                                let mut default = param.default_value.clone().unwrap_or_default();
                                 if ui
                                     .add(
-                                        egui::TextEdit::singleline(&mut desc)
-                                            .hint_text("description")
-                                            .desired_width(f32::INFINITY),
+                                        egui::TextEdit::singleline(&mut default)
+                                            .hint_text("default value")
+                                            .desired_width(160.0),
                                     )
                                     .changed()
                                 {
-                                    param.description =
-                                        if desc.is_empty() { None } else { Some(desc) };
+                                    param.default_value = if default.is_empty() {
+                                        None
+                                    } else {
+                                        Some(default)
+                                    };
                                 }
                             });
-                        ui.add_space(4.0);
-                    }
-                    if let Some(idx) = remove {
-                        form.parameters.remove(idx);
-                    }
-
-                    ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        let valid =
-                            !form.name.trim().is_empty() && !form.sql.trim().is_empty();
-                        if ui.add_enabled(valid, egui::Button::new("Save")).clicked() {
-                            let tags = parse_tags(&form.tags);
-                            let mut template = QueryTemplate::new(
-                                form.name.trim().to_string(),
-                                Some(form.description.trim().to_string())
-                                    .filter(|d| !d.is_empty()),
-                                form.sql.trim().to_string(),
-                                form.parameters.clone(),
-                                Some(form.category.trim().to_string())
-                                    .filter(|c| !c.is_empty()),
-                                if tags.is_empty() { None } else { Some(tags) },
-                            );
-                            if let Some(id) = &form.id {
-                                template.id = id.clone();
+                            let mut desc = param.description.clone().unwrap_or_default();
+                            if ui
+                                .add(
+                                    egui::TextEdit::singleline(&mut desc)
+                                        .hint_text("description")
+                                        .desired_width(f32::INFINITY),
+                                )
+                                .changed()
+                            {
+                                param.description = if desc.is_empty() { None } else { Some(desc) };
                             }
-                            saved = Some(template);
-                            close = true;
+                        });
+                    ui.add_space(4.0);
+                }
+                if let Some(idx) = remove {
+                    form.parameters.remove(idx);
+                }
+
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    let valid = !form.name.trim().is_empty() && !form.sql.trim().is_empty();
+                    if ui.add_enabled(valid, egui::Button::new("Save")).clicked() {
+                        let tags = parse_tags(&form.tags);
+                        let mut template = QueryTemplate::new(
+                            form.name.trim().to_string(),
+                            Some(form.description.trim().to_string()).filter(|d| !d.is_empty()),
+                            form.sql.trim().to_string(),
+                            form.parameters.clone(),
+                            Some(form.category.trim().to_string()).filter(|c| !c.is_empty()),
+                            if tags.is_empty() { None } else { Some(tags) },
+                        );
+                        if let Some(id) = &form.id {
+                            template.id = id.clone();
                         }
-                        if ui.button("Cancel").clicked() {
-                            close = true;
-                        }
-                    });
+                        saved = Some(template);
+                        close = true;
+                    }
+                    if ui.button("Cancel").clicked() {
+                        close = true;
+                    }
                 });
-        });
+            });
+    });
 
     if let Some(template) = saved {
         match h.templates.iter_mut().find(|t| t.id == template.id) {
@@ -1472,10 +1477,7 @@ fn template_run_dialog(
                                 )
                                 .changed(),
                             _ => ui
-                                .add(
-                                    egui::TextEdit::singleline(value)
-                                        .desired_width(f32::INFINITY),
-                                )
+                                .add(egui::TextEdit::singleline(value).desired_width(f32::INFINITY))
                                 .changed(),
                         };
 

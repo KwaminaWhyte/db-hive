@@ -393,33 +393,26 @@ fn redis_value_to_query_result(value: redis::Value) -> QueryResult {
             rows: vec![vec![serde_json::Value::Null]],
             rows_affected: Some(0),
         },
-        Value::Int(n) => QueryResult::with_data(
-            vec!["result".to_string()],
-            vec![vec![serde_json::json!(n)]],
-        ),
+        Value::Int(n) => {
+            QueryResult::with_data(vec!["result".to_string()], vec![vec![serde_json::json!(n)]])
+        }
         Value::BulkString(bytes) => {
             let s = String::from_utf8_lossy(&bytes).to_string();
-            QueryResult::with_data(
-                vec!["result".to_string()],
-                vec![vec![serde_json::json!(s)]],
-            )
+            QueryResult::with_data(vec!["result".to_string()], vec![vec![serde_json::json!(s)]])
         }
-        Value::SimpleString(s) => QueryResult::with_data(
-            vec!["result".to_string()],
-            vec![vec![serde_json::json!(s)]],
-        ),
+        Value::SimpleString(s) => {
+            QueryResult::with_data(vec!["result".to_string()], vec![vec![serde_json::json!(s)]])
+        }
         Value::Okay => QueryResult::with_data(
             vec!["result".to_string()],
             vec![vec![serde_json::json!("OK")]],
         ),
-        Value::Boolean(b) => QueryResult::with_data(
-            vec!["result".to_string()],
-            vec![vec![serde_json::json!(b)]],
-        ),
-        Value::Double(d) => QueryResult::with_data(
-            vec!["result".to_string()],
-            vec![vec![serde_json::json!(d)]],
-        ),
+        Value::Boolean(b) => {
+            QueryResult::with_data(vec!["result".to_string()], vec![vec![serde_json::json!(b)]])
+        }
+        Value::Double(d) => {
+            QueryResult::with_data(vec!["result".to_string()], vec![vec![serde_json::json!(d)]])
+        }
         Value::BigNumber(n) => {
             // BigNumber comes from the num-bigint type; convert via Display
             QueryResult::with_data(
@@ -440,10 +433,7 @@ fn redis_value_to_query_result(value: redis::Value) -> QueryResult {
                 .into_iter()
                 .map(|(k, v)| vec![redis_value_to_json(k), redis_value_to_json(v)])
                 .collect();
-            QueryResult::with_data(
-                vec!["field".to_string(), "value".to_string()],
-                rows,
-            )
+            QueryResult::with_data(vec!["field".to_string(), "value".to_string()], rows)
         }
         Value::Set(items) => {
             let rows: Vec<Vec<serde_json::Value>> = items
@@ -457,7 +447,10 @@ fn redis_value_to_query_result(value: redis::Value) -> QueryResult {
             vec![vec![serde_json::json!(text)]],
         ),
         // Attribute, Push: treat as informational; surface as JSON string
-        Value::Attribute { data, attributes: _ } => redis_value_to_query_result(*data),
+        Value::Attribute {
+            data,
+            attributes: _,
+        } => redis_value_to_query_result(*data),
         Value::Push { kind: _, data } => {
             let rows: Vec<Vec<serde_json::Value>> = data
                 .into_iter()
@@ -467,7 +460,9 @@ fn redis_value_to_query_result(value: redis::Value) -> QueryResult {
         }
         Value::ServerError(e) => QueryResult {
             columns: vec!["error".to_string()],
-            rows: vec![vec![serde_json::json!(e.details().unwrap_or("server error"))]],
+            rows: vec![vec![serde_json::json!(e
+                .details()
+                .unwrap_or("server error"))]],
             rows_affected: None,
         },
     }
@@ -508,7 +503,10 @@ fn redis_value_to_json(value: redis::Value) -> serde_json::Value {
             serde_json::Value::Array(items.into_iter().map(redis_value_to_json).collect())
         }
         Value::VerbatimString { format: _, text } => serde_json::json!(text),
-        Value::Attribute { data, attributes: _ } => redis_value_to_json(*data),
+        Value::Attribute {
+            data,
+            attributes: _,
+        } => redis_value_to_json(*data),
         Value::Push { kind: _, data } => {
             serde_json::Value::Array(data.into_iter().map(redis_value_to_json).collect())
         }
@@ -537,8 +535,7 @@ mod tests {
 
     #[test]
     fn test_simple_string_to_query_result() {
-        let result =
-            redis_value_to_query_result(redis::Value::SimpleString("PONG".to_string()));
+        let result = redis_value_to_query_result(redis::Value::SimpleString("PONG".to_string()));
         assert_eq!(result.rows[0][0], serde_json::json!("PONG"));
     }
 

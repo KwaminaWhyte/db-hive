@@ -269,7 +269,9 @@ impl PluginManager {
         if plugin.enabled && plugin.has_permission(permission) {
             Ok(())
         } else {
-            Err(PluginError::PermissionDenied(permission.label().to_string()))
+            Err(PluginError::PermissionDenied(
+                permission.label().to_string(),
+            ))
         }
     }
 
@@ -294,9 +296,7 @@ impl PluginManager {
         if !self.loaded.write().await.remove(plugin_id) {
             return Err(PluginError::NotFound(plugin_id.to_string()));
         }
-        let _ = self
-            .with_runtime(plugin_id, |rt| rt.call_on_unload())
-            .await;
+        let _ = self.with_runtime(plugin_id, |rt| rt.call_on_unload()).await;
         Ok(())
     }
 
@@ -364,8 +364,8 @@ impl PluginManager {
         let data_dir = self.store.data_dir(&plugin.manifest.id)?;
         let store = self.store.clone();
 
-        let (outcome, mut owned) = tokio::task::spawn_blocking(
-            move || -> (PluginResult<RunOutcome<T>>, Plugin) {
+        let (outcome, mut owned) =
+            tokio::task::spawn_blocking(move || -> (PluginResult<RunOutcome<T>>, Plugin) {
                 let result = (|| {
                     let code = std::fs::read_to_string(&main_path)?;
                     let mut rt = PluginRuntimeSync::new(&plugin, data_dir)?;
@@ -378,10 +378,9 @@ impl PluginManager {
                     })
                 })();
                 (result, plugin)
-            },
-        )
-        .await
-        .map_err(|e| PluginError::Other(format!("plugin task failed: {}", e)))?;
+            })
+            .await
+            .map_err(|e| PluginError::Other(format!("plugin task failed: {}", e)))?;
 
         let ok = outcome.is_ok();
         let store_for_stats = store.clone();

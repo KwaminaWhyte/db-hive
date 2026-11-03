@@ -23,12 +23,17 @@ pub fn to_row(r: RowView) -> PanelRow {
 }
 
 pub fn rows_model(rows: Vec<RowView>) -> ModelRc<PanelRow> {
-    ModelRc::new(VecModel::from(rows.into_iter().map(to_row).collect::<Vec<_>>()))
+    ModelRc::new(VecModel::from(
+        rows.into_iter().map(to_row).collect::<Vec<_>>(),
+    ))
 }
 
 pub fn strings_model(items: &[String]) -> ModelRc<SharedString> {
     ModelRc::new(VecModel::from(
-        items.iter().map(|s| SharedString::from(s.as_str())).collect::<Vec<_>>(),
+        items
+            .iter()
+            .map(|s| SharedString::from(s.as_str()))
+            .collect::<Vec<_>>(),
     ))
 }
 
@@ -48,7 +53,11 @@ pub fn run_params(fields: Vec<RunField>) -> ModelRc<RunParam> {
                 description: f.description.into(),
                 type_label: f.param_type.as_str().into(),
                 required: f.required,
-                kind: if f.param_type == ParamType::Boolean { 1 } else { 0 },
+                kind: if f.param_type == ParamType::Boolean {
+                    1
+                } else {
+                    0
+                },
                 placeholder: match f.param_type {
                     ParamType::Date => "YYYY-MM-DD",
                     ParamType::Datetime => "YYYY-MM-DD HH:MM:SS",

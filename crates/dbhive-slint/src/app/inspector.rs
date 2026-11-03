@@ -49,7 +49,11 @@ impl Ctx {
         let driver = ws.driver.clone()?;
         // A tab opened from the schema browser may live outside the
         // workspace's current schema.
-        let schema_arg = tab.schema.clone().or_else(|| ws.schema.clone()).unwrap_or_default();
+        let schema_arg = tab
+            .schema
+            .clone()
+            .or_else(|| ws.schema.clone())
+            .unwrap_or_default();
         Some(Target {
             connection_id: ws.connection_id.clone(),
             qualifier: sql_qualifier(&driver, &schema_arg),
@@ -515,9 +519,9 @@ pub(super) fn project(w: &AppWindow, ws: &Workspace, tab: &Tab) {
     // Selection and the row panel. A selection that no longer points at a
     // row (the page changed under it) shows nothing.
     let new_rows = v.edit.session.as_ref().map_or(0, |s| s.new_rows().len());
-    let selected = v
-        .selection
-        .filter(|c| page.is_some_and(|r| c.row < r.rows.len() + new_rows && c.col < r.columns.len()));
+    let selected = v.selection.filter(|c| {
+        page.is_some_and(|r| c.row < r.rows.len() + new_rows && c.col < r.columns.len())
+    });
     b.set_selected_row(selected.map_or(-1, |c| c.row as i32));
     b.set_selected_col(selected.map_or(-1, |c| c.col as i32));
     // A new, unsaved row has no stored JSON to show.

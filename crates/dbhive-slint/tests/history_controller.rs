@@ -30,7 +30,9 @@ fn sqlite_count(path: &std::path::Path) -> i64 {
 
 /// The row of `rows` whose title starts with `prefix`, as (index, id).
 fn find_row(rows: slint::ModelRc<dbhive_slint::PanelRow>, prefix: &str) -> Option<String> {
-    rows.iter().find(|r| r.title.starts_with(prefix)).map(|r| r.id.to_string())
+    rows.iter()
+        .find(|r| r.title.starts_with(prefix))
+        .map(|r| r.id.to_string())
 }
 
 fn toast_texts(w: &dbhive_slint::AppWindow) -> Vec<String> {
@@ -49,8 +51,16 @@ fn run_a_query_find_it_in_history_and_rerun_it_into_a_new_tab() {
     let db = dir.join("widgets.sqlite");
     {
         let conn = rusqlite::Connection::open(&db).unwrap();
-        conn.execute("CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)", []).unwrap();
-        conn.execute("INSERT INTO widgets (name) VALUES ('sprocket'), ('gizmo')", []).unwrap();
+        conn.execute(
+            "CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO widgets (name) VALUES ('sprocket'), ('gizmo')",
+            [],
+        )
+        .unwrap();
     }
     let db_name = db.to_string_lossy().to_string();
 
@@ -73,11 +83,23 @@ fn run_a_query_find_it_in_history_and_rerun_it_into_a_new_tab() {
 
         let at = |mins: i64| (chrono::Utc::now() - chrono::Duration::minutes(mins)).to_rfc3339();
         let mk = |conn: &str, name: &str, sql: &str, mins: i64| {
-            QueryHistory::new(conn.into(), name.into(), db_name.clone(), sql.into(), at(mins))
+            QueryHistory::new(
+                conn.into(),
+                name.into(),
+                db_name.clone(),
+                sql.into(),
+                at(mins),
+            )
         };
         let history = vec![
             mk("widgets-db", "Widgets", "DELETE FROM widgets", 30).with_success(2, Some(2)),
-            mk("other-db", "Elsewhere", "SELECT 'from another connection'", 20).with_success(1, Some(1)),
+            mk(
+                "other-db",
+                "Elsewhere",
+                "SELECT 'from another connection'",
+                20,
+            )
+            .with_success(1, Some(1)),
             mk("widgets-db", "Widgets", "SELECT * FROM missing_table", 10)
                 .with_error("no such table: missing_table".into(), Some(1)),
         ];
@@ -92,8 +114,13 @@ fn run_a_query_find_it_in_history_and_rerun_it_into_a_new_tab() {
 
     const SELECT: &str = "SELECT name FROM widgets ORDER BY id";
 
-    let (weak, fail, step2, db2, dir2) =
-        (w.as_weak(), failure.clone(), step.clone(), db.clone(), dir.clone());
+    let (weak, fail, step2, db2, dir2) = (
+        w.as_weak(),
+        failure.clone(),
+        step.clone(),
+        db.clone(),
+        dir.clone(),
+    );
     timer.start(TimerMode::Repeated, Duration::from_millis(20), move || {
         let w = weak.upgrade().unwrap();
         let h = w.global::<HistoryState>();

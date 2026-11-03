@@ -152,7 +152,9 @@ pub fn retarget_extension(path: &str, format: ResultFormat) -> String {
         .and_then(|e| e.to_str())
         .is_some_and(|e| known.iter().any(|k| k.eq_ignore_ascii_case(e)))
     {
-        p.with_extension(format.extension()).to_string_lossy().to_string()
+        p.with_extension(format.extension())
+            .to_string_lossy()
+            .to_string()
     } else {
         path.to_string()
     }
@@ -312,7 +314,10 @@ pub fn render_json(columns: &[String], rows: &[Vec<Value>]) -> String {
     if rows.is_empty() {
         return "[]\n".to_string();
     }
-    let keys: Vec<String> = unique_keys(columns).iter().map(|k| json_string(k)).collect();
+    let keys: Vec<String> = unique_keys(columns)
+        .iter()
+        .map(|k| json_string(k))
+        .collect();
     let mut out = String::from("[\n");
     for (r, row) in rows.iter().enumerate() {
         if keys.is_empty() {
@@ -364,7 +369,12 @@ pub enum ViewMode {
 }
 
 impl ViewMode {
-    pub const ALL: [ViewMode; 4] = [ViewMode::Table, ViewMode::Json, ViewMode::Text, ViewMode::Chart];
+    pub const ALL: [ViewMode; 4] = [
+        ViewMode::Table,
+        ViewMode::Json,
+        ViewMode::Text,
+        ViewMode::Chart,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -406,7 +416,11 @@ impl ViewText {
 
     /// The longest line, in characters, for sizing the horizontal scroll.
     pub fn max_columns(&self) -> usize {
-        self.lines.iter().map(|l| l.chars().count()).max().unwrap_or(0)
+        self.lines
+            .iter()
+            .map(|l| l.chars().count())
+            .max()
+            .unwrap_or(0)
     }
 
     /// The lines as one string, for the Copy button.
@@ -459,7 +473,11 @@ pub fn text_view(columns: &[String], rows: &[Vec<Value>], cap: usize) -> ViewTex
     let shown = rows.len().min(cap);
     let cells: Vec<Vec<String>> = rows[..shown]
         .iter()
-        .map(|row| (0..columns.len()).map(|i| row.get(i).map(text_cell).unwrap_or_default()).collect())
+        .map(|row| {
+            (0..columns.len())
+                .map(|i| row.get(i).map(text_cell).unwrap_or_default())
+                .collect()
+        })
         .collect();
     let widths: Vec<usize> = (0..columns.len())
         .map(|i| {
@@ -494,7 +512,11 @@ pub fn text_view(columns: &[String], rows: &[Vec<Value>], cap: usize) -> ViewTex
     for row in &cells {
         lines.push(pad_line(row.iter().map(String::as_str).collect()));
     }
-    ViewText { lines, shown_rows: shown, total_rows: rows.len() }
+    ViewText {
+        lines,
+        shown_rows: shown,
+        total_rows: rows.len(),
+    }
 }
 
 /// The Text view as real tab-separated values (same cap, same escaping).
@@ -503,8 +525,9 @@ pub fn text_tsv(columns: &[String], rows: &[Vec<Value>], cap: usize) -> String {
     let mut out = columns.join("\t");
     out.push('\n');
     for row in &rows[..shown] {
-        let fields: Vec<String> =
-            (0..columns.len()).map(|i| row.get(i).map(text_cell).unwrap_or_default()).collect();
+        let fields: Vec<String> = (0..columns.len())
+            .map(|i| row.get(i).map(text_cell).unwrap_or_default())
+            .collect();
         out.push_str(&fields.join("\t"));
         out.push('\n');
     }
@@ -577,7 +600,11 @@ pub fn json_runs(line: &str) -> Vec<(JsonKind, String)> {
                 while j < chars.len() && chars[j] == ' ' {
                     j += 1;
                 }
-                let kind = if chars.get(j) == Some(&':') { JsonKind::Key } else { JsonKind::String };
+                let kind = if chars.get(j) == Some(&':') {
+                    JsonKind::Key
+                } else {
+                    JsonKind::String
+                };
                 push(kind, chars[start..end].iter().collect());
             }
             '{' | '}' | '[' | ']' | ',' | ':' => {
@@ -586,8 +613,7 @@ pub fn json_runs(line: &str) -> Vec<(JsonKind, String)> {
             }
             '-' | '0'..='9' => {
                 let start = i;
-                while i < chars.len()
-                    && matches!(chars[i], '-' | '+' | '.' | 'e' | 'E' | '0'..='9')
+                while i < chars.len() && matches!(chars[i], '-' | '+' | '.' | 'e' | 'E' | '0'..='9')
                 {
                     i += 1;
                 }
@@ -644,16 +670,28 @@ const NOISE: [&str; 2] = ["error returned from database: ", "error occurred whil
 /// A more useful headline than "Query failed", chosen from the message.
 fn refine(lower: &str) -> Option<&'static str> {
     let has = |needles: &[&str]| needles.iter().any(|n| lower.contains(n));
-    if has(&["syntax error", "you have an error in your sql syntax", "incorrect syntax"]) {
+    if has(&[
+        "syntax error",
+        "you have an error in your sql syntax",
+        "incorrect syntax",
+    ]) {
         Some("Syntax error")
     } else if has(&["unique constraint", "duplicate key", "duplicate entry"]) {
         Some("Duplicate value")
     } else if has(&["foreign key constraint", "violates foreign key"]) {
         Some("Foreign key violation")
-    } else if has(&["not null constraint", "null value in column", "cannot be null"]) {
+    } else if has(&[
+        "not null constraint",
+        "null value in column",
+        "cannot be null",
+    ]) {
         Some("Missing required value")
-    } else if has(&["no such table", "no such column", "unknown column", "unknown table"])
-        || (lower.contains("does not exist") && has(&["relation", "column", "table"]))
+    } else if has(&[
+        "no such table",
+        "no such column",
+        "unknown column",
+        "unknown table",
+    ]) || (lower.contains("does not exist") && has(&["relation", "column", "table"]))
         || (lower.contains("doesn't exist") && lower.contains("table"))
         || lower.contains("invalid object name")
     {
@@ -662,7 +700,12 @@ fn refine(lower: &str) -> Option<&'static str> {
         Some("Permission denied")
     } else if has(&["timed out", "timeout"]) {
         Some("Query timed out")
-    } else if has(&["connection refused", "connection reset", "broken pipe", "connection closed"]) {
+    } else if has(&[
+        "connection refused",
+        "connection reset",
+        "broken pipe",
+        "connection closed",
+    ]) {
         Some("Connection lost")
     } else {
         None
@@ -680,7 +723,10 @@ fn find_code(message: &str) -> String {
     }
     if let Some(i) = message.find("SQLSTATE") {
         let rest = message[i + 8..].trim_start_matches([' ', ':']);
-        let code: String = rest.chars().take_while(|c| c.is_ascii_alphanumeric()).collect();
+        let code: String = rest
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric())
+            .collect();
         if code.len() == 5 {
             return code;
         }
@@ -722,7 +768,11 @@ pub fn describe_error(raw: &str) -> ErrorView {
     if detail.is_empty() {
         detail = "The database returned no further detail.".to_string();
     }
-    ErrorView { headline: headline.to_string(), detail, code }
+    ErrorView {
+        headline: headline.to_string(),
+        detail,
+        code,
+    }
 }
 
 /// What the Copy button puts on the clipboard: the error, its code, and the
@@ -774,14 +824,25 @@ mod tests {
     #[test]
     fn csv_writes_formula_looking_values_untouched() {
         // Nothing is neutralised silently: the dialog tells the user instead.
-        let rows = vec![vec![json!("=1+1"), json!("+SUM(A1)"), json!("-2"), json!("@cmd")]];
+        let rows = vec![vec![
+            json!("=1+1"),
+            json!("+SUM(A1)"),
+            json!("-2"),
+            json!("@cmd"),
+        ]];
         let out = render_csv(&cols(&["a", "b", "c", "d"]), &rows);
         assert_eq!(out, "a,b,c,d\n=1+1,+SUM(A1),-2,@cmd\n");
     }
 
     #[test]
     fn csv_null_is_empty_and_distinct_types_keep_their_text() {
-        let rows = vec![vec![json!(null), json!(true), json!(1.5), json!(42), json!({"k": [1, 2]})]];
+        let rows = vec![vec![
+            json!(null),
+            json!(true),
+            json!(1.5),
+            json!(42),
+            json!({"k": [1, 2]}),
+        ]];
         let out = render_csv(&cols(&["n", "b", "f", "i", "o"]), &rows);
         // The object contains a comma and quotes, so it is quoted.
         assert_eq!(out, "n,b,f,i,o\n,true,1.5,42,\"{\"\"k\"\":[1,2]}\"\n");
@@ -850,7 +911,10 @@ mod tests {
 
     #[test]
     fn unique_keys_skip_a_name_that_already_exists() {
-        assert_eq!(unique_keys(&cols(&["id", "id_2", "id"])), vec!["id", "id_2", "id_3"]);
+        assert_eq!(
+            unique_keys(&cols(&["id", "id_2", "id"])),
+            vec!["id", "id_2", "id_3"]
+        );
     }
 
     #[test]
@@ -864,7 +928,11 @@ mod tests {
 
     #[test]
     fn json_numbers_keep_their_precision() {
-        let rows = vec![vec![json!(9007199254740993_i64), json!(u64::MAX), json!(0.1)]];
+        let rows = vec![vec![
+            json!(9007199254740993_i64),
+            json!(u64::MAX),
+            json!(0.1),
+        ]];
         let out = render_json(&cols(&["i", "u", "f"]), &rows);
         assert!(out.contains("9007199254740993"));
         assert!(out.contains("18446744073709551615"));
@@ -884,7 +952,9 @@ mod tests {
     // -- Views ------------------------------------------------------------------
 
     fn numbered(n: usize) -> Vec<Vec<Value>> {
-        (0..n).map(|i| vec![json!(i), json!(format!("row {i}"))]).collect()
+        (0..n)
+            .map(|i| vec![json!(i), json!(format!("row {i}"))])
+            .collect()
     }
 
     #[test]
@@ -914,7 +984,10 @@ mod tests {
 
     #[test]
     fn text_view_aligns_columns_and_marks_null() {
-        let rows = vec![vec![json!(1), json!("alpha")], vec![json!(null), json!("b")]];
+        let rows = vec![
+            vec![json!(1), json!("alpha")],
+            vec![json!(null), json!("b")],
+        ];
         let t = text_view(&cols(&["id", "name"]), &rows, 10);
         assert_eq!(t.lines, vec!["id    name", "1     alpha", "NULL  b"]);
     }
@@ -933,11 +1006,17 @@ mod tests {
     #[test]
     fn text_view_caps_column_padding() {
         let long = "x".repeat(100);
-        let rows = vec![vec![json!(long.clone()), json!("b")], vec![json!("s"), json!("b")]];
+        let rows = vec![
+            vec![json!(long.clone()), json!("b")],
+            vec![json!("s"), json!("b")],
+        ];
         let t = text_view(&cols(&["a", "b"]), &rows, 10);
         // The long cell is not cut, and the short row pads to the cap only.
         assert!(t.lines[1].starts_with(&long));
-        assert_eq!(t.lines[2], format!("s{}  b", " ".repeat(TEXT_COLUMN_CAP - 1)));
+        assert_eq!(
+            t.lines[2],
+            format!("s{}  b", " ".repeat(TEXT_COLUMN_CAP - 1))
+        );
     }
 
     #[test]
@@ -1021,16 +1100,33 @@ mod tests {
 
     #[test]
     fn suggested_path_is_dated_and_safe() {
-        let p = suggested_path(Path::new("/tmp/dl"), "my table/1", ResultFormat::Json, "2026-10-21");
+        let p = suggested_path(
+            Path::new("/tmp/dl"),
+            "my table/1",
+            ResultFormat::Json,
+            "2026-10-21",
+        );
         assert_eq!(p, "/tmp/dl/my_table_1_2026-10-21.json");
     }
 
     #[test]
     fn changing_format_retargets_our_extensions_only() {
-        assert_eq!(retarget_extension("/x/a.csv", ResultFormat::Json), "/x/a.json");
-        assert_eq!(retarget_extension("/x/a.JSON", ResultFormat::Csv), "/x/a.csv");
-        assert_eq!(retarget_extension("/x/notes.txt", ResultFormat::Json), "/x/notes.txt");
-        assert_eq!(retarget_extension("/x/noext", ResultFormat::Json), "/x/noext");
+        assert_eq!(
+            retarget_extension("/x/a.csv", ResultFormat::Json),
+            "/x/a.json"
+        );
+        assert_eq!(
+            retarget_extension("/x/a.JSON", ResultFormat::Csv),
+            "/x/a.csv"
+        );
+        assert_eq!(
+            retarget_extension("/x/notes.txt", ResultFormat::Json),
+            "/x/notes.txt"
+        );
+        assert_eq!(
+            retarget_extension("/x/noext", ResultFormat::Json),
+            "/x/noext"
+        );
     }
 
     #[test]
@@ -1040,13 +1136,31 @@ mod tests {
         let free = dir.join("new.csv");
         let taken = dir.join("old.csv");
         std::fs::write(&taken, "x").unwrap();
-        assert_eq!(check_path(free.to_str().unwrap(), ResultFormat::Csv), PathCheck::Free);
-        assert_eq!(check_path(taken.to_str().unwrap(), ResultFormat::Csv), PathCheck::Replaces);
-        assert!(matches!(check_path("", ResultFormat::Csv), PathCheck::Problem(_)));
-        assert!(matches!(check_path("relative.csv", ResultFormat::Csv), PathCheck::Problem(_)));
-        assert!(matches!(check_path(free.to_str().unwrap(), ResultFormat::Json), PathCheck::Problem(_)));
+        assert_eq!(
+            check_path(free.to_str().unwrap(), ResultFormat::Csv),
+            PathCheck::Free
+        );
+        assert_eq!(
+            check_path(taken.to_str().unwrap(), ResultFormat::Csv),
+            PathCheck::Replaces
+        );
         assert!(matches!(
-            check_path(dir.join("missing").join("a.csv").to_str().unwrap(), ResultFormat::Csv),
+            check_path("", ResultFormat::Csv),
+            PathCheck::Problem(_)
+        ));
+        assert!(matches!(
+            check_path("relative.csv", ResultFormat::Csv),
+            PathCheck::Problem(_)
+        ));
+        assert!(matches!(
+            check_path(free.to_str().unwrap(), ResultFormat::Json),
+            PathCheck::Problem(_)
+        ));
+        assert!(matches!(
+            check_path(
+                dir.join("missing").join("a.csv").to_str().unwrap(),
+                ResultFormat::Csv
+            ),
             PathCheck::Problem(_)
         ));
         let _ = std::fs::remove_dir_all(&dir);
@@ -1091,11 +1205,17 @@ mod tests {
     fn reveal_selects_the_file_where_the_os_can() {
         assert_eq!(
             reveal_command("/Users/a/Downloads/x.csv", "macos"),
-            ("open".to_string(), vec!["-R".to_string(), "/Users/a/Downloads/x.csv".to_string()])
+            (
+                "open".to_string(),
+                vec!["-R".to_string(), "/Users/a/Downloads/x.csv".to_string()]
+            )
         );
         assert_eq!(
             reveal_command("C:\\a\\x.csv", "windows"),
-            ("explorer".to_string(), vec!["/select,C:\\a\\x.csv".to_string()])
+            (
+                "explorer".to_string(),
+                vec!["/select,C:\\a\\x.csv".to_string()]
+            )
         );
         assert_eq!(
             reveal_command("/home/a/x.csv", "linux"),
@@ -1126,10 +1246,19 @@ mod tests {
     #[test]
     fn constraint_and_permission_errors_are_recognised() {
         let h = |m: &str| describe_error(m).headline;
-        assert_eq!(h("UNIQUE constraint failed: users.email"), "Duplicate value");
-        assert_eq!(h("duplicate key value violates unique constraint \"x\""), "Duplicate value");
+        assert_eq!(
+            h("UNIQUE constraint failed: users.email"),
+            "Duplicate value"
+        );
+        assert_eq!(
+            h("duplicate key value violates unique constraint \"x\""),
+            "Duplicate value"
+        );
         assert_eq!(h("FOREIGN KEY constraint failed"), "Foreign key violation");
-        assert_eq!(h("NOT NULL constraint failed: t.c"), "Missing required value");
+        assert_eq!(
+            h("NOT NULL constraint failed: t.c"),
+            "Missing required value"
+        );
         assert_eq!(h("permission denied for table users"), "Permission denied");
     }
 
@@ -1149,7 +1278,10 @@ mod tests {
         assert_eq!(v.headline, "Query failed");
         assert_eq!(v.detail, "something odd happened");
         assert_eq!(v.code, "");
-        assert_eq!(describe_error("").detail, "The database returned no further detail.");
+        assert_eq!(
+            describe_error("").detail,
+            "The database returned no further detail."
+        );
     }
 
     #[test]

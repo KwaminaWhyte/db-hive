@@ -43,12 +43,17 @@ fn view_modes_error_state_and_export_on_a_real_database() {
     std::env::set_var(dbhive_core::storage::DATA_DIR_ENV, &dir);
     // The scenario needs results larger than the default Settings > Max rows
     // (1,000) to reach the view's own 2,000 row cap.
-    std::fs::write(dir.join("settings.json"), r#"{"settings":{"query":{"maxRows":100000}}}"#).unwrap();
+    std::fs::write(
+        dir.join("settings.json"),
+        r#"{"settings":{"query":{"maxRows":100000}}}"#,
+    )
+    .unwrap();
 
     let db = dir.join("shop.sqlite");
     {
         let conn = rusqlite::Connection::open(&db).unwrap();
-        conn.execute_batch("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, note TEXT);").unwrap();
+        conn.execute_batch("CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT, note TEXT);")
+            .unwrap();
         let rows: [(&str, Option<&str>); 6] = [
             ("plain", Some("ok")),
             ("a,b", Some("comma")),
@@ -58,7 +63,11 @@ fn view_modes_error_state_and_export_on_a_real_database() {
             ("héllo 世界 🐝", Some("")),
         ];
         for (name, note) in rows {
-            conn.execute("INSERT INTO items (name, note) VALUES (?1, ?2)", rusqlite::params![name, note]).unwrap();
+            conn.execute(
+                "INSERT INTO items (name, note) VALUES (?1, ?2)",
+                rusqlite::params![name, note],
+            )
+            .unwrap();
         }
     }
     {

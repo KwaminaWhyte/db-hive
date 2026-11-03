@@ -33,7 +33,10 @@ pub enum DbDriver {
 impl DbDriver {
     /// Whether this driver speaks the PostgreSQL wire protocol.
     pub fn is_postgres_compatible(&self) -> bool {
-        matches!(self, DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon)
+        matches!(
+            self,
+            DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon
+        )
     }
 }
 
@@ -289,11 +292,26 @@ mod tests {
 
     #[test]
     fn test_default_ports() {
-        assert_eq!(ConnectionProfile::default_port_for_driver(&DbDriver::Postgres), 5432);
-        assert_eq!(ConnectionProfile::default_port_for_driver(&DbDriver::MySql), 3306);
-        assert_eq!(ConnectionProfile::default_port_for_driver(&DbDriver::MongoDb), 27017);
-        assert_eq!(ConnectionProfile::default_port_for_driver(&DbDriver::SqlServer), 1433);
-        assert_eq!(ConnectionProfile::default_port_for_driver(&DbDriver::Sqlite), 0);
+        assert_eq!(
+            ConnectionProfile::default_port_for_driver(&DbDriver::Postgres),
+            5432
+        );
+        assert_eq!(
+            ConnectionProfile::default_port_for_driver(&DbDriver::MySql),
+            3306
+        );
+        assert_eq!(
+            ConnectionProfile::default_port_for_driver(&DbDriver::MongoDb),
+            27017
+        );
+        assert_eq!(
+            ConnectionProfile::default_port_for_driver(&DbDriver::SqlServer),
+            1433
+        );
+        assert_eq!(
+            ConnectionProfile::default_port_for_driver(&DbDriver::Sqlite),
+            0
+        );
     }
 
     #[test]

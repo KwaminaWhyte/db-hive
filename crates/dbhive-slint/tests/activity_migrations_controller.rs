@@ -37,7 +37,9 @@ fn tables(path: &std::path::Path) -> Vec<String> {
 
 fn columns(path: &std::path::Path, table: &str) -> Vec<String> {
     let conn = rusqlite::Connection::open(path).unwrap();
-    let mut stmt = conn.prepare(&format!("PRAGMA table_info({table})")).unwrap();
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({table})"))
+        .unwrap();
     let rows = stmt.query_map([], |r| r.get::<_, String>(1)).unwrap();
     rows.map(|r| r.unwrap()).collect()
 }
@@ -83,12 +85,29 @@ fn queries_reach_the_activity_log_and_a_migration_diffs_generates_and_applies() 
     let target = dir.join("target.sqlite");
     {
         let c = rusqlite::Connection::open(&source).unwrap();
-        c.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL, phone TEXT)", []).unwrap();
-        c.execute("CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL)", []).unwrap();
-        c.execute("INSERT INTO users (email) VALUES ('a@example.com'), ('b@example.com')", []).unwrap();
+        c.execute(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL, phone TEXT)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "CREATE TABLE orders (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL)",
+            [],
+        )
+        .unwrap();
+        c.execute(
+            "INSERT INTO users (email) VALUES ('a@example.com'), ('b@example.com')",
+            [],
+        )
+        .unwrap();
         let c = rusqlite::Connection::open(&target).unwrap();
-        c.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)", []).unwrap();
-        c.execute("CREATE TABLE old_stuff (id INTEGER PRIMARY KEY)", []).unwrap();
+        c.execute(
+            "CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT NOT NULL)",
+            [],
+        )
+        .unwrap();
+        c.execute("CREATE TABLE old_stuff (id INTEGER PRIMARY KEY)", [])
+            .unwrap();
     }
     {
         let mut state = AppState::new();

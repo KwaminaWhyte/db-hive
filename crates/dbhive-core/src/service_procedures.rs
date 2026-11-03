@@ -389,7 +389,10 @@ fn take_connection(
     let kind = guard
         .get_profile(connection_id)
         .ok_or_else(|| {
-            DbError::NotFound(format!("Connection profile for '{}' not found", connection_id))
+            DbError::NotFound(format!(
+                "Connection profile for '{}' not found",
+                connection_id
+            ))
         })?
         .driver
         .clone();
@@ -550,7 +553,11 @@ mod tests {
             DbDriver::Redis,
         ] {
             assert!(!supports_routines(&driver), "{:?}", driver);
-            assert!(list_routines_sql(&driver, None, &esc).is_none(), "{:?}", driver);
+            assert!(
+                list_routines_sql(&driver, None, &esc).is_none(),
+                "{:?}",
+                driver
+            );
         }
     }
 
@@ -673,8 +680,8 @@ mod tests {
         // The create statement is the third column of SHOW CREATE.
         assert!(as_function.iter().all(|q| q.column == 2));
 
-        let unknown = definition_queries(&DbDriver::MySql, "app", "total", None, &q_mysql, &esc)
-            .unwrap();
+        let unknown =
+            definition_queries(&DbDriver::MySql, "app", "total", None, &q_mysql, &esc).unwrap();
         assert!(unknown[0].sql.starts_with("SHOW CREATE PROCEDURE"));
     }
 
@@ -691,15 +698,8 @@ mod tests {
         .unwrap();
         assert!(my[0].sql.contains("`my db`.`we``ird`"), "{}", my[0].sql);
 
-        let ms = definition_queries(
-            &DbDriver::SqlServer,
-            "dbo",
-            "usp_run",
-            None,
-            &q_mssql,
-            &esc,
-        )
-        .unwrap();
+        let ms = definition_queries(&DbDriver::SqlServer, "dbo", "usp_run", None, &q_mssql, &esc)
+            .unwrap();
         assert!(ms[0].sql.contains("[dbo].[usp_run]"), "{}", ms[0].sql);
     }
 
@@ -722,7 +722,10 @@ mod tests {
 
     #[test]
     fn a_quote_in_an_argument_cannot_end_the_literal() {
-        assert_eq!(render_arg(&serde_json::json!("o'brien"), &esc), "'o''brien'");
+        assert_eq!(
+            render_arg(&serde_json::json!("o'brien"), &esc),
+            "'o''brien'"
+        );
         // MySQL also honours backslash escapes, so a lone backslash before a
         // quote would otherwise smuggle the quote through.
         assert_eq!(

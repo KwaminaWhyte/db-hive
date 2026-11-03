@@ -94,7 +94,10 @@ mod tests {
         let first = latest.begin();
         assert!(first.is_current());
         let second = latest.begin();
-        assert!(!first.is_current(), "a stale result would overwrite a newer one");
+        assert!(
+            !first.is_current(),
+            "a stale result would overwrite a newer one"
+        );
         assert!(second.is_current());
     }
 

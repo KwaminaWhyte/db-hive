@@ -91,7 +91,10 @@ pub fn mixed_driver_warning(
     ))
 }
 
-fn profile_of<'a>(profiles: &'a [ConnectionProfile], id: Option<&str>) -> Option<&'a ConnectionProfile> {
+fn profile_of<'a>(
+    profiles: &'a [ConnectionProfile],
+    id: Option<&str>,
+) -> Option<&'a ConnectionProfile> {
     let id = id?;
     profiles.iter().find(|p| p.id == id)
 }
@@ -191,7 +194,11 @@ pub const AUTO_EXPAND_LIMIT: usize = 40;
 /// table when the whole diff is small, none when it is large.
 pub fn default_expanded(diff: &SchemaDiff) -> HashSet<String> {
     let total: usize = diff.modified_tables.iter().map(change_count).sum::<usize>()
-        + diff.added_tables.iter().map(|t| t.columns.len()).sum::<usize>();
+        + diff
+            .added_tables
+            .iter()
+            .map(|t| t.columns.len())
+            .sum::<usize>();
     if total > AUTO_EXPAND_LIMIT {
         return HashSet::new();
     }
@@ -213,7 +220,14 @@ pub fn column_change_detail(c: &ColumnChange) -> String {
         parts.push(format!("type {} -> {}", old.data_type, new.data_type));
     }
     if old.nullable != new.nullable {
-        parts.push(if new.nullable { "now nullable" } else { "now NOT NULL" }.to_string());
+        parts.push(
+            if new.nullable {
+                "now nullable"
+            } else {
+                "now NOT NULL"
+            }
+            .to_string(),
+        );
     }
     if old.default_value != new.default_value {
         parts.push(match &new.default_value {
@@ -245,16 +259,32 @@ fn change(kind: DiffKind, label: String, detail: String) -> DiffTreeRow {
 fn modified_rows(td: &TableDiff, out: &mut Vec<DiffTreeRow>) {
     use DiffKind::*;
     for c in &td.added_columns {
-        out.push(change(Added, format!("column {}", c.name), c.data_type.clone()));
+        out.push(change(
+            Added,
+            format!("column {}", c.name),
+            c.data_type.clone(),
+        ));
     }
     for c in &td.removed_columns {
-        out.push(change(Removed, format!("column {}", c.name), "data in it is lost".to_string()));
+        out.push(change(
+            Removed,
+            format!("column {}", c.name),
+            "data in it is lost".to_string(),
+        ));
     }
     for c in &td.modified_columns {
-        out.push(change(Modified, format!("column {}", c.name), column_change_detail(c)));
+        out.push(change(
+            Modified,
+            format!("column {}", c.name),
+            column_change_detail(c),
+        ));
     }
     for i in &td.added_indexes {
-        out.push(change(Added, format!("index {}", i.name), i.columns.join(", ")));
+        out.push(change(
+            Added,
+            format!("index {}", i.name),
+            i.columns.join(", "),
+        ));
     }
     for i in &td.removed_indexes {
         out.push(change(Removed, format!("index {}", i.name), String::new()));
@@ -263,11 +293,20 @@ fn modified_rows(td: &TableDiff, out: &mut Vec<DiffTreeRow>) {
         out.push(change(
             Added,
             format!("foreign key {}", f.name),
-            format!("{} -> {}({})", f.columns.join(", "), f.referenced_table, f.referenced_columns.join(", ")),
+            format!(
+                "{} -> {}({})",
+                f.columns.join(", "),
+                f.referenced_table,
+                f.referenced_columns.join(", ")
+            ),
         ));
     }
     for f in &td.removed_fks {
-        out.push(change(Removed, format!("foreign key {}", f.name), String::new()));
+        out.push(change(
+            Removed,
+            format!("foreign key {}", f.name),
+            String::new(),
+        ));
     }
 }
 
@@ -289,7 +328,11 @@ pub fn diff_tree(diff: &SchemaDiff, expanded: &HashSet<String>) -> Vec<DiffTreeR
     };
 
     if !diff.added_tables.is_empty() {
-        heading(DiffKind::Added, format!("Added tables ({})", diff.added_tables.len()), &mut out);
+        heading(
+            DiffKind::Added,
+            format!("Added tables ({})", diff.added_tables.len()),
+            &mut out,
+        );
         for t in &diff.added_tables {
             let key = table_key(&t.table.schema, &t.table.name);
             let open = expanded.contains(&key);
@@ -302,7 +345,11 @@ pub fn diff_tree(diff: &SchemaDiff, expanded: &HashSet<String>) -> Vec<DiffTreeR
                 detail: format!(
                     "{} {}",
                     t.columns.len(),
-                    if t.columns.len() == 1 { "column" } else { "columns" }
+                    if t.columns.len() == 1 {
+                        "column"
+                    } else {
+                        "columns"
+                    }
                 ),
                 expandable: !t.columns.is_empty(),
                 expanded: open,
@@ -310,14 +357,22 @@ pub fn diff_tree(diff: &SchemaDiff, expanded: &HashSet<String>) -> Vec<DiffTreeR
             });
             if open {
                 for c in &t.columns {
-                    out.push(change(DiffKind::Added, format!("column {}", c.name), c.data_type.clone()));
+                    out.push(change(
+                        DiffKind::Added,
+                        format!("column {}", c.name),
+                        c.data_type.clone(),
+                    ));
                 }
             }
         }
     }
 
     if !diff.removed_tables.is_empty() {
-        heading(DiffKind::Removed, format!("Removed tables ({})", diff.removed_tables.len()), &mut out);
+        heading(
+            DiffKind::Removed,
+            format!("Removed tables ({})", diff.removed_tables.len()),
+            &mut out,
+        );
         for t in &diff.removed_tables {
             out.push(DiffTreeRow {
                 key: String::new(),
@@ -334,7 +389,11 @@ pub fn diff_tree(diff: &SchemaDiff, expanded: &HashSet<String>) -> Vec<DiffTreeR
     }
 
     if !diff.modified_tables.is_empty() {
-        heading(DiffKind::Modified, format!("Modified tables ({})", diff.modified_tables.len()), &mut out);
+        heading(
+            DiffKind::Modified,
+            format!("Modified tables ({})", diff.modified_tables.len()),
+            &mut out,
+        );
         for td in &diff.modified_tables {
             let key = table_key(&td.schema, &td.name);
             let open = expanded.contains(&key);
@@ -404,12 +463,16 @@ pub fn is_destructive_statement(stmt: &str) -> bool {
     s.starts_with("DROP ")
         || s.starts_with("TRUNCATE ")
         || s.starts_with("DELETE ")
-        || (s.starts_with("ALTER TABLE ") && (s.contains(" DROP COLUMN ") || s.contains(" DROP CONSTRAINT ")))
+        || (s.starts_with("ALTER TABLE ")
+            && (s.contains(" DROP COLUMN ") || s.contains(" DROP CONSTRAINT ")))
 }
 
 /// How many of `statements` are destructive.
 pub fn destructive_count(statements: &[String]) -> usize {
-    statements.iter().filter(|s| is_destructive_statement(s)).count()
+    statements
+        .iter()
+        .filter(|s| is_destructive_statement(s))
+        .count()
 }
 
 /// "3 statements" or "1 statement".
@@ -418,14 +481,14 @@ pub fn statement_count_label(n: usize) -> String {
 }
 
 /// The line under the SQL editor.
-pub fn sql_summary(
-    statements: &[String],
-    target_name: &str,
-    edited: bool,
-) -> String {
+pub fn sql_summary(statements: &[String], target_name: &str, edited: bool) -> String {
     let n = executable_count(statements);
     let d = destructive_count(statements);
-    let mut s = format!("{} will run against {}", statement_count_label(n), target_name);
+    let mut s = format!(
+        "{} will run against {}",
+        statement_count_label(n),
+        target_name
+    );
     if d > 0 {
         s.push_str(&format!(" ({} destructive)", d));
     }
@@ -443,7 +506,11 @@ pub fn apply_confirmation(
 ) -> (String, String) {
     let n = executable_count(statements);
     let d = destructive_count(statements);
-    let mut lines = vec![format!("{} will run against {}.", statement_count_label(n), target_name)];
+    let mut lines = vec![format!(
+        "{} will run against {}.",
+        statement_count_label(n),
+        target_name
+    )];
     if d > 0 {
         lines.push(format!(
             "{} of them drop or delete data, which cannot be recovered.",
@@ -506,7 +573,11 @@ pub fn outcome_view(result: &ApplyResult, use_transaction: bool) -> OutcomeView 
         (false, _) => format!(
             "{} earlier {} stay applied. The target is partly migrated.",
             result.succeeded,
-            if result.succeeded == 1 { "statement" } else { "statements" }
+            if result.succeeded == 1 {
+                "statement"
+            } else {
+                "statements"
+            }
         ),
     };
     OutcomeView {
@@ -522,7 +593,9 @@ mod tests {
     use super::*;
     use dbhive_core::migrations::compute_diff;
     use dbhive_core::migrations::diff::TableWithFks;
-    use dbhive_core::models::metadata::{ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo, TableSchema};
+    use dbhive_core::models::metadata::{
+        ColumnInfo, ForeignKeyInfo, IndexInfo, TableInfo, TableSchema,
+    };
 
     fn label(d: &DbDriver) -> &'static str {
         match d {
@@ -533,7 +606,14 @@ mod tests {
     }
 
     fn profile(id: &str, name: &str, driver: DbDriver) -> ConnectionProfile {
-        ConnectionProfile::new(id.into(), name.into(), driver, String::new(), 0, String::new())
+        ConnectionProfile::new(
+            id.into(),
+            name.into(),
+            driver,
+            String::new(),
+            0,
+            String::new(),
+        )
     }
 
     // -- connections ------------------------------------------------------
@@ -585,11 +665,15 @@ mod tests {
         ];
         let mut w = Wizard::default();
         let none = HashSet::new();
-        assert!(blocked_reason(&w, &profiles, &none).unwrap().contains("both"));
+        assert!(blocked_reason(&w, &profiles, &none)
+            .unwrap()
+            .contains("both"));
 
         w.source_id = Some("a".into());
         w.target_id = Some("b".into());
-        assert!(blocked_reason(&w, &profiles, &none).unwrap().starts_with("Connect first: Source, Target"));
+        assert!(blocked_reason(&w, &profiles, &none)
+            .unwrap()
+            .starts_with("Connect first: Source, Target"));
 
         let open: HashSet<String> = ["a".to_string(), "b".to_string()].into();
         assert_eq!(blocked_reason(&w, &profiles, &open), None);
@@ -597,13 +681,21 @@ mod tests {
         w.step = Step::Diff;
         assert_eq!(blocked_reason(&w, &profiles, &open).unwrap(), "No diff yet");
         w.set_diff(SchemaDiff::default());
-        assert_eq!(blocked_reason(&w, &profiles, &open).unwrap(), "Nothing to generate");
+        assert_eq!(
+            blocked_reason(&w, &profiles, &open).unwrap(),
+            "Nothing to generate"
+        );
 
         w.step = Step::Sql;
         w.sql = "-- only a comment".into();
-        assert_eq!(blocked_reason(&w, &profiles, &open).unwrap(), "No executable statements");
+        assert_eq!(
+            blocked_reason(&w, &profiles, &open).unwrap(),
+            "No executable statements"
+        );
         w.sql = "DROP TABLE t;".into();
-        assert!(blocked_reason(&w, &profiles, &open).unwrap().contains("Tick the box"));
+        assert!(blocked_reason(&w, &profiles, &open)
+            .unwrap()
+            .contains("Tick the box"));
         w.acknowledged = true;
         assert_eq!(blocked_reason(&w, &profiles, &open), None);
     }
@@ -616,7 +708,11 @@ mod tests {
 
     fn table(name: &str, cols: Vec<ColumnInfo>, idx: Vec<IndexInfo>) -> TableWithFks {
         TableWithFks {
-            schema: TableSchema::new(TableInfo::new(name.into(), "main".into(), "TABLE".into()), cols, idx),
+            schema: TableSchema::new(
+                TableInfo::new(name.into(), "main".into(), "TABLE".into()),
+                cols,
+                idx,
+            ),
             foreign_keys: Vec::<ForeignKeyInfo>::new(),
         }
     }
@@ -625,13 +721,21 @@ mod tests {
     /// email int NOT NULL, legacy) and an old table.
     fn sample_diff() -> SchemaDiff {
         let src = vec![
-            table("users", vec![col("id", "INTEGER", false), col("email", "BIGINT", true)], vec![]),
+            table(
+                "users",
+                vec![col("id", "INTEGER", false), col("email", "BIGINT", true)],
+                vec![],
+            ),
             table("orders", vec![col("id", "INTEGER", false)], vec![]),
         ];
         let tgt = vec![
             table(
                 "users",
-                vec![col("id", "INTEGER", false), col("email", "INT", false), col("legacy", "TEXT", true)],
+                vec![
+                    col("id", "INTEGER", false),
+                    col("email", "INT", false),
+                    col("legacy", "TEXT", true),
+                ],
                 vec![],
             ),
             table("old_stuff", vec![col("id", "INTEGER", false)], vec![]),
@@ -643,11 +747,25 @@ mod tests {
     fn the_tree_groups_added_removed_and_modified_tables() {
         let diff = sample_diff();
         let rows = diff_tree(&diff, &HashSet::new());
-        let headings: Vec<&str> = rows.iter().filter(|r| r.heading).map(|r| r.label.as_str()).collect();
-        assert_eq!(headings, vec!["Added tables (1)", "Removed tables (1)", "Modified tables (1)"]);
+        let headings: Vec<&str> = rows
+            .iter()
+            .filter(|r| r.heading)
+            .map(|r| r.label.as_str())
+            .collect();
+        assert_eq!(
+            headings,
+            vec![
+                "Added tables (1)",
+                "Removed tables (1)",
+                "Modified tables (1)"
+            ]
+        );
 
         let orders = rows.iter().find(|r| r.label == "main.orders").unwrap();
-        assert_eq!((orders.marker, orders.depth, orders.detail.as_str()), ("+", 1, "1 column"));
+        assert_eq!(
+            (orders.marker, orders.depth, orders.detail.as_str()),
+            ("+", 1, "1 column")
+        );
         let old = rows.iter().find(|r| r.label == "main.old_stuff").unwrap();
         assert_eq!(old.marker, "-");
         assert!(old.detail.contains("dropped"));
@@ -669,9 +787,20 @@ mod tests {
             .filter(|r| r.depth == 2)
             .map(|r| (r.marker, r.label.as_str(), r.detail.as_str()))
             .collect();
-        assert!(changes.contains(&("~", "column email", "type INT -> BIGINT, now nullable")), "{changes:?}");
-        assert!(changes.contains(&("-", "column legacy", "data in it is lost")), "{changes:?}");
-        assert!(rows.iter().find(|r| r.label == "main.users").unwrap().expanded);
+        assert!(
+            changes.contains(&("~", "column email", "type INT -> BIGINT, now nullable")),
+            "{changes:?}"
+        );
+        assert!(
+            changes.contains(&("-", "column legacy", "data in it is lost")),
+            "{changes:?}"
+        );
+        assert!(
+            rows.iter()
+                .find(|r| r.label == "main.users")
+                .unwrap()
+                .expanded
+        );
     }
 
     #[test]
@@ -695,9 +824,15 @@ mod tests {
         };
         let mut a = col("c", "INT", true);
         let mut b = col("c", "INT", false);
-        assert_eq!(column_change_detail(&change(a.clone(), b.clone())), "now NOT NULL");
+        assert_eq!(
+            column_change_detail(&change(a.clone(), b.clone())),
+            "now NOT NULL"
+        );
         b.default_value = Some("0".into());
-        assert_eq!(column_change_detail(&change(a.clone(), b.clone())), "now NOT NULL, default 0");
+        assert_eq!(
+            column_change_detail(&change(a.clone(), b.clone())),
+            "now NOT NULL, default 0"
+        );
         a.default_value = Some("1".into());
         b.default_value = None;
         assert!(column_change_detail(&change(a, b)).ends_with("default removed"));
@@ -709,8 +844,14 @@ mod tests {
 
     #[test]
     fn the_summary_counts_each_kind_or_says_identical() {
-        assert_eq!(diff_summary(&SchemaDiff::default()), "The schemas are identical");
-        assert_eq!(diff_summary(&sample_diff()), "1 added, 1 removed, 1 modified table(s)");
+        assert_eq!(
+            diff_summary(&SchemaDiff::default()),
+            "The schemas are identical"
+        );
+        assert_eq!(
+            diff_summary(&sample_diff()),
+            "1 added, 1 removed, 1 modified table(s)"
+        );
     }
 
     // -- the SQL ----------------------------------------------------------
@@ -746,7 +887,10 @@ mod tests {
 
     #[test]
     fn the_confirmation_counts_statements_and_calls_out_destruction() {
-        let stmts = vec!["CREATE TABLE a (id int)".to_string(), "DROP TABLE b".to_string()];
+        let stmts = vec![
+            "CREATE TABLE a (id int)".to_string(),
+            "DROP TABLE b".to_string(),
+        ];
         let (title, msg) = apply_confirmation("Staging", &stmts, true);
         assert_eq!(title, "Apply this migration?");
         assert!(msg.contains("2 statements will run against Staging."));
@@ -761,7 +905,10 @@ mod tests {
 
     #[test]
     fn comment_only_statements_are_not_counted_as_work() {
-        let stmts = vec!["-- cannot alter".to_string(), "CREATE TABLE a (id int)".to_string()];
+        let stmts = vec![
+            "-- cannot alter".to_string(),
+            "CREATE TABLE a (id int)".to_string(),
+        ];
         let s = sql_summary(&stmts, "T", true);
         assert!(s.starts_with("1 statement will run against T"), "{s}");
         assert!(s.ends_with("Edited from the generated SQL"));
@@ -786,7 +933,9 @@ mod tests {
         assert!(v.ok);
         assert_eq!(v.headline, "Applied 3 statement(s)");
         assert_eq!(v.detail, "Committed in one transaction.");
-        assert!(outcome_view(&result(3, 3, None), false).detail.contains("without a transaction"));
+        assert!(outcome_view(&result(3, 3, None), false)
+            .detail
+            .contains("without a transaction"));
         let nothing = outcome_view(&result(0, 0, None), true);
         assert!(nothing.ok && nothing.detail.is_empty());
     }
@@ -812,11 +961,17 @@ mod tests {
     #[test]
     fn a_failure_without_a_transaction_says_how_much_stayed_applied() {
         let partial = outcome_view(&result(5, 3, Some("ALTER TABLE t ADD c int")), false);
-        assert_eq!(partial.detail, "3 earlier statements stay applied. The target is partly migrated.");
+        assert_eq!(
+            partial.detail,
+            "3 earlier statements stay applied. The target is partly migrated."
+        );
         let one = outcome_view(&result(2, 1, Some("x")), false);
         assert!(one.detail.starts_with("1 earlier statement stay"));
         let first = outcome_view(&result(1, 0, Some("x")), false);
-        assert_eq!(first.detail, "The first statement failed. Nothing was changed.");
+        assert_eq!(
+            first.detail,
+            "The first statement failed. Nothing was changed."
+        );
     }
 
     #[test]

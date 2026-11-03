@@ -148,7 +148,13 @@ pub(super) fn overlay(tab: &Tab) -> Option<(Vec<Vec<Option<String>>>, Vec<RowMar
                 None => {
                     let hint = col_idx[c]
                         .and_then(|i| sess.columns().get(i))
-                        .map(|col| if col.is_auto_increment { "auto" } else { "default" })
+                        .map(|col| {
+                            if col.is_auto_increment {
+                                "auto"
+                            } else {
+                                "default"
+                            }
+                        })
                         .unwrap_or("default");
                     cells.push(Some(hint.to_string()));
                     placeholder[c] = true;
@@ -255,7 +261,9 @@ impl Ctx {
         if rows_changed {
             self.refresh_workspace();
         } else {
-            let Some(w) = self.window.upgrade() else { return };
+            let Some(w) = self.window.upgrade() else {
+                return;
+            };
             let s = self.session.borrow();
             if let Some(tab) = s.workspace.tabs.active() {
                 project(&w, &s.workspace, tab);
@@ -272,7 +280,11 @@ impl Ctx {
             return None;
         };
         let driver = ws.driver.clone()?;
-        let schema_arg = tab.schema.clone().or_else(|| ws.schema.clone()).unwrap_or_default();
+        let schema_arg = tab
+            .schema
+            .clone()
+            .or_else(|| ws.schema.clone())
+            .unwrap_or_default();
         Some((
             tab.id,
             ws.connection_id.clone(),
@@ -465,7 +477,9 @@ impl Ctx {
 
     /// The ticked rows of the page, as one JSON array, on the clipboard.
     pub(super) fn row_check_copy_json(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let copied = self
             .with_edit_view(|v, page| {
                 let page = page?;
@@ -726,7 +740,8 @@ pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
     on!(on_add_row, |ctx| ctx.row_edit_add_row());
     on!(on_delete_selected, |ctx| ctx.row_edit_delete_selected());
     on!(on_discard_edits, |ctx| ctx.row_edit_discard());
-    on!(on_row_toggled, |ctx, r| ctx.row_check_toggle(r.max(0) as usize));
+    on!(on_row_toggled, |ctx, r| ctx
+        .row_check_toggle(r.max(0) as usize));
     on!(on_toggle_all, |ctx| ctx.row_check_all());
     on!(on_clear_checked, |ctx| ctx.row_check_clear());
     on!(on_copy_checked_json, |ctx| ctx.row_check_copy_json());

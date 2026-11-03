@@ -72,8 +72,7 @@ pub fn parse_arg(raw: &str) -> serde_json::Value {
     if trimmed.is_empty() {
         return serde_json::Value::Null;
     }
-    serde_json::from_str(trimmed)
-        .unwrap_or_else(|_| serde_json::Value::String(trimmed.to_string()))
+    serde_json::from_str(trimmed).unwrap_or_else(|_| serde_json::Value::String(trimmed.to_string()))
 }
 
 /// Whether a routine matches the search box. Name and schema both count, so
@@ -238,7 +237,10 @@ mod tests {
 
     #[test]
     fn a_trailing_comma_does_not_add_an_empty_argument() {
-        assert_eq!(parse_signature("(a integer, )"), vec!["a integer".to_string()]);
+        assert_eq!(
+            parse_signature("(a integer, )"),
+            vec!["a integer".to_string()]
+        );
     }
 
     // ── argument parsing ─────────────────────────────────────────────────
@@ -355,7 +357,12 @@ mod tests {
         screen.args[0] = "42".into();
         screen.definition = "CREATE FUNCTION add ...".into();
 
-        screen.select(proc("public", "sub", RoutineKind::Function, "(a int, b int)"));
+        screen.select(proc(
+            "public",
+            "sub",
+            RoutineKind::Function,
+            "(a int, b int)",
+        ));
         assert_eq!(screen.args, vec![String::new(), String::new()]);
         assert!(
             screen.definition.is_empty(),
@@ -388,7 +395,11 @@ mod tests {
         screen.open_for("conn", "public");
         screen.procedures = vec![proc("public", "add", RoutineKind::Function, "()")];
         screen.open_for("conn", "public");
-        assert_eq!(screen.procedures.len(), 1, "a no-op reopen threw the list away");
+        assert_eq!(
+            screen.procedures.len(),
+            1,
+            "a no-op reopen threw the list away"
+        );
 
         // A different schema is a different list, so it does reset.
         screen.open_for("conn", "audit");

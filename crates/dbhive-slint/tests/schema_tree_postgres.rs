@@ -58,7 +58,9 @@ fn pg_bin() -> Option<PathBuf> {
         found.sort();
         candidates.extend(found.into_iter().rev());
     }
-    candidates.into_iter().find(|d| d.join("initdb").is_file() && d.join("pg_ctl").is_file() && d.join("psql").is_file())
+    candidates.into_iter().find(|d| {
+        d.join("initdb").is_file() && d.join("pg_ctl").is_file() && d.join("psql").is_file()
+    })
 }
 
 struct Cluster {
@@ -82,12 +84,25 @@ impl Cluster {
         let init = Command::new(bin.join("initdb"))
             .args(["-D"])
             .arg(&data)
-            .args(["-U", "postgres", "-A", "trust", "-E", "UTF8", "--no-locale", "--no-sync"])
+            .args([
+                "-U",
+                "postgres",
+                "-A",
+                "trust",
+                "-E",
+                "UTF8",
+                "--no-locale",
+                "--no-sync",
+            ])
             .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .output()
             .expect("run initdb");
-        assert!(init.status.success(), "initdb failed: {}", String::from_utf8_lossy(&init.stderr));
+        assert!(
+            init.status.success(),
+            "initdb failed: {}",
+            String::from_utf8_lossy(&init.stderr)
+        );
         let options = format!(
             "-p {port} -c listen_addresses=127.0.0.1 -c unix_socket_directories={} -c fsync=off",
             sock.display()
@@ -102,18 +117,40 @@ impl Cluster {
             .stderr(Stdio::piped())
             .output()
             .expect("run pg_ctl");
-        assert!(start.status.success(), "pg_ctl start failed: {}", String::from_utf8_lossy(&start.stderr));
-        Cluster { bin, dir: dir.to_path_buf(), sock, port }
+        assert!(
+            start.status.success(),
+            "pg_ctl start failed: {}",
+            String::from_utf8_lossy(&start.stderr)
+        );
+        Cluster {
+            bin,
+            dir: dir.to_path_buf(),
+            sock,
+            port,
+        }
     }
 
     /// Run SQL through psql, failing the test on any error.
     fn sql(&self, database: &str, sql: &str) -> String {
         let out = Command::new(self.bin.join("psql"))
-            .args(["-h", "127.0.0.1", "-p", &self.port.to_string(), "-U", "postgres", "-d", database])
+            .args([
+                "-h",
+                "127.0.0.1",
+                "-p",
+                &self.port.to_string(),
+                "-U",
+                "postgres",
+                "-d",
+                database,
+            ])
             .args(["-X", "-q", "-t", "-A", "-v", "ON_ERROR_STOP=1", "-c", sql])
             .output()
             .expect("run psql");
-        assert!(out.status.success(), "psql failed on {sql:?}: {}", String::from_utf8_lossy(&out.stderr));
+        assert!(
+            out.status.success(),
+            "psql failed on {sql:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
         String::from_utf8_lossy(&out.stdout).trim().to_string()
     }
 }
@@ -158,7 +195,10 @@ async fn sleep(d: Duration) {
 async fn until(what: &str, cond: impl Fn() -> bool) {
     let started = Instant::now();
     while !cond() {
-        assert!(started.elapsed() < Duration::from_secs(20), "timed out waiting for: {what}");
+        assert!(
+            started.elapsed() < Duration::from_secs(20),
+            "timed out waiting for: {what}"
+        );
         sleep(Duration::from_millis(10)).await;
     }
 }
@@ -171,20 +211,31 @@ async fn settle() {
 
 fn press_key(w: &AppWindow, k: Key) {
     let text: SharedString = k.into();
-    w.window().dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
+    w.window()
+        .dispatch_event(WindowEvent::KeyPressed { text: text.clone() });
     w.window().dispatch_event(WindowEvent::KeyReleased { text });
 }
 
 fn labels(w: &AppWindow) -> Vec<String> {
-    w.global::<TreeState>().get_rows().iter().map(|r| r.label.to_string()).collect()
+    w.global::<TreeState>()
+        .get_rows()
+        .iter()
+        .map(|r| r.label.to_string())
+        .collect()
 }
 
 fn row_of(w: &AppWindow, label: &str) -> usize {
-    labels(w).iter().position(|l| l == label).unwrap_or_else(|| panic!("no row {label:?} in {:?}", labels(w)))
+    labels(w)
+        .iter()
+        .position(|l| l == label)
+        .unwrap_or_else(|| panic!("no row {label:?} in {:?}", labels(w)))
 }
 
 fn tab_titles(w: &AppWindow) -> Vec<String> {
-    w.get_workspace_tabs().iter().map(|t| t.title.to_string()).collect()
+    w.get_workspace_tabs()
+        .iter()
+        .map(|t| t.title.to_string())
+        .collect()
 }
 
 fn toast_texts(w: &AppWindow) -> Vec<String> {
@@ -192,11 +243,19 @@ fn toast_texts(w: &AppWindow) -> Vec<String> {
 }
 
 fn menu_labels(w: &AppWindow) -> Vec<String> {
-    w.global::<TreeState>().get_menu_items().iter().map(|m| m.label.to_string()).collect()
+    w.global::<TreeState>()
+        .get_menu_items()
+        .iter()
+        .map(|m| m.label.to_string())
+        .collect()
 }
 
 fn routine_labels(w: &AppWindow) -> Vec<String> {
-    w.global::<TreeState>().get_routines().iter().map(|r| r.label.to_string()).collect()
+    w.global::<TreeState>()
+        .get_routines()
+        .iter()
+        .map(|r| r.label.to_string())
+        .collect()
 }
 
 /// Row `i`'s centre (see `schema_tree_controller.rs` for the arithmetic).
@@ -205,9 +264,16 @@ fn row_pos(row: usize) -> LogicalPosition {
 }
 
 fn pointer(w: &AppWindow, at: LogicalPosition, button: PointerEventButton) {
-    w.window().dispatch_event(WindowEvent::PointerMoved { position: at });
-    w.window().dispatch_event(WindowEvent::PointerPressed { position: at, button });
-    w.window().dispatch_event(WindowEvent::PointerReleased { position: at, button });
+    w.window()
+        .dispatch_event(WindowEvent::PointerMoved { position: at });
+    w.window().dispatch_event(WindowEvent::PointerPressed {
+        position: at,
+        button,
+    });
+    w.window().dispatch_event(WindowEvent::PointerReleased {
+        position: at,
+        button,
+    });
 }
 
 fn click_row(w: &AppWindow, row: usize) {
@@ -249,18 +315,34 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
     .await;
     assert_eq!(
         labels(&w),
-        ["app", "public", "customers", "order_totals", "orders", "audit", "billing", "other", "postgres"],
+        [
+            "app",
+            "public",
+            "customers",
+            "order_totals",
+            "orders",
+            "audit",
+            "billing",
+            "other",
+            "postgres"
+        ],
         "databases, then the current database's schemas (system schemas hidden), the \
          current schema open with its tables and a view"
     );
     let rows: Vec<_> = t.get_rows().iter().collect();
     assert_eq!(rows[0].kind, TreeRowKind::Database);
-    assert!(rows[0].active && !rows[7].active, "the connected database is marked");
+    assert!(
+        rows[0].active && !rows[7].active,
+        "the connected database is marked"
+    );
     assert_eq!(rows[1].kind, TreeRowKind::Schema);
     assert!(rows[1].active, "the schema other tools act on is marked");
     assert_eq!(rows[3].kind, TreeRowKind::View);
     assert_eq!(rows[2].kind, TreeRowKind::Table);
-    assert!(!labels(&w).contains(&"invoices".to_string()), "billing is not loaded until it is opened");
+    assert!(
+        !labels(&w).contains(&"invoices".to_string()),
+        "billing is not loaded until it is opened"
+    );
 
     // ---- a search loads the schemas it has not seen ---------------------------
     t.set_filter("invoic".into());
@@ -271,31 +353,58 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
     .await;
     t.invoke_clear_filter();
     until("the full tree back", || t.get_rows().row_count() == 9).await;
-    assert!(!labels(&w).contains(&"invoices".to_string()), "searching did not open billing for good");
+    assert!(
+        !labels(&w).contains(&"invoices".to_string()),
+        "searching did not open billing for good"
+    );
 
     // ---- expand a schema with the keyboard: its tables arrive ------------------
     click_row(&w, row_of(&w, "billing"));
     until("the click to focus billing", || t.get_cursor() == 6).await;
     press_key(&w, Key::RightArrow);
-    until("billing's tables", || labels(&w).contains(&"invoices".to_string())).await;
+    until("billing's tables", || {
+        labels(&w).contains(&"invoices".to_string())
+    })
+    .await;
     assert_eq!(
         labels(&w),
         [
-            "app", "public", "customers", "order_totals", "orders", "audit", "billing", "invoices",
-            "payments", "other", "postgres"
+            "app",
+            "public",
+            "customers",
+            "order_totals",
+            "orders",
+            "audit",
+            "billing",
+            "invoices",
+            "payments",
+            "other",
+            "postgres"
         ]
     );
 
     // ---- a table from another schema opens in its own tab ----------------------
     sleep(Duration::from_millis(700)).await;
     double_click_row(&w, row_of(&w, "invoices"));
-    until("the billing.invoices tab", || tab_titles(&w).contains(&"billing.invoices".to_string())).await;
-    until("its rows", || !w.get_workspace_running() && w.get_workspace_rows().row_count() == 4).await;
+    until("the billing.invoices tab", || {
+        tab_titles(&w).contains(&"billing.invoices".to_string())
+    })
+    .await;
+    until("its rows", || {
+        !w.get_workspace_running() && w.get_workspace_rows().row_count() == 4
+    })
+    .await;
     assert_eq!(w.get_workspace_result_title(), "invoices");
     sleep(Duration::from_millis(700)).await;
     double_click_row(&w, row_of(&w, "customers"));
-    until("the customers tab", || tab_titles(&w).contains(&"customers".to_string())).await;
-    until("its rows", || !w.get_workspace_running() && w.get_workspace_rows().row_count() == 3).await;
+    until("the customers tab", || {
+        tab_titles(&w).contains(&"customers".to_string())
+    })
+    .await;
+    until("its rows", || {
+        !w.get_workspace_running() && w.get_workspace_rows().row_count() == 3
+    })
+    .await;
 
     // ---- Create Table on a schema makes it the current one ------------------------
     right_click_row(&w, row_of(&w, "billing"));
@@ -304,29 +413,52 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
     choose(&w, "Create Table");
     let d = w.global::<TableDialogState>();
     until("the create wizard", || d.get_visible() && d.get_mode() == 0).await;
-    assert_eq!(d.get_subtitle(), "in billing", "the wizard creates the table in the schema it was raised on");
+    assert_eq!(
+        d.get_subtitle(),
+        "in billing",
+        "the wizard creates the table in the schema it was raised on"
+    );
     d.invoke_close();
     until("the wizard to close", || !d.get_visible()).await;
-    assert!(t.get_rows().iter().any(|r| r.active && r.label == "billing"), "billing is now the marked schema");
+    assert!(
+        t.get_rows()
+            .iter()
+            .any(|r| r.active && r.label == "billing"),
+        "billing is now the marked schema"
+    );
     // The customers tab was opened while public was current. It must still be public's.
-    let customers_tab = tab_titles(&w).iter().position(|x| x == "customers").unwrap();
+    let customers_tab = tab_titles(&w)
+        .iter()
+        .position(|x| x == "customers")
+        .unwrap();
     w.invoke_workspace_tab_selected(customers_tab as i32);
     settle().await;
     w.global::<InspectorBridge>().invoke_refresh();
     settle().await;
-    until("customers to reload from public", || !w.get_workspace_running()).await;
+    until("customers to reload from public", || {
+        !w.get_workspace_running()
+    })
+    .await;
     assert_eq!(
         w.get_workspace_rows().row_count(),
         3,
         "a table tab keeps the schema it was opened in when another becomes current"
     );
-    assert_eq!(w.get_workspace_rows_error(), "", "{}", w.get_workspace_rows_error());
+    assert_eq!(
+        w.get_workspace_rows_error(),
+        "",
+        "{}",
+        w.get_workspace_rows_error()
+    );
 
     // ---- Edit Table works on a table outside the current schema -----------------------
     right_click_row(&w, row_of(&w, "orders"));
     until("the table menu", || t.get_menu_visible()).await;
     choose(&w, "Edit Table");
-    until("the edit dialog", || d.get_visible() && !d.get_loading() && d.get_mode() == 1).await;
+    until("the edit dialog", || {
+        d.get_visible() && !d.get_loading() && d.get_mode() == 1
+    })
+    .await;
     assert_eq!(d.get_subtitle(), "public.orders");
     d.invoke_close();
     until("the dialog to close", || !d.get_visible()).await;
@@ -335,42 +467,83 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
     right_click_row(&w, row_of(&w, "payments"));
     until("the payments menu", || t.get_menu_visible()).await;
     choose(&w, "Generate SELECT");
-    until("the SELECT", || w.get_workspace_editor_text().starts_with("SELECT")).await;
-    assert_eq!(w.get_workspace_editor_text(), "SELECT *\nFROM \"billing\".\"payments\"\nLIMIT 100;");
+    until("the SELECT", || {
+        w.get_workspace_editor_text().starts_with("SELECT")
+    })
+    .await;
+    assert_eq!(
+        w.get_workspace_editor_text(),
+        "SELECT *\nFROM \"billing\".\"payments\"\nLIMIT 100;"
+    );
 
     // ---- Procedures & Functions ---------------------------------------------------------------
     assert!(t.get_routines_supported(), "Postgres has stored routines");
     t.invoke_routines_open();
-    until("the routines list", || t.get_routines_visible() && t.get_routines_status() == TreeStatus::Populated).await;
-    assert_eq!(routine_labels(&w), ["billing", "close_month", "public", "add_numbers"]);
+    until("the routines list", || {
+        t.get_routines_visible() && t.get_routines_status() == TreeStatus::Populated
+    })
+    .await;
+    assert_eq!(
+        routine_labels(&w),
+        ["billing", "close_month", "public", "add_numbers"]
+    );
     assert_eq!(t.get_routines_count(), 2);
     // Search narrows it.
     t.set_routines_filter("add".into());
     t.invoke_routines_search("add".into());
-    until("the search", || routine_labels(&w) == ["public", "add_numbers"]).await;
+    until("the search", || {
+        routine_labels(&w) == ["public", "add_numbers"]
+    })
+    .await;
     t.set_routines_filter("zzzz".into());
     t.invoke_routines_search("zzzz".into());
-    until("no matches", || t.get_routines_status() == TreeStatus::NoMatches).await;
+    until("no matches", || {
+        t.get_routines_status() == TreeStatus::NoMatches
+    })
+    .await;
     t.set_routines_filter("".into());
     t.invoke_routines_search("".into());
     until("everything again", || routine_labels(&w).len() == 4).await;
     // Pick a function: its source is read.
-    let add = routine_labels(&w).iter().position(|l| l == "add_numbers").unwrap();
+    let add = routine_labels(&w)
+        .iter()
+        .position(|l| l == "add_numbers")
+        .unwrap();
     t.invoke_routine_pick(add as i32);
-    until("the definition", || !t.get_routine_def_loading() && !t.get_routine_definition().is_empty()).await;
+    until("the definition", || {
+        !t.get_routine_def_loading() && !t.get_routine_definition().is_empty()
+    })
+    .await;
     assert_eq!(t.get_routine_title(), "public.add_numbers");
-    assert!(t.get_routine_definition().contains("CREATE OR REPLACE FUNCTION public.add_numbers"), "{}", t.get_routine_definition());
-    assert_eq!(t.get_routine_signature(), "(a integer, b integer) returns integer");
+    assert!(
+        t.get_routine_definition()
+            .contains("CREATE OR REPLACE FUNCTION public.add_numbers"),
+        "{}",
+        t.get_routine_definition()
+    );
+    assert_eq!(
+        t.get_routine_signature(),
+        "(a integer, b integer) returns integer"
+    );
     assert_eq!(t.get_routine_meta(), "function · sql");
     // A heading is not a routine.
     t.invoke_routine_pick(0);
     settle().await;
-    assert_eq!(t.get_routine_title(), "public.add_numbers", "picking a heading changes nothing");
+    assert_eq!(
+        t.get_routine_title(),
+        "public.add_numbers",
+        "picking a heading changes nothing"
+    );
     // A procedure.
-    let close = routine_labels(&w).iter().position(|l| l == "close_month").unwrap();
+    let close = routine_labels(&w)
+        .iter()
+        .position(|l| l == "close_month")
+        .unwrap();
     t.invoke_routine_pick(close as i32);
     until("the procedure", || {
-        !t.get_routine_def_loading() && t.get_routine_definition().contains("PROCEDURE billing.close_month")
+        !t.get_routine_def_loading()
+            && t.get_routine_definition()
+                .contains("PROCEDURE billing.close_month")
     })
     .await;
     assert_eq!(t.get_routine_meta(), "procedure · plpgsql");
@@ -378,34 +551,54 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
     let tabs_before = w.get_workspace_tabs().row_count();
     t.invoke_routine_to_editor();
     until("the definition in an editor", || {
-        w.get_workspace_tabs().row_count() == tabs_before + 1 && w.get_workspace_editor_text().contains("PROCEDURE billing.close_month")
+        w.get_workspace_tabs().row_count() == tabs_before + 1
+            && w.get_workspace_editor_text()
+                .contains("PROCEDURE billing.close_month")
     })
     .await;
     assert!(w.get_workspace_editor_text().trim_end().ends_with(';'));
-    assert!(!t.get_routines_visible(), "the panel closes so the editor shows");
+    assert!(
+        !t.get_routines_visible(),
+        "the panel closes so the editor shows"
+    );
     settle().await;
-    assert!(!w.get_workspace_has_result() && !w.get_workspace_running(), "a definition is never run");
+    assert!(
+        !w.get_workspace_has_result() && !w.get_workspace_running(),
+        "a definition is never run"
+    );
 
     // ---- Drop Table: nothing depends on orders, so there is no warning and no CASCADE --------
     right_click_row(&w, row_of(&w, "orders"));
     until("the orders menu", || t.get_menu_visible()).await;
     choose(&w, "Drop Table");
-    until("the dependency check", || t.get_drop_visible() && !t.get_drop_checking()).await;
+    until("the dependency check", || {
+        t.get_drop_visible() && !t.get_drop_checking()
+    })
+    .await;
     assert_eq!(t.get_drop_warning(), "");
-    assert!(!t.get_drop_offers_cascade(), "CASCADE is not offered when nothing depends on the table");
+    assert!(
+        !t.get_drop_offers_cascade(),
+        "CASCADE is not offered when nothing depends on the table"
+    );
     t.invoke_drop_cancel();
 
     // ---- Drop Table: a dependent in another schema, then CASCADE ------------------------------
     right_click_row(&w, row_of(&w, "customers"));
     until("the customers menu", || t.get_menu_visible()).await;
     choose(&w, "Drop Table");
-    until("the dependency check", || t.get_drop_visible() && !t.get_drop_checking()).await;
+    until("the dependency check", || {
+        t.get_drop_visible() && !t.get_drop_checking()
+    })
+    .await;
     assert_eq!(
         t.get_drop_warning(),
         "2 tables have foreign keys to customers: billing.invoices, public.orders.",
         "the warning finds the foreign key from another schema too"
     );
-    assert!(t.get_drop_offers_cascade(), "CASCADE is offered once the warning is up");
+    assert!(
+        t.get_drop_offers_cascade(),
+        "CASCADE is offered once the warning is up"
+    );
     assert!(!t.get_drop_cascade(), "and starts off");
     assert!(!t.get_drop_sql().contains("CASCADE"));
     t.set_drop_typed("customers".into());
@@ -413,24 +606,56 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
     assert!(t.get_drop_can_drop());
     // Without CASCADE the server refuses, and the dialog stays open saying so.
     t.invoke_drop_confirm();
-    until("the server's refusal", || !t.get_drop_error().is_empty() && !t.get_drop_running()).await;
+    until("the server's refusal", || {
+        !t.get_drop_error().is_empty() && !t.get_drop_running()
+    })
+    .await;
     assert!(t.get_drop_visible());
-    assert!(t.get_drop_error().contains("depend"), "{}", t.get_drop_error());
-    assert_eq!(pg.sql("app", "SELECT count(*) FROM pg_tables WHERE tablename = 'customers'"), "1");
+    assert!(
+        t.get_drop_error().contains("depend"),
+        "{}",
+        t.get_drop_error()
+    );
+    assert_eq!(
+        pg.sql(
+            "app",
+            "SELECT count(*) FROM pg_tables WHERE tablename = 'customers'"
+        ),
+        "1"
+    );
     // With CASCADE it goes, and the dependent tables stay without the keys.
     t.invoke_drop_cascade_toggled();
     assert!(t.get_drop_cascade() && t.get_drop_sql().contains("CASCADE"));
     t.invoke_drop_confirm();
     until("the drop to finish", || !t.get_drop_visible()).await;
-    assert_eq!(pg.sql("app", "SELECT count(*) FROM pg_tables WHERE tablename = 'customers'"), "0");
     assert_eq!(
-        pg.sql("app", "SELECT count(*) FROM pg_constraint WHERE contype = 'f'"),
+        pg.sql(
+            "app",
+            "SELECT count(*) FROM pg_tables WHERE tablename = 'customers'"
+        ),
+        "0"
+    );
+    assert_eq!(
+        pg.sql(
+            "app",
+            "SELECT count(*) FROM pg_constraint WHERE contype = 'f'"
+        ),
         "1",
         "only the key from billing.payments to billing.invoices is left"
     );
-    assert_eq!(pg.sql("app", "SELECT count(*) FROM billing.invoices"), "4", "CASCADE dropped the keys, not the rows");
-    until("the tree to refresh", || !labels(&w).contains(&"customers".to_string())).await;
-    assert!(!tab_titles(&w).contains(&"customers".to_string()), "its tab closes with it");
+    assert_eq!(
+        pg.sql("app", "SELECT count(*) FROM billing.invoices"),
+        "4",
+        "CASCADE dropped the keys, not the rows"
+    );
+    until("the tree to refresh", || {
+        !labels(&w).contains(&"customers".to_string())
+    })
+    .await;
+    assert!(
+        !tab_titles(&w).contains(&"customers".to_string()),
+        "its tab closes with it"
+    );
 
     // ---- Create Database ------------------------------------------------------------------------------
     right_click_row(&w, row_of(&w, "app"));
@@ -451,24 +676,52 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
     t.set_create_db_name("other".into());
     t.invoke_create_db_edited("other".into());
     t.invoke_create_db_confirm();
-    until("the server's refusal", || t.get_create_db_error().contains("already exists") && !t.get_create_db_running()).await;
+    until("the server's refusal", || {
+        t.get_create_db_error().contains("already exists") && !t.get_create_db_running()
+    })
+    .await;
     assert!(t.get_create_db_visible());
     t.set_create_db_name("reporting".into());
     t.invoke_create_db_edited("reporting".into());
-    assert_eq!(t.get_create_db_error(), "", "editing the name clears the old refusal");
+    assert_eq!(
+        t.get_create_db_error(),
+        "",
+        "editing the name clears the old refusal"
+    );
     t.invoke_create_db_confirm();
     until("the dialog to close", || !t.get_create_db_visible()).await;
-    until("the new database to be listed", || labels(&w).contains(&"reporting".to_string())).await;
-    assert_eq!(pg.sql("postgres", "SELECT count(*) FROM pg_database WHERE datname = 'reporting'"), "1");
-    assert!(toast_texts(&w).iter().any(|x| x == "Created database reporting"));
+    until("the new database to be listed", || {
+        labels(&w).contains(&"reporting".to_string())
+    })
+    .await;
+    assert_eq!(
+        pg.sql(
+            "postgres",
+            "SELECT count(*) FROM pg_database WHERE datname = 'reporting'"
+        ),
+        "1"
+    );
+    assert!(toast_texts(&w)
+        .iter()
+        .any(|x| x == "Created database reporting"));
 
     // ---- switch database: open tables are closed, the tree is the new one's ---------------------------
     assert!(tab_titles(&w).iter().any(|x| x == "billing.invoices"));
     sleep(Duration::from_millis(700)).await;
     double_click_row(&w, row_of(&w, "other"));
-    until("the switch", || labels(&w).first().is_some_and(|l| l == "app") && t.get_rows().iter().any(|r| r.active && r.label == "other")).await;
-    until("the new database's tables", || labels(&w).contains(&"elsewhere".to_string())).await;
-    assert!(!labels(&w).contains(&"billing".to_string()), "the other database has no billing schema");
+    until("the switch", || {
+        labels(&w).first().is_some_and(|l| l == "app")
+            && t.get_rows().iter().any(|r| r.active && r.label == "other")
+    })
+    .await;
+    until("the new database's tables", || {
+        labels(&w).contains(&"elsewhere".to_string())
+    })
+    .await;
+    assert!(
+        !labels(&w).contains(&"billing".to_string()),
+        "the other database has no billing schema"
+    );
     assert!(
         tab_titles(&w).iter().all(|x| x.starts_with("Query")),
         "tables of the database we left are closed: {:?}",
@@ -479,7 +732,9 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
     sleep(Duration::from_millis(700)).await;
     double_click_row(&w, row_of(&w, "elsewhere"));
     until("elsewhere's rows", || {
-        tab_titles(&w).contains(&"elsewhere".to_string()) && !w.get_workspace_running() && w.get_workspace_rows().row_count() == 2
+        tab_titles(&w).contains(&"elsewhere".to_string())
+            && !w.get_workspace_running()
+            && w.get_workspace_rows().row_count() == 2
     })
     .await;
 
@@ -490,7 +745,9 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
 #[test]
 fn schemas_cross_schema_drop_database_switch_and_routines_on_a_real_postgres() {
     let Some(bin) = pg_bin() else {
-        eprintln!("skipped: no initdb/pg_ctl/psql found (set DBHIVE_PG_BIN to a Postgres bin directory)");
+        eprintln!(
+            "skipped: no initdb/pg_ctl/psql found (set DBHIVE_PG_BIN to a Postgres bin directory)"
+        );
         return;
     };
     i_slint_backend_testing::init_integration_test_with_system_time();
@@ -544,7 +801,10 @@ fn schemas_cross_schema_drop_database_switch_and_routines_on_a_real_postgres() {
     // A failed assertion in the scenario panics inside the event loop and
     // comes out of here (and `pg` still stops the cluster on the way out).
     w.run().unwrap();
-    assert!(finished.get(), "the event loop ended before the scenario did");
+    assert!(
+        finished.get(),
+        "the event loop ended before the scenario did"
+    );
     drop(pg);
     let _ = std::fs::remove_dir_all(&dir);
 }

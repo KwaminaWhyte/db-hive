@@ -1247,10 +1247,17 @@ mod tests {
         let pick: std::collections::BTreeSet<usize> = [2, 0, 9].into_iter().collect();
         let j = rows_json(&r, &pick);
         let parsed: serde_json::Value = serde_json::from_str(&j).unwrap();
-        assert_eq!(parsed.as_array().unwrap().len(), 2, "row 9 is not on the page");
+        assert_eq!(
+            parsed.as_array().unwrap().len(),
+            2,
+            "row 9 is not on the page"
+        );
         assert_eq!(parsed[0]["zeta"], 1);
         assert_eq!(parsed[1]["alpha"], "c");
-        assert!(j.find("zeta").unwrap() < j.find("alpha").unwrap(), "column order kept");
+        assert!(
+            j.find("zeta").unwrap() < j.find("alpha").unwrap(),
+            "column order kept"
+        );
         assert_eq!(rows_json(&r, &Default::default()), "[]");
     }
 
@@ -1273,7 +1280,10 @@ mod tests {
         v.toggle_checked(2);
         v.total = Some(1000);
         assert!(v.next(50));
-        assert!(v.checked.is_empty(), "row 2 of page 1 is not row 2 of page 2");
+        assert!(
+            v.checked.is_empty(),
+            "row 2 of page 1 is not row 2 of page 2"
+        );
     }
 
     #[test]

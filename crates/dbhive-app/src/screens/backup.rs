@@ -112,7 +112,9 @@ impl Default for Backup {
 
 impl Backup {
     fn busy(&self) -> bool {
-        self.create_job.is_running() || self.restore_job.is_running() || self.delete_job.is_running()
+        self.create_job.is_running()
+            || self.restore_job.is_running()
+            || self.delete_job.is_running()
     }
 
     /// The options the create form currently describes.
@@ -376,9 +378,12 @@ fn apply(
             app.screens.backup.last_error = None;
             app.screens.backup.started = Some(Instant::now());
             app.screens.backup.last_elapsed = None;
-            app.screens.backup.create_job.start(&handle, ctx, async move {
-                svc::create_backup(&state, &connection_id, options, sink).await
-            });
+            app.screens
+                .backup
+                .create_job
+                .start(&handle, ctx, async move {
+                    svc::create_backup(&state, &connection_id, options, sink).await
+                });
         }
 
         Action::AskRestore(index) => {
@@ -408,10 +413,13 @@ fn apply(
             app.screens.backup.last_error = None;
             app.screens.backup.started = Some(Instant::now());
             app.screens.backup.last_elapsed = None;
-            app.screens.backup.restore_job.start(&handle, ctx, async move {
-                let r = svc::restore_backup(&state, &connection_id, options, sink).await;
-                (file_name, r)
-            });
+            app.screens
+                .backup
+                .restore_job
+                .start(&handle, ctx, async move {
+                    let r = svc::restore_backup(&state, &connection_id, options, sink).await;
+                    (file_name, r)
+                });
         }
 
         Action::AskDelete(index) => {
@@ -427,14 +435,17 @@ fn apply(
             let handle = app.rt.handle().clone();
             app.screens.backup.last_error = None;
             app.screens.backup.started = Some(Instant::now());
-            app.screens.backup.delete_job.start(&handle, ctx, async move {
-                let r = tokio::task::spawn_blocking(move || svc::delete_backup(&path))
-                    .await
-                    .unwrap_or_else(|e| {
-                        Err(DbError::InternalError(format!("Delete task failed: {}", e)))
-                    });
-                (file_name, r)
-            });
+            app.screens
+                .backup
+                .delete_job
+                .start(&handle, ctx, async move {
+                    let r = tokio::task::spawn_blocking(move || svc::delete_backup(&path))
+                        .await
+                        .unwrap_or_else(|e| {
+                            Err(DbError::InternalError(format!("Delete task failed: {}", e)))
+                        });
+                    (file_name, r)
+                });
             // The listing is refreshed once the delete lands, not now: the
             // file is still on disk until then.
         }
@@ -697,48 +708,47 @@ fn list_panel(
     let selected_entry = selected.and_then(|i| b.entries.get(i)).cloned();
 
     ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        match &selected_entry {
-            Some(entry) => {
-                let failed = matches!(entry.status, BackupStatus::Failed(_));
-                let can_restore = connected && !failed && !busy;
+    ui.horizontal(|ui| match &selected_entry {
+        Some(entry) => {
+            let failed = matches!(entry.status, BackupStatus::Failed(_));
+            let can_restore = connected && !failed && !busy;
 
-                let restore = ui.add_enabled(can_restore, egui::Button::new("Restore…"));
-                let restore = if !connected {
-                    restore.on_disabled_hover_text("Connect to a database to restore")
-                } else if failed {
-                    restore.on_disabled_hover_text("Cannot restore a failed backup")
-                } else {
-                    restore
-                };
-                if restore.clicked() {
-                    if let Some(i) = selected {
-                        actions.push(Action::AskRestore(i));
-                    }
+            let restore = ui.add_enabled(can_restore, egui::Button::new("Restore…"));
+            let restore = if !connected {
+                restore.on_disabled_hover_text("Connect to a database to restore")
+            } else if failed {
+                restore.on_disabled_hover_text("Cannot restore a failed backup")
+            } else {
+                restore
+            };
+            if restore.clicked() {
+                if let Some(i) = selected {
+                    actions.push(Action::AskRestore(i));
                 }
+            }
 
-                if ui
-                    .add_enabled(
-                        !busy,
-                        egui::Button::new(
-                            egui::RichText::new("Delete…").color(palette.destructive),
-                        ),
-                    )
-                    .clicked()
-                {
-                    if let Some(i) = selected {
-                        actions.push(Action::AskDelete(i));
-                    }
+            if ui
+                .add_enabled(
+                    !busy,
+                    egui::Button::new(egui::RichText::new("Delete…").color(palette.destructive)),
+                )
+                .clicked()
+            {
+                if let Some(i) = selected {
+                    actions.push(Action::AskDelete(i));
                 }
+            }
 
-                ui.label(text::muted(palette, format!("Selected: {}", entry.file_name)));
-            }
-            None => {
-                ui.label(text::muted(
-                    palette,
-                    "Select a backup to restore or delete it.",
-                ));
-            }
+            ui.label(text::muted(
+                palette,
+                format!("Selected: {}", entry.file_name),
+            ));
+        }
+        None => {
+            ui.label(text::muted(
+                palette,
+                "Select a backup to restore or delete it.",
+            ));
         }
     });
 }
@@ -907,7 +917,6 @@ fn card<R>(
         .inner
 }
 
-
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -936,6 +945,9 @@ mod tests {
         assert_eq!(o.note.as_deref(), Some("n"));
         assert_eq!(o.note, f.note);
         assert_eq!(o.output_dir, f.output_dir);
-        assert_eq!((o.include_schema, o.include_data), (f.include_schema, f.include_data));
+        assert_eq!(
+            (o.include_schema, o.include_data),
+            (f.include_schema, f.include_data)
+        );
     }
 }

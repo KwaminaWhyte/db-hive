@@ -170,7 +170,11 @@ impl Ctx {
         };
         let (view, can_create, routines) = {
             let s = self.session.borrow();
-            let routines = s.tree.driver.as_ref().is_some_and(service_procedures::supports_routines);
+            let routines = s
+                .tree
+                .driver
+                .as_ref()
+                .is_some_and(service_procedures::supports_routines);
             (s.tree.model.view(), s.tree.caps.ddl, routines)
         };
         schema_tree_view::apply(&w, &view, can_create);
@@ -204,9 +208,7 @@ impl Ctx {
                 let name = name.clone();
                 async move { d.get_tables(&name).await.map_err(|e| e.to_string()) }
             },
-            move |result| {
-                with_ctx(|ctx| ctx.tree_schema_loaded(generation, ticket, &name, result))
-            },
+            move |result| with_ctx(|ctx| ctx.tree_schema_loaded(generation, ticket, &name, result)),
         );
     }
 
@@ -231,7 +233,10 @@ impl Ctx {
                 s.workspace.tables = tables.clone();
             }
             s.tree.model.set_tables(schema, result.clone());
-            (s.tree.waiting.remove(schema).unwrap_or_default(), is_current)
+            (
+                s.tree.waiting.remove(schema).unwrap_or_default(),
+                is_current,
+            )
         };
         if is_current_schema {
             self.completion_reset();
@@ -245,7 +250,10 @@ impl Ctx {
                 }
             }
             // The row only says it failed; the reason goes here.
-            Err(e) => self.toast(format!("Could not list tables in {schema}: {e}"), Tone::Danger),
+            Err(e) => self.toast(
+                format!("Could not list tables in {schema}: {e}"),
+                Tone::Danger,
+            ),
         }
     }
 
@@ -336,7 +344,10 @@ impl Ctx {
             // A tab in the current schema (or in a driver with no schema
             // level) is the plain kind; any other is pinned to its schema.
             let plain = ws.schema.as_deref() == Some(schema) || !s.tree.model.schema_level();
-            (ws.connection_id.clone(), (!plain).then(|| schema.to_string()))
+            (
+                ws.connection_id.clone(),
+                (!plain).then(|| schema.to_string()),
+            )
         };
         if self.open_driver(&connection_id).is_none() {
             self.toast("This connection is no longer open.", Tone::Danger);
@@ -433,7 +444,12 @@ impl Ctx {
 
     /// A live search sees only loaded schemas, so it loads the rest.
     fn tree_search_loads(self: &Rc<Self>) {
-        let names = self.session.borrow().tree.model.schemas_to_load_for_search();
+        let names = self
+            .session
+            .borrow()
+            .tree
+            .model
+            .schemas_to_load_for_search();
         for name in names {
             self.tree_load_schema(&name);
         }
@@ -451,7 +467,11 @@ impl Ctx {
             // Re-reads the overview too, which is cheap.
             self.load_tables();
         } else {
-            self.session.borrow_mut().tree.model.invalidate_schema(schema);
+            self.session
+                .borrow_mut()
+                .tree
+                .model
+                .invalidate_schema(schema);
             self.tree_load_schema(schema);
         }
     }
@@ -588,7 +608,10 @@ impl Ctx {
         };
         match schema {
             Some(schema) => self.tree_create_table_in(&schema),
-            None => self.toast("Tables are still loading. Try again in a moment.", Tone::Neutral),
+            None => self.toast(
+                "Tables are still loading. Try again in a moment.",
+                Tone::Neutral,
+            ),
         }
     }
 
@@ -598,10 +621,17 @@ impl Ctx {
     fn tree_sql_target(
         &self,
         schema: &str,
-    ) -> Option<(std::sync::Arc<dyn dbhive_core::drivers::DatabaseDriver>, DbDriver, String)> {
+    ) -> Option<(
+        std::sync::Arc<dyn dbhive_core::drivers::DatabaseDriver>,
+        DbDriver,
+        String,
+    )> {
         let (connection_id, driver) = {
             let s = self.session.borrow();
-            (s.workspace.connection_id.clone(), s.workspace.driver.clone()?)
+            (
+                s.workspace.connection_id.clone(),
+                s.workspace.driver.clone()?,
+            )
         };
         let d = self.open_driver(&connection_id)?;
         let qualifier = sql_qualifier(&driver, schema);
@@ -693,7 +723,10 @@ impl Ctx {
             )
         };
         if !allowed {
-            self.toast("This database cannot switch databases from here.", Tone::Warning);
+            self.toast(
+                "This database cannot switch databases from here.",
+                Tone::Warning,
+            );
             return;
         }
         if busy {
@@ -913,7 +946,12 @@ impl Ctx {
         };
         let (ticket, schema) = {
             let s = self.session.borrow();
-            let schema = s.tree.drop.as_ref().map(|d| d.schema.clone()).unwrap_or_default();
+            let schema = s
+                .tree
+                .drop
+                .as_ref()
+                .map(|d| d.schema.clone())
+                .unwrap_or_default();
             (s.tree.drop_latest.begin(), schema)
         };
         let dropped = table.clone();
@@ -979,10 +1017,17 @@ impl Ctx {
     fn tree_create_database_open(self: &Rc<Self>) {
         let driver = {
             let s = self.session.borrow();
-            s.tree.caps.create_database.then(|| s.tree.driver.clone()).flatten()
+            s.tree
+                .caps
+                .create_database
+                .then(|| s.tree.driver.clone())
+                .flatten()
         };
         let Some(driver) = driver else {
-            self.toast("This database cannot create databases from here.", Tone::Warning);
+            self.toast(
+                "This database cannot create databases from here.",
+                Tone::Warning,
+            );
             return;
         };
         self.session.borrow_mut().tree.create_db = Some(CreateDatabaseDialog::new(&driver));
@@ -1073,11 +1118,17 @@ impl Ctx {
             let s = self.session.borrow();
             (
                 s.workspace.connection_id.clone(),
-                s.tree.driver.as_ref().is_some_and(service_procedures::supports_routines),
+                s.tree
+                    .driver
+                    .as_ref()
+                    .is_some_and(service_procedures::supports_routines),
             )
         };
         if !supported {
-            self.toast("This database has no stored procedures or functions.", Tone::Neutral);
+            self.toast(
+                "This database has no stored procedures or functions.",
+                Tone::Neutral,
+            );
             return;
         }
         let needs_list = {
@@ -1166,7 +1217,10 @@ impl Ctx {
         let s = self.session.borrow();
         let m = &s.tree.routines.model;
         let (_, items) = routine_list::rows(&m.procedures, &m.search, m.selected.as_ref());
-        usize::try_from(row).ok().and_then(|i| items.into_iter().nth(i)).flatten()
+        usize::try_from(row)
+            .ok()
+            .and_then(|i| items.into_iter().nth(i))
+            .flatten()
     }
 
     fn tree_routine_pick(self: &Rc<Self>, row: i32) {
@@ -1258,15 +1312,18 @@ impl Ctx {
                 rows,
                 error: r.list_error.clone(),
                 message: "This database has no stored procedures or functions.".to_string(),
-                picked: m.selected.as_ref().map(|p| schema_tree_view::PickedRoutine {
-                    title: p.qualified(),
-                    signature: routine_list::signature_line(p),
-                    meta: match &p.language {
-                        Some(l) => format!("{} · {l}", p.kind.label()),
-                        None => p.kind.label().to_string(),
-                    },
-                    definition: m.definition.clone(),
-                }),
+                picked: m
+                    .selected
+                    .as_ref()
+                    .map(|p| schema_tree_view::PickedRoutine {
+                        title: p.qualified(),
+                        signature: routine_list::signature_line(p),
+                        meta: match &p.language {
+                            Some(l) => format!("{} · {l}", p.kind.label()),
+                            None => p.kind.label().to_string(),
+                        },
+                        definition: m.definition.clone(),
+                    }),
                 def_loading: r.def_loading,
                 def_error: r.def_error.clone(),
             }
@@ -1321,7 +1378,8 @@ pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
     on!(on_menu_chosen, |ctx, i| ctx.tree_menu_chosen(i));
     on!(on_menu_dismissed, |ctx| ctx.tree_menu_dismissed());
     on!(on_drop_typed_edited, |ctx, t| ctx.tree_drop_typed(&t));
-    on!(on_drop_cascade_toggled, |ctx| ctx.tree_drop_toggle_cascade());
+    on!(on_drop_cascade_toggled, |ctx| ctx
+        .tree_drop_toggle_cascade());
     on!(on_drop_confirm, |ctx| ctx.tree_drop_confirm());
     on!(on_drop_cancel, |ctx| ctx.tree_drop_cancel());
     on!(on_create_db_edited, |ctx, t| ctx.tree_create_db_edited(&t));

@@ -227,8 +227,7 @@ fn completion_popup(
     let mut chosen = None;
     ui.input_mut(|i| {
         if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown) {
-            state.completion_selected =
-                (state.completion_selected + 1) % state.completions.len();
+            state.completion_selected = (state.completion_selected + 1) % state.completions.len();
         }
         if i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp) {
             state.completion_selected = state

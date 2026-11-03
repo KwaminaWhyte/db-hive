@@ -108,9 +108,6 @@ mod tests {
     #[test]
     fn test_error_display() {
         let error = DbError::QueryError("syntax error".to_string());
-        assert_eq!(
-            error.to_string(),
-            "Query execution failed: syntax error"
-        );
+        assert_eq!(error.to_string(), "Query execution failed: syntax error");
     }
 }

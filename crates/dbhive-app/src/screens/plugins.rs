@@ -169,7 +169,10 @@ mod engine {
     pub async fn set_loaded(plugin_id: &str, loaded: bool) -> Result<(), String> {
         let m = manager()?;
         if loaded {
-            m.load(plugin_id).await.map(|_| ()).map_err(|e| e.to_string())
+            m.load(plugin_id)
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
         } else {
             m.unload(plugin_id).await.map_err(|e| e.to_string())
         }
@@ -314,10 +317,7 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         ui.add_space(12.0);
         let current = app.screens.plugins.tab;
         for tab in Tab::ALL {
-            if ui
-                .selectable_label(current == tab, tab.label())
-                .clicked()
-            {
+            if ui.selectable_label(current == tab, tab.label()).clicked() {
                 app.screens.plugins.tab = tab;
             }
         }
@@ -394,7 +394,8 @@ pub fn toolbar(app: &mut DbHiveApp, ui: &mut egui::Ui) {
 
     ui.separator();
     for item in &items {
-        let button = egui::Button::new(format!("{} {}", item.icon.glyph(), item.label)).frame(false);
+        let button =
+            egui::Button::new(format!("{} {}", item.icon.glyph(), item.label)).frame(false);
         let response = ui.add_enabled(item.enabled, button);
         // The tooltip always names the plugin: a button in the application's
         // own title bar should say whose it is.
@@ -548,7 +549,11 @@ fn installed_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, actions: &mut Vec<Actio
             ui.label(text::strong(palette, "Installed Plugins"));
             ui.label(text::muted(
                 palette,
-                format!("{} plugin{} installed", count, if count == 1 { "" } else { "s" }),
+                format!(
+                    "{} plugin{} installed",
+                    count,
+                    if count == 1 { "" } else { "s" }
+                ),
             ));
             ui.add_space(8.0);
 
@@ -578,10 +583,18 @@ fn installed_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, actions: &mut Vec<Actio
                         let toggling = busy.as_deref() == Some(id.as_str());
 
                         let response = egui::Frame::none()
-                            .fill(if is_selected { palette.accent } else { palette.card })
+                            .fill(if is_selected {
+                                palette.accent
+                            } else {
+                                palette.card
+                            })
                             .stroke(egui::Stroke::new(
                                 1.0_f32,
-                                if is_selected { palette.primary } else { palette.border },
+                                if is_selected {
+                                    palette.primary
+                                } else {
+                                    palette.border
+                                },
                             ))
                             .rounding(egui::Rounding::same(6.0))
                             .inner_margin(egui::Margin::symmetric(10.0, 8.0))
@@ -612,10 +625,8 @@ fn installed_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, actions: &mut Vec<Actio
                                                 egui::Checkbox::new(&mut enabled, ""),
                                             );
                                             if toggle.changed() {
-                                                actions.push(Action::SetEnabled(
-                                                    id.clone(),
-                                                    enabled,
-                                                ));
+                                                actions
+                                                    .push(Action::SetEnabled(id.clone(), enabled));
                                             }
                                             if toggling {
                                                 ui.add(egui::Spinner::new());
@@ -665,7 +676,10 @@ fn detail(app: &mut DbHiveApp, ui: &mut egui::Ui, plugin: &Plugin, actions: &mut
         .show(ui, |ui| {
             ui.horizontal(|ui| {
                 ui.label(text::heading(palette, &plugin.manifest.name));
-                ui.label(text::muted(palette, format!("v{}", plugin.manifest.version)));
+                ui.label(text::muted(
+                    palette,
+                    format!("v{}", plugin.manifest.version),
+                ));
                 if plugin.enabled {
                     ui.colored_label(palette.success, "Enabled");
                 } else {
@@ -688,9 +702,7 @@ fn detail(app: &mut DbHiveApp, ui: &mut egui::Ui, plugin: &Plugin, actions: &mut
                         actions.push(Action::OpenView(id.clone()));
                     }
 
-                    if plugin.manifest.config_schema.is_some()
-                        && ui.button("Settings").clicked()
-                    {
+                    if plugin.manifest.config_schema.is_some() && ui.button("Settings").clicked() {
                         actions.push(Action::OpenSettings(id.clone()));
                     }
 
@@ -721,7 +733,12 @@ fn detail(app: &mut DbHiveApp, ui: &mut egui::Ui, plugin: &Plugin, actions: &mut
                     row(ui, palette, "Identifier", &plugin.manifest.id);
                 });
                 card(&mut columns[1], palette, "Statistics", |ui| {
-                    row(ui, palette, "Installed", &short_date(&plugin.stats.install_date));
+                    row(
+                        ui,
+                        palette,
+                        "Installed",
+                        &short_date(&plugin.stats.install_date),
+                    );
                     row(
                         ui,
                         palette,
@@ -923,10 +940,8 @@ fn marketplace_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, actions: &mut Vec<Act
 
     ui.add_space(8.0);
 
-    let listing = marketplace::filter_and_sort(
-        &app.screens.plugins.catalog,
-        &app.screens.plugins.filters,
-    );
+    let listing =
+        marketplace::filter_and_sort(&app.screens.plugins.catalog, &app.screens.plugins.filters);
 
     if listing.is_empty() {
         ui.add_space(30.0);
@@ -993,10 +1008,7 @@ fn marketplace_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, actions: &mut Vec<Act
                                 palette,
                                 format!("{:.1} rating", entry.stats.rating),
                             ));
-                            ui.label(text::muted(
-                                palette,
-                                marketplace::format_size(entry.size),
-                            ));
+                            ui.label(text::muted(palette, marketplace::format_size(entry.size)));
                             ui.label(text::muted(palette, entry.manifest.category.label()));
                             for keyword in entry.manifest.keywords.iter().take(4) {
                                 ui.label(text::muted(palette, keyword));
@@ -1152,13 +1164,13 @@ fn render_item(
         } => {
             use descriptor::ButtonStyle as B;
             let button = match style {
-                B::Primary => egui::Button::new(
-                    egui::RichText::new(label).color(palette.primary_foreground),
-                )
-                .fill(palette.primary),
-                B::Danger => egui::Button::new(
-                    egui::RichText::new(label).color(palette.destructive),
-                ),
+                B::Primary => {
+                    egui::Button::new(egui::RichText::new(label).color(palette.primary_foreground))
+                        .fill(palette.primary)
+                }
+                B::Danger => {
+                    egui::Button::new(egui::RichText::new(label).color(palette.destructive))
+                }
                 B::Normal => egui::Button::new(label),
             };
             let mut response = ui.add_enabled(*enabled, button);
@@ -1181,10 +1193,7 @@ fn render_item(
             enabled,
             ..
         } => {
-            let mut value = fields
-                .get(id)
-                .map(|v| v.as_text())
-                .unwrap_or_default();
+            let mut value = fields.get(id).map(|v| v.as_text()).unwrap_or_default();
             ui.label(text::muted(palette, label));
             let response = ui.add_enabled_ui(*enabled, |ui| {
                 if *multiline {
@@ -1758,14 +1767,14 @@ mod tests {
             .unwrap();
         rt.block_on(async {
             assert!(engine::render("com.does.not.exist").await.is_err());
-            assert!(engine::set_loaded("com.does.not.exist", true).await.is_err());
-            assert!(engine::dispatch(
-                "com.does.not.exist",
-                &PluginUi::default(),
-                &UiEvent::Opened
-            )
-            .await
-            .is_err());
+            assert!(engine::set_loaded("com.does.not.exist", true)
+                .await
+                .is_err());
+            assert!(
+                engine::dispatch("com.does.not.exist", &PluginUi::default(), &UiEvent::Opened)
+                    .await
+                    .is_err()
+            );
         });
     }
 }

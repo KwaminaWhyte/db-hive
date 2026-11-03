@@ -34,7 +34,11 @@ fn rss_mb() -> f64 {
         .args(["-o", "rss=", "-p", &pid])
         .output()
         .unwrap();
-    String::from_utf8_lossy(&out.stdout).trim().parse::<f64>().unwrap_or(0.0) / 1024.0
+    String::from_utf8_lossy(&out.stdout)
+        .trim()
+        .parse::<f64>()
+        .unwrap_or(0.0)
+        / 1024.0
 }
 
 fn render(w: &MinimalSoftwareWindow, pw: u32, ph: u32, path: &str) -> f64 {
@@ -72,21 +76,41 @@ fn main() {
                 Some(i.to_string()),
                 Some(format!("customer_{:05}", i)),
                 Some(format!("user{}@example.com", i)),
-                if i % 7 == 0 { None } else { Some(format!("{}.{:02}", i % 1000, i % 100)) },
+                if i % 7 == 0 {
+                    None
+                } else {
+                    Some(format!("{}.{:02}", i % 1000, i % 100))
+                },
                 Some(if i % 3 == 0 { "paid" } else { "pending" }.to_string()),
                 Some(format!("2026-{:02}-{:02}", i % 12 + 1, i % 28 + 1)),
-                if i % 5 == 0 { None } else { Some("Accra".to_string()) },
-                Some(format!("note for row {}, with enough text to need eliding", i)),
+                if i % 5 == 0 {
+                    None
+                } else {
+                    Some("Accra".to_string())
+                },
+                Some(format!(
+                    "note for row {}, with enough text to need eliding",
+                    i
+                )),
             ]
         })
         .collect();
     let build_ms = t.elapsed().as_secs_f64() * 1000.0;
     let after_data = rss_mb();
 
-    let titles: Vec<String> = ["id", "name", "email", "total", "status", "created_at", "city", "note"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
+    let titles: Vec<String> = [
+        "id",
+        "name",
+        "email",
+        "total",
+        "status",
+        "created_at",
+        "city",
+        "note",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
     let widths = [80.0, 170.0, 220.0, 100.0, 100.0, 120.0, 100.0, 340.0];
     let (columns, total) = layout_columns(&titles, &widths);
 
@@ -117,7 +141,19 @@ fn main() {
     println!("jump to row 25,000     {:>8.1} ms", mid_ms);
     println!("jump to last row       {:>8.1} ms", end_ms);
     println!("rss baseline           {:>8.1} MB", base);
-    println!("rss with raw data      {:>8.1} MB  (+{:.1})", after_data, after_data - base);
-    println!("rss after first frame  {:>8.1} MB  (+{:.1})", after_top, after_top - after_data);
-    println!("rss after scrolling    {:>8.1} MB  (+{:.1})", after_scroll, after_scroll - after_top);
+    println!(
+        "rss with raw data      {:>8.1} MB  (+{:.1})",
+        after_data,
+        after_data - base
+    );
+    println!(
+        "rss after first frame  {:>8.1} MB  (+{:.1})",
+        after_top,
+        after_top - after_data
+    );
+    println!(
+        "rss after scrolling    {:>8.1} MB  (+{:.1})",
+        after_scroll,
+        after_scroll - after_top
+    );
 }

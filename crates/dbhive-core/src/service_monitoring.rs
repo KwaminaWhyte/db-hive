@@ -223,11 +223,10 @@ pub fn map_active_row(row: &[Value]) -> ActiveQuery {
 /// two shapes are decoded separately even though the output is the same.
 pub fn parse_server_stats(driver: &DbDriver, result: QueryResult) -> Result<ServerStats, DbError> {
     if driver.is_postgres_compatible() {
-        let row = result
-            .rows
-            .into_iter()
-            .next()
-            .ok_or_else(|| DbError::QueryError("pg_stat_database returned no rows".to_string()))?;
+        let row =
+            result.rows.into_iter().next().ok_or_else(|| {
+                DbError::QueryError("pg_stat_database returned no rows".to_string())
+            })?;
         let xact_total = row.get(3).and_then(as_i64).unwrap_or(0);
         return Ok(ServerStats {
             numeric_connections: row.first().and_then(as_i64).unwrap_or(0),
@@ -809,8 +808,9 @@ pub fn logged_databases(state: &Mutex<AppState>, connection_id: Option<&str>) ->
 /// the filesystem.
 pub fn render_logs(logs: &[QueryLog], format: ExportFormat) -> Result<String, DbError> {
     match format {
-        ExportFormat::Json => serde_json::to_string_pretty(logs)
-            .map_err(|e| DbError::InternalError(format!("Failed to serialize logs to JSON: {}", e))),
+        ExportFormat::Json => serde_json::to_string_pretty(logs).map_err(|e| {
+            DbError::InternalError(format!("Failed to serialize logs to JSON: {}", e))
+        }),
         ExportFormat::Csv => {
             let mut csv = String::new();
             csv.push_str(
@@ -1112,7 +1112,13 @@ mod tests {
                 "xact_total".into(),
                 "deadlocks".into(),
             ],
-            vec![vec![json!(12), json!(3), json!(0.987), json!(50_000), json!(2)]],
+            vec![vec![
+                json!(12),
+                json!(3),
+                json!(0.987),
+                json!(50_000),
+                json!(2),
+            ]],
         );
         let stats = parse_server_stats(&DbDriver::Postgres, result).unwrap();
         assert_eq!(stats.numeric_connections, 12);
@@ -1547,7 +1553,10 @@ mod tests {
     #[test]
     fn exporting_nothing_still_produces_a_valid_document() {
         assert_eq!(render_logs(&[], ExportFormat::Json).unwrap(), "[]");
-        assert_eq!(render_logs(&[], ExportFormat::Csv).unwrap().lines().count(), 1);
+        assert_eq!(
+            render_logs(&[], ExportFormat::Csv).unwrap().lines().count(),
+            1
+        );
     }
 
     // -- state-backed operations ------------------------------------------

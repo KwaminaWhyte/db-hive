@@ -144,7 +144,9 @@ mod tests {
     #[test]
     fn every_driver_has_distinct_initials() {
         use DbDriver::*;
-        let all = [Postgres, Supabase, Neon, MySql, Sqlite, MongoDb, SqlServer, Turso, Redis];
+        let all = [
+            Postgres, Supabase, Neon, MySql, Sqlite, MongoDb, SqlServer, Turso, Redis,
+        ];
         let mut seen = std::collections::HashSet::new();
         for d in all {
             assert!(seen.insert(driver_chip(&d).0), "{:?} shares initials", d);

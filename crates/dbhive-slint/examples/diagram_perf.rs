@@ -83,7 +83,13 @@ fn main() {
             Node {
                 title: format!("table_{:02}", i),
                 columns: (0..n)
-                    .map(|c| if c == 0 { "PK  id".into() } else { format!("column_{}   varchar", c) })
+                    .map(|c| {
+                        if c == 0 {
+                            "PK  id".into()
+                        } else {
+                            format!("column_{}   varchar", c)
+                        }
+                    })
                     .collect(),
                 x: 20.0 + (i % 10) as f32 * 250.0,
                 y: 20.0 + (i / 10) as f32 * 230.0,
@@ -124,7 +130,10 @@ fn main() {
 
     // Drag table_11 by its header with real pointer events.
     let start = LogicalPosition::new(20.0 + 250.0 + 40.0, 20.0 + 230.0 + 15.0);
-    window.dispatch_event(WindowEvent::PointerPressed { position: start, button: PointerEventButton::Left });
+    window.dispatch_event(WindowEvent::PointerPressed {
+        position: start,
+        button: PointerEventButton::Left,
+    });
     let mut drag_frames = Vec::new();
     for step in 1..=30 {
         let p = LogicalPosition::new(start.x + step as f32 * 8.0, start.y + step as f32 * 5.0);
@@ -132,12 +141,21 @@ fn main() {
         drag_frames.push(frame(&window, pw, ph, None));
     }
     let end = LogicalPosition::new(start.x + 240.0, start.y + 150.0);
-    window.dispatch_event(WindowEvent::PointerReleased { position: end, button: PointerEventButton::Left });
+    window.dispatch_event(WindowEvent::PointerReleased {
+        position: end,
+        button: PointerEventButton::Left,
+    });
     let after = frame(&window, pw, ph, Some(&format!("{}-after.ppm", prefix)));
 
     // Select it to highlight its relationships.
-    window.dispatch_event(WindowEvent::PointerPressed { position: end, button: PointerEventButton::Left });
-    window.dispatch_event(WindowEvent::PointerReleased { position: end, button: PointerEventButton::Left });
+    window.dispatch_event(WindowEvent::PointerPressed {
+        position: end,
+        button: PointerEventButton::Left,
+    });
+    window.dispatch_event(WindowEvent::PointerReleased {
+        position: end,
+        button: PointerEventButton::Left,
+    });
     let selected = frame(&window, pw, ph, Some(&format!("{}-selected.ppm", prefix)));
 
     let d = diagram.borrow();
@@ -147,9 +165,15 @@ fn main() {
     println!("relationships          {}", d.edge_count());
     println!("first frame            {:>7.1} ms", first);
     println!("drag frame avg         {:>7.1} ms", avg);
-    println!("drag frame p95         {:>7.1} ms", drag_frames[(drag_frames.len() * 95) / 100 - 1]);
+    println!(
+        "drag frame p95         {:>7.1} ms",
+        drag_frames[(drag_frames.len() * 95) / 100 - 1]
+    );
     println!("after drag             {:>7.1} ms", after);
     println!("after select           {:>7.1} ms", selected);
-    println!("table_11 moved to      ({:.0}, {:.0})  expected (510, 400)", d.nodes[11].x, d.nodes[11].y);
+    println!(
+        "table_11 moved to      ({:.0}, {:.0})  expected (510, 400)",
+        d.nodes[11].x, d.nodes[11].y
+    );
     println!("selected               {:?}", d.selected);
 }

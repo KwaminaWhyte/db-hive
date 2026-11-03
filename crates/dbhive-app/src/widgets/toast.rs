@@ -127,11 +127,9 @@ impl Toasts {
                                         if ui
                                             .add(
                                                 egui::Button::new(
-                                                    egui::RichText::new(
-                                                        crate::theme::glyph::CLOSE,
-                                                    )
-                                                    .size(9.0)
-                                                    .color(palette.dim_foreground),
+                                                    egui::RichText::new(crate::theme::glyph::CLOSE)
+                                                        .size(9.0)
+                                                        .color(palette.dim_foreground),
                                                 )
                                                 .fill(egui::Color32::TRANSPARENT)
                                                 .stroke(egui::Stroke::NONE)

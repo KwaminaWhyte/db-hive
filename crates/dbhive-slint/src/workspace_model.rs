@@ -145,7 +145,11 @@ mod tests {
 
     #[test]
     fn falls_back_to_first_non_internal_schema() {
-        let schemas = vec![schema("pg_catalog"), schema("information_schema"), schema("app")];
+        let schemas = vec![
+            schema("pg_catalog"),
+            schema("information_schema"),
+            schema("app"),
+        ];
         assert_eq!(pick_default_schema(&schemas), Some("app".to_string()));
     }
 

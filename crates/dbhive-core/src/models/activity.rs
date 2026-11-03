@@ -69,30 +69,12 @@ impl QueryType {
                     Regex::new(r"(?i)^\s*(WITH\s+\w+\s+AS\s+\(.*?\)\s+)?SELECT\b").unwrap(),
                     QueryType::Select,
                 ),
-                (
-                    Regex::new(r"(?i)^\s*INSERT\b").unwrap(),
-                    QueryType::Insert,
-                ),
-                (
-                    Regex::new(r"(?i)^\s*UPDATE\b").unwrap(),
-                    QueryType::Update,
-                ),
-                (
-                    Regex::new(r"(?i)^\s*DELETE\b").unwrap(),
-                    QueryType::Delete,
-                ),
-                (
-                    Regex::new(r"(?i)^\s*CREATE\b").unwrap(),
-                    QueryType::Create,
-                ),
-                (
-                    Regex::new(r"(?i)^\s*ALTER\b").unwrap(),
-                    QueryType::Alter,
-                ),
-                (
-                    Regex::new(r"(?i)^\s*DROP\b").unwrap(),
-                    QueryType::Drop,
-                ),
+                (Regex::new(r"(?i)^\s*INSERT\b").unwrap(), QueryType::Insert),
+                (Regex::new(r"(?i)^\s*UPDATE\b").unwrap(), QueryType::Update),
+                (Regex::new(r"(?i)^\s*DELETE\b").unwrap(), QueryType::Delete),
+                (Regex::new(r"(?i)^\s*CREATE\b").unwrap(), QueryType::Create),
+                (Regex::new(r"(?i)^\s*ALTER\b").unwrap(), QueryType::Alter),
+                (Regex::new(r"(?i)^\s*DROP\b").unwrap(), QueryType::Drop),
                 (
                     Regex::new(r"(?i)^\s*(BEGIN|COMMIT|ROLLBACK|START\s+TRANSACTION)\b").unwrap(),
                     QueryType::Transaction,
@@ -465,7 +447,10 @@ mod tests {
 
     #[test]
     fn test_query_type_from_sql_select() {
-        assert_eq!(QueryType::from_sql("SELECT * FROM users"), QueryType::Select);
+        assert_eq!(
+            QueryType::from_sql("SELECT * FROM users"),
+            QueryType::Select
+        );
         assert_eq!(
             QueryType::from_sql("  select id, name from products"),
             QueryType::Select
@@ -518,8 +503,14 @@ mod tests {
 
     #[test]
     fn test_query_type_from_sql_other() {
-        assert_eq!(QueryType::from_sql("EXPLAIN SELECT * FROM users"), QueryType::Other);
-        assert_eq!(QueryType::from_sql("SET work_mem = '64MB'"), QueryType::Other);
+        assert_eq!(
+            QueryType::from_sql("EXPLAIN SELECT * FROM users"),
+            QueryType::Other
+        );
+        assert_eq!(
+            QueryType::from_sql("SET work_mem = '64MB'"),
+            QueryType::Other
+        );
     }
 
     #[test]

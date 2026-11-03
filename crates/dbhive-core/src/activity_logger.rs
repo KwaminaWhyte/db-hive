@@ -500,10 +500,14 @@ mod tests {
         let log = create_test_log("log-1", "conn-1", "SELECT * FROM users");
 
         logger.log_query_start(log);
-        let updated = logger.update_tags("log-1", vec!["slow".to_string(), "production".to_string()]);
+        let updated =
+            logger.update_tags("log-1", vec!["slow".to_string(), "production".to_string()]);
 
         assert!(updated);
         let retrieved = logger.get_log("log-1").unwrap();
-        assert_eq!(retrieved.tags, Some(vec!["slow".to_string(), "production".to_string()]));
+        assert_eq!(
+            retrieved.tags,
+            Some(vec!["slow".to_string(), "production".to_string()])
+        );
     }
 }

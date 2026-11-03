@@ -21,7 +21,10 @@ const MAX_PROBLEM_BANNERS: usize = 3;
 
 fn strings(items: &[String]) -> ModelRc<SharedString> {
     ModelRc::new(VecModel::from(
-        items.iter().map(|s| SharedString::from(s.as_str())).collect::<Vec<_>>(),
+        items
+            .iter()
+            .map(|s| SharedString::from(s.as_str()))
+            .collect::<Vec<_>>(),
     ))
 }
 
@@ -92,7 +95,10 @@ fn facts(pairs: &[(String, String)]) -> ModelRc<PluginFact> {
     ModelRc::new(VecModel::from(
         pairs
             .iter()
-            .map(|(l, v)| PluginFact { label: l.as_str().into(), value: v.as_str().into() })
+            .map(|(l, v)| PluginFact {
+                label: l.as_str().into(),
+                value: v.as_str().into(),
+            })
             .collect::<Vec<_>>(),
     ))
 }
@@ -137,7 +143,8 @@ pub fn sync_items(current: ModelRc<PluginItem>, rows: &[ItemRow]) -> ModelRc<Plu
     if let Some(vec) = current.as_any().downcast_ref::<VecModel<PluginItem>>() {
         let same_shape = vec.row_count() == fresh.len()
             && fresh.iter().enumerate().all(|(i, f)| {
-                vec.row_data(i).is_some_and(|old| old.kind == f.kind && old.id == f.id)
+                vec.row_data(i)
+                    .is_some_and(|old| old.kind == f.kind && old.id == f.id)
             });
         if same_shape {
             for (i, f) in fresh.into_iter().enumerate() {
@@ -213,7 +220,10 @@ pub fn apply(s: &PluginsState, p: &PluginsPanel, items: Items) {
     let (view, form) = (p.items(Scope::View), p.items(Scope::Form));
     let (view_model, form_model) = match items {
         Items::Rebuild => (replace_items(&view), replace_items(&form)),
-        Items::Patch => (sync_items(s.get_view_items(), &view), sync_items(s.get_form_items(), &form)),
+        Items::Patch => (
+            sync_items(s.get_view_items(), &view),
+            sync_items(s.get_form_items(), &form),
+        ),
     };
     s.set_view_items(view_model);
     s.set_form_items(form_model);
@@ -264,7 +274,10 @@ mod tests {
         r.options = vec!["A".into(), "B".into()];
         r.option_index = 1;
         let m = item(&r);
-        assert_eq!((m.kind, m.id.as_str(), m.text.as_str(), m.option_index), (kind::SELECT, "fmt", "B", 1));
+        assert_eq!(
+            (m.kind, m.id.as_str(), m.text.as_str(), m.option_index),
+            (kind::SELECT, "fmt", "B", 1)
+        );
         assert_eq!(m.options.row_count(), 2);
         assert_eq!(m.options.row_data(1).unwrap().as_str(), "B");
     }
@@ -273,12 +286,21 @@ mod tests {
     fn a_patch_with_the_same_shape_updates_rows_in_place() {
         let first = vec![row(kind::INPUT, "name", "a"), row(kind::BUTTON, "run", "")];
         let model = replace_items(&first);
-        let before = model.as_any().downcast_ref::<VecModel<PluginItem>>().unwrap() as *const _;
+        let before = model
+            .as_any()
+            .downcast_ref::<VecModel<PluginItem>>()
+            .unwrap() as *const _;
 
-        let next = vec![row(kind::INPUT, "name", "abc"), row(kind::BUTTON, "run", "")];
+        let next = vec![
+            row(kind::INPUT, "name", "abc"),
+            row(kind::BUTTON, "run", ""),
+        ];
         let out = sync_items(model, &next);
         let after = out.as_any().downcast_ref::<VecModel<PluginItem>>().unwrap() as *const _;
-        assert_eq!(before, after, "the same model, so the text box keeps focus and caret");
+        assert_eq!(
+            before, after,
+            "the same model, so the text box keeps focus and caret"
+        );
         assert_eq!(out.row_data(0).unwrap().text.as_str(), "abc");
     }
 
@@ -286,7 +308,10 @@ mod tests {
     fn a_patch_with_a_different_shape_rebuilds_the_model() {
         let first = vec![row(kind::INPUT, "name", "a")];
         let model = replace_items(&first);
-        let before = model.as_any().downcast_ref::<VecModel<PluginItem>>().unwrap() as *const _;
+        let before = model
+            .as_any()
+            .downcast_ref::<VecModel<PluginItem>>()
+            .unwrap() as *const _;
 
         let next = vec![row(kind::INPUT, "other", "a"), row(kind::BUTTON, "run", "")];
         let out = sync_items(model, &next);

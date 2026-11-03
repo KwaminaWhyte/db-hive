@@ -37,7 +37,10 @@ pub fn is_view(table_type: &str) -> bool {
 pub enum NodeId {
     Database(String),
     Schema(String),
-    Table { schema: String, name: String },
+    Table {
+        schema: String,
+        name: String,
+    },
     /// A line under a schema that says something instead of being an object.
     Note(String, NoteKind),
 }
@@ -141,7 +144,10 @@ pub enum Action {
     None,
     /// State changed; redraw the rows.
     Redraw,
-    OpenTable { schema: String, table: String },
+    OpenTable {
+        schema: String,
+        table: String,
+    },
     SwitchDatabase(String),
     LoadSchema(String),
     CreateTable(String),
@@ -185,8 +191,7 @@ impl Caps {
     pub fn for_driver(driver: &DbDriver) -> Self {
         Self {
             ddl: dbhive_core::ddl::get_ddl_generator(driver).is_ok(),
-            switch_database: driver.is_postgres_compatible()
-                || matches!(driver, DbDriver::MySql),
+            switch_database: driver.is_postgres_compatible() || matches!(driver, DbDriver::MySql),
             create_database: driver.is_postgres_compatible() || matches!(driver, DbDriver::MySql),
         }
     }
@@ -392,7 +397,10 @@ impl SchemaTree {
     pub fn is_blank(&self) -> bool {
         self.list == Load::Ready
             && self.schemas.len() <= 1
-            && self.schemas.first().is_none_or(|s| s.load == Load::Ready && s.tables.is_empty())
+            && self
+                .schemas
+                .first()
+                .is_none_or(|s| s.load == Load::Ready && s.tables.is_empty())
     }
 
     // -- Filter -------------------------------------------------------------------
@@ -427,7 +435,10 @@ impl SchemaTree {
     fn database_matches(&self, name: &str, needle: &str) -> bool {
         contains_ci(name, needle)
             || (name == self.active_database
-                && self.schemas.iter().any(|s| self.schema_has_match(s, needle)))
+                && self
+                    .schemas
+                    .iter()
+                    .any(|s| self.schema_has_match(s, needle)))
     }
 
     fn schema_has_match(&self, s: &SchemaNode, needle: &str) -> bool {
@@ -457,7 +468,14 @@ impl SchemaTree {
         }
     }
 
-    fn note_row(&self, schema: &str, kind: NoteKind, label: String, detail: &str, depth: u8) -> TreeRow {
+    fn note_row(
+        &self,
+        schema: &str,
+        kind: NoteKind,
+        label: String,
+        detail: &str,
+        depth: u8,
+    ) -> TreeRow {
         TreeRow {
             id: NodeId::Note(schema.to_string(), kind),
             depth,
@@ -484,7 +502,13 @@ impl SchemaTree {
             Load::Idle => {}
             Load::Loading => {
                 if needle.is_empty() {
-                    out.push(self.note_row(&s.name, NoteKind::Loading, "Loading tables…".into(), "", depth));
+                    out.push(self.note_row(
+                        &s.name,
+                        NoteKind::Loading,
+                        "Loading tables…".into(),
+                        "",
+                        depth,
+                    ));
                 }
             }
             Load::Failed(_) => out.push(self.note_row(
@@ -499,7 +523,13 @@ impl SchemaTree {
                 if s.tables.is_empty() {
                     // A sole schema says so with a panel of its own.
                     if needle.is_empty() && self.schema_level && self.schemas.len() > 1 {
-                        out.push(self.note_row(&s.name, NoteKind::Empty, "No tables".into(), "Create", depth));
+                        out.push(self.note_row(
+                            &s.name,
+                            NoteKind::Empty,
+                            "No tables".into(),
+                            "Create",
+                            depth,
+                        ));
                     }
                     return;
                 }
@@ -614,7 +644,14 @@ impl SchemaTree {
             {
                 (PanelStatus::Loading, String::new())
             }
-            _ if !self.needle().is_empty() && !rows.iter().any(|r| matches!(r.kind, RowKind::Table | RowKind::View | RowKind::Schema | RowKind::Database)) => {
+            _ if !self.needle().is_empty()
+                && !rows.iter().any(|r| {
+                    matches!(
+                        r.kind,
+                        RowKind::Table | RowKind::View | RowKind::Schema | RowKind::Database
+                    )
+                }) =>
+            {
                 (PanelStatus::NoMatches, String::new())
             }
             _ if self.needle().is_empty() && self.is_blank() => (PanelStatus::Empty, String::new()),
@@ -835,7 +872,12 @@ impl SchemaTree {
                         caps.switch_database,
                     ));
                 }
-                items.push(entry(MenuAction::Refresh, "Refresh", "refresh-cw", *name == self.active_database));
+                items.push(entry(
+                    MenuAction::Refresh,
+                    "Refresh",
+                    "refresh-cw",
+                    *name == self.active_database,
+                ));
                 if caps.create_database {
                     let mut e = entry(MenuAction::CreateDatabase, "Create Database…", "plus", true);
                     e.divider_above = true;
@@ -856,7 +898,12 @@ impl SchemaTree {
                     entry(MenuAction::GenerateSelect, "Generate SELECT", "code", true),
                 ];
                 if !view {
-                    items.push(entry(MenuAction::GenerateInsert, "Generate INSERT", "code", true));
+                    items.push(entry(
+                        MenuAction::GenerateInsert,
+                        "Generate INSERT",
+                        "code",
+                        true,
+                    ));
                 }
                 items.push(entry(MenuAction::CopyName, "Copy Name", "copy", true));
                 if !view {
@@ -1122,7 +1169,11 @@ mod tests {
     fn the_active_database_and_schema_are_marked() {
         let t = pg_tree();
         let rows = t.rows();
-        let active: Vec<&str> = rows.iter().filter(|r| r.active).map(|r| r.label.as_str()).collect();
+        let active: Vec<&str> = rows
+            .iter()
+            .filter(|r| r.active)
+            .map(|r| r.label.as_str())
+            .collect();
         assert_eq!(active, vec!["app", "public"]);
     }
 
@@ -1141,7 +1192,10 @@ mod tests {
         assert_eq!(t.toggle(&billing), Action::LoadSchema("billing".into()));
         t.begin_schema("billing");
         assert!(t.rows().iter().any(|r| r.kind == RowKind::Loading));
-        t.set_tables("billing", Ok(vec![table("invoices", "BASE TABLE", Some(9))]));
+        t.set_tables(
+            "billing",
+            Ok(vec![table("invoices", "BASE TABLE", Some(9))]),
+        );
         assert!(labels(&t).contains(&"    invoices".to_string()));
         // Collapsing and expanding again does not refetch.
         assert_eq!(t.toggle(&billing), Action::Redraw);
@@ -1157,7 +1211,10 @@ mod tests {
         let err = rows.iter().find(|r| r.kind == RowKind::Error).unwrap();
         assert_eq!(err.label, "Could not load tables");
         assert_eq!(err.detail, "Retry");
-        assert_eq!(t.click(&err.id.clone()), Action::LoadSchema("billing".into()));
+        assert_eq!(
+            t.click(&err.id.clone()),
+            Action::LoadSchema("billing".into())
+        );
     }
 
     #[test]
@@ -1167,7 +1224,10 @@ mod tests {
         t.set_tables("billing", Ok(vec![]));
         let rows = t.rows();
         let empty = rows.iter().find(|r| r.kind == RowKind::Empty).unwrap();
-        assert_eq!(t.click(&empty.id.clone()), Action::CreateTable("billing".into()));
+        assert_eq!(
+            t.click(&empty.id.clone()),
+            Action::CreateTable("billing".into())
+        );
     }
 
     #[test]
@@ -1217,7 +1277,13 @@ mod tests {
         t.set_filter("publ");
         assert_eq!(
             labels(&t),
-            vec!["app", "  public", "    Customers", "    order_totals", "    orders"]
+            vec![
+                "app",
+                "  public",
+                "    Customers",
+                "    order_totals",
+                "    orders"
+            ]
         );
     }
 
@@ -1253,7 +1319,9 @@ mod tests {
 
     fn cursor_label(t: &SchemaTree) -> String {
         let v = t.view();
-        v.cursor.map(|i| v.rows[i].label.clone()).unwrap_or_default()
+        v.cursor
+            .map(|i| v.rows[i].label.clone())
+            .unwrap_or_default()
     }
 
     #[test]
@@ -1298,7 +1366,10 @@ mod tests {
     #[test]
     fn left_on_a_table_goes_to_its_schema() {
         let mut t = pg_tree();
-        t.set_cursor(Some(NodeId::Table { schema: "public".into(), name: "orders".into() }));
+        t.set_cursor(Some(NodeId::Table {
+            schema: "public".into(),
+            name: "orders".into(),
+        }));
         t.key(NavKey::Left);
         assert_eq!(cursor_label(&t), "public");
     }
@@ -1313,10 +1384,16 @@ mod tests {
     #[test]
     fn enter_opens_a_table_and_toggles_a_schema() {
         let mut t = pg_tree();
-        t.set_cursor(Some(NodeId::Table { schema: "public".into(), name: "orders".into() }));
+        t.set_cursor(Some(NodeId::Table {
+            schema: "public".into(),
+            name: "orders".into(),
+        }));
         assert_eq!(
             t.key(NavKey::Enter),
-            Action::OpenTable { schema: "public".into(), table: "orders".into() }
+            Action::OpenTable {
+                schema: "public".into(),
+                table: "orders".into()
+            }
         );
         t.set_cursor(Some(NodeId::Schema("public".into())));
         assert_eq!(t.key(NavKey::Enter), Action::Redraw);
@@ -1327,7 +1404,10 @@ mod tests {
     fn enter_on_another_database_switches_to_it() {
         let mut t = pg_tree();
         t.set_cursor(Some(NodeId::Database("analytics".into())));
-        assert_eq!(t.key(NavKey::Enter), Action::SwitchDatabase("analytics".into()));
+        assert_eq!(
+            t.key(NavKey::Enter),
+            Action::SwitchDatabase("analytics".into())
+        );
     }
 
     #[test]
@@ -1343,7 +1423,10 @@ mod tests {
     #[test]
     fn a_cursor_on_a_hidden_row_starts_over_from_the_top() {
         let mut t = pg_tree();
-        t.set_cursor(Some(NodeId::Table { schema: "public".into(), name: "orders".into() }));
+        t.set_cursor(Some(NodeId::Table {
+            schema: "public".into(),
+            name: "orders".into(),
+        }));
         t.set_filter("analy");
         t.key(NavKey::Down);
         assert_eq!(cursor_label(&t), "analytics");
@@ -1352,7 +1435,15 @@ mod tests {
     #[test]
     fn navigation_on_an_empty_tree_does_nothing() {
         let mut t = SchemaTree::new();
-        for k in [NavKey::Up, NavKey::Down, NavKey::Home, NavKey::End, NavKey::Left, NavKey::Right, NavKey::Enter] {
+        for k in [
+            NavKey::Up,
+            NavKey::Down,
+            NavKey::Home,
+            NavKey::End,
+            NavKey::Left,
+            NavKey::Right,
+            NavKey::Enter,
+        ] {
             assert_eq!(t.key(k), Action::None);
         }
     }
@@ -1362,12 +1453,18 @@ mod tests {
     #[test]
     fn a_click_highlights_and_a_double_click_opens() {
         let mut t = pg_tree();
-        let orders = NodeId::Table { schema: "public".into(), name: "orders".into() };
+        let orders = NodeId::Table {
+            schema: "public".into(),
+            name: "orders".into(),
+        };
         assert_eq!(t.click(&orders), Action::Redraw);
         assert_eq!(t.cursor(), Some(&orders));
         assert_eq!(
             t.open(&orders),
-            Action::OpenTable { schema: "public".into(), table: "orders".into() }
+            Action::OpenTable {
+                schema: "public".into(),
+                table: "orders".into()
+            }
         );
     }
 
@@ -1404,7 +1501,10 @@ mod tests {
         t.toggle(&NodeId::Schema("billing".into()));
         t.set_tables("billing", Ok(vec![]));
         t.invalidate_all();
-        assert_eq!(t.expanded_unloaded(), vec!["public".to_string(), "billing".to_string()]);
+        assert_eq!(
+            t.expanded_unloaded(),
+            vec!["public".to_string(), "billing".to_string()]
+        );
         t.toggle(&NodeId::Schema("billing".into()));
         assert_eq!(t.expanded_unloaded(), vec!["public".to_string()]);
     }
@@ -1428,7 +1528,11 @@ mod tests {
     // -- Menus --------------------------------------------------------------------------------
 
     fn caps() -> Caps {
-        Caps { ddl: true, switch_database: true, create_database: false }
+        Caps {
+            ddl: true,
+            switch_database: true,
+            create_database: false,
+        }
     }
 
     fn actions(items: &[MenuEntry]) -> Vec<MenuAction> {
@@ -1438,7 +1542,10 @@ mod tests {
     #[test]
     fn a_table_menu_has_the_documented_entries_in_order() {
         let t = pg_tree();
-        let id = NodeId::Table { schema: "public".into(), name: "orders".into() };
+        let id = NodeId::Table {
+            schema: "public".into(),
+            name: "orders".into(),
+        };
         assert_eq!(
             actions(&t.menu_for(&id, caps())),
             vec![
@@ -1458,7 +1565,10 @@ mod tests {
     #[test]
     fn a_view_cannot_be_edited_dropped_or_inserted_into() {
         let t = pg_tree();
-        let id = NodeId::Table { schema: "public".into(), name: "order_totals".into() };
+        let id = NodeId::Table {
+            schema: "public".into(),
+            name: "order_totals".into(),
+        };
         let a = actions(&t.menu_for(&id, caps()));
         assert!(!a.contains(&MenuAction::EditTable));
         assert!(!a.contains(&MenuAction::DropTable));
@@ -1470,19 +1580,37 @@ mod tests {
     fn a_schema_menu_is_create_table_and_refresh() {
         let t = pg_tree();
         let items = t.menu_for(&NodeId::Schema("public".into()), caps());
-        assert_eq!(actions(&items), vec![MenuAction::CreateTable, MenuAction::Refresh]);
+        assert_eq!(
+            actions(&items),
+            vec![MenuAction::CreateTable, MenuAction::Refresh]
+        );
     }
 
     #[test]
     fn ddl_entries_are_disabled_when_the_driver_cannot_do_ddl() {
         let t = pg_tree();
-        let no_ddl = Caps { ddl: false, ..caps() };
-        let id = NodeId::Table { schema: "public".into(), name: "orders".into() };
+        let no_ddl = Caps {
+            ddl: false,
+            ..caps()
+        };
+        let id = NodeId::Table {
+            schema: "public".into(),
+            name: "orders".into(),
+        };
         let items = t.menu_for(&id, no_ddl);
-        for m in items.iter().filter(|m| matches!(m.action, MenuAction::EditTable | MenuAction::DropTable)) {
+        for m in items
+            .iter()
+            .filter(|m| matches!(m.action, MenuAction::EditTable | MenuAction::DropTable))
+        {
             assert!(!m.enabled, "{:?} should be disabled", m.action);
         }
-        assert!(items.iter().find(|m| m.action == MenuAction::ViewData).unwrap().enabled);
+        assert!(
+            items
+                .iter()
+                .find(|m| m.action == MenuAction::ViewData)
+                .unwrap()
+                .enabled
+        );
     }
 
     #[test]
@@ -1546,7 +1674,10 @@ mod tests {
         d.server_error = "database \"app\" already exists".into();
         assert!(d.error().contains("already exists"));
         d.name = "9".into();
-        assert!(d.error().contains("start with a"), "a local problem outranks a stale refusal");
+        assert!(
+            d.error().contains("start with a"),
+            "a local problem outranks a stale refusal"
+        );
     }
 
     #[test]
@@ -1560,7 +1691,10 @@ mod tests {
     // -- Drop dialog ----------------------------------------------------------------------------
 
     fn dep(schema: &str, name: &str) -> TableRef {
-        TableRef { schema: schema.into(), name: name.into() }
+        TableRef {
+            schema: schema.into(),
+            name: name.into(),
+        }
     }
 
     #[test]
@@ -1594,7 +1728,10 @@ mod tests {
         let mut d = DropDialog::new("public", "public", "customers", true);
         d.dependents = Dependents::Ready(vec![dep("public", "orders"), dep("billing", "invoices")]);
         let w = d.warning();
-        assert!(w.starts_with("2 tables have foreign keys to customers"), "{w}");
+        assert!(
+            w.starts_with("2 tables have foreign keys to customers"),
+            "{w}"
+        );
         assert!(w.contains("public.orders") && w.contains("billing.invoices"));
         d.dependents = Dependents::Ready(vec![dep("public", "orders")]);
         assert!(d.warning().starts_with("1 table has foreign keys"));
@@ -1603,7 +1740,11 @@ mod tests {
     #[test]
     fn a_long_dependent_list_is_cut_off() {
         let mut d = DropDialog::new("public", "public", "t", true);
-        d.dependents = Dependents::Ready((0..12).map(|i| dep("public", &format!("child_{i:02}"))).collect());
+        d.dependents = Dependents::Ready(
+            (0..12)
+                .map(|i| dep("public", &format!("child_{i:02}")))
+                .collect(),
+        );
         let w = d.warning();
         assert!(w.contains("and 4 more"), "{w}");
         assert!(!w.contains("child_11"));
@@ -1612,7 +1753,10 @@ mod tests {
     #[test]
     fn cascade_is_offered_on_postgres_and_only_with_dependents() {
         let mut d = DropDialog::new("public", "public", "customers", true);
-        assert!(!d.cascade_offered(), "not before the warning has anything to show");
+        assert!(
+            !d.cascade_offered(),
+            "not before the warning has anything to show"
+        );
         d.dependents = Dependents::Ready(vec![]);
         assert!(!d.cascade_offered());
         d.dependents = Dependents::Ready(vec![dep("public", "orders")]);

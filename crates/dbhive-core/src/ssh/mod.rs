@@ -73,8 +73,8 @@ fn known_hosts_path() -> Option<PathBuf> {
 /// recorded). Returns `Err(reason)` on mismatch or storage failure.
 fn verify_host_key(server_addr: &str, key: &PublicKey) -> Result<(), String> {
     let fingerprint = key.fingerprint();
-    let path = known_hosts_path()
-        .ok_or_else(|| "Cannot locate application data directory".to_string())?;
+    let path =
+        known_hosts_path().ok_or_else(|| "Cannot locate application data directory".to_string())?;
 
     let mut hosts: HashMap<String, String> = match std::fs::read_to_string(&path) {
         Ok(contents) => serde_json::from_str(&contents)
@@ -199,24 +199,32 @@ impl SshTunnelManager {
                 let auth_result = session
                     .authenticate_password(&config.username, &password)
                     .await
-                    .map_err(|e| DbError::AuthError(format!("SSH password authentication failed: {}", e)))?;
+                    .map_err(|e| {
+                        DbError::AuthError(format!("SSH password authentication failed: {}", e))
+                    })?;
 
                 if !auth_result {
-                    return Err(DbError::AuthError("SSH authentication failed: incorrect password".to_string()));
+                    return Err(DbError::AuthError(
+                        "SSH authentication failed: incorrect password".to_string(),
+                    ));
                 }
             }
             SshAuthMethod::PrivateKey => {
                 let key_path = config.private_key_path.as_ref().ok_or_else(|| {
-                    DbError::InvalidInput("Private key path required for key authentication".to_string())
+                    DbError::InvalidInput(
+                        "Private key path required for key authentication".to_string(),
+                    )
                 })?;
 
                 // Load private key
-                let key_data = std::fs::read(key_path)
-                    .map_err(|e| DbError::ConnectionError(format!("Failed to read private key: {}", e)))?;
+                let key_data = std::fs::read(key_path).map_err(|e| {
+                    DbError::ConnectionError(format!("Failed to read private key: {}", e))
+                })?;
 
                 let key = russh_keys::decode_secret_key(
-                    std::str::from_utf8(&key_data)
-                        .map_err(|e| DbError::AuthError(format!("Invalid UTF-8 in key file: {}", e)))?,
+                    std::str::from_utf8(&key_data).map_err(|e| {
+                        DbError::AuthError(format!("Invalid UTF-8 in key file: {}", e))
+                    })?,
                     None,
                 )
                 .map_err(|e| DbError::AuthError(format!("Failed to parse private key: {}", e)))?;
@@ -224,10 +232,14 @@ impl SshTunnelManager {
                 let auth_result = session
                     .authenticate_publickey(&config.username, Arc::new(key))
                     .await
-                    .map_err(|e| DbError::AuthError(format!("SSH key authentication failed: {}", e)))?;
+                    .map_err(|e| {
+                        DbError::AuthError(format!("SSH key authentication failed: {}", e))
+                    })?;
 
                 if !auth_result {
-                    return Err(DbError::AuthError("SSH key authentication failed".to_string()));
+                    return Err(DbError::AuthError(
+                        "SSH key authentication failed".to_string(),
+                    ));
                 }
             }
         }
@@ -235,10 +247,12 @@ impl SshTunnelManager {
         let session = Arc::new(Mutex::new(session));
 
         // Start local listener
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", local_port))
-            .map_err(|e| DbError::ConnectionError(format!("Failed to bind local port {}: {}", local_port, e)))?;
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", local_port)).map_err(|e| {
+            DbError::ConnectionError(format!("Failed to bind local port {}: {}", local_port, e))
+        })?;
 
-        let actual_port = listener.local_addr()
+        let actual_port = listener
+            .local_addr()
             .map_err(|e| DbError::InternalError(format!("Failed to get local address: {}", e)))?
             .port();
 
@@ -299,7 +313,14 @@ impl SshTunnelManager {
             let session_clone = session.clone();
             let db_host_clone = db_host.clone();
             tokio::spawn(async move {
-                if let Err(e) = Self::handle_tunnel_connection(tokio_stream, session_clone, db_host_clone, db_port).await {
+                if let Err(e) = Self::handle_tunnel_connection(
+                    tokio_stream,
+                    session_clone,
+                    db_host_clone,
+                    db_port,
+                )
+                .await
+                {
                     eprintln!("Tunnel connection error: {}", e);
                 }
             });
@@ -356,7 +377,8 @@ impl SshTunnelManager {
         let listener = TcpListener::bind("127.0.0.1:0")
             .map_err(|e| DbError::InternalError(format!("Failed to find free port: {}", e)))?;
 
-        let port = listener.local_addr()
+        let port = listener
+            .local_addr()
             .map_err(|e| DbError::InternalError(format!("Failed to get local address: {}", e)))?
             .port();
 
@@ -373,8 +395,12 @@ impl SshTunnelManager {
 
             // Close the SSH session
             let session = tunnel_info.session.lock().await;
-            session.disconnect(russh::Disconnect::ByApplication, "", "en").await
-                .map_err(|e| DbError::InternalError(format!("Failed to disconnect SSH session: {}", e)))?;
+            session
+                .disconnect(russh::Disconnect::ByApplication, "", "en")
+                .await
+                .map_err(|e| {
+                    DbError::InternalError(format!("Failed to disconnect SSH session: {}", e))
+                })?;
         }
 
         Ok(())

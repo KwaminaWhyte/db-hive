@@ -14,7 +14,6 @@
 //! Nothing is applied without the user seeing the exact statements first and
 //! confirming. DDL is not undoable.
 
-
 use std::collections::HashMap;
 
 use dbhive_core::models::{DbError, ForeignKeyInfo, TableSchema};
@@ -360,8 +359,7 @@ fn toolbar(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
     }
     if load {
         // A non-empty design would be thrown away, so ask first.
-        if app.screens.schema_designer.tables.is_empty()
-            || app.screens.schema_designer.confirm_load
+        if app.screens.schema_designer.tables.is_empty() || app.screens.schema_designer.confirm_load
         {
             app.screens.schema_designer.confirm_load = false;
             start_load(app, ui.ctx());
@@ -510,7 +508,11 @@ fn properties(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
                                             );
                                         }
                                     });
-                                if ui.small_button("✖").on_hover_text("Remove column").clicked() {
+                                if ui
+                                    .small_button("✖")
+                                    .on_hover_text("Remove column")
+                                    .clicked()
+                                {
                                     remove_column = Some(i);
                                 }
                             });
@@ -985,10 +987,7 @@ fn sql_window(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
             } else {
                 ui.label(crate::theme::text::muted(
                     palette,
-                    format!(
-                        "{} statements, referenced tables first",
-                        statements.len()
-                    ),
+                    format!("{} statements, referenced tables first", statements.len()),
                 ));
                 egui::ScrollArea::vertical()
                     .max_height(360.0)
@@ -1172,7 +1171,11 @@ mod tests {
         let a = d.add_table();
         let b = d.add_table();
         assert_ne!(a, b);
-        assert_ne!(d.position(a), d.position(b), "new tables landed on top of each other");
+        assert_ne!(
+            d.position(a),
+            d.position(b),
+            "new tables landed on top of each other"
+        );
         assert_eq!(d.selected, Some(b));
     }
 

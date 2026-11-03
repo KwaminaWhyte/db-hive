@@ -52,7 +52,10 @@ impl SavedWorkspace {
             }
             saved.push(entry);
         }
-        Self { tabs: saved, active }
+        Self {
+            tabs: saved,
+            active,
+        }
     }
 
     /// Whether there is anything a person would miss: a table tab, or a
@@ -143,9 +146,15 @@ mod tests {
         assert_eq!(
             s.tabs,
             vec![
-                SavedTab::Query { sql: "SELECT 1".into() },
-                SavedTab::Query { sql: "SELECT 2".into() },
-                SavedTab::Table { name: "orders".into() },
+                SavedTab::Query {
+                    sql: "SELECT 1".into()
+                },
+                SavedTab::Query {
+                    sql: "SELECT 2".into()
+                },
+                SavedTab::Table {
+                    name: "orders".into()
+                },
             ]
         );
         assert_eq!(s.active, Some(2));
@@ -174,7 +183,10 @@ mod tests {
         let s = SavedWorkspace::capture(&tabs_with(&["SELECT 'it''s'"], &["we\"ird"]));
         assert_eq!(SavedWorkspace::from_value(&s.to_value()), Some(s));
         assert_eq!(SavedWorkspace::from_value(&json!("nonsense")), None);
-        assert_eq!(SavedWorkspace::from_value(&json!({"tabs": [{"kind": "mystery"}]})), None);
+        assert_eq!(
+            SavedWorkspace::from_value(&json!({"tabs": [{"kind": "mystery"}]})),
+            None
+        );
         // An active index past the end is dropped, not trusted.
         let v = json!({"tabs": [{"kind": "query", "sql": "a"}], "active": 7});
         assert_eq!(SavedWorkspace::from_value(&v).unwrap().active, None);
@@ -184,9 +196,15 @@ mod tests {
     fn missing_tables_are_dropped_and_active_follows_its_tab() {
         let s = SavedWorkspace {
             tabs: vec![
-                SavedTab::Table { name: "gone".into() },
-                SavedTab::Query { sql: "SELECT 1".into() },
-                SavedTab::Table { name: "kept".into() },
+                SavedTab::Table {
+                    name: "gone".into(),
+                },
+                SavedTab::Query {
+                    sql: "SELECT 1".into(),
+                },
+                SavedTab::Table {
+                    name: "kept".into(),
+                },
             ],
             active: Some(2),
         };
@@ -194,7 +212,10 @@ mod tests {
         assert_eq!(r.tabs.len(), 2);
         assert_eq!(r.active, Some(1));
         // If the active tab itself is gone there is no active tab.
-        let s2 = SavedWorkspace { active: Some(0), ..s };
+        let s2 = SavedWorkspace {
+            active: Some(0),
+            ..s
+        };
         assert_eq!(s2.without_missing_tables(|n| n == "kept").active, None);
     }
 

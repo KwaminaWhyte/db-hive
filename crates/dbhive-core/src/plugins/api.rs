@@ -53,14 +53,20 @@ impl PluginApi {
         if self.context.permissions.contains(&permission) {
             Ok(())
         } else {
-            Err(PluginError::PermissionDenied(permission.label().to_string()))
+            Err(PluginError::PermissionDenied(
+                permission.label().to_string(),
+            ))
         }
     }
 
     // ---- Database -------------------------------------------------------
 
     /// Not available. See the module documentation.
-    pub async fn execute_query(&self, _sql: &str, _connection_id: &str) -> PluginResult<QueryResult> {
+    pub async fn execute_query(
+        &self,
+        _sql: &str,
+        _connection_id: &str,
+    ) -> PluginResult<QueryResult> {
         self.check(PluginPermission::ExecuteQuery)?;
         Err(PluginError::NotSupported(
             "database access from plugins".into(),
@@ -86,8 +92,7 @@ impl PluginApi {
     /// Validate a declarative interface a plugin wants shown.
     pub fn accept_ui(&self, raw: &str) -> PluginResult<super::ui::PluginUi> {
         self.check(PluginPermission::ModifyUi)?;
-        super::ui::PluginUi::parse(raw)
-            .map_err(|e| PluginError::ExecutionError(e.to_string()))
+        super::ui::PluginUi::parse(raw).map_err(|e| PluginError::ExecutionError(e.to_string()))
     }
 
     // ---- Files ----------------------------------------------------------
@@ -284,9 +289,18 @@ mod tests {
 
     #[test]
     fn notification_kinds_parse_leniently() {
-        assert_eq!(NotificationKind::from_wire("Success"), NotificationKind::Success);
-        assert_eq!(NotificationKind::from_wire("warn"), NotificationKind::Warning);
-        assert_eq!(NotificationKind::from_wire("nonsense"), NotificationKind::Info);
+        assert_eq!(
+            NotificationKind::from_wire("Success"),
+            NotificationKind::Success
+        );
+        assert_eq!(
+            NotificationKind::from_wire("warn"),
+            NotificationKind::Warning
+        );
+        assert_eq!(
+            NotificationKind::from_wire("nonsense"),
+            NotificationKind::Info
+        );
         assert_eq!(NotificationKind::from_wire(""), NotificationKind::Info);
     }
 }

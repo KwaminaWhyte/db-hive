@@ -246,10 +246,7 @@ pub enum AlterColumnOperation {
     DropColumn { column_name: String, cascade: bool },
 
     /// Rename a column
-    RenameColumn {
-        old_name: String,
-        new_name: String,
-    },
+    RenameColumn { old_name: String, new_name: String },
 
     /// Change column type
     AlterType {
@@ -258,10 +255,7 @@ pub enum AlterColumnOperation {
     },
 
     /// Set/drop NOT NULL constraint
-    SetNotNull {
-        column_name: String,
-        not_null: bool,
-    },
+    SetNotNull { column_name: String, not_null: bool },
 
     /// Set/drop default value
     SetDefault {

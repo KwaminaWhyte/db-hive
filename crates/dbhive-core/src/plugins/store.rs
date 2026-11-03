@@ -114,8 +114,7 @@ impl PluginStore {
             // A missing directory is a first run, not a failure.
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return out,
             Err(e) => {
-                out.problems
-                    .push(format!("{}: {}", self.root.display(), e));
+                out.problems.push(format!("{}: {}", self.root.display(), e));
                 return out;
             }
         };
@@ -137,8 +136,12 @@ impl PluginStore {
             }
         }
 
-        out.plugins
-            .sort_by(|a, b| a.manifest.name.to_lowercase().cmp(&b.manifest.name.to_lowercase()));
+        out.plugins.sort_by(|a, b| {
+            a.manifest
+                .name
+                .to_lowercase()
+                .cmp(&b.manifest.name.to_lowercase())
+        });
         out
     }
 
@@ -271,7 +274,10 @@ impl PluginStore {
         }
         fs::create_dir_all(&dest)?;
         write_json(&dest.join("manifest.json"), manifest)?;
-        fs::write(dest.join(&manifest.main), placeholder_source(manifest, note))?;
+        fs::write(
+            dest.join(&manifest.main),
+            placeholder_source(manifest, note),
+        )?;
         Ok(dest)
     }
 
@@ -454,10 +460,20 @@ mod tests {
 
         let scan = store.scan("0.21.0");
         assert!(scan.problems.is_empty(), "{:?}", scan.problems);
-        let names: Vec<&str> = scan.plugins.iter().map(|p| p.manifest.name.as_str()).collect();
+        let names: Vec<&str> = scan
+            .plugins
+            .iter()
+            .map(|p| p.manifest.name.as_str())
+            .collect();
         assert_eq!(names, vec!["Alpha", "Beta"]);
-        assert!(scan.plugins.iter().all(|p| p.enabled), "new plugins start enabled");
-        assert!(scan.plugins.iter().all(|p| !p.loaded), "nothing is loaded by a scan");
+        assert!(
+            scan.plugins.iter().all(|p| p.enabled),
+            "new plugins start enabled"
+        );
+        assert!(
+            scan.plugins.iter().all(|p| !p.loaded),
+            "nothing is loaded by a scan"
+        );
     }
 
     #[test]
@@ -476,7 +492,12 @@ mod tests {
         let scan = store.scan("0.21.0");
         assert_eq!(scan.plugins.len(), 1);
         assert_eq!(scan.plugins[0].manifest.id, "com.good");
-        assert_eq!(scan.problems.len(), 2, "both failures are reported: {:?}", scan.problems);
+        assert_eq!(
+            scan.problems.len(),
+            2,
+            "both failures are reported: {:?}",
+            scan.problems
+        );
         assert!(scan.problems.iter().any(|p| p.starts_with("com.bad")));
     }
 
@@ -486,7 +507,11 @@ mod tests {
         let store = store_in(&tmp);
         let dir = store.plugin_dir("com.a").unwrap();
         fs::create_dir_all(&dir).unwrap();
-        fs::write(dir.join("manifest.json"), manifest_json("com.b", "Impostor")).unwrap();
+        fs::write(
+            dir.join("manifest.json"),
+            manifest_json("com.b", "Impostor"),
+        )
+        .unwrap();
 
         let scan = store.scan("0.21.0");
         assert!(scan.plugins.is_empty());
@@ -653,6 +678,9 @@ mod tests {
         let scan = store.scan("0.21.0");
         assert_eq!(scan.plugins.len(), 1);
         let body = fs::read_to_string(scan.plugins[0].main_path().unwrap()).unwrap();
-        assert!(body.contains("renderUi"), "the placeholder describes itself");
+        assert!(
+            body.contains("renderUi"),
+            "the placeholder describes itself"
+        );
     }
 }

@@ -234,7 +234,11 @@ fn alter_column_sql(
                     qualified,
                     col,
                     source.data_type,
-                    if source.nullable { " NULL" } else { " NOT NULL" }
+                    if source.nullable {
+                        " NULL"
+                    } else {
+                        " NOT NULL"
+                    }
                 ));
             }
             DbDriver::Sqlite | DbDriver::Turso => {
@@ -298,11 +302,22 @@ struct Quoter {
 impl Quoter {
     fn for_driver(driver: &DbDriver) -> Result<Self, DbError> {
         match driver {
-            DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite | DbDriver::Turso => {
-                Ok(Self { open: '"', close: '"' })
-            }
-            DbDriver::MySql => Ok(Self { open: '`', close: '`' }),
-            DbDriver::SqlServer => Ok(Self { open: '[', close: ']' }),
+            DbDriver::Postgres
+            | DbDriver::Supabase
+            | DbDriver::Neon
+            | DbDriver::Sqlite
+            | DbDriver::Turso => Ok(Self {
+                open: '"',
+                close: '"',
+            }),
+            DbDriver::MySql => Ok(Self {
+                open: '`',
+                close: '`',
+            }),
+            DbDriver::SqlServer => Ok(Self {
+                open: '[',
+                close: ']',
+            }),
             DbDriver::MongoDb | DbDriver::Redis => Err(DbError::InvalidInput(
                 "Schema migrations are not supported for this driver".to_string(),
             )),

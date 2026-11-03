@@ -639,12 +639,7 @@ fn joins_section(app: &mut DbHiveApp, ui: &mut egui::Ui, intents: &mut Vec<Inten
     app.screens.query_builder.sections.joins = open;
 }
 
-fn column_picker(
-    ui: &mut egui::Ui,
-    id: (&str, usize),
-    columns: &[String],
-    target: &mut String,
-) {
+fn column_picker(ui: &mut egui::Ui, id: (&str, usize), columns: &[String], target: &mut String) {
     egui::ComboBox::from_id_salt(id)
         .selected_text(if target.is_empty() {
             "column".to_string()
@@ -713,84 +708,92 @@ fn columns_section(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     let mut add: Option<SelectedColumn> = None;
     let global_distinct = qb.state.distinct;
 
-    section(ui, palette, "qb_columns", "Columns", count, &mut open, |ui| {
-        if qb.state.columns.is_empty() {
-            ui.label(crate::theme::text::muted(
-                palette,
-                "No columns picked, so the query selects every column.",
-            ));
-        }
+    section(
+        ui,
+        palette,
+        "qb_columns",
+        "Columns",
+        count,
+        &mut open,
+        |ui| {
+            if qb.state.columns.is_empty() {
+                ui.label(crate::theme::text::muted(
+                    palette,
+                    "No columns picked, so the query selects every column.",
+                ));
+            }
 
-        for (i, col) in qb.state.columns.iter_mut().enumerate() {
-            ui.horizontal(|ui| {
-                alias_column_picker(
-                    ui,
-                    ("qb_col", i),
-                    &aliases,
-                    &available,
-                    &mut col.table_alias,
-                    &mut col.column,
-                );
-                egui::ComboBox::from_id_salt(("qb_col_agg", i))
-                    .selected_text(col.aggregate.label())
-                    .width(130.0)
-                    .show_ui(ui, |ui| {
-                        for a in Aggregate::ALL {
-                            ui.selectable_value(&mut col.aggregate, a, a.label());
+            for (i, col) in qb.state.columns.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    alias_column_picker(
+                        ui,
+                        ("qb_col", i),
+                        &aliases,
+                        &available,
+                        &mut col.table_alias,
+                        &mut col.column,
+                    );
+                    egui::ComboBox::from_id_salt(("qb_col_agg", i))
+                        .selected_text(col.aggregate.label())
+                        .width(130.0)
+                        .show_ui(ui, |ui| {
+                            for a in Aggregate::ALL {
+                                ui.selectable_value(&mut col.aggregate, a, a.label());
+                            }
+                        });
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        if ui.small_button("Remove").clicked() {
+                            remove = Some(i);
                         }
                     });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.small_button("Remove").clicked() {
-                        remove = Some(i);
+                });
+                ui.horizontal(|ui| {
+                    ui.add(
+                        egui::TextEdit::singleline(&mut col.alias)
+                            .hint_text("output name (optional)")
+                            .desired_width(180.0),
+                    );
+                    ui.add_enabled(
+                        !col.aggregate.is_some() && !global_distinct,
+                        egui::Checkbox::new(&mut col.distinct, "DISTINCT"),
+                    )
+                    .on_hover_text("Applies to the first output column only");
+                });
+                ui.add_space(4.0);
+                ui.separator();
+            }
+
+            ui.label(crate::theme::text::muted(palette, "Add a column"));
+            egui::ScrollArea::vertical()
+                .id_salt("qb_col_available")
+                .max_height(150.0)
+                .show(ui, |ui| {
+                    for (alias, cols) in &available {
+                        for c in cols {
+                            let already = qb
+                                .state
+                                .columns
+                                .iter()
+                                .any(|s| &s.table_alias == alias && &s.column == c);
+                            ui.horizontal(|ui| {
+                                if ui
+                                    .add_enabled(!already, egui::Button::new("+").small())
+                                    .clicked()
+                                {
+                                    add = Some(SelectedColumn::new(alias.clone(), c.clone()));
+                                }
+                                let label = if c == STAR {
+                                    format!("{}.* (all columns)", alias)
+                                } else {
+                                    format!("{}.{}", alias, c)
+                                };
+                                ui.label(crate::theme::text::muted(palette, label));
+                            });
+                        }
                     }
                 });
-            });
-            ui.horizontal(|ui| {
-                ui.add(
-                    egui::TextEdit::singleline(&mut col.alias)
-                        .hint_text("output name (optional)")
-                        .desired_width(180.0),
-                );
-                ui.add_enabled(
-                    !col.aggregate.is_some() && !global_distinct,
-                    egui::Checkbox::new(&mut col.distinct, "DISTINCT"),
-                )
-                .on_hover_text("Applies to the first output column only");
-            });
-            ui.add_space(4.0);
-            ui.separator();
-        }
-
-        ui.label(crate::theme::text::muted(palette, "Add a column"));
-        egui::ScrollArea::vertical()
-            .id_salt("qb_col_available")
-            .max_height(150.0)
-            .show(ui, |ui| {
-                for (alias, cols) in &available {
-                    for c in cols {
-                        let already = qb
-                            .state
-                            .columns
-                            .iter()
-                            .any(|s| &s.table_alias == alias && &s.column == c);
-                        ui.horizontal(|ui| {
-                            if ui
-                                .add_enabled(!already, egui::Button::new("+").small())
-                                .clicked()
-                            {
-                                add = Some(SelectedColumn::new(alias.clone(), c.clone()));
-                            }
-                            let label = if c == STAR {
-                                format!("{}.* (all columns)", alias)
-                            } else {
-                                format!("{}.{}", alias, c)
-                            };
-                            ui.label(crate::theme::text::muted(palette, label));
-                        });
-                    }
-                }
-            });
-    });
+        },
+    );
 
     let qb = &mut app.screens.query_builder;
     if let Some(i) = remove {
@@ -819,12 +822,20 @@ fn filters_section(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         .map(|t| (t.alias.clone(), t.columns.clone()))
         .collect();
 
-    section(ui, palette, "qb_filters", "Filters", count, &mut open, |ui| {
-        let group = std::mem::take(&mut qb.state.filters);
-        let mut group = group;
-        draw_group(ui, palette, &mut group, &aliases, &typed, 0, "g");
-        qb.state.filters = group;
-    });
+    section(
+        ui,
+        palette,
+        "qb_filters",
+        "Filters",
+        count,
+        &mut open,
+        |ui| {
+            let group = std::mem::take(&mut qb.state.filters);
+            let mut group = group;
+            draw_group(ui, palette, &mut group, &aliases, &typed, 0, "g");
+            qb.state.filters = group;
+        },
+    );
 
     app.screens.query_builder.sections.filters = open;
 }
@@ -1011,7 +1022,8 @@ fn value_editor(
             );
         }
         Arity::One => {
-            if cond.kind == ValueKind::Bool && !matches!(cond.op, CompareOp::Like | CompareOp::NotLike)
+            if cond.kind == ValueKind::Bool
+                && !matches!(cond.op, CompareOp::Like | CompareOp::NotLike)
             {
                 let mut on = matches!(cond.value.to_ascii_lowercase().as_str(), "true" | "t" | "1");
                 if ui.checkbox(&mut on, "true").changed() {
@@ -1179,40 +1191,48 @@ fn order_by_section(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     let mut add = false;
     let mut move_up: Option<usize> = None;
 
-    section(ui, palette, "qb_order_by", "Order by", count, &mut open, |ui| {
-        for (i, o) in qb.state.order_by.iter_mut().enumerate() {
-            ui.horizontal(|ui| {
-                alias_column_picker(
-                    ui,
-                    ("qb_ob", i),
-                    &aliases,
-                    &columns,
-                    &mut o.table_alias,
-                    &mut o.column,
-                );
-                if ui
-                    .small_button(o.direction.sql())
-                    .on_hover_text("Toggle direction")
-                    .clicked()
-                {
-                    o.direction = o.direction.toggled();
-                }
-                if ui
-                    .add_enabled(i > 0, egui::Button::new("⬆").small())
-                    .on_hover_text("Sort by this earlier")
-                    .clicked()
-                {
-                    move_up = Some(i);
-                }
-                if ui.small_button("Remove").clicked() {
-                    remove = Some(i);
-                }
-            });
-        }
-        if ui.button("Add order by").clicked() {
-            add = true;
-        }
-    });
+    section(
+        ui,
+        palette,
+        "qb_order_by",
+        "Order by",
+        count,
+        &mut open,
+        |ui| {
+            for (i, o) in qb.state.order_by.iter_mut().enumerate() {
+                ui.horizontal(|ui| {
+                    alias_column_picker(
+                        ui,
+                        ("qb_ob", i),
+                        &aliases,
+                        &columns,
+                        &mut o.table_alias,
+                        &mut o.column,
+                    );
+                    if ui
+                        .small_button(o.direction.sql())
+                        .on_hover_text("Toggle direction")
+                        .clicked()
+                    {
+                        o.direction = o.direction.toggled();
+                    }
+                    if ui
+                        .add_enabled(i > 0, egui::Button::new("⬆").small())
+                        .on_hover_text("Sort by this earlier")
+                        .clicked()
+                    {
+                        move_up = Some(i);
+                    }
+                    if ui.small_button("Remove").clicked() {
+                        remove = Some(i);
+                    }
+                });
+            }
+            if ui.button("Add order by").clicked() {
+                add = true;
+            }
+        },
+    );
 
     let qb = &mut app.screens.query_builder;
     if let Some(i) = remove {
@@ -1241,26 +1261,34 @@ fn limit_section(app: &mut DbHiveApp, ui: &mut egui::Ui, rules: DialectRules) {
     let mut open = qb.sections.limit;
     let count = usize::from(qb.state.limit.is_some()) + usize::from(qb.state.offset.is_some());
 
-    section(ui, palette, "qb_limit", "Limit / offset", count, &mut open, |ui| {
-        ui.checkbox(&mut qb.state.distinct, "DISTINCT (whole result)");
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            ui.label(crate::theme::text::muted(palette, "LIMIT"));
-            optional_number(ui, "qb_limit_v", &mut qb.state.limit);
-            ui.label(crate::theme::text::muted(palette, "OFFSET"));
-            optional_number(ui, "qb_offset_v", &mut qb.state.offset);
-        });
-        ui.label(crate::theme::text::muted(
-            palette,
-            pagination_summary(qb.state.limit, qb.state.offset),
-        ));
-        if rules.limit_style == LimitStyle::OffsetFetch {
+    section(
+        ui,
+        palette,
+        "qb_limit",
+        "Limit / offset",
+        count,
+        &mut open,
+        |ui| {
+            ui.checkbox(&mut qb.state.distinct, "DISTINCT (whole result)");
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label(crate::theme::text::muted(palette, "LIMIT"));
+                optional_number(ui, "qb_limit_v", &mut qb.state.limit);
+                ui.label(crate::theme::text::muted(palette, "OFFSET"));
+                optional_number(ui, "qb_offset_v", &mut qb.state.offset);
+            });
             ui.label(crate::theme::text::muted(
                 palette,
-                "SQL Server needs an ORDER BY for OFFSET/FETCH.",
+                pagination_summary(qb.state.limit, qb.state.offset),
             ));
-        }
-    });
+            if rules.limit_style == LimitStyle::OffsetFetch {
+                ui.label(crate::theme::text::muted(
+                    palette,
+                    "SQL Server needs an ORDER BY for OFFSET/FETCH.",
+                ));
+            }
+        },
+    );
 
     app.screens.query_builder.sections.limit = open;
 }
@@ -1544,7 +1572,6 @@ mod tests {
             ..Default::default()
         }
     }
-
 
     #[test]
     fn the_completion_index_covers_tables_aliases_and_columns() {

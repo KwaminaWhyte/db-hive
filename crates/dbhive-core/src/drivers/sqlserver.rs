@@ -7,9 +7,9 @@ use async_trait::async_trait;
 use futures_util::TryStreamExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tiberius::{AuthMethod, Client, Config, EncryptionLevel, QueryItem};
 use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 use tokio_util::compat::TokioAsyncWriteCompatExt;
 
 use super::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
@@ -58,25 +58,20 @@ impl SqlServerDriver {
         let config = Self::build_config(opts)?;
 
         // Create TCP connection
-        let tcp = TcpStream::connect(config.get_addr())
-            .await
-            .map_err(|e| {
-                DbError::ConnectionError(format!("Failed to connect to SQL Server: {}", e))
-            })?;
+        let tcp = TcpStream::connect(config.get_addr()).await.map_err(|e| {
+            DbError::ConnectionError(format!("Failed to connect to SQL Server: {}", e))
+        })?;
 
         // Wrap in compat for tiberius
-        tcp.set_nodelay(true).map_err(|e| {
-            DbError::ConnectionError(format!("Failed to set TCP nodelay: {}", e))
-        })?;
+        tcp.set_nodelay(true)
+            .map_err(|e| DbError::ConnectionError(format!("Failed to set TCP nodelay: {}", e)))?;
 
         let tcp_compat = tcp.compat_write();
 
         // Connect to SQL Server
         Client::connect(config, tcp_compat)
             .await
-            .map_err(|e| {
-                DbError::ConnectionError(format!("SQL Server connection failed: {}", e))
-            })
+            .map_err(|e| DbError::ConnectionError(format!("SQL Server connection failed: {}", e)))
     }
 
     /// Build SQL Server config from connection options
@@ -202,10 +197,7 @@ impl DatabaseDriver for SqlServerDriver {
             .map_err(|e| DbError::QueryError(format!("Failed to get columns: {}", e)))?
             .unwrap_or(&[]);
 
-        let column_names: Vec<String> = columns
-            .iter()
-            .map(|col| col.name().to_string())
-            .collect();
+        let column_names: Vec<String> = columns.iter().map(|col| col.name().to_string()).collect();
 
         // Stream rows from the first result set instead of materializing the
         // entire response via `into_first_result()` (PERF-03). Conversion
@@ -413,9 +405,9 @@ impl DatabaseDriver for SqlServerDriver {
                 .map_err(|e| DbError::QueryError(format!("Failed to parse nullable: {}", e)))?
                 .ok_or_else(|| DbError::QueryError("Nullable is null".to_string()))?;
 
-            let default_value: Option<&str> = row
-                .try_get(3)
-                .map_err(|e| DbError::QueryError(format!("Failed to parse default value: {}", e)))?;
+            let default_value: Option<&str> = row.try_get(3).map_err(|e| {
+                DbError::QueryError(format!("Failed to parse default value: {}", e))
+            })?;
 
             let is_primary_key: i32 = row
                 .try_get(4)
@@ -540,7 +532,9 @@ impl DatabaseDriver for SqlServerDriver {
         for row in row_stream {
             let constraint_name: &str = row
                 .try_get(0)
-                .map_err(|e| DbError::QueryError(format!("Failed to parse constraint name: {}", e)))?
+                .map_err(|e| {
+                    DbError::QueryError(format!("Failed to parse constraint name: {}", e))
+                })?
                 .ok_or_else(|| DbError::QueryError("Constraint name is null".to_string()))?;
 
             let table_name: &str = row

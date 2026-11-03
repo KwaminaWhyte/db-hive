@@ -110,7 +110,10 @@ fn snapshot(tab: &Tab) -> Option<Snapshot> {
     let (scope, rows) = match tab.kind {
         TabKind::Query => {
             let order = visible_rows(result, &tab.grid);
-            (ExportScope::Query, order.iter().map(|&i| result.rows[i].clone()).collect())
+            (
+                ExportScope::Query,
+                order.iter().map(|&i| result.rows[i].clone()).collect(),
+            )
         }
         TabKind::Table(_) => (ExportScope::TablePage, result.rows.clone()),
     };
@@ -137,7 +140,9 @@ impl Ctx {
     /// Project the active tab's view mode, JSON / Text lines, error and
     /// export availability into `ResultsState`. Cheap when nothing changed.
     pub(super) fn results_refresh(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let g = w.global::<ResultsState>();
         let mut guard = self.session.borrow_mut();
         let s = &mut *guard;
@@ -213,7 +218,11 @@ impl Ctx {
             mode,
             filter: tab.grid.filter.clone(),
             sort: tab.grid.sort,
-            chart: if mode == ViewMode::Chart { stored } else { None },
+            chart: if mode == ViewMode::Chart {
+                stored
+            } else {
+                None
+            },
         };
         if s.results.built.as_ref() == Some(&key) {
             return;
@@ -227,7 +236,10 @@ impl Ctx {
             g.set_view_notice("".into());
             g.set_chart_x_options(string_model(&result.columns));
             g.set_chart_y_options(string_model(
-                &numeric.iter().map(|&c| result.columns[c].clone()).collect::<Vec<_>>(),
+                &numeric
+                    .iter()
+                    .map(|&c| result.columns[c].clone())
+                    .collect::<Vec<_>>(),
             ));
             let mut message = String::new();
             match spec {
@@ -282,7 +294,9 @@ impl Ctx {
 
     /// Project the export dialog.
     fn results_project_export(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let g = w.global::<ResultsState>();
         let s = self.session.borrow();
         let d = &s.results.export;
@@ -291,7 +305,10 @@ impl Ctx {
             return;
         }
         g.set_export_formats(ModelRc::new(VecModel::from(
-            ResultFormat::labels().into_iter().map(Into::into).collect::<Vec<slint::SharedString>>(),
+            ResultFormat::labels()
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<slint::SharedString>>(),
         )));
         g.set_export_format(d.format.index());
         g.set_export_hint(rx::format_hint(d.format).into());
@@ -337,7 +354,9 @@ impl Ctx {
     fn results_mode_picked(&self, index: i32) {
         {
             let mut s = self.session.borrow_mut();
-            let Some(tab) = s.workspace.tabs.active() else { return };
+            let Some(tab) = s.workspace.tabs.active() else {
+                return;
+            };
             if !tab.is_query() {
                 return;
             }
@@ -349,10 +368,14 @@ impl Ctx {
 
     /// Copy what the JSON or Text view shows (JSON text, or real TSV).
     fn results_view_copy(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let copied = {
             let s = self.session.borrow();
-            let Some(tab) = s.workspace.tabs.active() else { return };
+            let Some(tab) = s.workspace.tabs.active() else {
+                return;
+            };
             let Some(result) = &tab.result else { return };
             let mode = s.results.modes.get(&tab.id).copied().unwrap_or_default();
             let (columns, rows) = capped_rows(result, tab);
@@ -376,8 +399,12 @@ impl Ctx {
         {
             let mut guard = self.session.borrow_mut();
             let s = &mut *guard;
-            let Some(tab) = s.workspace.tabs.active() else { return };
-            let Some((seq, spec, numeric)) = s.results.chart.get_mut(&tab.id) else { return };
+            let Some(tab) = s.workspace.tabs.active() else {
+                return;
+            };
+            let Some((seq, spec, numeric)) = s.results.chart.get_mut(&tab.id) else {
+                return;
+            };
             if *seq != tab.run_seq {
                 return;
             }
@@ -389,10 +416,14 @@ impl Ctx {
     // -- Error --------------------------------------------------------------------
 
     fn results_error_copy(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let text = {
             let s = self.session.borrow();
-            let Some(tab) = s.workspace.tabs.active() else { return };
+            let Some(tab) = s.workspace.tabs.active() else {
+                return;
+            };
             let Some(raw) = &tab.error else { return };
             error_clipboard(&describe_error(raw), &tab.sql)
         };
@@ -405,7 +436,9 @@ impl Ctx {
     fn results_export_open(&self) {
         {
             let mut s = self.session.borrow_mut();
-            let Some(tab) = s.workspace.tabs.active() else { return };
+            let Some(tab) = s.workspace.tabs.active() else {
+                return;
+            };
             if tab.running || snapshot(tab).is_none() {
                 return;
             }
@@ -430,7 +463,9 @@ impl Ctx {
 
     /// Put the dialog's path into the text box (typing already has it there).
     fn results_push_export_path(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let path = self.session.borrow().results.export.path.clone();
         w.global::<ResultsState>().set_export_path(path.into());
     }
@@ -476,7 +511,12 @@ impl Ctx {
     fn results_export_suggest(&self) {
         {
             let mut s = self.session.borrow_mut();
-            let stem = s.workspace.tabs.get(s.results.export.tab).map(stem_for).unwrap_or_default();
+            let stem = s
+                .workspace
+                .tabs
+                .get(s.results.export.tab)
+                .map(stem_for)
+                .unwrap_or_default();
             let d = &mut s.results.export;
             if d.running {
                 return;
@@ -519,7 +559,9 @@ impl Ctx {
             }
         };
         self.results_project_export();
-        let Some((columns, rows, format, path)) = job else { return };
+        let Some((columns, rows, format, path)) = job else {
+            return;
+        };
         let written = path.clone();
         runtime::spawn(
             async move {
@@ -568,14 +610,21 @@ impl Ctx {
 
 fn string_model(items: &[String]) -> ModelRc<slint::SharedString> {
     ModelRc::new(VecModel::from(
-        items.iter().map(|s| s.as_str().into()).collect::<Vec<slint::SharedString>>(),
+        items
+            .iter()
+            .map(|s| s.as_str().into())
+            .collect::<Vec<slint::SharedString>>(),
     ))
 }
 
 /// The columns and the first [`VIEW_ROW_CAP`] rows of the grid's order.
 fn capped_rows(result: &QueryResult, tab: &Tab) -> (Vec<String>, Vec<Vec<Value>>) {
     let order = visible_rows(result, &tab.grid);
-    let rows = order.iter().take(VIEW_ROW_CAP).map(|&i| result.rows[i].clone()).collect();
+    let rows = order
+        .iter()
+        .take(VIEW_ROW_CAP)
+        .map(|&i| result.rows[i].clone())
+        .collect();
     (result.columns.clone(), rows)
 }
 
@@ -593,7 +642,11 @@ fn build_view(
     };
     // Only the first rows were cloned; the view must report the real total.
     view.total_rows = total;
-    let style = if mode == ViewMode::Text { LineStyle::Text } else { LineStyle::Json };
+    let style = if mode == ViewMode::Text {
+        LineStyle::Text
+    } else {
+        LineStyle::Json
+    };
     let max = view.max_columns();
     let notice = truncation_notice(view.shown_rows, view.total_rows);
     (view, style, max, notice)
@@ -615,13 +668,17 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
 
     on!(on_mode_picked, |c, i| c.results_mode_picked(i));
     on!(on_view_copy, |c| c.results_view_copy());
-    on!(on_chart_kind_picked, |c, i| c.results_chart_edit(|s, _| s.kind = ChartKind::at(i)));
-    on!(on_chart_x_picked, |c, i| c.results_chart_edit(|s, _| s.x = i.max(0) as usize));
-    on!(on_chart_y_picked, |c, i| c.results_chart_edit(|s, numeric| {
-        if let Some(&col) = usize::try_from(i).ok().and_then(|i| numeric.get(i)) {
-            s.y = col;
+    on!(on_chart_kind_picked, |c, i| c
+        .results_chart_edit(|s, _| s.kind = ChartKind::at(i)));
+    on!(on_chart_x_picked, |c, i| c
+        .results_chart_edit(|s, _| s.x = i.max(0) as usize));
+    on!(on_chart_y_picked, |c, i| c.results_chart_edit(
+        |s, numeric| {
+            if let Some(&col) = usize::try_from(i).ok().and_then(|i| numeric.get(i)) {
+                s.y = col;
+            }
         }
-    }));
+    ));
     on!(on_error_retry, |c| c.run_active_tab());
     on!(on_error_copy, |c| c.results_error_copy());
     on!(on_error_toggle_query, |c| {
@@ -633,8 +690,10 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     });
     on!(on_export_open, |c| c.results_export_open());
     on!(on_export_close, |c| c.results_export_close());
-    on!(on_export_format_picked, |c, i| c.results_export_format_picked(i));
-    on!(on_export_path_edited, |c, t| c.results_export_path_edited(&t));
+    on!(on_export_format_picked, |c, i| c
+        .results_export_format_picked(i));
+    on!(on_export_path_edited, |c, t| c
+        .results_export_path_edited(&t));
     on!(on_export_suggest, |c| c.results_export_suggest());
     on!(on_export_run, |c| c.results_export_run());
     on!(on_export_reveal, |c| c.results_export_reveal());

@@ -88,7 +88,11 @@ pub struct Link {
 
 impl Link {
     pub fn new(from: usize, to: usize) -> Self {
-        Self { from, to, ..Default::default() }
+        Self {
+            from,
+            to,
+            ..Default::default()
+        }
     }
 }
 
@@ -238,8 +242,11 @@ impl Diagram {
     }
 
     fn rebuild(&self) {
-        self.node_model
-            .set_vec((0..self.nodes.len()).map(|i| self.to_slint(i)).collect::<Vec<_>>());
+        self.node_model.set_vec(
+            (0..self.nodes.len())
+                .map(|i| self.to_slint(i))
+                .collect::<Vec<_>>(),
+        );
         if self.hide_edges {
             self.edge_model.set_vec(Vec::new());
         } else {
@@ -352,7 +359,11 @@ mod tests {
         // With no horizontal gap a proportional control distance is zero and
         // the curve degenerates into a kink.
         let cmd = edge_commands(&node(0.0, 0.0), &node(200.0, 0.0));
-        assert!(cmd.contains("240.0"), "control point did not respect the minimum: {}", cmd);
+        assert!(
+            cmd.contains("240.0"),
+            "control point did not respect the minimum: {}",
+            cmd
+        );
     }
 
     #[test]
@@ -387,9 +398,15 @@ mod tests {
         d.select(Some(0));
         assert!(d.node_model.row_data(0).unwrap().selected);
         d.select(Some(2));
-        assert!(!d.node_model.row_data(0).unwrap().selected, "the old selection stayed selected");
+        assert!(
+            !d.node_model.row_data(0).unwrap().selected,
+            "the old selection stayed selected"
+        );
         assert!(d.node_model.row_data(2).unwrap().selected);
-        assert!(!d.edge_model.row_data(0).unwrap().highlighted, "edge 0 touches neither selected table now");
+        assert!(
+            !d.edge_model.row_data(0).unwrap().highlighted,
+            "edge 0 touches neither selected table now"
+        );
         assert!(d.edge_model.row_data(1).unwrap().highlighted);
         d.select(None);
         assert!(!d.node_model.row_data(2).unwrap().selected);
@@ -419,8 +436,18 @@ mod tests {
             .filter_map(|t| t.parse::<f32>().ok())
             .collect();
         for pair in nums.chunks(2) {
-            assert!(pair[0] >= 0.0 && pair[0] <= w, "x {} outside 0..{}", pair[0], w);
-            assert!(pair[1] >= 0.0 && pair[1] <= h, "y {} outside 0..{}", pair[1], h);
+            assert!(
+                pair[0] >= 0.0 && pair[0] <= w,
+                "x {} outside 0..{}",
+                pair[0],
+                w
+            );
+            assert!(
+                pair[1] >= 0.0 && pair[1] <= h,
+                "y {} outside 0..{}",
+                pair[1],
+                h
+            );
         }
     }
 
@@ -468,9 +495,14 @@ mod tests {
 
     #[test]
     fn a_self_reference_is_drawn_as_a_loop_beside_its_table() {
-        let d = Diagram::new(vec![node(0.0, 0.0)], vec![Link::new(0, 0)]).with_flow(Flow::Vertical, true);
+        let d = Diagram::new(vec![node(0.0, 0.0)], vec![Link::new(0, 0)])
+            .with_flow(Flow::Vertical, true);
         let e = d.edge_model.row_data(0).unwrap();
-        assert!(e.x >= 190.0, "the loop should start at the table's right edge: {}", e.x);
+        assert!(
+            e.x >= 190.0,
+            "the loop should start at the table's right edge: {}",
+            e.x
+        );
         assert!(e.width > 60.0);
     }
 
@@ -503,12 +535,18 @@ mod tests {
         c.dimmed = true;
         let d = Diagram::new(vec![a, b, c], vec![Link::new(0, 1), Link::new(1, 2)]);
         assert!(!d.edge_model.row_data(0).unwrap().dimmed, "touches a match");
-        assert!(d.edge_model.row_data(1).unwrap().dimmed, "touches only unmatched tables");
+        assert!(
+            d.edge_model.row_data(1).unwrap().dimmed,
+            "touches only unmatched tables"
+        );
     }
 
     #[test]
     fn move_to_places_a_node_absolutely() {
-        let mut d = Diagram::new(vec![node(0.0, 0.0), node(400.0, 0.0)], vec![Link::new(0, 1)]);
+        let mut d = Diagram::new(
+            vec![node(0.0, 0.0), node(400.0, 0.0)],
+            vec![Link::new(0, 1)],
+        );
         d.move_to(0, 32.0, 48.0);
         assert_eq!((d.nodes[0].x, d.nodes[0].y), (32.0, 48.0));
         assert_eq!(d.node_model.row_data(0).unwrap().x, 32.0);

@@ -21,7 +21,13 @@ fn main() {
             Node {
                 title: format!("table_{:02}", i),
                 columns: (0..n)
-                    .map(|c| if c == 0 { "PK  id".into() } else { format!("column_{}   varchar", c) })
+                    .map(|c| {
+                        if c == 0 {
+                            "PK  id".into()
+                        } else {
+                            format!("column_{}   varchar", c)
+                        }
+                    })
                     .collect(),
                 x: 20.0 + (i % 10) as f32 * 250.0,
                 y: 20.0 + (i / 10) as f32 * 230.0,
@@ -55,22 +61,30 @@ fn main() {
     let start = Instant::now();
     let mut last = (0.0_f32, 0.0_f32);
     let timer = slint::Timer::default();
-    timer.start(slint::TimerMode::Repeated, Duration::from_millis(8), move || {
-        let t = start.elapsed().as_secs_f32();
-        let pos = ((t * 2.0).cos() * 150.0, (t * 2.0).sin() * 100.0);
-        d.borrow_mut().drag(11, pos.0 - last.0, pos.1 - last.1);
-        last = pos;
-    });
+    timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(8),
+        move || {
+            let t = start.elapsed().as_secs_f32();
+            let pos = ((t * 2.0).cos() * 150.0, (t * 2.0).sin() * 100.0);
+            d.borrow_mut().drag(11, pos.0 - last.0, pos.1 - last.1);
+            last = pos;
+        },
+    );
 
     // Stop after a fixed time so the measurement is repeatable.
     let weak = c.as_weak();
     let stop = slint::Timer::default();
-    stop.start(slint::TimerMode::SingleShot, Duration::from_secs(8), move || {
-        if let Some(c) = weak.upgrade() {
-            let _ = c.hide();
-        }
-        let _ = slint::quit_event_loop();
-    });
+    stop.start(
+        slint::TimerMode::SingleShot,
+        Duration::from_secs(8),
+        move || {
+            if let Some(c) = weak.upgrade() {
+                let _ = c.hide();
+            }
+            let _ = slint::quit_event_loop();
+        },
+    );
 
     c.run().unwrap();
 }

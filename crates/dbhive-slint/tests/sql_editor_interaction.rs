@@ -12,8 +12,10 @@ use slint::{ComponentHandle, Model};
 fn type_text(c: &SqlEditorSpike, text: &str) {
     for ch in text.chars() {
         let s: slint::SharedString = ch.to_string().into();
-        c.window().dispatch_event(WindowEvent::KeyPressed { text: s.clone() });
-        c.window().dispatch_event(WindowEvent::KeyReleased { text: s });
+        c.window()
+            .dispatch_event(WindowEvent::KeyPressed { text: s.clone() });
+        c.window()
+            .dispatch_event(WindowEvent::KeyReleased { text: s });
     }
 }
 
@@ -44,13 +46,21 @@ fn typing_reaches_the_input_and_recolours_the_layer() {
     let c = setup();
     type_text(&c, "select 1");
 
-    assert_eq!(c.get_text(), "select 1", "keystrokes did not reach the input");
+    assert_eq!(
+        c.get_text(),
+        "select 1",
+        "keystrokes did not reach the input"
+    );
 
     let lines = c.get_lines();
     assert_eq!(lines.row_count(), 1);
     let (text, color) = first_run(&lines, 0);
     assert_eq!(text, "select");
-    assert_eq!(color, colour(Kind::Keyword), "keyword was not recoloured after typing");
+    assert_eq!(
+        color,
+        colour(Kind::Keyword),
+        "keyword was not recoloured after typing"
+    );
 }
 
 fn newlines_create_rows_in_the_colour_layer() {

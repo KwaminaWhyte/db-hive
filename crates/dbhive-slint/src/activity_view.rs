@@ -120,10 +120,7 @@ pub fn chart(view: Option<&ChartView>) -> MonitorChart {
 /// A grid's columns, rows and total width. Rows go through the lazy model the
 /// results grid expects, so a page of 250 logs costs no more than a 50k row
 /// result.
-pub fn grid(
-    result: &QueryResult,
-    widths: &[f32],
-) -> (ModelRc<GridColumn>, ModelRc<GridRow>, f32) {
+pub fn grid(result: &QueryResult, widths: &[f32]) -> (ModelRc<GridColumn>, ModelRc<GridRow>, f32) {
     let (columns, total) = layout_columns(&result.columns, widths);
     let rows = ModelRc::new(LazyRows::new(Rc::new(to_grid_rows(result))));
     (columns, rows, total)

@@ -31,7 +31,10 @@ type Reply = Arc<Mutex<(&'static str, &'static str)>>;
 fn stub() -> (String, Reply, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/latest.json", listener.local_addr().unwrap());
-    let reply: Reply = Arc::new(Mutex::new(("200 OK", r#"{"version":"99.0.0","notes":"new"}"#)));
+    let reply: Reply = Arc::new(Mutex::new((
+        "200 OK",
+        r#"{"version":"99.0.0","notes":"new"}"#,
+    )));
     let hits = Arc::new(AtomicUsize::new(0));
     let (r2, h2) = (reply.clone(), hits.clone());
     std::thread::spawn(move || {
@@ -69,8 +72,13 @@ fn the_automatic_and_manual_checks_report_through_the_banner_and_about() {
     let started = Instant::now();
     let timer = Timer::default();
 
-    let (weak, fail, step2, reply2, hits2) =
-        (w.as_weak(), failure.clone(), step.clone(), reply.clone(), hits.clone());
+    let (weak, fail, step2, reply2, hits2) = (
+        w.as_weak(),
+        failure.clone(),
+        step.clone(),
+        reply.clone(),
+        hits.clone(),
+    );
     timer.start(TimerMode::Repeated, Duration::from_millis(50), move || {
         let w: AppWindow = weak.upgrade().unwrap();
         let u = w.global::<UpdateBridge>();
@@ -98,8 +106,15 @@ fn the_automatic_and_manual_checks_report_through_the_banner_and_about() {
                     "banner said {:?}",
                     u.get_banner_message()
                 );
-                expect!(u.get_has_update(), "a newer version should offer the release page");
-                expect!(hits2.load(Ordering::SeqCst) == 1, "one request so far, got {}", hits2.load(Ordering::SeqCst));
+                expect!(
+                    u.get_has_update(),
+                    "a newer version should offer the release page"
+                );
+                expect!(
+                    hits2.load(Ordering::SeqCst) == 1,
+                    "one request so far, got {}",
+                    hits2.load(Ordering::SeqCst)
+                );
                 u.invoke_dismiss();
                 step2.set(1);
             }
@@ -118,13 +133,19 @@ fn the_automatic_and_manual_checks_report_through_the_banner_and_about() {
 
             // -- a check the person asked for says when it fails -----------
             2 if !u.get_checking() && u.get_about_status().starts_with("Could not check") => {
-                expect!(u.get_banner_visible(), "a failed manual check should show a banner");
+                expect!(
+                    u.get_banner_visible(),
+                    "a failed manual check should show a banner"
+                );
                 expect!(
                     u.get_banner_message().contains("500"),
                     "banner said {:?}",
                     u.get_banner_message()
                 );
-                expect!(!u.get_has_update(), "no release page offered after a failed check");
+                expect!(
+                    !u.get_has_update(),
+                    "no release page offered after a failed check"
+                );
                 u.invoke_dismiss();
                 step2.set(3);
             }
@@ -149,7 +170,10 @@ fn the_automatic_and_manual_checks_report_through_the_banner_and_about() {
             // 200 ms tick a few turns to wrongly repeat it.
             5 if started.elapsed() > Duration::from_millis(2000) => {
                 let n = hits2.load(Ordering::SeqCst);
-                expect!(n == 3, "expected 3 requests (1 automatic, 2 manual), got {n}");
+                expect!(
+                    n == 3,
+                    "expected 3 requests (1 automatic, 2 manual), got {n}"
+                );
                 step2.set(99);
                 slint::quit_event_loop().unwrap();
             }

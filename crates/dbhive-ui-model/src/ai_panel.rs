@@ -37,11 +37,15 @@ use crate::history_panel::append_sql;
 pub fn request_disclosure(kind: Kind, include_schema: bool) -> &'static str {
     match (kind, include_schema) {
         (Kind::Generate, true) => "Your request and the schema context.",
-        (Kind::Generate, false) => "Your request only. Without the schema the model guesses table names.",
+        (Kind::Generate, false) => {
+            "Your request only. Without the schema the model guesses table names."
+        }
         (Kind::Explain, _) => "The query in the editor. No schema.",
         (Kind::Optimize, true) => "The query in the editor and the schema context.",
         (Kind::Optimize, false) => "The query in the editor.",
-        (Kind::Fix, true) => "The query, the error text as the database reported it, and the schema context.",
+        (Kind::Fix, true) => {
+            "The query, the error text as the database reported it, and the schema context."
+        }
         (Kind::Fix, false) => "The query and the error text as the database reported it.",
         (Kind::Chat, _) => "Your message and the earlier turns.",
     }
@@ -175,7 +179,11 @@ pub fn answer_prose(content: &str, sql: Option<&str>) -> String {
 /// "AI error: OpenAI API error: ...", and the first prefix says nothing the
 /// second does not.
 pub fn error_text(message: &str) -> String {
-    message.trim().strip_prefix("AI error: ").unwrap_or(message.trim()).to_string()
+    message
+        .trim()
+        .strip_prefix("AI error: ")
+        .unwrap_or(message.trim())
+        .to_string()
 }
 
 /// A request as the transcript shows it: the statement clipped to two lines,
@@ -372,7 +380,8 @@ impl AiPanel {
         if let Some(problem) = base_url_problem(url) {
             return Err(problem.to_string());
         }
-        self.settings.get_mut(self.provider).base_url = url.trim().trim_end_matches('/').to_string();
+        self.settings.get_mut(self.provider).base_url =
+            url.trim().trim_end_matches('/').to_string();
         self.key_changed();
         Ok(self.settings.clone())
     }
@@ -417,15 +426,19 @@ impl AiPanel {
         self.models_load = Load::Loading;
     }
 
-    pub fn models_result(&mut self, provider: AiProviderType, result: Result<Vec<AiModel>, String>) {
+    pub fn models_result(
+        &mut self,
+        provider: AiProviderType,
+        result: Result<Vec<AiModel>, String>,
+    ) {
         if provider != self.provider {
             return;
         }
         match result {
             Ok(models) => {
                 let default = self.settings.get(provider).default_model.clone();
-                self.model = service_ai::preferred_model(&models, &self.model, &default)
-                    .unwrap_or_default();
+                self.model =
+                    service_ai::preferred_model(&models, &self.model, &default).unwrap_or_default();
                 self.models = models;
                 self.models_load = Load::Ready;
             }
@@ -637,7 +650,12 @@ impl AiPanel {
 
     /// An answer (or a failure) landed. Ignored when it was for another
     /// provider, or nothing is waiting for it any more.
-    pub fn finish(&mut self, provider: AiProviderType, kind: Kind, result: Result<AiResponse, String>) {
+    pub fn finish(
+        &mut self,
+        provider: AiProviderType,
+        kind: Kind,
+        result: Result<AiResponse, String>,
+    ) {
         if provider != self.provider || self.pending != Some(kind) {
             return;
         }
@@ -736,7 +754,8 @@ impl AiPanel {
         };
         if self.models_load == Load::Ready && self.models.is_empty() {
             models_error = if self.provider == AiProviderType::Ollama {
-                "No models installed. Run `ollama pull llama3.2` in a terminal, then refresh.".into()
+                "No models installed. Run `ollama pull llama3.2` in a terminal, then refresh."
+                    .into()
             } else {
                 "This provider listed no models for your key.".into()
             };
@@ -796,7 +815,10 @@ impl AiPanel {
             .collect();
 
         AiView {
-            providers: service_ai::PROVIDERS.iter().map(|p| p.label.to_string()).collect(),
+            providers: service_ai::PROVIDERS
+                .iter()
+                .map(|p| p.label.to_string())
+                .collect(),
             provider_index: service_ai::PROVIDERS
                 .iter()
                 .position(|p| p.provider == self.provider)
@@ -841,7 +863,11 @@ impl AiPanel {
             // Only copied out while the viewer is open: the context of a big
             // database is large, and the view is rebuilt on every keystroke
             // in the editor.
-            context_text: if self.show_context { self.context.clone() } else { String::new() },
+            context_text: if self.show_context {
+                self.context.clone()
+            } else {
+                String::new()
+            },
             context_summary: self.context_stats.clone(),
             context_loading,
             context_error,
@@ -947,7 +973,11 @@ mod tests {
     }
 
     fn ok_status(provider: AiProviderType) -> ProviderStatus {
-        ProviderStatus { provider, available: true, configured: true }
+        ProviderStatus {
+            provider,
+            available: true,
+            configured: true,
+        }
     }
 
     fn response(content: &str) -> AiResponse {
@@ -960,7 +990,11 @@ mod tests {
     }
 
     fn inputs<'a>(sql: &'a str, error: Option<&'a str>, prompt: &'a str) -> Inputs<'a> {
-        Inputs { current_sql: sql, last_error: error, prompt }
+        Inputs {
+            current_sql: sql,
+            last_error: error,
+            prompt,
+        }
     }
 
     /// A panel on OpenAI that is connected, has models and a loaded schema.
@@ -972,7 +1006,10 @@ mod tests {
         p.models_result(OPENAI, Ok(vec![model("gpt-a"), model("gpt-b")]));
         let key = ("conn".to_string(), "shop".to_string());
         p.begin_context(key.clone());
-        p.context_result(&key, Ok("Database: shop\n\nTables:\n\nmain.users:\n  - id: integer\n".into()));
+        p.context_result(
+            &key,
+            Ok("Database: shop\n\nTables:\n\nmain.users:\n  - id: integer\n".into()),
+        );
         p
     }
 
@@ -988,7 +1025,9 @@ mod tests {
         for kind in [Kind::Generate, Kind::Explain, Kind::Optimize, Kind::Fix] {
             for schema in [true, false] {
                 assert!(
-                    !request_disclosure(kind, schema).to_lowercase().contains("rows"),
+                    !request_disclosure(kind, schema)
+                        .to_lowercase()
+                        .contains("rows"),
                     "no request sends row data, and none should hint that it might"
                 );
             }
@@ -998,7 +1037,10 @@ mod tests {
     #[test]
     fn context_summary_counts_tables_and_size() {
         let ctx = "Database: shop\n\nTables:\n\npublic.users:\n  - id: integer\n\npublic.orders:\n  - id: integer\n";
-        assert_eq!(context_summary(ctx), format!("2 tables, {} bytes", ctx.len()));
+        assert_eq!(
+            context_summary(ctx),
+            format!("2 tables, {} bytes", ctx.len())
+        );
         let one = "Database: shop\n\nTables:\n\nmain.t:\n  - a: int\n";
         assert!(context_summary(one).starts_with("1 table,"));
         assert_eq!(context_summary(&"x".repeat(2048)), "0 tables, 2.0 KB");
@@ -1011,7 +1053,10 @@ mod tests {
             "app.sqlite"
         );
         assert_eq!(context_database_label(&DbDriver::Postgres, "shop"), "shop");
-        assert_eq!(context_database_label(&DbDriver::Sqlite, "plain.db"), "plain.db");
+        assert_eq!(
+            context_database_label(&DbDriver::Sqlite, "plain.db"),
+            "plain.db"
+        );
     }
 
     #[test]
@@ -1033,19 +1078,26 @@ mod tests {
     fn prose_is_what_is_left_after_the_statement_block() {
         let content = "Here you go:\n```sql\nSELECT 1;\n```\nThat returns one.";
         let sql = service_ai::extract_sql(content);
-        assert_eq!(answer_prose(content, sql.as_deref()), "Here you go:\nThat returns one.");
+        assert_eq!(
+            answer_prose(content, sql.as_deref()),
+            "Here you go:\nThat returns one."
+        );
     }
 
     #[test]
     fn a_bare_statement_has_no_prose_and_a_prose_answer_is_all_prose() {
         assert_eq!(answer_prose("SELECT 1;", Some("SELECT 1;")), "");
         assert_eq!(answer_prose("  SELECT 1;\n", Some("SELECT 1;")), "");
-        assert_eq!(answer_prose("  It scans the table.  ", None), "It scans the table.");
+        assert_eq!(
+            answer_prose("  It scans the table.  ", None),
+            "It scans the table."
+        );
     }
 
     #[test]
     fn only_the_offered_block_is_removed_when_there_are_several() {
-        let content = "Before:\n```sql\nSELECT a FROM t;\n```\nAfter:\n```sql\nSELECT b FROM t;\n```";
+        let content =
+            "Before:\n```sql\nSELECT a FROM t;\n```\nAfter:\n```sql\nSELECT b FROM t;\n```";
         let sql = service_ai::extract_sql(content);
         assert_eq!(sql.as_deref(), Some("SELECT a FROM t;"));
         assert_eq!(
@@ -1063,8 +1115,14 @@ mod tests {
 
     #[test]
     fn the_ai_error_prefix_is_dropped_once() {
-        assert_eq!(error_text("AI error: OpenAI API error: bad key"), "OpenAI API error: bad key");
-        assert_eq!(error_text("  Credential error: denied "), "Credential error: denied");
+        assert_eq!(
+            error_text("AI error: OpenAI API error: bad key"),
+            "OpenAI API error: bad key"
+        );
+        assert_eq!(
+            error_text("  Credential error: denied "),
+            "Credential error: denied"
+        );
     }
 
     #[test]
@@ -1086,10 +1144,19 @@ mod tests {
 
     #[test]
     fn applying_replaces_appends_or_starts_fresh() {
-        assert_eq!(apply_text(Apply::Replace, "SELECT 1", "SELECT 2"), "SELECT 2");
-        assert_eq!(apply_text(Apply::Append, "SELECT 1\n", "SELECT 2"), "SELECT 1\n\nSELECT 2");
+        assert_eq!(
+            apply_text(Apply::Replace, "SELECT 1", "SELECT 2"),
+            "SELECT 2"
+        );
+        assert_eq!(
+            apply_text(Apply::Append, "SELECT 1\n", "SELECT 2"),
+            "SELECT 1\n\nSELECT 2"
+        );
         assert_eq!(apply_text(Apply::Append, "  ", "SELECT 2"), "SELECT 2");
-        assert_eq!(apply_text(Apply::NewTab, "SELECT 1", "SELECT 2"), "SELECT 2");
+        assert_eq!(
+            apply_text(Apply::NewTab, "SELECT 1", "SELECT 2"),
+            "SELECT 2"
+        );
     }
 
     // --- provider, status, models -----------------------------------------------
@@ -1113,13 +1180,17 @@ mod tests {
         p.settings_result(Err("Saved AI settings could not be read: bad json".into()));
         assert!(p.settings_loaded());
         assert_eq!(p.provider(), AiProviderType::Ollama);
-        assert!(p.view(inputs("", None, "")).notice.contains("could not be read"));
+        assert!(p
+            .view(inputs("", None, ""))
+            .notice
+            .contains("could not be read"));
     }
 
     #[test]
     fn changing_provider_resets_status_models_and_the_request_in_flight() {
         let mut p = ready_panel();
-        p.start(Kind::Generate, inputs("", None, "list users")).unwrap();
+        p.start(Kind::Generate, inputs("", None, "list users"))
+            .unwrap();
         assert!(p.busy());
 
         assert!(!p.change_provider(OPENAI), "same provider is not a change");
@@ -1127,7 +1198,12 @@ mod tests {
         assert!(p.status().is_none());
         assert!(!p.busy());
         assert!(p.view(inputs("", None, "")).models.is_empty());
-        assert_eq!(p.model(), AiSettings::default().get(AiProviderType::Google).default_model);
+        assert_eq!(
+            p.model(),
+            AiSettings::default()
+                .get(AiProviderType::Google)
+                .default_model
+        );
     }
 
     #[test]
@@ -1145,7 +1221,14 @@ mod tests {
         let mut p = AiPanel::default();
         p.change_provider(OPENAI);
         assert!(!p.wants_models());
-        p.status_result(OPENAI, ProviderStatus { provider: OPENAI, available: true, configured: false });
+        p.status_result(
+            OPENAI,
+            ProviderStatus {
+                provider: OPENAI,
+                available: true,
+                configured: false,
+            },
+        );
         assert!(!p.wants_models());
         p.status_result(OPENAI, ok_status(OPENAI));
         assert!(p.wants_models());
@@ -1164,7 +1247,10 @@ mod tests {
         assert_eq!(saved.get(OPENAI).default_model, "gpt-b");
         assert_eq!(p.model(), "gpt-b");
         assert!(p.choose_model(1).is_none(), "the same choice saves nothing");
-        assert!(p.choose_model(9).is_none(), "an index past the list is ignored");
+        assert!(
+            p.choose_model(9).is_none(),
+            "an index past the list is ignored"
+        );
         p.refresh_models();
         p.models_result(OPENAI, Ok(vec![model("gpt-b"), model("gpt-c")]));
         assert_eq!(p.model(), "gpt-b");
@@ -1195,7 +1281,10 @@ mod tests {
         p.begin_models();
         assert!(p.view(inputs("", None, "")).models_loading);
         p.models_result(OPENAI, Err("OpenAI API error: bad key".into()));
-        assert_eq!(p.view(inputs("", None, "")).models_error, "OpenAI API error: bad key");
+        assert_eq!(
+            p.view(inputs("", None, "")).models_error,
+            "OpenAI API error: bad key"
+        );
         p.refresh_models();
         assert!(p.wants_models());
     }
@@ -1222,7 +1311,14 @@ mod tests {
         assert_eq!(v.status_text, "Checking");
         assert_eq!(v.status_tone, StatusTone::Muted);
 
-        p.status_result(OPENAI, ProviderStatus { provider: OPENAI, available: false, configured: false });
+        p.status_result(
+            OPENAI,
+            ProviderStatus {
+                provider: OPENAI,
+                available: false,
+                configured: false,
+            },
+        );
         let v = p.view(inputs("", None, ""));
         let e = v.empty.unwrap();
         assert_eq!(e.kind, EmptyState::NeedsApiKey);
@@ -1231,7 +1327,14 @@ mod tests {
         assert!(!v.key_saved);
         assert!(v.needs_key);
 
-        p.status_result(OPENAI, ProviderStatus { provider: OPENAI, available: false, configured: true });
+        p.status_result(
+            OPENAI,
+            ProviderStatus {
+                provider: OPENAI,
+                available: false,
+                configured: true,
+            },
+        );
         let v = p.view(inputs("", None, ""));
         assert_eq!(v.empty.as_ref().unwrap().kind, EmptyState::Unavailable);
         assert_eq!(v.status_tone, StatusTone::Destructive);
@@ -1249,7 +1352,11 @@ mod tests {
         let mut p = AiPanel::default();
         p.status_result(
             AiProviderType::Ollama,
-            ProviderStatus { provider: AiProviderType::Ollama, available: false, configured: true },
+            ProviderStatus {
+                provider: AiProviderType::Ollama,
+                available: false,
+                configured: true,
+            },
         );
         let e = p.view(inputs("", None, "")).empty.unwrap();
         assert_eq!(e.kind, EmptyState::OllamaUnavailable);
@@ -1262,12 +1369,17 @@ mod tests {
     #[test]
     fn generate_sends_the_prompt_and_the_schema_and_records_the_user_turn() {
         let mut p = ready_panel();
-        let d = p.start(Kind::Generate, inputs("", None, "  list users  ")).unwrap();
+        let d = p
+            .start(Kind::Generate, inputs("", None, "  list users  "))
+            .unwrap();
         assert_eq!(d.kind, Kind::Generate);
         assert_eq!(d.provider, OPENAI);
         assert_eq!(d.model.as_deref(), Some("gpt-a"));
         match d.task {
-            AiTask::Generate { prompt, schema_context } => {
+            AiTask::Generate {
+                prompt,
+                schema_context,
+            } => {
                 assert_eq!(prompt, "list users");
                 assert!(schema_context.contains("main.users"));
             }
@@ -1282,19 +1394,30 @@ mod tests {
     fn turning_the_schema_off_sends_none_and_the_view_says_so() {
         let mut p = ready_panel();
         p.set_include_schema(false);
-        match p.start(Kind::Generate, inputs("", None, "list users")).unwrap().task {
+        match p
+            .start(Kind::Generate, inputs("", None, "list users"))
+            .unwrap()
+            .task
+        {
             AiTask::Generate { schema_context, .. } => assert_eq!(schema_context, ""),
             other => panic!("unexpected {:?}", other),
         }
         let v = p.view(inputs("", None, ""));
         assert!(!v.include_schema);
-        assert!(v.disclosure.iter().all(|l| !l.text.contains("schema context")));
+        assert!(v
+            .disclosure
+            .iter()
+            .all(|l| !l.text.contains("schema context")));
     }
 
     #[test]
     fn explain_never_sends_the_schema() {
         let mut p = ready_panel();
-        match p.start(Kind::Explain, inputs("SELECT 1", None, "")).unwrap().task {
+        match p
+            .start(Kind::Explain, inputs("SELECT 1", None, ""))
+            .unwrap()
+            .task
+        {
             AiTask::Explain { sql } => assert_eq!(sql, "SELECT 1"),
             other => panic!("unexpected {:?}", other),
         }
@@ -1304,15 +1427,27 @@ mod tests {
     fn fix_needs_the_statement_and_its_error() {
         let mut p = ready_panel();
         assert!(!p.view(inputs("SELECT * FROM nope", None, "")).can_fix);
-        assert!(p.start(Kind::Fix, inputs("SELECT * FROM nope", None, "")).is_none());
+        assert!(p
+            .start(Kind::Fix, inputs("SELECT * FROM nope", None, ""))
+            .is_none());
         assert!(!p.busy());
-        assert!(p.view(inputs("", None, "")).notice.starts_with("No error to fix"));
+        assert!(p
+            .view(inputs("", None, ""))
+            .notice
+            .starts_with("No error to fix"));
 
         let d = p
-            .start(Kind::Fix, inputs("SELECT * FROM nope", Some("no such table: nope"), ""))
+            .start(
+                Kind::Fix,
+                inputs("SELECT * FROM nope", Some("no such table: nope"), ""),
+            )
             .unwrap();
         match d.task {
-            AiTask::Fix { sql, error_message, schema_context } => {
+            AiTask::Fix {
+                sql,
+                error_message,
+                schema_context,
+            } => {
                 assert_eq!(sql, "SELECT * FROM nope");
                 assert_eq!(error_message, "no such table: nope");
                 assert!(schema_context.contains("main.users"));
@@ -1324,8 +1459,12 @@ mod tests {
     #[test]
     fn nothing_starts_while_something_is_in_flight() {
         let mut p = ready_panel();
-        assert!(p.start(Kind::Explain, inputs("SELECT 1", None, "")).is_some());
-        assert!(p.start(Kind::Explain, inputs("SELECT 1", None, "")).is_none());
+        assert!(p
+            .start(Kind::Explain, inputs("SELECT 1", None, ""))
+            .is_some());
+        assert!(p
+            .start(Kind::Explain, inputs("SELECT 1", None, ""))
+            .is_none());
         assert!(!p.view(inputs("SELECT 1", None, "x")).can_explain);
         assert_eq!(p.turns().len(), 1, "no second user turn");
     }
@@ -1342,7 +1481,10 @@ mod tests {
         assert!(!v.can_generate, "would go out without the schema");
         assert!(v.can_explain, "explain does not use it");
         assert!(p.start(Kind::Generate, inputs("", None, "x")).is_none());
-        assert!(p.view(inputs("", None, "")).notice.contains("still loading"));
+        assert!(p
+            .view(inputs("", None, ""))
+            .notice
+            .contains("still loading"));
         // With the schema switched off there is nothing to wait for.
         p.set_include_schema(false);
         assert!(p.start(Kind::Generate, inputs("", None, "x")).is_some());
@@ -1367,16 +1509,41 @@ mod tests {
     fn requests_are_refused_with_a_reason_when_the_provider_is_not_ready() {
         let mut p = AiPanel::default();
         p.change_provider(OPENAI);
-        assert!(p.start(Kind::Explain, inputs("SELECT 1", None, "")).is_none());
-        assert!(p.view(inputs("", None, "")).notice.contains("Still checking"));
+        assert!(p
+            .start(Kind::Explain, inputs("SELECT 1", None, ""))
+            .is_none());
+        assert!(p
+            .view(inputs("", None, ""))
+            .notice
+            .contains("Still checking"));
 
-        p.status_result(OPENAI, ProviderStatus { provider: OPENAI, available: false, configured: false });
+        p.status_result(
+            OPENAI,
+            ProviderStatus {
+                provider: OPENAI,
+                available: false,
+                configured: false,
+            },
+        );
         p.start(Kind::Explain, inputs("SELECT 1", None, ""));
-        assert_eq!(p.view(inputs("", None, "")).notice, "Add an API key for OpenAI first.");
+        assert_eq!(
+            p.view(inputs("", None, "")).notice,
+            "Add an API key for OpenAI first."
+        );
 
-        p.status_result(OPENAI, ProviderStatus { provider: OPENAI, available: false, configured: true });
+        p.status_result(
+            OPENAI,
+            ProviderStatus {
+                provider: OPENAI,
+                available: false,
+                configured: true,
+            },
+        );
         p.start(Kind::Explain, inputs("SELECT 1", None, ""));
-        assert_eq!(p.view(inputs("", None, "")).notice, "OpenAI is not answering.");
+        assert_eq!(
+            p.view(inputs("", None, "")).notice,
+            "OpenAI is not answering."
+        );
     }
 
     #[test]
@@ -1390,8 +1557,13 @@ mod tests {
     #[test]
     fn an_answer_lands_as_a_turn_with_its_statement_model_and_duration() {
         let mut p = ready_panel();
-        p.start(Kind::Generate, inputs("", None, "list users")).unwrap();
-        p.finish(OPENAI, Kind::Generate, Ok(response("SELECT id FROM users;")));
+        p.start(Kind::Generate, inputs("", None, "list users"))
+            .unwrap();
+        p.finish(
+            OPENAI,
+            Kind::Generate,
+            Ok(response("SELECT id FROM users;")),
+        );
         assert!(!p.busy());
         assert_eq!(p.turn_sql(1), Some("SELECT id FROM users;"));
         assert_eq!(p.turn_sql(0), None, "the user's own turn offers nothing");
@@ -1410,8 +1582,13 @@ mod tests {
     #[test]
     fn a_failure_lands_as_a_failed_turn_that_offers_no_sql() {
         let mut p = ready_panel();
-        p.start(Kind::Explain, inputs("SELECT 1", None, "")).unwrap();
-        p.finish(OPENAI, Kind::Explain, Err("OpenAI API error: rate limited".into()));
+        p.start(Kind::Explain, inputs("SELECT 1", None, ""))
+            .unwrap();
+        p.finish(
+            OPENAI,
+            Kind::Explain,
+            Err("OpenAI API error: rate limited".into()),
+        );
         assert!(!p.busy());
         let v = p.view(inputs("", None, ""));
         let t = v.turns.last().unwrap();
@@ -1424,18 +1601,24 @@ mod tests {
     #[test]
     fn a_late_answer_for_another_provider_or_after_a_reset_is_dropped() {
         let mut p = ready_panel();
-        p.start(Kind::Explain, inputs("SELECT 1", None, "")).unwrap();
+        p.start(Kind::Explain, inputs("SELECT 1", None, ""))
+            .unwrap();
         p.finish(AiProviderType::Google, Kind::Explain, Ok(response("x")));
         assert!(p.busy(), "the answer was for another provider");
         p.change_provider(AiProviderType::Google);
         p.finish(OPENAI, Kind::Explain, Ok(response("late")));
-        assert_eq!(p.turns().len(), 1, "only the user's turn; the late answer is gone");
+        assert_eq!(
+            p.turns().len(),
+            1,
+            "only the user's turn; the late answer is gone"
+        );
     }
 
     #[test]
     fn clearing_empties_the_conversation_but_not_a_request_in_flight() {
         let mut p = ready_panel();
-        p.start(Kind::Explain, inputs("SELECT 1", None, "")).unwrap();
+        p.start(Kind::Explain, inputs("SELECT 1", None, ""))
+            .unwrap();
         p.clear();
         assert!(p.turns().is_empty());
         assert!(p.busy());
@@ -1444,7 +1627,10 @@ mod tests {
     #[test]
     fn a_long_user_turn_is_clipped_in_the_view_but_kept_whole_in_the_transcript() {
         let mut p = ready_panel();
-        let sql = (0..10).map(|i| format!("SELECT {}", i)).collect::<Vec<_>>().join("\n");
+        let sql = (0..10)
+            .map(|i| format!("SELECT {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         p.start(Kind::Explain, inputs(&sql, None, "")).unwrap();
         let v = p.view(inputs("", None, ""));
         assert!(v.turns[0].body.ends_with('…'));
@@ -1454,7 +1640,10 @@ mod tests {
     #[test]
     fn the_editor_preview_and_error_are_shown_clipped() {
         let p = ready_panel();
-        let sql = (0..9).map(|i| format!("SELECT {}", i)).collect::<Vec<_>>().join("\n");
+        let sql = (0..9)
+            .map(|i| format!("SELECT {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let v = p.view(inputs(&sql, Some("syntax error near \"FORM\""), ""));
         assert!(v.has_sql && v.has_error);
         assert!(v.sql_preview.ends_with('…'));
@@ -1476,7 +1665,11 @@ mod tests {
         assert!(p.context_wanted(&b));
         p.begin_context(b.clone());
         p.context_result(&a, Ok("stale".into()));
-        assert_eq!(p.context_text(), "", "the answer for the old database is ignored");
+        assert_eq!(
+            p.context_text(),
+            "",
+            "the answer for the old database is ignored"
+        );
         p.context_result(&b, Ok("fresh".into()));
         assert_eq!(p.context_text(), "fresh");
         p.invalidate_context();

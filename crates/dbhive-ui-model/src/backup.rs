@@ -181,7 +181,9 @@ pub fn annotate_entries(entries: &mut [BackupEntry], profiles: &[(String, String
             continue;
         }
         let key = svc::safe_name(&e.connection_name);
-        let mut matches = profiles.iter().filter(|(_, name, _)| svc::safe_name(name) == key);
+        let mut matches = profiles
+            .iter()
+            .filter(|(_, name, _)| svc::safe_name(name) == key);
         if let (Some((id, name, driver)), None) = (matches.next(), matches.next()) {
             e.connection_id = id.clone();
             e.connection_name = name.clone();
@@ -313,7 +315,10 @@ mod tests {
             parse_tables(" orders , customers ,"),
             vec!["orders", "customers"]
         );
-        assert_eq!(parse_tables("orders\ncustomers"), vec!["orders", "customers"]);
+        assert_eq!(
+            parse_tables("orders\ncustomers"),
+            vec!["orders", "customers"]
+        );
     }
 
     #[test]
@@ -411,8 +416,16 @@ mod tests {
     #[test]
     fn annotation_leaves_unknown_and_ambiguous_names_alone() {
         let profiles = vec![
-            ("a".to_string(), "prod orders".to_string(), "MySql".to_string()),
-            ("b".to_string(), "prod/orders".to_string(), "Postgres".to_string()),
+            (
+                "a".to_string(),
+                "prod orders".to_string(),
+                "MySql".to_string(),
+            ),
+            (
+                "b".to_string(),
+                "prod/orders".to_string(),
+                "Postgres".to_string(),
+            ),
         ];
         // Both profiles reduce to the same filename, so neither can be
         // claimed: guessing would attribute a backup to the wrong database.

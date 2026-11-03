@@ -12,22 +12,22 @@
 //! - Google (Gemini)
 //! - OpenRouter (multi-model gateway)
 
-pub mod provider;
-pub mod ollama;
-pub mod openai;
 pub mod anthropic;
 pub mod google;
+pub mod ollama;
+pub mod openai;
 pub mod openrouter;
+pub mod provider;
 
 // Re-export common types
 pub use provider::{
-    AiProvider, AiProviderType, AiModel, ChatMessage, ChatRole,
-    ChatCompletion, TokenUsage, extract_sql,
+    extract_sql, AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole,
+    TokenUsage,
 };
 
 // Re-export providers
-pub use ollama::{OllamaProvider, OllamaConfig};
-pub use openai::{OpenAiProvider, OpenAiConfig};
-pub use anthropic::{AnthropicProvider, AnthropicConfig};
-pub use google::{GoogleAiProvider, GoogleAiConfig};
-pub use openrouter::{OpenRouterProvider, OpenRouterConfig};
+pub use anthropic::{AnthropicConfig, AnthropicProvider};
+pub use google::{GoogleAiConfig, GoogleAiProvider};
+pub use ollama::{OllamaConfig, OllamaProvider};
+pub use openai::{OpenAiConfig, OpenAiProvider};
+pub use openrouter::{OpenRouterConfig, OpenRouterProvider};

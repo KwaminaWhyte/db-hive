@@ -99,7 +99,9 @@ pub fn history_rows(entries: &[QueryHistory], now: DateTime<Utc>) -> Vec<RowView
                 note: if h.success {
                     String::new()
                 } else {
-                    h.error_message.clone().unwrap_or_else(|| "Query failed".to_string())
+                    h.error_message
+                        .clone()
+                        .unwrap_or_else(|| "Query failed".to_string())
                 },
                 status: Some(h.success),
                 tags: Vec::new(),
@@ -210,7 +212,9 @@ pub fn rerun_plan(entry: &QueryHistory, current_connection_id: &str) -> RerunPla
         ));
     }
     if !entry.success {
-        return RerunPlan::OpenOnly("That query failed last time. Opened it without running.".into());
+        return RerunPlan::OpenOnly(
+            "That query failed last time. Opened it without running.".into(),
+        );
     }
     RerunPlan::RunHere
 }
@@ -425,7 +429,11 @@ impl TemplateRun {
             .iter()
             .map(|p| RunField {
                 name: p.name.clone(),
-                label: if p.label.is_empty() { p.name.clone() } else { p.label.clone() },
+                label: if p.label.is_empty() {
+                    p.name.clone()
+                } else {
+                    p.label.clone()
+                },
                 description: p.description.clone().unwrap_or_default(),
                 required: p.required,
                 param_type: p.param_type,
@@ -437,7 +445,9 @@ impl TemplateRun {
     /// The user changed one field. Type errors show as they type; "required"
     /// only appears on submit.
     pub fn set_value(&mut self, index: usize, value: &str) {
-        let Some(p) = self.template.parameters.get(index) else { return };
+        let Some(p) = self.template.parameters.get(index) else {
+            return;
+        };
         let (name, ty) = (p.name.clone(), p.param_type);
         self.values.insert(name.clone(), value.to_string());
         match validate_parameter_value(value, ty) {
@@ -501,7 +511,14 @@ mod tests {
     }
 
     fn template(sql: &str) -> QueryTemplate {
-        QueryTemplate::new("T".into(), None, sql.into(), sync_parameters(sql, &[]), None, None)
+        QueryTemplate::new(
+            "T".into(),
+            None,
+            sql.into(),
+            sync_parameters(sql, &[]),
+            None,
+            None,
+        )
     }
 
     #[test]
@@ -526,7 +543,10 @@ mod tests {
         let mut e = entry("c1", true);
         e.row_count = Some(1);
         e.execution_time_ms = Some(0);
-        assert_eq!(history_rows(&[e], now())[0].subtitle, "5m ago · Prod / app · N/A · 1 row");
+        assert_eq!(
+            history_rows(&[e], now())[0].subtitle,
+            "5m ago · Prod / app · N/A · 1 row"
+        );
     }
 
     #[test]
@@ -542,15 +562,22 @@ mod tests {
     #[test]
     fn rerun_runs_only_successful_queries_on_the_open_connection() {
         assert_eq!(rerun_plan(&entry("c1", true), "c1"), RerunPlan::RunHere);
-        assert!(matches!(rerun_plan(&entry("c1", false), "c1"), RerunPlan::OpenOnly(m) if m.contains("failed")));
-        assert!(matches!(rerun_plan(&entry("c2", true), "c1"), RerunPlan::OpenOnly(m) if m.contains("Prod")));
+        assert!(
+            matches!(rerun_plan(&entry("c1", false), "c1"), RerunPlan::OpenOnly(m) if m.contains("failed"))
+        );
+        assert!(
+            matches!(rerun_plan(&entry("c2", true), "c1"), RerunPlan::OpenOnly(m) if m.contains("Prod"))
+        );
     }
 
     #[test]
     fn appending_replaces_a_blank_editor_and_otherwise_adds_after_a_gap() {
         assert_eq!(append_sql("", "SELECT 1"), "SELECT 1");
         assert_eq!(append_sql("  \n", "SELECT 1"), "SELECT 1");
-        assert_eq!(append_sql("SELECT 2;\n", "SELECT 1"), "SELECT 2;\n\nSELECT 1");
+        assert_eq!(
+            append_sql("SELECT 2;\n", "SELECT 1"),
+            "SELECT 2;\n\nSELECT 1"
+        );
     }
 
     #[test]
@@ -570,8 +597,17 @@ mod tests {
 
     #[test]
     fn editing_a_snippet_keeps_identity_and_can_clear_optional_fields() {
-        let first = QuerySnippet::new("n".into(), "SELECT 1".into(), Some("d".into()), Some(vec!["x".into()]));
-        let d = SnippetDraft { name: "n2".into(), query: "SELECT 2".into(), ..Default::default() };
+        let first = QuerySnippet::new(
+            "n".into(),
+            "SELECT 1".into(),
+            Some("d".into()),
+            Some(vec!["x".into()]),
+        );
+        let d = SnippetDraft {
+            name: "n2".into(),
+            query: "SELECT 2".into(),
+            ..Default::default()
+        };
         let edited = build_snippet(&d, Some(&first)).unwrap();
         assert_eq!(edited.id, first.id);
         assert_eq!(edited.created_at, first.created_at);
@@ -582,7 +618,12 @@ mod tests {
 
     #[test]
     fn snippet_draft_round_trips() {
-        let s = QuerySnippet::new("n".into(), "SELECT 1".into(), Some("d".into()), Some(vec!["x".into(), "y".into()]));
+        let s = QuerySnippet::new(
+            "n".into(),
+            "SELECT 1".into(),
+            Some("d".into()),
+            Some(vec!["x".into(), "y".into()]),
+        );
         let d = SnippetDraft::from_snippet(&s);
         assert_eq!(d.tags, "x, y");
         let back = build_snippet(&d, Some(&s)).unwrap();
@@ -593,7 +634,12 @@ mod tests {
     #[test]
     fn snippet_rows_sort_by_name_and_fall_back_to_the_sql_when_undescribed() {
         let a = QuerySnippet::new("beta".into(), "SELECT 2\nFROM t".into(), None, None);
-        let b = QuerySnippet::new("Alpha".into(), "SELECT 1".into(), Some("first".into()), Some(vec!["t".into()]));
+        let b = QuerySnippet::new(
+            "Alpha".into(),
+            "SELECT 1".into(),
+            Some("first".into()),
+            Some(vec!["t".into()]),
+        );
         let rows = snippet_rows(&[a, b], "", None);
         assert_eq!(rows[0].title, "Alpha");
         assert_eq!(rows[0].subtitle, "first");
@@ -605,7 +651,10 @@ mod tests {
     fn snippet_rows_honour_search_and_tag() {
         let a = QuerySnippet::new("a".into(), "SELECT 1".into(), None, Some(vec!["x".into()]));
         let b = QuerySnippet::new("b".into(), "SELECT 2".into(), None, None);
-        assert_eq!(snippet_rows(&[a.clone(), b.clone()], "", Some("x")).len(), 1);
+        assert_eq!(
+            snippet_rows(&[a.clone(), b.clone()], "", Some("x")).len(),
+            1
+        );
         assert_eq!(snippet_rows(&[a, b], "select 2", None).len(), 1);
     }
 
@@ -627,7 +676,11 @@ mod tests {
         let mut first = template("SELECT {{a}}");
         first.parameters[0].default_value = Some("7".into());
         first.parameters[0].required = false;
-        let d = TemplateDraft { name: "T2".into(), sql: "SELECT {{a}}, {{b}}".into(), ..Default::default() };
+        let d = TemplateDraft {
+            name: "T2".into(),
+            sql: "SELECT {{a}}, {{b}}".into(),
+            ..Default::default()
+        };
         let edited = build_template(&d, &first.parameters, Some(&first)).unwrap();
         assert_eq!(edited.id, first.id);
         assert_eq!(edited.created_at, first.created_at);
@@ -639,8 +692,13 @@ mod tests {
     #[test]
     fn template_form_requires_name_and_sql() {
         assert!(build_template(&TemplateDraft::default(), &[], None).is_err());
-        let d = TemplateDraft { name: "x".into(), ..Default::default() };
-        assert!(build_template(&d, &[], None).unwrap_err().contains("no SQL"));
+        let d = TemplateDraft {
+            name: "x".into(),
+            ..Default::default()
+        };
+        assert!(build_template(&d, &[], None)
+            .unwrap_err()
+            .contains("no SQL"));
     }
 
     #[test]
@@ -674,7 +732,10 @@ mod tests {
         t.category = Some("Reports".into());
         let rows = template_rows(&[t], "", None);
         assert_eq!(rows[0].subtitle, "2 parameters · Reports");
-        assert_eq!(template_rows(&[template("SELECT 1")], "", None)[0].subtitle, "No parameters");
+        assert_eq!(
+            template_rows(&[template("SELECT 1")], "", None)[0].subtitle,
+            "No parameters"
+        );
     }
 
     #[test]
@@ -720,7 +781,10 @@ mod tests {
         let t = template("SELECT * FROM u WHERE name = {{name}}");
         let mut run = TemplateRun::new(&t);
         run.set_value(0, "x'; DROP TABLE u; --");
-        assert_eq!(run.submit().unwrap(), "SELECT * FROM u WHERE name = 'x''; DROP TABLE u; --'");
+        assert_eq!(
+            run.submit().unwrap(),
+            "SELECT * FROM u WHERE name = 'x''; DROP TABLE u; --'"
+        );
     }
 
     #[test]

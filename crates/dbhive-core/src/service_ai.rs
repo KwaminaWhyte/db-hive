@@ -389,9 +389,8 @@ impl AiSettings {
 pub fn load_settings() -> Result<AiSettings, DbError> {
     let store = JsonStore::open(SETTINGS_STORE)?;
     match store.get(SETTINGS_KEY) {
-        Some(value) => serde_json::from_value(value.clone()).map_err(|e| {
-            DbError::AiError(format!("Saved AI settings could not be read: {}", e))
-        }),
+        Some(value) => serde_json::from_value(value.clone())
+            .map_err(|e| DbError::AiError(format!("Saved AI settings could not be read: {}", e))),
         None => Ok(AiSettings::default()),
     }
 }
@@ -638,7 +637,11 @@ pub async fn run_task_with(
             sql,
             error_message,
             schema_context,
-        } => client.fix_query(sql, error_message, schema_context, m).await,
+        } => {
+            client
+                .fix_query(sql, error_message, schema_context, m)
+                .await
+        }
         AiTask::Chat { messages } => client
             .chat(messages.clone(), m, Some(0.7), None)
             .await
@@ -1229,7 +1232,9 @@ mod tests {
     #[test]
     fn a_store_never_prints_its_keys() {
         let store = MemoryKeyStore::new();
-        store.set(AiProviderType::Google, "sentinel-secret-value").unwrap();
+        store
+            .set(AiProviderType::Google, "sentinel-secret-value")
+            .unwrap();
         assert!(!format!("{:?}", store).contains("sentinel"));
     }
 
@@ -1240,13 +1245,20 @@ mod tests {
         settings.openai.base_url = "http://127.0.0.1:1/v1".into();
         let store = MemoryKeyStore::new();
         let p = AiProviderType::OpenAI;
-        let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 
-        let none = rt.block_on(provider_status_with(&store, &settings, p)).unwrap();
+        let none = rt
+            .block_on(provider_status_with(&store, &settings, p))
+            .unwrap();
         assert!(!none.configured && !none.available);
 
         store.set(p, "test-key-not-real").unwrap();
-        let keyed = rt.block_on(provider_status_with(&store, &settings, p)).unwrap();
+        let keyed = rt
+            .block_on(provider_status_with(&store, &settings, p))
+            .unwrap();
         assert!(keyed.configured, "a key in the store counts as configured");
         assert!(!keyed.available, "but nothing answers on that port");
     }
@@ -1412,7 +1424,11 @@ mod tests {
 
     #[test]
     fn schema_context_matches_the_web_shell_shape() {
-        let tables = vec![table("public", "users", &[("id", "integer"), ("email", "text")])];
+        let tables = vec![table(
+            "public",
+            "users",
+            &[("id", "integer"), ("email", "text")],
+        )];
         assert_eq!(
             build_schema_context("shop", &tables),
             "Database: shop\n\nTables:\n\npublic.users:\n  - id: integer\n  - email: text\n"
@@ -1445,10 +1461,7 @@ mod tests {
             .lines()
             .filter(|l| l.ends_with(':') && l.contains('.'))
             .collect();
-        assert_eq!(
-            order,
-            vec!["public.a:", "public.z:", "alpha.a:", "zeta.a:"]
-        );
+        assert_eq!(order, vec!["public.a:", "public.z:", "alpha.a:", "zeta.a:"]);
     }
 
     #[test]

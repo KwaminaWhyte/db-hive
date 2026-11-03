@@ -69,14 +69,26 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum PluginEvent {
-    Installed { plugin_id: String, version: String },
-    Uninstalled { plugin_id: String },
-    Enabled { plugin_id: String },
-    Disabled { plugin_id: String },
+    Installed {
+        plugin_id: String,
+        version: String,
+    },
+    Uninstalled {
+        plugin_id: String,
+    },
+    Enabled {
+        plugin_id: String,
+    },
+    Disabled {
+        plugin_id: String,
+    },
     Updated {
         plugin_id: String,
         old_version: String,
         new_version: String,
     },
-    Error { plugin_id: String, error: String },
+    Error {
+        plugin_id: String,
+        error: String,
+    },
 }

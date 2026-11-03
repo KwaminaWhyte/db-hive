@@ -338,7 +338,11 @@ fn tab_bar(app: &mut DbHiveApp, ui: &mut egui::Ui) {
         .meta
         .as_ref()
         .and_then(|m| ti.target.as_ref().map(|t| (m, t)))
-        .map(|(m, t)| relations_result(&m.foreign_keys, &t.schema, &t.table).rows.len())
+        .map(|(m, t)| {
+            relations_result(&m.foreign_keys, &t.schema, &t.table)
+                .rows
+                .len()
+        })
         .unwrap_or(0);
 
     ui.horizontal(|ui| {
@@ -551,7 +555,10 @@ fn pager(app: &mut DbHiveApp, ui: &mut egui::Ui) {
             },
         ));
         if ui
-            .add_enabled(has_next && next_offset_ok && !busy, egui::Button::new("Next"))
+            .add_enabled(
+                has_next && next_offset_ok && !busy,
+                egui::Button::new("Next"),
+            )
             .clicked()
         {
             go = Some(page + 1);

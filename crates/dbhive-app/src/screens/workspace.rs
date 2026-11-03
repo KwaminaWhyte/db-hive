@@ -131,7 +131,11 @@ impl Workspace {
 /// Pull the driver out of state, cloning the Arc so the lock is released
 /// before any await. Holding it across a query would freeze the UI.
 fn driver(app: &DbHiveApp, connection_id: &str) -> Option<Arc<dyn DatabaseDriver>> {
-    app.state.lock().unwrap().get_connection(connection_id).cloned()
+    app.state
+        .lock()
+        .unwrap()
+        .get_connection(connection_id)
+        .cloned()
 }
 
 pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
@@ -174,7 +178,6 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
             app.workspace.as_mut().unwrap().active().sql = sql;
             run_now = true;
         }
-
     }
 
     let ws = app.workspace.as_mut().unwrap();
@@ -346,7 +349,10 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
-                    ui.label(crate::theme::text::strong(palette, ws.connection_name.clone()));
+                    ui.label(crate::theme::text::strong(
+                        palette,
+                        ws.connection_name.clone(),
+                    ));
                     ui.horizontal(|ui| {
                         kit::status_badge(ui, palette, "Connected", kit::Tone::Success);
                     });
@@ -1015,9 +1021,7 @@ pub fn refresh_metadata(app: &mut DbHiveApp, ctx: &egui::Context) {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
 }

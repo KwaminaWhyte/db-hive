@@ -130,7 +130,10 @@ pub fn sql_filters() -> Vec<(String, Vec<String>)> {
 }
 pub fn data_filters() -> Vec<(String, Vec<String>)> {
     vec![
-        ("Data files".into(), vec!["csv".into(), "tsv".into(), "xlsx".into(), "xls".into()]),
+        (
+            "Data files".into(),
+            vec!["csv".into(), "tsv".into(), "xlsx".into(), "xls".into()],
+        ),
         ("CSV".into(), vec!["csv".into()]),
         ("Excel".into(), vec!["xlsx".into(), "xls".into()]),
     ]

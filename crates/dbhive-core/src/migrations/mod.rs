@@ -8,7 +8,5 @@
 pub mod diff;
 pub mod sql_gen;
 
-pub use diff::{
-    compute_diff, ColumnChange, ForeignKeyDiff, IndexDiff, SchemaDiff, TableDiff,
-};
+pub use diff::{compute_diff, ColumnChange, ForeignKeyDiff, IndexDiff, SchemaDiff, TableDiff};
 pub use sql_gen::generate_migration_sql;

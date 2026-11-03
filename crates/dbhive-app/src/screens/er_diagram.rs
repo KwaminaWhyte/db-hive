@@ -20,8 +20,8 @@ use crate::widgets::graph_layout;
 
 // Pure logic moved to dbhive-ui-model; re-exported so existing paths keep
 // working.
-pub use dbhive_ui_model::er_diagram::{table_size, DiagramTable, Point, HEADER_H, ROW_H};
 use dbhive_ui_model::er_diagram as model;
+pub use dbhive_ui_model::er_diagram::{table_size, DiagramTable, Point, HEADER_H, ROW_H};
 
 type Loaded = (Vec<DiagramTable>, Vec<ForeignKeyInfo>);
 
@@ -274,10 +274,7 @@ fn canvas(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
         ) else {
             continue;
         };
-        let a = to_screen(egui::pos2(
-            from.0.x + from.1 .0,
-            from.0.y + from.1 .1 / 2.0,
-        ));
+        let a = to_screen(egui::pos2(from.0.x + from.1 .0, from.0.y + from.1 .1 / 2.0));
         let b = to_screen(egui::pos2(to.0.x, to.0.y + to.1 .1 / 2.0));
 
         let involved = d.selected.as_deref() == Some(fk.table.as_str())
@@ -449,7 +446,11 @@ mod tests {
         d.open_for("conn", "public");
         d.pinned.insert("users".into(), Point::new(10.0, 10.0));
         d.open_for("conn", "public");
-        assert_eq!(d.pinned.len(), 1, "a no-op reopen discarded the arrangement");
+        assert_eq!(
+            d.pinned.len(),
+            1,
+            "a no-op reopen discarded the arrangement"
+        );
 
         // A different schema is a different diagram, so it does reset.
         d.open_for("conn", "other");

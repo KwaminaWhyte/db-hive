@@ -13,7 +13,10 @@ use mongodb::{
 use serde_json::Value as JsonValue;
 
 use super::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
-use crate::models::{ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema};
+use crate::models::{
+    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo,
+    TableSchema,
+};
 
 /// MongoDB database driver
 ///
@@ -118,10 +121,7 @@ impl DatabaseDriver for MongoDbDriver {
 
         let connection_string = if opts.username.is_empty() {
             // No authentication
-            format!(
-                "mongodb://{}:{}/{}",
-                opts.host, opts.port, database_name
-            )
+            format!("mongodb://{}:{}/{}", opts.host, opts.port, database_name)
         } else if let Some(password) = &opts.password {
             // Username and password authentication
             format!(

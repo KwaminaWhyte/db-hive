@@ -129,7 +129,11 @@ async fn activate(manager: &PluginManager, id: &str) -> Activation {
         .await
         .map(|out| (Some(out.value), out.outbox))
         .map_err(|e| e.to_string());
-    Activation { calls, interface, load_error: None }
+    Activation {
+        calls,
+        interface,
+        load_error: None,
+    }
 }
 
 fn tone(t: NoteTone) -> Tone {
@@ -176,7 +180,9 @@ impl Ctx {
 
     /// Project the panel into the `PluginsState` global.
     pub(super) fn refresh_plugins(&self, items: Items) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let s = self.session.borrow();
         let g = w.global::<PluginsState>();
         view::apply(&g, &s.plugins.panel, items);
@@ -206,10 +212,15 @@ impl Ctx {
     }
 
     pub(super) fn open_plugins(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         w.global::<PluginsState>().set_visible(true);
         // A panel that already has a list shows it while it re-reads.
-        let loaded = matches!(self.session.borrow().plugins.panel.load, dbhive_ui_model::plugins_panel::Load::Ready);
+        let loaded = matches!(
+            self.session.borrow().plugins.panel.load,
+            dbhive_ui_model::plugins_panel::Load::Ready
+        );
         self.plugins_rescan(!loaded);
         self.refresh_plugins(Items::Rebuild);
     }
@@ -287,11 +298,20 @@ impl Ctx {
     /// Load a plugin and take its interface. `explicit` is the user asking to
     /// open it: failures are then shown beside the controls.
     fn plugins_activate(self: &Rc<Self>, id: String, explicit: bool) {
-        let Ok(manager) = self.plugin_manager() else { return };
+        let Ok(manager) = self.plugin_manager() else {
+            return;
+        };
         {
             let mut s = self.session.borrow_mut();
             s.plugins.started.insert(id.clone());
-            s.plugins.panel.busy.insert(id.clone(), if explicit { Busy::Opening } else { Busy::Starting });
+            s.plugins.panel.busy.insert(
+                id.clone(),
+                if explicit {
+                    Busy::Opening
+                } else {
+                    Busy::Starting
+                },
+            );
         }
         self.refresh_plugins(Items::Patch);
         let ticket = self.session.borrow().plugins.interface_ticket.begin();
@@ -317,7 +337,11 @@ impl Ctx {
             // once, whoever asked.
             self.toast(format!("Could not start {}: {}", name, e), Tone::Danger);
             if explicit {
-                self.session.borrow_mut().plugins.panel.fail_interface(id, e);
+                self.session
+                    .borrow_mut()
+                    .plugins
+                    .panel
+                    .fail_interface(id, e);
             }
             self.refresh_plugins(Items::Rebuild);
             return;
@@ -338,7 +362,11 @@ impl Ctx {
             }
             Err(e) if explicit => {
                 let msg = interface_error_message(&name, &e);
-                self.session.borrow_mut().plugins.panel.fail_interface(id, msg);
+                self.session
+                    .borrow_mut()
+                    .plugins
+                    .panel
+                    .fail_interface(id, msg);
             }
             // The first look at a plugin that has no interface says nothing.
             Err(_) => {}
@@ -368,14 +396,21 @@ impl Ctx {
 
     /// Enable or disable. `id` is blank for the selected plugin.
     fn plugins_toggle(self: &Rc<Self>, id: &str) {
-        let Some(id) = (if id.is_empty() { self.selected_plugin() } else { Some(id.to_string()) })
-        else {
+        let Some(id) = (if id.is_empty() {
+            self.selected_plugin()
+        } else {
+            Some(id.to_string())
+        }) else {
             return;
         };
-        let Ok(manager) = self.plugin_manager() else { return };
+        let Ok(manager) = self.plugin_manager() else {
+            return;
+        };
         let (enabling, name) = {
             let mut s = self.session.borrow_mut();
-            let Some(p) = s.plugins.panel.find(&id) else { return };
+            let Some(p) = s.plugins.panel.find(&id) else {
+                return;
+            };
             if s.plugins.panel.is_busy(&id) {
                 return;
             }
@@ -394,7 +429,11 @@ impl Ctx {
                     .map_err(|e| e.to_string())?;
                 // Enabling loads the plugin and reads its interface; disabling
                 // has already unloaded it (the manager does that first).
-                let activation = if enabling { Some(activate(&manager, &task_id).await) } else { None };
+                let activation = if enabling {
+                    Some(activate(&manager, &task_id).await)
+                } else {
+                    None
+                };
                 Ok::<_, String>((plugin, activation))
             },
             move |result| {
@@ -412,11 +451,17 @@ impl Ctx {
                                 s.plugins.panel.upsert(plugin);
                             }
                             ctx.toast(
-                                format!("{} {}", name, if enabling { "enabled" } else { "disabled" }),
+                                format!(
+                                    "{} {}",
+                                    name,
+                                    if enabling { "enabled" } else { "disabled" }
+                                ),
                                 Tone::Neutral,
                             );
                             match activation {
-                                Some(a) => ctx.plugins_activated(&id, false, a, ticket.is_current()),
+                                Some(a) => {
+                                    ctx.plugins_activated(&id, false, a, ticket.is_current())
+                                }
                                 None => ctx.refresh_plugins(Items::Rebuild),
                             }
                         }
@@ -431,10 +476,13 @@ impl Ctx {
     }
 
     fn plugins_open_interface(self: &Rc<Self>) {
-        let Some(id) = self.selected_plugin() else { return };
+        let Some(id) = self.selected_plugin() else {
+            return;
+        };
         {
             let mut s = self.session.borrow_mut();
-            let usable = s.plugins.panel.find(&id).is_some_and(|p| p.enabled) && !s.plugins.panel.is_busy(&id);
+            let usable = s.plugins.panel.find(&id).is_some_and(|p| p.enabled)
+                && !s.plugins.panel.is_busy(&id);
             if !usable {
                 return;
             }
@@ -451,7 +499,9 @@ impl Ctx {
     }
 
     fn plugins_open_settings(self: &Rc<Self>) {
-        let Some(id) = self.selected_plugin() else { return };
+        let Some(id) = self.selected_plugin() else {
+            return;
+        };
         {
             let mut s = self.session.borrow_mut();
             s.plugins.form_error.clear();
@@ -472,7 +522,9 @@ impl Ctx {
     }
 
     fn plugins_save_settings(self: &Rc<Self>) {
-        let Ok(manager) = self.plugin_manager() else { return };
+        let Ok(manager) = self.plugin_manager() else {
+            return;
+        };
         let saved = self.session.borrow().plugins.panel.settings_to_save();
         let (id, config) = match saved {
             Ok(v) => v,
@@ -491,7 +543,12 @@ impl Ctx {
         let name = self.plugin_name(&id);
         let task_id = id.clone();
         crate::runtime::spawn(
-            async move { manager.update_config(&task_id, config).await.map_err(|e| e.to_string()) },
+            async move {
+                manager
+                    .update_config(&task_id, config)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
             move |result| {
                 with_ctx(|ctx| {
                     ctx.session.borrow_mut().plugins.panel.busy.remove(&id);
@@ -517,12 +574,15 @@ impl Ctx {
     }
 
     fn plugins_uninstall_asked(self: &Rc<Self>) {
-        let Some(id) = self.selected_plugin() else { return };
+        let Some(id) = self.selected_plugin() else {
+            return;
+        };
         if self.session.borrow().plugins.panel.is_busy(&id) {
             return;
         }
         let name = self.plugin_name(&id);
-        self.session.borrow_mut().pending_action = Some(PendingAction::Plugins(Pending::Uninstall(id)));
+        self.session.borrow_mut().pending_action =
+            Some(PendingAction::Plugins(Pending::Uninstall(id)));
         self.show_confirm(
             "Uninstall plugin?",
             &format!(
@@ -540,7 +600,9 @@ impl Ctx {
     }
 
     fn plugins_uninstall(self: &Rc<Self>, id: String) {
-        let Ok(manager) = self.plugin_manager() else { return };
+        let Ok(manager) = self.plugin_manager() else {
+            return;
+        };
         let name = self.plugin_name(&id);
         {
             let mut s = self.session.borrow_mut();
@@ -570,7 +632,9 @@ impl Ctx {
                             }
                             ctx.toast(format!("{} uninstalled", name), Tone::Neutral);
                         }
-                        Err(e) => ctx.toast(format!("Could not uninstall {}: {}", name, e), Tone::Danger),
+                        Err(e) => {
+                            ctx.toast(format!("Could not uninstall {}: {}", name, e), Tone::Danger)
+                        }
                     }
                     ctx.refresh_plugins(Items::Rebuild);
                 })
@@ -579,15 +643,22 @@ impl Ctx {
     }
 
     fn plugins_install(self: &Rc<Self>, id: &str) {
-        let Ok(manager) = self.plugin_manager() else { return };
+        let Ok(manager) = self.plugin_manager() else {
+            return;
+        };
         let entry = {
             let mut s = self.session.borrow_mut();
-            let Some(entry) = s.plugins.panel.market_entry(id).cloned() else { return };
+            let Some(entry) = s.plugins.panel.market_entry(id).cloned() else {
+                return;
+            };
             if s.plugins.panel.is_installed(id) || s.plugins.panel.is_busy(id) {
                 return;
             }
             s.plugins.panel.install_errors.remove(id);
-            s.plugins.panel.busy.insert(id.to_string(), Busy::Installing);
+            s.plugins
+                .panel
+                .busy
+                .insert(id.to_string(), Busy::Installing);
             entry
         };
         self.refresh_plugins(Items::Rebuild);
@@ -621,7 +692,12 @@ impl Ctx {
                         }
                         Err(e) => {
                             let msg = install_error_message(&name, &e);
-                            ctx.session.borrow_mut().plugins.panel.install_errors.insert(id.clone(), msg.clone());
+                            ctx.session
+                                .borrow_mut()
+                                .plugins
+                                .panel
+                                .install_errors
+                                .insert(id.clone(), msg.clone());
                             ctx.toast(msg, Tone::Danger);
                             ctx.refresh_plugins(Items::Rebuild);
                         }
@@ -637,15 +713,26 @@ impl Ctx {
     /// looking at; core resolves the event against it before any plugin code
     /// runs. `track` marks a call that blocks others for that plugin (a
     /// button), as opposed to a field edit.
-    fn plugins_dispatch(self: &Rc<Self>, plugin_id: &str, current: PluginUi, event: UiEvent, track: bool) {
-        let Ok(manager) = self.plugin_manager() else { return };
+    fn plugins_dispatch(
+        self: &Rc<Self>,
+        plugin_id: &str,
+        current: PluginUi,
+        event: UiEvent,
+        track: bool,
+    ) {
+        let Ok(manager) = self.plugin_manager() else {
+            return;
+        };
         {
             let mut s = self.session.borrow_mut();
             if track {
                 if s.plugins.panel.is_busy(plugin_id) {
                     return;
                 }
-                s.plugins.panel.busy.insert(plugin_id.to_string(), Busy::Running);
+                s.plugins
+                    .panel
+                    .busy
+                    .insert(plugin_id.to_string(), Busy::Running);
             }
         }
         if track {
@@ -672,11 +759,19 @@ impl Ctx {
                             let absorbed = absorb(&name, out.value, out.outbox);
                             ctx.show_plugin_toasts(&absorbed);
                             if let (Some(next), true) = (absorbed.descriptor, ticket.is_current()) {
-                                ctx.session.borrow_mut().plugins.panel.set_interface(&id, next);
+                                ctx.session
+                                    .borrow_mut()
+                                    .plugins
+                                    .panel
+                                    .set_interface(&id, next);
                             }
                         }
                         Err(e) => {
-                            ctx.session.borrow_mut().plugins.panel.set_interface_error(&id, e.clone());
+                            ctx.session
+                                .borrow_mut()
+                                .plugins
+                                .panel
+                                .set_interface_error(&id, e.clone());
                             ctx.toast(format!("{}: {}", name, e), Tone::Danger);
                         }
                     }
@@ -692,15 +787,24 @@ impl Ctx {
         }
         let (plugin, event) = {
             let s = self.session.borrow();
-            let Some(plugin) = s.plugins.panel.open_view.clone() else { return };
-            let Some(event) = s.plugins.panel.button_event(Scope::View, id) else { return };
+            let Some(plugin) = s.plugins.panel.open_view.clone() else {
+                return;
+            };
+            let Some(event) = s.plugins.panel.button_event(Scope::View, id) else {
+                return;
+            };
             (plugin, event)
         };
         self.plugins_dispatch(&plugin, event.0, event.1, true);
     }
 
     fn plugins_toolbar(self: &Rc<Self>, plugin_id: &str, item_id: &str) {
-        let event = self.session.borrow().plugins.panel.toolbar_event(plugin_id, item_id);
+        let event = self
+            .session
+            .borrow()
+            .plugins
+            .panel
+            .toolbar_event(plugin_id, item_id);
         if let Some((current, event)) = event {
             self.plugins_dispatch(plugin_id, current, event, true);
         }
@@ -713,8 +817,12 @@ impl Ctx {
         }
         let (plugin, event) = {
             let s = self.session.borrow();
-            let Some(plugin) = s.plugins.panel.open_view.clone() else { return };
-            let Some(event) = s.plugins.panel.value_event(id) else { return };
+            let Some(plugin) = s.plugins.panel.open_view.clone() else {
+                return;
+            };
+            let Some(event) = s.plugins.panel.value_event(id) else {
+                return;
+            };
             (plugin, event)
         };
         self.plugins_dispatch(&plugin, event.0, event.1, false);
@@ -744,7 +852,11 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     on!(on_refresh, |c| {
         c.plugins_rescan(true);
     });
-    on!(on_tab_selected, |c, i| c.plugins_set_tab(if i == 1 { Tab::Marketplace } else { Tab::Installed }));
+    on!(on_tab_selected, |c, i| c.plugins_set_tab(if i == 1 {
+        Tab::Marketplace
+    } else {
+        Tab::Installed
+    }));
 
     on!(on_select, |c, id| c.plugins_select(&id));
     on!(on_toggle_enabled, |c, id| c.plugins_toggle(&id));
@@ -755,39 +867,61 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     on!(on_settings_cancel, |c| c.plugins_close_settings());
     on!(on_uninstall, |c| c.plugins_uninstall_asked());
 
-    on!(on_item_button, |c, scope, id| c.plugins_button(scope_of(scope), &id));
+    on!(on_item_button, |c, scope, id| c
+        .plugins_button(scope_of(scope), &id));
     on!(on_item_input, |c, scope, id, t| {
-        c.session.borrow_mut().plugins.panel.set_text(scope_of(scope), &id, &t);
+        c.session
+            .borrow_mut()
+            .plugins
+            .panel
+            .set_text(scope_of(scope), &id, &t);
     });
     on!(on_item_input_accepted, |c, scope, id, t| {
-        c.session.borrow_mut().plugins.panel.set_text(scope_of(scope), &id, &t);
+        c.session
+            .borrow_mut()
+            .plugins
+            .panel
+            .set_text(scope_of(scope), &id, &t);
         c.plugins_value_changed(scope_of(scope), &id);
     });
     on!(on_item_number, |c, scope, id, t| {
-        c.session.borrow_mut().plugins.panel.set_number(scope_of(scope), &id, &t);
+        c.session
+            .borrow_mut()
+            .plugins
+            .panel
+            .set_number(scope_of(scope), &id, &t);
         c.refresh_plugins(Items::Patch);
     });
     on!(on_item_number_accepted, |c, scope, id, t| {
-        let changed = c.session.borrow_mut().plugins.panel.set_number(scope_of(scope), &id, &t);
+        let changed = c
+            .session
+            .borrow_mut()
+            .plugins
+            .panel
+            .set_number(scope_of(scope), &id, &t);
         c.refresh_plugins(Items::Patch);
         if changed.is_some() {
             c.plugins_value_changed(scope_of(scope), &id);
         }
     });
     on!(on_item_check, |c, scope, id| {
-        let changed = c.session.borrow_mut().plugins.panel.toggle_check(scope_of(scope), &id);
+        let changed = c
+            .session
+            .borrow_mut()
+            .plugins
+            .panel
+            .toggle_check(scope_of(scope), &id);
         c.refresh_plugins(Items::Patch);
         if changed.is_some() {
             c.plugins_value_changed(scope_of(scope), &id);
         }
     });
     on!(on_item_select, |c, scope, id, i| {
-        let changed = c
-            .session
-            .borrow_mut()
-            .plugins
-            .panel
-            .pick_option(scope_of(scope), &id, usize::try_from(i).unwrap_or(usize::MAX));
+        let changed = c.session.borrow_mut().plugins.panel.pick_option(
+            scope_of(scope),
+            &id,
+            usize::try_from(i).unwrap_or(usize::MAX),
+        );
         c.refresh_plugins(Items::Patch);
         if changed.is_some() {
             c.plugins_value_changed(scope_of(scope), &id);
@@ -807,11 +941,19 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         c.refresh_plugins(Items::Patch);
     });
     on!(on_category_picked, |c, i| {
-        c.session.borrow_mut().plugins.panel.set_category_index(usize::try_from(i).unwrap_or(0));
+        c.session
+            .borrow_mut()
+            .plugins
+            .panel
+            .set_category_index(usize::try_from(i).unwrap_or(0));
         c.refresh_plugins(Items::Patch);
     });
     on!(on_sort_picked, |c, i| {
-        c.session.borrow_mut().plugins.panel.set_sort_index(usize::try_from(i).unwrap_or(0));
+        c.session
+            .borrow_mut()
+            .plugins
+            .panel
+            .set_sort_index(usize::try_from(i).unwrap_or(0));
         c.refresh_plugins(Items::Patch);
     });
     on!(on_verified_toggled, |c| {
@@ -830,7 +972,8 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         c.refresh_plugins(Items::Patch);
     });
     on!(on_install, |c, id| c.plugins_install(&id));
-    on!(on_toolbar_pressed, |c, plugin, item| c.plugins_toolbar(&plugin, &item));
+    on!(on_toolbar_pressed, |c, plugin, item| c
+        .plugins_toolbar(&plugin, &item));
 
     ctx.plugins_start();
 }

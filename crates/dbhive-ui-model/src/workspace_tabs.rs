@@ -289,7 +289,11 @@ impl Tabs {
 pub fn result_summary(result: &QueryResult, elapsed_ms: Option<u64>) -> String {
     let time = elapsed_ms.map(elapsed_label);
     let head = match (result.columns.is_empty(), result.rows_affected) {
-        (true, Some(n)) => format!("{} {} affected", thousands(n as usize), plural(n as usize, "row")),
+        (true, Some(n)) => format!(
+            "{} {} affected",
+            thousands(n as usize),
+            plural(n as usize, "row")
+        ),
         _ => format!(
             "{} {}",
             thousands(result.rows.len()),
@@ -368,8 +372,17 @@ mod tests {
         assert_eq!(tab.capped_at, Some(MAX_RESULT_ROWS));
         // A setting above the drivers' cap cannot raise it.
         let seq = t.begin_run(id).unwrap();
-        assert!(t.finish_run_capped(id, seq, Ok(rows(MAX_RESULT_ROWS + 1)), 9, 10 * MAX_RESULT_ROWS));
-        assert_eq!(t.get(id).unwrap().result.as_ref().unwrap().rows.len(), MAX_RESULT_ROWS);
+        assert!(t.finish_run_capped(
+            id,
+            seq,
+            Ok(rows(MAX_RESULT_ROWS + 1)),
+            9,
+            10 * MAX_RESULT_ROWS
+        ));
+        assert_eq!(
+            t.get(id).unwrap().result.as_ref().unwrap().rows.len(),
+            MAX_RESULT_ROWS
+        );
     }
 
     fn rows(n: usize) -> QueryResult {
@@ -515,7 +528,10 @@ mod tests {
         // begin_run refuses while a run is in flight; restart does not.
         assert!(t.begin_run(id).is_none());
         let second = t.restart_run(id).unwrap();
-        assert!(!t.finish_run(id, first, Ok(rows(1)), 1), "the superseded page must not land");
+        assert!(
+            !t.finish_run(id, first, Ok(rows(1)), 1),
+            "the superseded page must not land"
+        );
         assert!(t.get(id).unwrap().running);
         assert!(t.finish_run(id, second, Ok(rows(2)), 1));
         assert_eq!(t.get(id).unwrap().result.as_ref().unwrap().rows.len(), 2);

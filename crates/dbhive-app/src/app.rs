@@ -235,90 +235,94 @@ fn render_window(app: &mut DbHiveApp, ctx: &egui::Context) {
     let self_ = app;
     top_bar(self_, ctx);
 
-        if let Some((id, name)) = self_.autoconnect.take() {
-            self_.connections.connecting = Some(id.clone());
-            let state = self_.state.clone();
-            let handle = self_.rt.handle().clone();
-            self_.connections.pending_name = Some(name);
-            self_.connections.connect_job.start(&handle, ctx, async move {
+    if let Some((id, name)) = self_.autoconnect.take() {
+        self_.connections.connecting = Some(id.clone());
+        let state = self_.state.clone();
+        let handle = self_.rt.handle().clone();
+        self_.connections.pending_name = Some(name);
+        self_
+            .connections
+            .connect_job
+            .start(&handle, ctx, async move {
                 dbhive_core::service::connect(&state, id, String::new(), None).await
             });
+    }
+
+    // Settings own the theme: loaded once, then applied every frame so a
+    // saved mode or accent survives a restart even if Settings is never
+    // opened. This must run before anything draws.
+    settings::ensure_loaded(self_, ctx);
+    settings::poll(self_);
+    settings::ensure_theme(self_, ctx);
+
+    let palette = self_.mode.palette();
+    self_.toasts.show(ctx, palette);
+
+    egui::CentralPanel::default().show(ctx, |ui| {
+        if let Some(err) = self_.startup_error.clone() {
+            ui.horizontal(|ui| {
+                ui.colored_label(
+                    self_.mode.palette().destructive,
+                    "Could not load saved data:",
+                );
+                ui.label(err);
+                if ui.button("Dismiss").clicked() {
+                    self_.startup_error = None;
+                }
+            });
+            ui.separator();
         }
 
-        // Settings own the theme: loaded once, then applied every frame so a
-        // saved mode or accent survives a restart even if Settings is never
-        // opened. This must run before anything draws.
-        settings::ensure_loaded(self_, ctx);
-        settings::poll(self_);
-        settings::ensure_theme(self_, ctx);
-
-        let palette = self_.mode.palette();
-        self_.toasts.show(ctx, palette);
-
-        egui::CentralPanel::default().show(ctx, |ui| {
-            if let Some(err) = self_.startup_error.clone() {
-                ui.horizontal(|ui| {
-                    ui.colored_label(self_.mode.palette().destructive, "Could not load saved data:");
-                    ui.label(err);
-                    if ui.button("Dismiss").clicked() {
-                        self_.startup_error = None;
-                    }
-                });
-                ui.separator();
-            }
-
-            if self_.screens.table_editor.open {
-                table_editor::show(self_, ui);
-            } else if self_.screens.activity_monitor.open {
-                activity_monitor::show(self_, ui);
-            } else if self_.screens.procedures.open {
-                procedures::show(self_, ui);
-            } else if self_.screens.query_builder.open {
-                if let query_builder::BuilderAction::UseSql(sql) =
-                    query_builder::show(self_, ui)
-                {
-                    self_.screens.query_builder.close();
-                    self_.screen = Screen::Workspace;
-                    if let Some(ws) = self_.workspace.as_mut() {
-                        ws.add_tab();
-                        let tab = ws.active();
-                        tab.title = "Visual Query".to_string();
-                        tab.sql = sql;
-                    }
-                }
-            } else if self_.screens.schema_designer.open {
-                schema_designer::show(self_, ui);
-            } else if self_.screens.er_diagram.open {
-                er_diagram::show(self_, ui);
-            } else if self_.screens.table_inspector.open {
-                table_inspector::show(self_, ui);
-            } else {
-                match self_.screen {
-                    Screen::Connections => connections::show(self_, ui),
-                    Screen::Workspace => workspace::show(self_, ui),
+        if self_.screens.table_editor.open {
+            table_editor::show(self_, ui);
+        } else if self_.screens.activity_monitor.open {
+            activity_monitor::show(self_, ui);
+        } else if self_.screens.procedures.open {
+            procedures::show(self_, ui);
+        } else if self_.screens.query_builder.open {
+            if let query_builder::BuilderAction::UseSql(sql) = query_builder::show(self_, ui) {
+                self_.screens.query_builder.close();
+                self_.screen = Screen::Workspace;
+                if let Some(ws) = self_.workspace.as_mut() {
+                    ws.add_tab();
+                    let tab = ws.active();
+                    tab.title = "Visual Query".to_string();
+                    tab.sql = sql;
                 }
             }
-        });
-        settings::show_window(self_, ctx);
-        migrations::show_window(self_, ctx);
-        backup::show_window(self_, ctx);
-        import_export::show_window(self_, ctx);
-        plugins::show_window(self_, ctx);
-
-        if let Some(action) = connection_editor::show(self_, ctx) {
-            match action {
-                connection_editor::EditorAction::Saved(id) => {
-                    self_.toasts.success("Connection saved");
-                    self_.connections.last_saved = Some(id);
-                }
-                connection_editor::EditorAction::Cancelled => {}
+        } else if self_.screens.schema_designer.open {
+            schema_designer::show(self_, ui);
+        } else if self_.screens.er_diagram.open {
+            er_diagram::show(self_, ui);
+        } else if self_.screens.table_inspector.open {
+            table_inspector::show(self_, ui);
+        } else {
+            match self_.screen {
+                Screen::Connections => connections::show(self_, ui),
+                Screen::Workspace => workspace::show(self_, ui),
             }
         }
+    });
+    settings::show_window(self_, ctx);
+    migrations::show_window(self_, ctx);
+    backup::show_window(self_, ctx);
+    import_export::show_window(self_, ctx);
+    plugins::show_window(self_, ctx);
 
-        // Last, so the palette draws above every other overlay.
-        if let command_palette::PaletteAction::Run(id) = command_palette::show(self_, ctx) {
-            dispatch(self_, ctx, id);
+    if let Some(action) = connection_editor::show(self_, ctx) {
+        match action {
+            connection_editor::EditorAction::Saved(id) => {
+                self_.toasts.success("Connection saved");
+                self_.connections.last_saved = Some(id);
+            }
+            connection_editor::EditorAction::Cancelled => {}
         }
+    }
+
+    // Last, so the palette draws above every other overlay.
+    if let command_palette::PaletteAction::Run(id) = command_palette::show(self_, ctx) {
+        dispatch(self_, ctx, id);
+    }
 }
 
 /// Act on a command from the palette or a keyboard shortcut.
@@ -440,8 +444,10 @@ fn dispatch(app: &mut DbHiveApp, ctx: &egui::Context, id: command_palette::Comma
         C::RefreshMetadata => workspace::refresh_metadata(app, ctx),
         // Handled inside the palette, or belonging to a screen not yet built.
         other => {
-            app.toasts
-                .info(format!("{} is not wired up yet", command_palette::command(other).title));
+            app.toasts.info(format!(
+                "{} is not wired up yet",
+                command_palette::command(other).title
+            ));
         }
     }
 }
@@ -733,9 +739,7 @@ fn about_window(app: &mut DbHiveApp, ctx: &egui::Context) {
     let mut open = app.about_open;
     let checking = app.update_job.is_running();
     let status = app.update_status.clone();
-    let update_available = status
-        .as_deref()
-        .is_some_and(|s| s.starts_with("Version "));
+    let update_available = status.as_deref().is_some_and(|s| s.starts_with("Version "));
     let mut check_now = false;
     egui::Window::new("About DB Hive")
         .open(&mut open)
@@ -835,12 +839,16 @@ mod tests {
             ("er_diagram", |a| a.screens.er_diagram.open = true),
             ("schema_designer", |a| a.screens.schema_designer.open = true),
             ("query_builder", |a| a.screens.query_builder.open = true),
-            ("activity_monitor", |a| a.screens.activity_monitor.open = true),
+            ("activity_monitor", |a| {
+                a.screens.activity_monitor.open = true
+            }),
             ("migrations", |a| a.screens.migrations.open = true),
             ("backup", |a| a.screens.backup.open = true),
             ("import_export", |a| a.screens.import_export.open = true),
             ("command_palette", |a| a.screens.command_palette.open()),
-            ("connection_editor", |a| a.screens.connection_editor.open_new()),
+            ("connection_editor", |a| {
+                a.screens.connection_editor.open_new()
+            }),
             ("about", |a| a.about_open = true),
         ];
 

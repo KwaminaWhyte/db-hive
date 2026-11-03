@@ -96,9 +96,11 @@ impl Ctx {
             let general = s.settings.editor.saved().general.clone();
             now - started >= startup_delay()
                 && auto_allowed()
-                && s.updates
-                    .state
-                    .due(now, general.auto_check_updates, general.update_check_interval_hours)
+                && s.updates.state.due(
+                    now,
+                    general.auto_check_updates,
+                    general.update_check_interval_hours,
+                )
         };
         if due {
             self.updates_check(false);
@@ -134,13 +136,18 @@ impl Ctx {
     }
 
     fn updates_open_release(&self) {
-        if let Err(e) = std::process::Command::new(OPEN_CMD).arg(RELEASES_URL).spawn() {
+        if let Err(e) = std::process::Command::new(OPEN_CMD)
+            .arg(RELEASES_URL)
+            .spawn()
+        {
             eprintln!("Warning: could not open the release page: {e}");
         }
     }
 
     fn updates_project(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let s = self.session.borrow();
         let st = &s.updates.state;
         let b = w.global::<UpdateBridge>();

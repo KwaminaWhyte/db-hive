@@ -39,8 +39,14 @@ pub struct UpdateManifest {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UpdateStatus {
-    UpToDate { current: String },
-    Available { current: String, latest: String, notes: Option<String> },
+    UpToDate {
+        current: String,
+    },
+    Available {
+        current: String,
+        latest: String,
+        notes: Option<String>,
+    },
 }
 
 impl UpdateStatus {
@@ -89,7 +95,7 @@ pub fn is_newer(candidate: &str, current: &str) -> bool {
         }
     }
     match (cpre, npre) {
-        (None, Some(_)) => true,   // 1.0.0 beats 1.0.0-beta
+        (None, Some(_)) => true, // 1.0.0 beats 1.0.0-beta
         (Some(_), None) => false,
         (Some(a), Some(b)) => a > b,
         (None, None) => false,
@@ -198,7 +204,11 @@ mod tests {
             pub_date: None,
         };
         match status_for(&m, "0.21.0") {
-            UpdateStatus::Available { current, latest, notes } => {
+            UpdateStatus::Available {
+                current,
+                latest,
+                notes,
+            } => {
                 assert_eq!(current, "0.21.0");
                 assert_eq!(latest, "0.22.0");
                 assert_eq!(notes.as_deref(), Some("fixes"));
@@ -264,6 +274,9 @@ mod tests {
         let junk = serve("200 OK", "<html>not a manifest</html>").await;
         assert!(check_at(&junk, "1.0.0").await.is_err());
         let not_a_version = serve("200 OK", r#"{"version":"<html>"}"#).await;
-        assert!(!check_at(&not_a_version, "1.0.0").await.map(|s| s.is_available()).unwrap_or(false));
+        assert!(!check_at(&not_a_version, "1.0.0")
+            .await
+            .map(|s| s.is_available())
+            .unwrap_or(false));
     }
 }

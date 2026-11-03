@@ -9,7 +9,8 @@ use libsql::{Builder, Connection, Value};
 
 use super::{ConnectionOptions, DatabaseDriver, QueryResult, MAX_RESULT_ROWS};
 use crate::models::{
-    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
+    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo,
+    TableSchema,
 };
 
 pub struct TursoDriver {
@@ -82,13 +83,18 @@ impl DatabaseDriver for TursoDriver {
         let db = Builder::new_remote(opts.host.clone(), auth_token)
             .build()
             .await
-            .map_err(|e| DbError::ConnectionError(format!("Failed to build Turso database: {}", e)))?;
+            .map_err(|e| {
+                DbError::ConnectionError(format!("Failed to build Turso database: {}", e))
+            })?;
 
-        let conn = db
-            .connect()
-            .map_err(|e| DbError::ConnectionError(format!("Failed to open Turso connection: {}", e)))?;
+        let conn = db.connect().map_err(|e| {
+            DbError::ConnectionError(format!("Failed to open Turso connection: {}", e))
+        })?;
 
-        Ok(Self { conn, url: opts.host })
+        Ok(Self {
+            conn,
+            url: opts.host,
+        })
     }
 
     async fn test_connection(&self) -> Result<(), DbError> {
@@ -143,11 +149,10 @@ impl DatabaseDriver for TursoDriver {
 
             Ok(QueryResult::with_data(columns, data))
         } else {
-            let affected = self
-                .conn
-                .execute(sql, ())
-                .await
-                .map_err(|e| DbError::QueryError(format!("Failed to execute statement: {}", e)))?;
+            let affected =
+                self.conn.execute(sql, ()).await.map_err(|e| {
+                    DbError::QueryError(format!("Failed to execute statement: {}", e))
+                })?;
             Ok(QueryResult::with_affected(affected))
         }
     }

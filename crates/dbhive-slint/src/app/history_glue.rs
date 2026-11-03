@@ -10,9 +10,8 @@ use std::rc::Rc;
 
 use dbhive_core::state::AppState;
 use dbhive_ui_model::history::{
-    export_templates_now, import_templates_now, load_templates,
-    merge_imported, save_templates, sync_parameters, template_categories,
-    QueryTemplate, TemplateParameter, HISTORY_LIMITS,
+    export_templates_now, import_templates_now, load_templates, merge_imported, save_templates,
+    sync_parameters, template_categories, QueryTemplate, TemplateParameter, HISTORY_LIMITS,
 };
 use dbhive_ui_model::history_panel::{
     append_sql, build_snippet, build_template, duplicate_template, history_rows, rerun_plan,
@@ -102,7 +101,9 @@ impl Ctx {
 
     /// Project the panel's state into the `HistoryState` global.
     pub(super) fn refresh_history_panel(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let h = w.global::<HistoryState>();
 
         // Copy out of the lock first; nothing below holds it.
@@ -128,11 +129,17 @@ impl Ctx {
 
         // A tag or category that no longer exists must not keep filtering.
         let snippet_tags = dbhive_ui_model::history::snippet_tags(&all_snippets);
-        if p.snippet_tag.as_ref().is_some_and(|t| !snippet_tags.contains(t)) {
+        if p.snippet_tag
+            .as_ref()
+            .is_some_and(|t| !snippet_tags.contains(t))
+        {
             p.snippet_tag = None;
         }
         let categories = template_categories(&p.templates);
-        if p.template_category.as_ref().is_some_and(|c| !categories.contains(c)) {
+        if p.template_category
+            .as_ref()
+            .is_some_and(|c| !categories.contains(c))
+        {
             p.template_category = None;
         }
 
@@ -144,13 +151,20 @@ impl Ctx {
         let history_count = entries.len();
         h.set_history(rows_model(history_rows(&entries, now)));
         h.set_history_summary(
-            format!("{}, newest first", count_label(history_count, "query", "queries")).into(),
+            format!(
+                "{}, newest first",
+                count_label(history_count, "query", "queries")
+            )
+            .into(),
         );
         h.set_scoped(p.scoped && !ws_connection.is_empty());
         h.set_scope_label(scope_label.into());
         h.set_limit_value(limit.to_string().into());
         h.set_limit_options(strings_model(
-            &HISTORY_LIMITS.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
+            &HISTORY_LIMITS
+                .iter()
+                .map(|n| n.to_string())
+                .collect::<Vec<_>>(),
         ));
 
         // Snippets.
@@ -171,7 +185,11 @@ impl Ctx {
 
         // Templates.
         let template_search = h.get_template_search().to_string();
-        let rows = template_rows(&p.templates, &template_search, p.template_category.as_deref());
+        let rows = template_rows(
+            &p.templates,
+            &template_search,
+            p.template_category.as_deref(),
+        );
         let template_shown = rows.len();
         h.set_templates(rows_model(rows));
         h.set_template_categories(strings_model(&categories));
@@ -232,7 +250,9 @@ impl Ctx {
     // -- Open and close -----------------------------------------------------
 
     pub(super) fn open_history_panel(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         if w.get_screen() != Screen::Workspace {
             self.toast("Open a connection to see its history.", Tone::Neutral);
             return;
@@ -341,13 +361,17 @@ impl Ctx {
     }
 
     fn history_open(&self, id: &str) {
-        let Some(entry) = self.history_entry(id) else { return };
+        let Some(entry) = self.history_entry(id) else {
+            return;
+        };
         self.open_query_tab_with(&entry.query);
         self.hide_history_panel();
     }
 
     fn history_rerun(self: &Rc<Self>, id: &str) {
-        let Some(entry) = self.history_entry(id) else { return };
+        let Some(entry) = self.history_entry(id) else {
+            return;
+        };
         let current = self.session.borrow().workspace.connection_id.clone();
         match rerun_plan(&entry, &current) {
             RerunPlan::RunHere => {
@@ -369,9 +393,16 @@ impl Ctx {
         };
         let (message, label) = if scoped {
             let name = self.session.borrow().workspace.connection_name.clone();
-            (format!("Every saved query for \"{name}\" will be removed. This cannot be undone."), "Clear history")
+            (
+                format!("Every saved query for \"{name}\" will be removed. This cannot be undone."),
+                "Clear history",
+            )
         } else {
-            ("Every saved query on every connection will be removed. This cannot be undone.".to_string(), "Clear all")
+            (
+                "Every saved query on every connection will be removed. This cannot be undone."
+                    .to_string(),
+                "Clear all",
+            )
         };
         self.session.borrow_mut().pending_action =
             Some(PendingAction::History(Pending::ClearHistory));
@@ -439,7 +470,9 @@ impl Ctx {
     }
 
     fn load_form(&self, name: &str, description: &str, category: &str, tags: &str, sql: &str) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let h = w.global::<HistoryState>();
         h.set_form_name(name.into());
         h.set_form_description(description.into());
@@ -481,7 +514,9 @@ impl Ctx {
     }
 
     fn snippet_save(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let h = w.global::<HistoryState>();
         let draft = SnippetDraft {
             name: h.get_form_name().to_string(),
@@ -508,12 +543,18 @@ impl Ctx {
     }
 
     fn snippet_delete_asked(&self, id: &str) {
-        let Some(snippet) = self.state.lock().unwrap().get_snippet(id).cloned() else { return };
-        self.session.borrow_mut().pending_action =
-            Some(PendingAction::History(Pending::DeleteSnippet(id.to_string())));
+        let Some(snippet) = self.state.lock().unwrap().get_snippet(id).cloned() else {
+            return;
+        };
+        self.session.borrow_mut().pending_action = Some(PendingAction::History(
+            Pending::DeleteSnippet(id.to_string()),
+        ));
         self.show_confirm(
             "Delete snippet?",
-            &format!("\"{}\" will be removed. This cannot be undone.", snippet.name),
+            &format!(
+                "\"{}\" will be removed. This cannot be undone.",
+                snippet.name
+            ),
             "Delete",
         );
     }
@@ -545,11 +586,19 @@ impl Ctx {
     }
 
     fn find_template(&self, id: &str) -> Option<QueryTemplate> {
-        self.session.borrow().history.templates.iter().find(|t| t.id == id).cloned()
+        self.session
+            .borrow()
+            .history
+            .templates
+            .iter()
+            .find(|t| t.id == id)
+            .cloned()
     }
 
     fn template_run_asked(self: &Rc<Self>, id: &str) {
-        let Some(template) = self.find_template(id) else { return };
+        let Some(template) = self.find_template(id) else {
+            return;
+        };
         if template.parameters.is_empty() {
             self.hide_history_panel();
             self.run_in_new_tab(&template.sql);
@@ -591,7 +640,8 @@ impl Ctx {
             }
             Err(()) => {
                 if let Some(w) = self.window.upgrade() {
-                    w.global::<HistoryState>().set_form_error("Fix the highlighted fields first.".into());
+                    w.global::<HistoryState>()
+                        .set_form_error("Fix the highlighted fields first.".into());
                 }
                 self.refresh_history_panel();
                 None
@@ -615,7 +665,9 @@ impl Ctx {
     }
 
     fn template_form_edit(&self, id: &str) {
-        let Some(t) = self.find_template(id) else { return };
+        let Some(t) = self.find_template(id) else {
+            return;
+        };
         let d = TemplateDraft::from_template(&t);
         {
             let mut s = self.session.borrow_mut();
@@ -645,7 +697,9 @@ impl Ctx {
     }
 
     fn template_save(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let h = w.global::<HistoryState>();
         let draft = TemplateDraft {
             name: h.get_form_name().to_string(),
@@ -656,7 +710,10 @@ impl Ctx {
         };
         let (editing, params) = {
             let s = self.session.borrow();
-            (s.history.editing_template.clone(), s.history.draft_params.clone())
+            (
+                s.history.editing_template.clone(),
+                s.history.draft_params.clone(),
+            )
         };
         let existing = editing.as_deref().and_then(|id| self.find_template(id));
         match build_template(&draft, &params, existing.as_ref()) {
@@ -681,7 +738,9 @@ impl Ctx {
     }
 
     fn template_duplicate(self: &Rc<Self>, id: &str) {
-        let Some(source) = self.find_template(id) else { return };
+        let Some(source) = self.find_template(id) else {
+            return;
+        };
         let copy = {
             let s = self.session.borrow();
             duplicate_template(&source, &s.history.templates)
@@ -694,9 +753,12 @@ impl Ctx {
     }
 
     fn template_delete_asked(&self, id: &str) {
-        let Some(t) = self.find_template(id) else { return };
-        self.session.borrow_mut().pending_action =
-            Some(PendingAction::History(Pending::DeleteTemplate(id.to_string())));
+        let Some(t) = self.find_template(id) else {
+            return;
+        };
+        self.session.borrow_mut().pending_action = Some(PendingAction::History(
+            Pending::DeleteTemplate(id.to_string()),
+        ));
         self.show_confirm(
             "Delete template?",
             &format!("\"{}\" will be removed. This cannot be undone.", t.name),
@@ -705,7 +767,11 @@ impl Ctx {
     }
 
     fn template_delete_confirmed(self: &Rc<Self>, id: &str) {
-        self.session.borrow_mut().history.templates.retain(|t| t.id != id);
+        self.session
+            .borrow_mut()
+            .history
+            .templates
+            .retain(|t| t.id != id);
         self.refresh_history_panel();
         self.persist_templates();
         self.toast("Template deleted", Tone::Neutral);
@@ -776,7 +842,10 @@ impl Ctx {
 pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     let h = window.global::<HistoryState>();
     h.set_limit_options(strings_model(
-        &HISTORY_LIMITS.iter().map(|n| n.to_string()).collect::<Vec<_>>(),
+        &HISTORY_LIMITS
+            .iter()
+            .map(|n| n.to_string())
+            .collect::<Vec<_>>(),
     ));
 
     macro_rules! on {
@@ -803,7 +872,8 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         c.refresh_history_panel();
     });
     on!(on_limit_selected, |c, i| {
-        c.session.borrow_mut().history.limit_index = (i.max(0) as usize).min(HISTORY_LIMITS.len() - 1);
+        c.session.borrow_mut().history.limit_index =
+            (i.max(0) as usize).min(HISTORY_LIMITS.len() - 1);
         c.refresh_history_panel();
     });
     on!(on_history_open, |c, id| c.history_open(&id));
@@ -812,7 +882,8 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
 
     on!(on_snippet_search_edited, |c, _t| c.refresh_history_panel());
     on!(on_snippet_tag_picked, |c, i| {
-        let tags = dbhive_ui_model::history::snippet_tags(&c.state.lock().unwrap().get_all_snippets());
+        let tags =
+            dbhive_ui_model::history::snippet_tags(&c.state.lock().unwrap().get_all_snippets());
         c.session.borrow_mut().history.snippet_tag =
             usize::try_from(i).ok().and_then(|i| tags.get(i).cloned());
         c.refresh_history_panel();
@@ -836,7 +907,8 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     on!(on_template_delete, |c, id| c.template_delete_asked(&id));
     on!(on_template_export, |c| c.template_export());
     on!(on_template_import_open, |c| c.template_import_open());
-    on!(on_template_import, |c, path| c.template_import(path.to_string()));
+    on!(on_template_import, |c, path| c
+        .template_import(path.to_string()));
 
     on!(on_form_save, |c| {
         let template_form = c.session.borrow().history.form == FormKind::Template;
@@ -853,16 +925,24 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     });
     on!(on_form_sql_edited, |c, t| c.form_sql_edited(&t));
     on!(on_form_param_required, |c, i| {
-        toggle_param_required(&mut c.session.borrow_mut().history.draft_params, i.max(0) as usize);
+        toggle_param_required(
+            &mut c.session.borrow_mut().history.draft_params,
+            i.max(0) as usize,
+        );
         c.refresh_history_panel();
     });
     on!(on_form_param_default, |c, i, t| {
         // No refresh: rebuilding the rows would take focus from the field
         // being typed in. The draft is read at save time.
-        set_param_default(&mut c.session.borrow_mut().history.draft_params, i.max(0) as usize, &t);
+        set_param_default(
+            &mut c.session.borrow_mut().history.draft_params,
+            i.max(0) as usize,
+            &t,
+        );
     });
 
-    on!(on_run_edited, |c, i, t| c.template_run_edited(i.max(0) as usize, &t));
+    on!(on_run_edited, |c, i, t| c
+        .template_run_edited(i.max(0) as usize, &t));
     on!(on_run_open, |c| {
         if let Some(sql) = c.template_run_statement() {
             c.open_query_tab_with(&sql);

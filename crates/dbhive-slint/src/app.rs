@@ -16,11 +16,11 @@ use dbhive_core::models::{ConnectionProfile, DbDriver};
 use dbhive_core::state::AppState;
 use slint::{ComponentHandle, ModelRc, VecModel};
 
+use dbhive_ui_model::command_palette::{CommandId, Scope, IS_MAC};
 use dbhive_ui_model::connection_editor::{
     build_profile, build_profile_with, form_from_profile, paste_connection_string, save_profile,
     test_profile, validate, ConnectionForm,
 };
-use dbhive_ui_model::command_palette::{CommandId, Scope, IS_MAC};
 use dbhive_ui_model::palette_session::{
     chord_from_input, command_for_key, status, CommandContext, Overlay, PaletteState,
     ShortcutsState, Status,
@@ -38,19 +38,19 @@ mod erd;
 mod inspector;
 mod results;
 mod row_edit;
-mod tab_persist;
-mod updates;
 mod schema_tree;
 mod settings;
+mod tab_persist;
 mod table_dialog;
+mod updates;
 
 use crate::connection_editor as editor_view;
 use crate::connection_list::{self, EnvTone};
 use crate::grid_model::{layout_columns, LazyRows};
 use crate::palette_view;
 use crate::runtime;
-use crate::workspace_model;
 use crate::sql_highlight;
+use crate::workspace_model;
 use crate::{
     AppWindow, ConnectionItem, GridRow, Screen, TabInfo, TableItem, Theme, ToastItem, Tone,
 };
@@ -209,7 +209,9 @@ impl Ctx {
     }
 
     fn refresh_connections(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let profiles = self.profiles();
         let s = self.session.borrow();
 
@@ -294,28 +296,30 @@ impl Ctx {
         let worker_id = id.clone();
         runtime::spawn(
             async move { dbhive_core::service::connect(&state, worker_id, String::new(), None).await },
-            move |result| with_ctx(|ctx| {
-                ctx.session.borrow_mut().connecting = None;
-                match result {
-                    Ok(conn_id) => {
-                        ctx.session.borrow_mut().connected.insert(conn_id.clone());
-                        let profile = ctx.find_profile(&conn_id);
-                        let name = profile
-                            .as_ref()
-                            .map(|p| p.name.clone())
-                            .unwrap_or_else(|| conn_id.clone());
-                        ctx.toast(format!("Connected to {}", name), Tone::Success);
-                        if let Some(profile) = profile {
-                            ctx.open_workspace(profile);
+            move |result| {
+                with_ctx(|ctx| {
+                    ctx.session.borrow_mut().connecting = None;
+                    match result {
+                        Ok(conn_id) => {
+                            ctx.session.borrow_mut().connected.insert(conn_id.clone());
+                            let profile = ctx.find_profile(&conn_id);
+                            let name = profile
+                                .as_ref()
+                                .map(|p| p.name.clone())
+                                .unwrap_or_else(|| conn_id.clone());
+                            ctx.toast(format!("Connected to {}", name), Tone::Success);
+                            if let Some(profile) = profile {
+                                ctx.open_workspace(profile);
+                            }
+                        }
+                        Err(e) => {
+                            ctx.session.borrow_mut().error = format!("Connection failed: {}", e);
+                            ctx.toast("Connection failed", Tone::Danger);
                         }
                     }
-                    Err(e) => {
-                        ctx.session.borrow_mut().error = format!("Connection failed: {}", e);
-                        ctx.toast("Connection failed", Tone::Danger);
-                    }
-                }
-                ctx.refresh_connections();
-            }),
+                    ctx.refresh_connections();
+                })
+            },
         );
     }
 
@@ -324,21 +328,23 @@ impl Ctx {
         let worker_id = id.clone();
         runtime::spawn(
             async move { dbhive_core::service::disconnect(&state, &worker_id).await },
-            move |result| with_ctx(|ctx| {
-                ctx.session.borrow_mut().connected.remove(&id);
-                match result {
-                    Ok(()) => {
-                        // The workspace screen has nothing to show once its
-                        // connection is gone.
-                        let showing_it = ctx.session.borrow().workspace.connection_id == id;
-                        if showing_it {
-                            ctx.leave_workspace();
+            move |result| {
+                with_ctx(|ctx| {
+                    ctx.session.borrow_mut().connected.remove(&id);
+                    match result {
+                        Ok(()) => {
+                            // The workspace screen has nothing to show once its
+                            // connection is gone.
+                            let showing_it = ctx.session.borrow().workspace.connection_id == id;
+                            if showing_it {
+                                ctx.leave_workspace();
+                            }
                         }
+                        Err(e) => ctx.toast(format!("Disconnect failed: {}", e), Tone::Danger),
                     }
-                    Err(e) => ctx.toast(format!("Disconnect failed: {}", e), Tone::Danger),
-                }
-                ctx.refresh_connections();
-            }),
+                    ctx.refresh_connections();
+                })
+            },
         );
     }
 
@@ -349,7 +355,9 @@ impl Ctx {
     // -- Connection editor -------------------------------------------------
 
     fn refresh_editor(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let s = self.session.borrow();
         let ed = &s.editor;
         let mut data = editor_view::form_data(&ed.form);
@@ -361,8 +369,11 @@ impl Ctx {
         data.show_ssh_password_text = ed.show_ssh_password;
         w.set_editor_is_new(ed.is_new);
         w.set_editor(data);
-        let errors: Vec<slint::SharedString> =
-            validate(&ed.form).messages().into_iter().map(Into::into).collect();
+        let errors: Vec<slint::SharedString> = validate(&ed.form)
+            .messages()
+            .into_iter()
+            .map(Into::into)
+            .collect();
         w.set_editor_errors(ModelRc::new(VecModel::from(errors)));
         w.set_editor_testing(ed.testing);
         w.set_editor_test_message(ed.test_message.as_str().into());
@@ -379,7 +390,9 @@ impl Ctx {
     }
 
     fn open_edit_connection(&self, id: &str) {
-        let Some(profile) = self.find_profile(id) else { return };
+        let Some(profile) = self.find_profile(id) else {
+            return;
+        };
         self.session.borrow_mut().editor = Editor {
             is_new: false,
             form: form_from_profile(&profile),
@@ -392,7 +405,9 @@ impl Ctx {
     }
 
     fn open_duplicate_connection(&self, id: &str) {
-        let Some(profile) = self.find_profile(id) else { return };
+        let Some(profile) = self.find_profile(id) else {
+            return;
+        };
         let mut form = form_from_profile(&profile);
         form.id = None;
         form.name = format!("{} copy", form.name);
@@ -514,29 +529,35 @@ impl Ctx {
         let state = self.state.clone();
         runtime::spawn(
             async move { test_profile(state, profile, password, ssh_password).await },
-            move |result| with_ctx(|ctx| {
-                let mut s = ctx.session.borrow_mut();
-                s.editor.testing = false;
-                match result {
-                    Ok(()) => {
-                        s.editor.test_ok = true;
-                        s.editor.test_message = "Connected successfully.".to_string();
+            move |result| {
+                with_ctx(|ctx| {
+                    let mut s = ctx.session.borrow_mut();
+                    s.editor.testing = false;
+                    match result {
+                        Ok(()) => {
+                            s.editor.test_ok = true;
+                            s.editor.test_message = "Connected successfully.".to_string();
+                        }
+                        Err(e) => {
+                            s.editor.test_ok = false;
+                            s.editor.test_message = format!("Connection failed: {}", e);
+                        }
                     }
-                    Err(e) => {
-                        s.editor.test_ok = false;
-                        s.editor.test_message = format!("Connection failed: {}", e);
-                    }
-                }
-                drop(s);
-                ctx.refresh_editor();
-            }),
+                    drop(s);
+                    ctx.refresh_editor();
+                })
+            },
         );
     }
 
     fn save_editor(self: &Rc<Self>) {
         let (form, password, is_new) = {
             let s = self.session.borrow();
-            (s.editor.form.clone(), s.editor.password.clone(), s.editor.is_new)
+            (
+                s.editor.form.clone(),
+                s.editor.password.clone(),
+                s.editor.is_new,
+            )
         };
         if !validate(&form).is_valid() {
             // The messages are already on screen; nothing to save yet.
@@ -553,43 +574,55 @@ impl Ctx {
         let state = self.state.clone();
         runtime::spawn(
             async move { save_profile(state, profile, id, password, ssh_password).await },
-            move |result| with_ctx(|ctx| {
-                ctx.session.borrow_mut().editor.saving = false;
-                match result {
-                    Ok((_, warning)) => {
-                        ctx.close_editor();
-                        let verb = if is_new { "Added" } else { "Saved" };
-                        ctx.toast(format!("{} {}", verb, name), Tone::Success);
-                        if let Some(w) = warning {
-                            ctx.toast(w, Tone::Warning);
+            move |result| {
+                with_ctx(|ctx| {
+                    ctx.session.borrow_mut().editor.saving = false;
+                    match result {
+                        Ok((_, warning)) => {
+                            ctx.close_editor();
+                            let verb = if is_new { "Added" } else { "Saved" };
+                            ctx.toast(format!("{} {}", verb, name), Tone::Success);
+                            if let Some(w) = warning {
+                                ctx.toast(w, Tone::Warning);
+                            }
+                            ctx.refresh_connections();
                         }
-                        ctx.refresh_connections();
+                        Err(e) => {
+                            ctx.refresh_editor();
+                            ctx.toast(format!("Could not save: {}", e), Tone::Danger);
+                        }
                     }
-                    Err(e) => {
-                        ctx.refresh_editor();
-                        ctx.toast(format!("Could not save: {}", e), Tone::Danger);
-                    }
-                }
-            }),
+                })
+            },
         );
     }
 
     // -- Delete confirmation -------------------------------------------------
 
     fn confirm_delete_connection(&self, id: &str) {
-        let Some(profile) = self.find_profile(id) else { return };
+        let Some(profile) = self.find_profile(id) else {
+            return;
+        };
         self.session.borrow_mut().pending_delete = Some((id.to_string(), profile.name.clone()));
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         w.set_confirm_title("Delete connection?".into());
         w.set_confirm_message(
-            format!("\"{}\" will be removed. This cannot be undone.", profile.name).into(),
+            format!(
+                "\"{}\" will be removed. This cannot be undone.",
+                profile.name
+            )
+            .into(),
         );
         w.set_confirm_label("Delete".into());
         w.set_show_confirm(true);
     }
 
     fn delete_pending_connection(self: &Rc<Self>) {
-        let Some((id, name)) = self.session.borrow_mut().pending_delete.take() else { return };
+        let Some((id, name)) = self.session.borrow_mut().pending_delete.take() else {
+            return;
+        };
         let result = {
             let mut guard = self.state.lock().unwrap();
             guard.remove_profile(&id);
@@ -612,7 +645,11 @@ impl Ctx {
     /// still open. Cloning the `Arc` and dropping the lock immediately means
     /// nothing holds `AppState`'s mutex across an `.await`.
     fn open_driver(&self, connection_id: &str) -> Option<Arc<dyn DatabaseDriver>> {
-        self.state.lock().unwrap().get_connection(connection_id).cloned()
+        self.state
+            .lock()
+            .unwrap()
+            .get_connection(connection_id)
+            .cloned()
     }
 
     fn refresh_workspace(&self) {
@@ -620,7 +657,9 @@ impl Ctx {
         self.ai_refresh_for_editor();
         // View mode, JSON / Text lines, the structured error and Export.
         self.results_refresh();
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let s = self.session.borrow();
         let ws = &s.workspace;
 
@@ -664,7 +703,9 @@ impl Ctx {
         w.set_workspace_active_tab(ws.tabs.active_index().map_or(-1, |i| i as i32));
 
         let empty_grid = || {
-            w.set_workspace_columns(ModelRc::new(VecModel::from(Vec::<crate::GridColumn>::new())));
+            w.set_workspace_columns(ModelRc::new(
+                VecModel::from(Vec::<crate::GridColumn>::new()),
+            ));
             w.set_workspace_rows(ModelRc::new(VecModel::from(Vec::<GridRow>::new())));
             w.set_workspace_grid_width(0.0);
             w.set_workspace_row_count(0);
@@ -679,7 +720,9 @@ impl Ctx {
             if !w.get_workspace_editor_text().is_empty() {
                 w.set_workspace_editor_text("".into());
             }
-            w.set_workspace_editor_lines(ModelRc::new(VecModel::from(Vec::<crate::HighlightLine>::new())));
+            w.set_workspace_editor_lines(ModelRc::new(VecModel::from(
+                Vec::<crate::HighlightLine>::new(),
+            )));
             w.set_workspace_running(false);
             w.set_workspace_rows_error("".into());
             w.set_workspace_result_title("".into());
@@ -749,7 +792,9 @@ impl Ctx {
         let ordered = workspace_model::to_grid_rows(&visible);
         // A table tab with pending edits draws the page with them applied.
         let rows_model = match row_edit::overlay(tab) {
-            Some((rows, marks)) => LazyRows::with_marks(std::rc::Rc::new(rows), std::rc::Rc::new(marks)),
+            Some((rows, marks)) => {
+                LazyRows::with_marks(std::rc::Rc::new(rows), std::rc::Rc::new(marks))
+            }
             None => LazyRows::new(std::rc::Rc::new(ordered)),
         };
         w.set_workspace_rows(ModelRc::new(rows_model));
@@ -862,34 +907,36 @@ impl Ctx {
                 let tables = d.get_tables(&schema_arg).await;
                 (overview, schema_arg, tables)
             },
-            move |(overview, schema, tables)| with_ctx(|ctx| {
-                if !ticket.is_current() {
-                    return;
-                }
-                let mut s = ctx.session.borrow_mut();
-                let ws = &mut s.workspace;
-                ws.loading_tables = false;
-                ws.database = Some(overview.database.clone());
-                ws.schema = Some(schema.clone());
-                let loaded = tables.is_ok();
-                let for_tree = match tables {
-                    Ok(t) => {
-                        ws.tables = t.clone();
-                        Ok(t)
+            move |(overview, schema, tables)| {
+                with_ctx(|ctx| {
+                    if !ticket.is_current() {
+                        return;
                     }
-                    Err(e) => {
-                        ws.tables_error = format!("Could not list tables: {}", e);
-                        Err(e.to_string())
-                    }
-                };
-                drop(s);
-                // A reloaded schema means column lists may have changed.
-                ctx.completion_reset();
-                ctx.refresh_workspace();
-                // First load only: put back the tabs from the last session.
-                ctx.tabs_restore(loaded);
-                ctx.tree_seed(tree_generation, overview, &schema, for_tree);
-            }),
+                    let mut s = ctx.session.borrow_mut();
+                    let ws = &mut s.workspace;
+                    ws.loading_tables = false;
+                    ws.database = Some(overview.database.clone());
+                    ws.schema = Some(schema.clone());
+                    let loaded = tables.is_ok();
+                    let for_tree = match tables {
+                        Ok(t) => {
+                            ws.tables = t.clone();
+                            Ok(t)
+                        }
+                        Err(e) => {
+                            ws.tables_error = format!("Could not list tables: {}", e);
+                            Err(e.to_string())
+                        }
+                    };
+                    drop(s);
+                    // A reloaded schema means column lists may have changed.
+                    ctx.completion_reset();
+                    ctx.refresh_workspace();
+                    // First load only: put back the tabs from the last session.
+                    ctx.tabs_restore(loaded);
+                    ctx.tree_seed(tree_generation, overview, &schema, for_tree);
+                })
+            },
         );
     }
 
@@ -945,7 +992,8 @@ impl Ctx {
                 id,
                 tabs.needs_close_confirmation(id),
                 t.map(|t| t.title.clone()).unwrap_or_default(),
-                t.and_then(|t| t.inspector.as_ref()).map_or(0, |v| v.edit.pending_count()),
+                t.and_then(|t| t.inspector.as_ref())
+                    .map_or(0, |v| v.edit.pending_count()),
             )
         };
         if !ask {
@@ -1003,8 +1051,11 @@ impl Ctx {
             // "Confirm destructive queries" in Settings turns the guard off.
             let warnings = destructive_warnings(&self.app_settings().query, &sql);
             if !warnings.is_empty() {
-                let mut lines: Vec<String> =
-                    warnings.iter().take(3).map(|w| format!("• {}", w.description)).collect();
+                let mut lines: Vec<String> = warnings
+                    .iter()
+                    .take(3)
+                    .map(|w| format!("• {}", w.description))
+                    .collect();
                 if warnings.len() > 3 {
                     lines.push(format!("• and {} more", warnings.len() - 3));
                 }
@@ -1048,25 +1099,39 @@ impl Ctx {
                 // Settings > Query timeout. Dropping the future stops
                 // waiting; the server may finish the statement on its own.
                 let out = match query_timeout(&query_settings) {
-                    Some(limit) => match tokio::time::timeout(limit, d.execute_query(&run_sql)).await {
-                        Ok(result) => result,
-                        Err(_) => Err(dbhive_core::models::DbError::QueryError(timeout_message(
-                            &query_settings,
-                        ))),
-                    },
+                    Some(limit) => {
+                        match tokio::time::timeout(limit, d.execute_query(&run_sql)).await {
+                            Ok(result) => result,
+                            Err(_) => Err(dbhive_core::models::DbError::QueryError(
+                                timeout_message(&query_settings),
+                            )),
+                        }
+                    }
                     None => d.execute_query(&run_sql).await,
                 };
                 (out, started.elapsed().as_millis() as u64)
             },
-            move |(out, elapsed)| with_ctx(|ctx| {
-                let outcome = out.map_err(|e| e.to_string());
-                ctx.record_run(&connection_id, &connection_name, &database, &sql, &log_id, &outcome, elapsed);
-                {
-                    let mut s = ctx.session.borrow_mut();
-                    s.workspace.tabs.finish_run_capped(id, seq, outcome, elapsed, max_rows);
-                }
-                ctx.refresh_workspace();
-            }),
+            move |(out, elapsed)| {
+                with_ctx(|ctx| {
+                    let outcome = out.map_err(|e| e.to_string());
+                    ctx.record_run(
+                        &connection_id,
+                        &connection_name,
+                        &database,
+                        &sql,
+                        &log_id,
+                        &outcome,
+                        elapsed,
+                    );
+                    {
+                        let mut s = ctx.session.borrow_mut();
+                        s.workspace
+                            .tabs
+                            .finish_run_capped(id, seq, outcome, elapsed, max_rows);
+                    }
+                    ctx.refresh_workspace();
+                })
+            },
         );
     }
 
@@ -1136,7 +1201,9 @@ impl Ctx {
     }
 
     fn show_confirm(&self, title: &str, message: &str, label: &str) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         w.set_confirm_title(title.into());
         w.set_confirm_message(message.into());
         w.set_confirm_label(label.into());
@@ -1221,7 +1288,9 @@ enum Outcome {
 // `dispatch` refuses.
 impl Ctx {
     fn overlay(&self) -> Overlay {
-        let Some(w) = self.window.upgrade() else { return Overlay::None };
+        let Some(w) = self.window.upgrade() else {
+            return Overlay::None;
+        };
         if w.get_show_palette() {
             Overlay::Palette
         } else if w.get_show_shortcuts() {
@@ -1283,7 +1352,9 @@ impl Ctx {
             Status::Enabled => {}
             other => return Outcome::Refused(other.reason()),
         }
-        let Some(w) = self.window.upgrade() else { return Outcome::Ran };
+        let Some(w) = self.window.upgrade() else {
+            return Outcome::Ran;
+        };
 
         match id {
             // Same as the workspace's Back button.
@@ -1326,9 +1397,15 @@ impl Ctx {
         Outcome::Ran
     }
 
-
     /// A key nothing focused used. Returns whether it ran a shortcut.
-    fn key_chord(self: &Rc<Self>, text: &str, ctrl: bool, alt: bool, shift: bool, meta: bool) -> bool {
+    fn key_chord(
+        self: &Rc<Self>,
+        text: &str,
+        ctrl: bool,
+        alt: bool,
+        shift: bool,
+        meta: bool,
+    ) -> bool {
         let Some(chord) = chord_from_input(text, ctrl, alt, shift, meta) else {
             return false;
         };
@@ -1345,7 +1422,9 @@ impl Ctx {
     // -- Palette -----------------------------------------------------------
 
     fn refresh_palette(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let ctx = self.command_context();
         let s = self.session.borrow();
         let view = s.palette.view(&ctx, IS_MAC);
@@ -1379,9 +1458,14 @@ impl Ctx {
     /// Arrow keys: move the selection (wrapping) and keep it in view.
     fn palette_move(&self, delta: i32) {
         let ctx = self.command_context();
-        self.session.borrow_mut().palette.move_selection(delta, &ctx);
+        self.session
+            .borrow_mut()
+            .palette
+            .move_selection(delta, &ctx);
         self.refresh_palette();
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let view = self.session.borrow().palette.view(&ctx, IS_MAC);
         w.set_palette_scroll(view.reveal_offset(w.get_palette_scroll()));
     }
@@ -1413,7 +1497,9 @@ impl Ctx {
     // -- Shortcuts help ------------------------------------------------------
 
     fn refresh_shortcuts(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let s = self.session.borrow();
         let rows = s.shortcuts.view(IS_MAC);
         palette_view::apply_shortcuts(&w, s.shortcuts.is_open(), s.shortcuts.query(), &rows);
@@ -1578,9 +1664,8 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     }
     {
         let ctx = ctx.clone();
-        window.on_editor_toggle_password_visibility(move || {
-            ctx.toggle_editor_password_visibility()
-        });
+        window
+            .on_editor_toggle_password_visibility(move || ctx.toggle_editor_password_visibility());
     }
     {
         let ctx = ctx.clone();
@@ -1660,9 +1745,8 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     }
     {
         let ctx = ctx.clone();
-        window.on_editor_color_picked(move |i| {
-            ctx.edit_form(|f| f.color = editor_view::color_at(i))
-        });
+        window
+            .on_editor_color_picked(move |i| ctx.edit_form(|f| f.color = editor_view::color_at(i)));
     }
     {
         let ctx = ctx.clone();

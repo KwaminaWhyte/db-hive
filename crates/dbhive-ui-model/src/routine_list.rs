@@ -79,7 +79,11 @@ pub fn rows(
     for (schema, list) in grouped(all, query) {
         rows.push(RoutineRow {
             header: true,
-            label: if schema.is_empty() { "(default)".to_string() } else { schema },
+            label: if schema.is_empty() {
+                "(default)".to_string()
+            } else {
+                schema
+            },
             detail: list.len().to_string(),
             kind: "",
             selected: false,
@@ -117,7 +121,13 @@ pub fn definition_for_editor(definition: &str) -> String {
 mod tests {
     use super::*;
 
-    fn p(schema: &str, name: &str, kind: RoutineKind, sig: &str, ret: Option<&str>) -> ProcedureInfo {
+    fn p(
+        schema: &str,
+        name: &str,
+        kind: RoutineKind,
+        sig: &str,
+        ret: Option<&str>,
+    ) -> ProcedureInfo {
         ProcedureInfo {
             schema: schema.into(),
             name: name.into(),
@@ -131,8 +141,20 @@ mod tests {
     fn sample() -> Vec<ProcedureInfo> {
         vec![
             p("billing", "close_month", RoutineKind::Procedure, "()", None),
-            p("public", "add_numbers", RoutineKind::Function, "(a integer, b integer)", Some("integer")),
-            p("public", "slugify", RoutineKind::Function, "(t text)", Some("text")),
+            p(
+                "public",
+                "add_numbers",
+                RoutineKind::Function,
+                "(a integer, b integer)",
+                Some("integer"),
+            ),
+            p(
+                "public",
+                "slugify",
+                RoutineKind::Function,
+                "(t text)",
+                Some("text"),
+            ),
         ]
     }
 
@@ -140,7 +162,10 @@ mod tests {
     fn each_schema_gets_a_header_with_its_count() {
         let (rows, items) = rows(&sample(), "", None);
         let labels: Vec<&str> = rows.iter().map(|r| r.label.as_str()).collect();
-        assert_eq!(labels, ["billing", "close_month", "public", "add_numbers", "slugify"]);
+        assert_eq!(
+            labels,
+            ["billing", "close_month", "public", "add_numbers", "slugify"]
+        );
         assert!(rows[0].header && rows[2].header && !rows[1].header);
         assert_eq!(rows[0].detail, "1");
         assert_eq!(rows[2].detail, "2");
@@ -176,7 +201,11 @@ mod tests {
     fn the_selected_routine_is_marked() {
         let all = sample();
         let (rows, _) = rows(&all, "", Some(&all[1]));
-        let marked: Vec<&str> = rows.iter().filter(|r| r.selected).map(|r| r.label.as_str()).collect();
+        let marked: Vec<&str> = rows
+            .iter()
+            .filter(|r| r.selected)
+            .map(|r| r.label.as_str())
+            .collect();
         assert_eq!(marked, ["add_numbers"]);
     }
 
@@ -195,22 +224,37 @@ mod tests {
         assert_eq!(status(false, "boom", false, &[], ""), RoutineStatus::Error);
         assert_eq!(status(false, "", true, &[], ""), RoutineStatus::Unsupported);
         assert_eq!(status(false, "", false, &[], ""), RoutineStatus::Empty);
-        assert_eq!(status(false, "", false, &all, "zzz"), RoutineStatus::NoMatches);
+        assert_eq!(
+            status(false, "", false, &all, "zzz"),
+            RoutineStatus::NoMatches
+        );
         assert_eq!(status(false, "", false, &all, ""), RoutineStatus::Populated);
         // A refresh keeps showing what it has while it reloads or fails.
         assert_eq!(status(true, "", false, &all, ""), RoutineStatus::Populated);
-        assert_eq!(status(false, "boom", false, &all, ""), RoutineStatus::Populated);
+        assert_eq!(
+            status(false, "boom", false, &all, ""),
+            RoutineStatus::Populated
+        );
     }
 
     #[test]
     fn an_unsupported_driver_wins_over_everything() {
-        assert_eq!(status(true, "x", true, &sample(), ""), RoutineStatus::Unsupported);
+        assert_eq!(
+            status(true, "x", true, &sample(), ""),
+            RoutineStatus::Unsupported
+        );
     }
 
     #[test]
     fn a_definition_for_the_editor_ends_in_a_semicolon_once() {
-        assert_eq!(definition_for_editor("CREATE FUNCTION f() ...\n"), "CREATE FUNCTION f() ...;");
-        assert_eq!(definition_for_editor("CREATE FUNCTION f() ...;"), "CREATE FUNCTION f() ...;");
+        assert_eq!(
+            definition_for_editor("CREATE FUNCTION f() ...\n"),
+            "CREATE FUNCTION f() ...;"
+        );
+        assert_eq!(
+            definition_for_editor("CREATE FUNCTION f() ...;"),
+            "CREATE FUNCTION f() ...;"
+        );
         assert_eq!(definition_for_editor(""), "");
     }
 }

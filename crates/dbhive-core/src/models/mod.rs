@@ -17,6 +17,7 @@ pub use activity::{
     ActivityStats, ExportFormat, QueryLog, QueryLogFilter, QueryLogResponse, QueryLogSort,
     QueryLogSortField, QueryStatus, QueryType, SortDirection,
 };
+pub use backup::{BackupEntry, BackupOptions, BackupProgress, BackupStatus, RestoreOptions};
 pub use connection::{ConnectionProfile, ConnectionStatus, DbDriver, SslMode};
 pub use ddl::{
     AlterColumnOperation, AlterTableDefinition, CheckConstraint, ColumnDefinition, ColumnType,
@@ -28,5 +29,4 @@ pub use history::{QueryHistory, QuerySnippet};
 pub use metadata::{
     ColumnInfo, DatabaseInfo, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
 };
-pub use backup::{BackupEntry, BackupOptions, BackupProgress, BackupStatus, RestoreOptions};
 pub use settings::AppSettings;

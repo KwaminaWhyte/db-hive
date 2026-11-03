@@ -8,7 +8,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use super::provider::{AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage};
+use super::provider::{
+    AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage,
+};
 
 /// Google AI API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -212,7 +214,10 @@ impl AiProvider for GoogleAiProvider {
         }
 
         // Check by listing models
-        let url = format!("{}/models?key={}", self.config.base_url, self.config.api_key);
+        let url = format!(
+            "{}/models?key={}",
+            self.config.base_url, self.config.api_key
+        );
 
         match self.client.get(&url).send().await {
             Ok(response) => response.status().is_success(),
@@ -235,9 +240,14 @@ impl AiProvider for GoogleAiProvider {
                 .collect());
         }
 
-        let url = format!("{}/models?key={}", self.config.base_url, self.config.api_key);
+        let url = format!(
+            "{}/models?key={}",
+            self.config.base_url, self.config.api_key
+        );
 
-        let response = self.client.get(&url)
+        let response = self
+            .client
+            .get(&url)
             .send()
             .await
             .map_err(|e| format!("Failed to connect to Google AI: {}", e))?;
@@ -262,22 +272,27 @@ impl AiProvider for GoogleAiProvider {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         // Filter to models that support generateContent
-        let models: Vec<AiModel> = data.models
+        let models: Vec<AiModel> = data
+            .models
             .into_iter()
             .filter(|m| Self::supports_generate_content(&m.supported_generation_methods))
             .filter(|m| m.name.contains("gemini"))
             .map(|m| {
                 // Model name is "models/gemini-xxx", extract just the model id
-                let id = m.name.strip_prefix("models/").unwrap_or(&m.name).to_string();
+                let id = m
+                    .name
+                    .strip_prefix("models/")
+                    .unwrap_or(&m.name)
+                    .to_string();
                 let context_window = m.input_token_limit;
 
                 AiModel {
                     id,
                     name: m.display_name,
                     provider: AiProviderType::Google,
-                    description: m.description.or_else(|| {
-                        context_window.map(|c| format!("{}K context", c / 1000))
-                    }),
+                    description: m
+                        .description
+                        .or_else(|| context_window.map(|c| format!("{}K context", c / 1000))),
                     context_window,
                 }
             })
@@ -333,7 +348,9 @@ impl AiProvider for GoogleAiProvider {
             }),
         };
 
-        let response = self.client.post(&url)
+        let response = self
+            .client
+            .post(&url)
             .header("Content-Type", "application/json")
             .json(&request_body)
             .send()
@@ -341,13 +358,12 @@ impl AiProvider for GoogleAiProvider {
             .map_err(|e| format!("Failed to send request: {}", e))?;
 
         if !response.status().is_success() {
-            let error: GeminiErrorResponse = response.json().await
-                .unwrap_or(GeminiErrorResponse {
-                    error: GeminiError {
-                        message: "Unknown error".to_string(),
-                        status: "UNKNOWN".to_string(),
-                    },
-                });
+            let error: GeminiErrorResponse = response.json().await.unwrap_or(GeminiErrorResponse {
+                error: GeminiError {
+                    message: "Unknown error".to_string(),
+                    status: "UNKNOWN".to_string(),
+                },
+            });
             return Err(format!("Google AI API error: {}", error.error.message));
         }
 
@@ -357,10 +373,12 @@ impl AiProvider for GoogleAiProvider {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         // Extract text content from first candidate
-        let content = api_response.candidates
+        let content = api_response
+            .candidates
             .first()
             .map(|c| {
-                c.content.parts
+                c.content
+                    .parts
                     .iter()
                     .map(|p| p.text.as_str())
                     .collect::<Vec<_>>()

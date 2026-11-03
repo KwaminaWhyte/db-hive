@@ -39,11 +39,15 @@ fn cell_modified(w: &AppWindow, row: usize, col: usize) -> bool {
 }
 
 fn row_deleted(w: &AppWindow, row: usize) -> bool {
-    w.get_workspace_rows().row_data(row).is_some_and(|r| r.deleted)
+    w.get_workspace_rows()
+        .row_data(row)
+        .is_some_and(|r| r.deleted)
 }
 
 fn row_added(w: &AppWindow, row: usize) -> bool {
-    w.get_workspace_rows().row_data(row).is_some_and(|r| r.added)
+    w.get_workspace_rows()
+        .row_data(row)
+        .is_some_and(|r| r.added)
 }
 
 fn rows(w: &AppWindow) -> usize {
@@ -155,7 +159,9 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                 w.invoke_connect("pantry-db".into());
                 step2.set(1);
             }
-            1 if w.get_screen() == Screen::Workspace && w.get_workspace_tables().row_count() == 2 => {
+            1 if w.get_screen() == Screen::Workspace
+                && w.get_workspace_tables().row_count() == 2 =>
+            {
                 w.invoke_workspace_select_table("items".into());
                 step2.set(2);
             }
@@ -163,7 +169,11 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
             // -- double-click opens the editor with the stored value ------
             2 if ready(3) => {
                 expect!(b.get_editable(), "a SQLite table should be editable");
-                expect!(b.get_edit_note().is_empty(), "note was {:?}", b.get_edit_note());
+                expect!(
+                    b.get_edit_note().is_empty(),
+                    "note was {:?}",
+                    b.get_edit_note()
+                );
                 b.invoke_cell_double_clicked(0, 1);
                 step2.set(3);
             }
@@ -174,7 +184,11 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                     b.get_editing_row(),
                     b.get_editing_col()
                 );
-                expect!(b.get_edit_initial() == "Apple", "initial was {:?}", b.get_edit_initial());
+                expect!(
+                    b.get_edit_initial() == "Apple",
+                    "initial was {:?}",
+                    b.get_edit_initial()
+                );
                 b.invoke_edit_accepted("Apricot".into());
                 step2.set(4);
             }
@@ -182,12 +196,23 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
             // -- the edit is pending; the database is untouched -----------
             4 => {
                 expect!(b.get_editing_row() == -1, "the editor should close");
-                expect!(cell_text(&w, 0, 1) == "Apricot", "grid shows {:?}", cell_text(&w, 0, 1));
+                expect!(
+                    cell_text(&w, 0, 1) == "Apricot",
+                    "grid shows {:?}",
+                    cell_text(&w, 0, 1)
+                );
                 expect!(cell_modified(&w, 0, 1), "the edited cell should be marked");
                 expect!(!cell_modified(&w, 0, 2), "other cells should not be marked");
-                expect!(b.get_pending_count() == 1, "pending {}", b.get_pending_count());
+                expect!(
+                    b.get_pending_count() == 1,
+                    "pending {}",
+                    b.get_pending_count()
+                );
                 let stored = db_rows(&db2, "SELECT name FROM items WHERE id = 1");
-                expect!(stored == vec![vec!["Apple".to_string()]], "db changed early: {stored:?}");
+                expect!(
+                    stored == vec![vec!["Apple".to_string()]],
+                    "db changed early: {stored:?}"
+                );
 
                 // A value that does not fit the column type is refused with a
                 // reason, and nothing is held.
@@ -204,15 +229,26 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                     "message was {:?}",
                     b.get_edit_message()
                 );
-                expect!(cell_text(&w, 1, 2) == "7", "bad text must not stick: {:?}", cell_text(&w, 1, 2));
-                expect!(b.get_pending_count() == 1, "pending {}", b.get_pending_count());
+                expect!(
+                    cell_text(&w, 1, 2) == "7",
+                    "bad text must not stick: {:?}",
+                    cell_text(&w, 1, 2)
+                );
+                expect!(
+                    b.get_pending_count() == 1,
+                    "pending {}",
+                    b.get_pending_count()
+                );
 
                 // The primary key cannot be edited.
                 b.invoke_cell_double_clicked(0, 0);
                 step2.set(7);
             }
             7 => {
-                expect!(b.get_editing_row() == -1, "a primary key cell must not open an editor");
+                expect!(
+                    b.get_editing_row() == -1,
+                    "a primary key cell must not open an editor"
+                );
                 expect!(
                     b.get_edit_message().contains("Primary key"),
                     "message was {:?}",
@@ -224,9 +260,17 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                 step2.set(8);
             }
             8 => {
-                expect!(rows(&w) == 4, "an added row should show, got {} rows", rows(&w));
+                expect!(
+                    rows(&w) == 4,
+                    "an added row should show, got {} rows",
+                    rows(&w)
+                );
                 expect!(row_added(&w, 3), "row 3 should be marked as added");
-                expect!(cell_text(&w, 3, 0) == "auto", "id placeholder was {:?}", cell_text(&w, 3, 0));
+                expect!(
+                    cell_text(&w, 3, 0) == "auto",
+                    "id placeholder was {:?}",
+                    cell_text(&w, 3, 0)
+                );
                 b.invoke_cell_double_clicked(3, 1);
                 step2.set(9);
             }
@@ -245,7 +289,11 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
 
             // -- delete the second row ------------------------------------
             12 => {
-                expect!(cell_text(&w, 3, 1) == "Dill", "new row name {:?}", cell_text(&w, 3, 1));
+                expect!(
+                    cell_text(&w, 3, 1) == "Dill",
+                    "new row name {:?}",
+                    cell_text(&w, 3, 1)
+                );
                 b.invoke_cell_clicked(1, 1);
                 step2.set(13);
             }
@@ -255,8 +303,15 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
             }
             14 => {
                 expect!(row_deleted(&w, 1), "row 1 should be marked deleted");
-                expect!(b.get_selected_deleted(), "the selection should know it is deleted");
-                expect!(b.get_pending_count() == 3, "pending {}", b.get_pending_count());
+                expect!(
+                    b.get_selected_deleted(),
+                    "the selection should know it is deleted"
+                );
+                expect!(
+                    b.get_pending_count() == 3,
+                    "pending {}",
+                    b.get_pending_count()
+                );
                 b.invoke_open_review();
                 step2.set(15);
             }
@@ -265,12 +320,28 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
             15 if b.get_review_open() => {
                 let items: Vec<_> = b.get_review_items().iter().collect();
                 expect!(items.len() == 3, "review has {} items", items.len());
-                let sql: String = items.iter().map(|i| i.sql.to_string()).collect::<Vec<_>>().join("\n");
-                expect!(sql.contains("UPDATE") && sql.contains("Apricot"), "no update in:\n{sql}");
-                expect!(sql.contains("DELETE") && sql.contains("id"), "no delete in:\n{sql}");
-                expect!(sql.contains("INSERT") && sql.contains("Dill"), "no insert in:\n{sql}");
+                let sql: String = items
+                    .iter()
+                    .map(|i| i.sql.to_string())
+                    .collect::<Vec<_>>()
+                    .join("\n");
+                expect!(
+                    sql.contains("UPDATE") && sql.contains("Apricot"),
+                    "no update in:\n{sql}"
+                );
+                expect!(
+                    sql.contains("DELETE") && sql.contains("id"),
+                    "no delete in:\n{sql}"
+                );
+                expect!(
+                    sql.contains("INSERT") && sql.contains("Dill"),
+                    "no insert in:\n{sql}"
+                );
                 let stored = db_rows(&db2, "SELECT COUNT(*) FROM items");
-                expect!(stored == vec![vec!["3".to_string()]], "db changed at review: {stored:?}");
+                expect!(
+                    stored == vec![vec!["3".to_string()]],
+                    "db changed at review: {stored:?}"
+                );
                 b.invoke_commit_edits();
                 step2.set(16);
             }
@@ -288,7 +359,9 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                 .collect();
                 expect!(stored == want, "db after commit: {stored:?}");
                 expect!(
-                    w.get_toasts().iter().any(|t| t.text.contains("Saved 3 changes")),
+                    w.get_toasts()
+                        .iter()
+                        .any(|t| t.text.contains("Saved 3 changes")),
                     "expected a saved toast"
                 );
                 step2.set(17);
@@ -296,8 +369,15 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
 
             // -- the grid reloaded from the database ----------------------
             17 if ready(3) => {
-                expect!(cell_text(&w, 1, 1) == "Carrot", "reloaded row 1 was {:?}", cell_text(&w, 1, 1));
-                expect!(!cell_modified(&w, 0, 1), "marks should be gone after the reload");
+                expect!(
+                    cell_text(&w, 1, 1) == "Carrot",
+                    "reloaded row 1 was {:?}",
+                    cell_text(&w, 1, 1)
+                );
+                expect!(
+                    !cell_modified(&w, 0, 1),
+                    "marks should be gone after the reload"
+                );
 
                 // -- a failing change leaves everything as it was ---------
                 // Change Carrot's name, and add a row whose unique code
@@ -340,9 +420,19 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
             26 if !b.get_committing() && !b.get_edit_message().is_empty() => {
                 let msg = b.get_edit_message().to_string();
                 expect!(msg.contains("Nothing was changed"), "message was {msg:?}");
-                expect!(msg.contains("2 of 2") || msg.contains("1 of 2"), "should name the change: {msg:?}");
-                expect!(b.get_review_open(), "the review should stay open to fix or discard");
-                expect!(b.get_pending_count() == 2, "pending {}", b.get_pending_count());
+                expect!(
+                    msg.contains("2 of 2") || msg.contains("1 of 2"),
+                    "should name the change: {msg:?}"
+                );
+                expect!(
+                    b.get_review_open(),
+                    "the review should stay open to fix or discard"
+                );
+                expect!(
+                    b.get_pending_count() == 2,
+                    "pending {}",
+                    b.get_pending_count()
+                );
                 let stored = db_rows(&db2, "SELECT id, name FROM items ORDER BY id");
                 let want: Vec<Vec<String>> = [["1", "Apricot"], ["3", "Carrot"], ["4", "Dill"]]
                     .iter()
@@ -359,7 +449,11 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                 step2.set(28);
             }
             28 if w.get_show_confirm() => {
-                expect!(w.get_confirm_title() == "Close this tab?", "title {:?}", w.get_confirm_title());
+                expect!(
+                    w.get_confirm_title() == "Close this tab?",
+                    "title {:?}",
+                    w.get_confirm_title()
+                );
                 expect!(
                     w.get_confirm_message().contains("2 unsaved row changes"),
                     "message was {:?}",
@@ -370,14 +464,25 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                 step2.set(29);
             }
             29 => {
-                expect!(w.get_workspace_tabs().row_count() == 2, "the tab closed without confirmation");
+                expect!(
+                    w.get_workspace_tabs().row_count() == 2,
+                    "the tab closed without confirmation"
+                );
                 // Discard throws the changes away.
                 b.invoke_discard_edits();
                 step2.set(30);
             }
             30 => {
-                expect!(b.get_pending_count() == 0, "pending {}", b.get_pending_count());
-                expect!(rows(&w) == 3, "discard should drop the added row, got {}", rows(&w));
+                expect!(
+                    b.get_pending_count() == 0,
+                    "pending {}",
+                    b.get_pending_count()
+                );
+                expect!(
+                    rows(&w) == 3,
+                    "discard should drop the added row, got {}",
+                    rows(&w)
+                );
                 expect!(!cell_modified(&w, 1, 1), "discard should clear marks");
 
                 // -- tick rows: copy them, tick all, delete them ---------
@@ -386,12 +491,23 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                 step2.set(40);
             }
             40 => {
-                expect!(b.get_checked_count() == 2, "ticked {}", b.get_checked_count());
+                expect!(
+                    b.get_checked_count() == 2,
+                    "ticked {}",
+                    b.get_checked_count()
+                );
                 expect!(!b.get_all_checked(), "two of three is not all");
                 expect!(
-                    w.get_workspace_rows().row_data(0).is_some_and(|r| r.checked)
-                        && w.get_workspace_rows().row_data(2).is_some_and(|r| r.checked)
-                        && !w.get_workspace_rows().row_data(1).is_some_and(|r| r.checked),
+                    w.get_workspace_rows()
+                        .row_data(0)
+                        .is_some_and(|r| r.checked)
+                        && w.get_workspace_rows()
+                            .row_data(2)
+                            .is_some_and(|r| r.checked)
+                        && !w
+                            .get_workspace_rows()
+                            .row_data(1)
+                            .is_some_and(|r| r.checked),
                     "the grid should mark rows 0 and 2 as ticked"
                 );
                 b.invoke_copy_checked_json();
@@ -399,19 +515,27 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
             }
             41 => {
                 expect!(
-                    w.get_toasts().iter().any(|t| t.text.contains("Copied 2 rows as JSON")),
+                    w.get_toasts()
+                        .iter()
+                        .any(|t| t.text.contains("Copied 2 rows as JSON")),
                     "copying ticked rows should say so"
                 );
                 b.invoke_toggle_all();
                 step2.set(42);
             }
             42 => {
-                expect!(b.get_checked_count() == 3 && b.get_all_checked(), "header box should tick all three");
+                expect!(
+                    b.get_checked_count() == 3 && b.get_all_checked(),
+                    "header box should tick all three"
+                );
                 b.invoke_toggle_all();
                 step2.set(43);
             }
             43 => {
-                expect!(b.get_checked_count() == 0 && !b.get_all_checked(), "header box again should clear");
+                expect!(
+                    b.get_checked_count() == 0 && !b.get_all_checked(),
+                    "header box again should clear"
+                );
                 b.invoke_row_toggled(0);
                 b.invoke_row_toggled(1);
                 step2.set(44);
@@ -421,18 +545,35 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                 step2.set(45);
             }
             45 => {
-                expect!(row_deleted(&w, 0) && row_deleted(&w, 1) && !row_deleted(&w, 2), "rows 0 and 1 should be marked deleted");
-                expect!(b.get_pending_count() == 2, "pending {}", b.get_pending_count());
-                expect!(b.get_checked_count() == 0, "ticks should clear after marking");
+                expect!(
+                    row_deleted(&w, 0) && row_deleted(&w, 1) && !row_deleted(&w, 2),
+                    "rows 0 and 1 should be marked deleted"
+                );
+                expect!(
+                    b.get_pending_count() == 2,
+                    "pending {}",
+                    b.get_pending_count()
+                );
+                expect!(
+                    b.get_checked_count() == 0,
+                    "ticks should clear after marking"
+                );
                 let stored = db_rows(&db2, "SELECT COUNT(*) FROM items");
-                expect!(stored == vec![vec!["3".to_string()]], "bulk delete wrote early: {stored:?}");
+                expect!(
+                    stored == vec![vec!["3".to_string()]],
+                    "bulk delete wrote early: {stored:?}"
+                );
                 b.invoke_discard_edits();
                 step2.set(46);
             }
 
             // -- a table with no primary key refuses edits ------------
             46 => {
-                expect!(b.get_pending_count() == 0, "pending {}", b.get_pending_count());
+                expect!(
+                    b.get_pending_count() == 0,
+                    "pending {}",
+                    b.get_pending_count()
+                );
                 w.invoke_workspace_select_table("loose".into());
                 step2.set(31);
             }
@@ -441,7 +582,10 @@ fn edit_add_delete_review_and_commit_rows_in_a_real_table() {
                 step2.set(32);
             }
             32 => {
-                expect!(b.get_editing_row() == -1, "no editor on a table without a key");
+                expect!(
+                    b.get_editing_row() == -1,
+                    "no editor on a table without a key"
+                );
                 expect!(
                     b.get_edit_message().contains("no primary key"),
                     "message was {:?}",

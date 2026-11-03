@@ -6,8 +6,8 @@
 use dbhive_core::models::{ConnectionProfile, DbDriver, DbError};
 
 use crate::app::DbHiveApp;
-use crate::widgets::ui_kit as kit;
 use crate::task::Job;
+use crate::widgets::ui_kit as kit;
 
 #[derive(Default)]
 pub struct ConnectionsScreen {
@@ -125,7 +125,12 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     ui.add_space(12.0);
 
     if let Some(err) = app.connections.last_error.clone() {
-        if kit::banner(ui, palette, kit::Tone::Danger, format!("Connection failed: {}", err)) {
+        if kit::banner(
+            ui,
+            palette,
+            kit::Tone::Danger,
+            format!("Connection failed: {}", err),
+        ) {
             app.connections.last_error = None;
         }
     }
@@ -206,8 +211,7 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     if let Some(id) = to_connect {
         // Ask for a password up front when nothing is stored, rather than
         // letting the driver fail with an opaque message.
-        let known = dbhive_core::credentials::CredentialManager::has_password(&id)
-            .unwrap_or(false)
+        let known = dbhive_core::credentials::CredentialManager::has_password(&id).unwrap_or(false)
             || app
                 .state
                 .lock()
@@ -251,9 +255,11 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
     if let Some(id) = to_disconnect {
         let state = app.state.clone();
         app.connections.connected.retain(|c| c != &id);
-        app.connections.disconnect_job.start(app.rt.handle(), ui.ctx(), async move {
-            dbhive_core::service::disconnect(&state, &id).await
-        });
+        app.connections
+            .disconnect_job
+            .start(app.rt.handle(), ui.ctx(), async move {
+                dbhive_core::service::disconnect(&state, &id).await
+            });
     }
 }
 
@@ -430,9 +436,8 @@ fn password_prompt(app: &mut DbHiveApp, ctx: &egui::Context) {
         // service::connect saves a non-empty password to the keyring itself,
         // so "don't remember" means clearing it again after connecting.
         if !prompt.save {
-            let _ = dbhive_core::credentials::CredentialManager::delete_password(
-                &prompt.profile_id,
-            );
+            let _ =
+                dbhive_core::credentials::CredentialManager::delete_password(&prompt.profile_id);
         }
         start_connect(app, ctx, prompt.profile_id, prompt.password);
     }
@@ -585,8 +590,11 @@ fn driver_chip(ui: &mut egui::Ui, palette: &crate::theme::Palette, driver: &DbDr
 
     let size = egui::vec2(30.0_f32, 30.0_f32);
     let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-    ui.painter()
-        .rect_filled(rect, crate::theme::radius::CONTROL, tint.gamma_multiply(0.22));
+    ui.painter().rect_filled(
+        rect,
+        crate::theme::radius::CONTROL,
+        tint.gamma_multiply(0.22),
+    );
     ui.painter().rect_stroke(
         rect,
         crate::theme::radius::CONTROL,
@@ -605,4 +613,3 @@ fn driver_chip(ui: &mut egui::Ui, palette: &crate::theme::Palette, driver: &DbDr
     );
     let _ = driver_label(driver);
 }
-

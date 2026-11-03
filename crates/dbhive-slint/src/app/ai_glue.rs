@@ -30,7 +30,9 @@ use std::sync::Arc;
 use dbhive_core::ai::AiProviderType;
 use dbhive_core::service_ai::{self, ApiKeyStore, KeyringKeyStore, ProviderStatus};
 use dbhive_ui_model::ai_assistant::{EmptyState, Kind};
-use dbhive_ui_model::ai_panel::{apply_text, context_database_label, error_text, AiPanel, Apply, Inputs};
+use dbhive_ui_model::ai_panel::{
+    apply_text, context_database_label, error_text, AiPanel, Apply, Inputs,
+};
 use dbhive_ui_model::command_palette::CommandId;
 use slint::ComponentHandle;
 
@@ -101,7 +103,9 @@ impl Ctx {
 
     /// Project the panel into the `AiState` global. Cheap when closed.
     pub(super) fn ai_refresh(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         if !w.global::<AiState>().get_visible() {
             return;
         }
@@ -142,7 +146,9 @@ impl Ctx {
     // -- Open and close -----------------------------------------------------
 
     pub(super) fn ai_open(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         if w.get_screen() != Screen::Workspace {
             self.toast("Open a connection to use the AI assistant.", Tone::Neutral);
             return;
@@ -281,7 +287,11 @@ impl Ctx {
                     if !ticket.is_current() {
                         return;
                     }
-                    ctx.session.borrow_mut().ai.panel.models_result(provider, result);
+                    ctx.session
+                        .borrow_mut()
+                        .ai
+                        .panel
+                        .models_result(provider, result);
                     ctx.ai_refresh();
                 })
             },
@@ -289,7 +299,10 @@ impl Ctx {
     }
 
     fn ai_select_provider(self: &Rc<Self>, index: i32) {
-        let Some(info) = usize::try_from(index).ok().and_then(|i| service_ai::PROVIDERS.get(i)) else {
+        let Some(info) = usize::try_from(index)
+            .ok()
+            .and_then(|i| service_ai::PROVIDERS.get(i))
+        else {
             return;
         };
         let changed = {
@@ -318,7 +331,9 @@ impl Ctx {
     }
 
     fn ai_select_model(self: &Rc<Self>, index: i32) {
-        let Ok(i) = usize::try_from(index) else { return };
+        let Ok(i) = usize::try_from(index) else {
+            return;
+        };
         let saved = self.session.borrow_mut().ai.panel.choose_model(i);
         if let Some(settings) = saved {
             self.ai_persist(settings);
@@ -351,7 +366,9 @@ impl Ctx {
 
     /// Hand the typed key to the store and clear the field.
     fn ai_save_key(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let state = w.global::<AiState>();
         let key = state.get_api_key().to_string();
         if key.trim().is_empty() || self.session.borrow().ai.saving_key {
@@ -368,7 +385,11 @@ impl Ctx {
         };
         self.ai_refresh();
         runtime::spawn(
-            async move { store.set(provider, &key).map_err(|e| error_text(&e.to_string())) },
+            async move {
+                store
+                    .set(provider, &key)
+                    .map_err(|e| error_text(&e.to_string()))
+            },
             move |result| with_ctx(|ctx| ctx.ai_key_stored(provider, result, "API key saved")),
         );
     }
@@ -381,12 +402,21 @@ impl Ctx {
         };
         self.ai_refresh();
         runtime::spawn(
-            async move { store.delete(provider).map_err(|e| error_text(&e.to_string())) },
+            async move {
+                store
+                    .delete(provider)
+                    .map_err(|e| error_text(&e.to_string()))
+            },
             move |result| with_ctx(|ctx| ctx.ai_key_stored(provider, result, "API key removed")),
         );
     }
 
-    fn ai_key_stored(self: &Rc<Self>, provider: AiProviderType, result: Result<(), String>, done: &str) {
+    fn ai_key_stored(
+        self: &Rc<Self>,
+        provider: AiProviderType,
+        result: Result<(), String>,
+        done: &str,
+    ) {
         let current = {
             let mut s = self.session.borrow_mut();
             s.ai.saving_key = false;
@@ -419,9 +449,15 @@ impl Ctx {
         let (connection_id, driver, database) = {
             let s = self.session.borrow();
             let ws = &s.workspace;
-            (ws.connection_id.clone(), ws.driver.clone(), ws.database.clone().unwrap_or_default())
+            (
+                ws.connection_id.clone(),
+                ws.driver.clone(),
+                ws.database.clone().unwrap_or_default(),
+            )
         };
-        let Some(driver) = driver.filter(|_| !connection_id.is_empty()) else { return };
+        let Some(driver) = driver.filter(|_| !connection_id.is_empty()) else {
+            return;
+        };
         let label = context_database_label(&driver, &database);
         let key = (connection_id.clone(), label.clone());
 
@@ -450,7 +486,11 @@ impl Ctx {
                     if !ticket.is_current() {
                         return;
                     }
-                    ctx.session.borrow_mut().ai.panel.context_result(&key, result);
+                    ctx.session
+                        .borrow_mut()
+                        .ai
+                        .panel
+                        .context_result(&key, result);
                     ctx.ai_refresh();
                 })
             },
@@ -460,7 +500,9 @@ impl Ctx {
     // -- Requests -------------------------------------------------------------------
 
     fn ai_ask(self: &Rc<Self>, kind: Kind) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let prompt = w.global::<AiState>().get_prompt().to_string();
         let (sql, error) = self.ai_editor();
         let dispatch = {
@@ -496,7 +538,11 @@ impl Ctx {
                     if !ticket.is_current() {
                         return;
                     }
-                    ctx.session.borrow_mut().ai.panel.finish(provider, kind, result);
+                    ctx.session
+                        .borrow_mut()
+                        .ai
+                        .panel
+                        .finish(provider, kind, result);
                     ctx.ai_refresh();
                 })
             },
@@ -508,10 +554,14 @@ impl Ctx {
     /// Put the statement of the answer at `turn` into the editor. Nothing is
     /// run: that is the editor's Run button, with its guard.
     fn ai_apply(self: &Rc<Self>, turn: i32, mode: i32) {
-        let Some(sql) = usize::try_from(turn)
-            .ok()
-            .and_then(|i| self.session.borrow().ai.panel.turn_sql(i).map(str::to_string))
-        else {
+        let Some(sql) = usize::try_from(turn).ok().and_then(|i| {
+            self.session
+                .borrow()
+                .ai
+                .panel
+                .turn_sql(i)
+                .map(str::to_string)
+        }) else {
             return;
         };
         let mode = match mode {
@@ -538,7 +588,11 @@ impl Ctx {
         if in_place {
             self.refresh_workspace();
             self.toast(
-                if mode == Apply::Replace { "Replaced the query in the editor" } else { "Added to the editor" },
+                if mode == Apply::Replace {
+                    "Replaced the query in the editor"
+                } else {
+                    "Added to the editor"
+                },
                 Tone::Success,
             );
         } else {
@@ -549,10 +603,14 @@ impl Ctx {
     }
 
     fn ai_copy(self: &Rc<Self>, turn: i32) {
-        let Some(sql) = usize::try_from(turn)
-            .ok()
-            .and_then(|i| self.session.borrow().ai.panel.turn_sql(i).map(str::to_string))
-        else {
+        let Some(sql) = usize::try_from(turn).ok().and_then(|i| {
+            self.session
+                .borrow()
+                .ai
+                .panel
+                .turn_sql(i)
+                .map(str::to_string)
+        }) else {
             return;
         };
         if let Some(w) = self.window.upgrade() {
@@ -565,7 +623,11 @@ impl Ctx {
         let (sql, error) = self.ai_editor();
         let kind = {
             let s = self.session.borrow();
-            let view = s.ai.panel.view(Inputs { current_sql: &sql, last_error: error.as_deref(), prompt: "" });
+            let view = s.ai.panel.view(Inputs {
+                current_sql: &sql,
+                last_error: error.as_deref(),
+                prompt: "",
+            });
             view.empty.map(|e| e.kind)
         };
         match kind {

@@ -64,7 +64,8 @@ impl Model for LazyRows {
     fn row_data(&self, row: usize) -> Option<GridRow> {
         let src = self.rows.get(row)?;
         let mark = self.marks.as_ref().and_then(|m| m.get(row));
-        let flag = |v: Option<&Vec<bool>>, i: usize| v.and_then(|v| v.get(i)).copied().unwrap_or(false);
+        let flag =
+            |v: Option<&Vec<bool>>, i: usize| v.and_then(|v| v.get(i)).copied().unwrap_or(false);
         let cells: Vec<GridCell> = src
             .iter()
             .enumerate()

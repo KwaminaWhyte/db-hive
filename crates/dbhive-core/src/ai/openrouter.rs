@@ -12,7 +12,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use super::provider::{AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage};
+use super::provider::{
+    AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage,
+};
 
 /// OpenRouter API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -173,7 +175,9 @@ impl AiProvider for OpenRouterProvider {
 
         let url = format!("{}/models", self.config.base_url);
 
-        let request = self.client.get(&url)
+        let request = self
+            .client
+            .get(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .header("HTTP-Referer", REFERER_HEADER)
             .header("X-Title", TITLE_HEADER);
@@ -191,7 +195,9 @@ impl AiProvider for OpenRouterProvider {
 
         let url = format!("{}/models", self.config.base_url);
 
-        let request = self.client.get(&url)
+        let request = self
+            .client
+            .get(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .header("HTTP-Referer", REFERER_HEADER)
             .header("X-Title", TITLE_HEADER);
@@ -202,8 +208,8 @@ impl AiProvider for OpenRouterProvider {
             .map_err(|e| format!("Failed to connect to OpenRouter: {}", e))?;
 
         if !response.status().is_success() {
-            let error: OpenRouterErrorResponse = response.json().await
-                .unwrap_or(OpenRouterErrorResponse {
+            let error: OpenRouterErrorResponse =
+                response.json().await.unwrap_or(OpenRouterErrorResponse {
                     error: OpenRouterError {
                         message: "Unknown error".to_string(),
                         error_type: None,
@@ -217,11 +223,14 @@ impl AiProvider for OpenRouterProvider {
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-        let models: Vec<AiModel> = data.data
+        let models: Vec<AiModel> = data
+            .data
             .into_iter()
             .map(|m| AiModel {
                 name: m.name.clone().unwrap_or_else(|| m.id.clone()),
-                description: m.description.or_else(|| Some("OpenRouter model".to_string())),
+                description: m
+                    .description
+                    .or_else(|| Some("OpenRouter model".to_string())),
                 context_window: m.context_length,
                 id: m.id,
                 provider: AiProviderType::OpenRouter,
@@ -253,7 +262,9 @@ impl AiProvider for OpenRouterProvider {
             max_tokens,
         };
 
-        let request = self.client.post(&url)
+        let request = self
+            .client
+            .post(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .header("Content-Type", "application/json")
             .header("HTTP-Referer", REFERER_HEADER)
@@ -266,8 +277,8 @@ impl AiProvider for OpenRouterProvider {
             .map_err(|e| format!("Failed to send request: {}", e))?;
 
         if !response.status().is_success() {
-            let error: OpenRouterErrorResponse = response.json().await
-                .unwrap_or(OpenRouterErrorResponse {
+            let error: OpenRouterErrorResponse =
+                response.json().await.unwrap_or(OpenRouterErrorResponse {
                     error: OpenRouterError {
                         message: "Unknown error".to_string(),
                         error_type: None,
@@ -281,7 +292,8 @@ impl AiProvider for OpenRouterProvider {
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-        let content = chat_response.choices
+        let content = chat_response
+            .choices
             .first()
             .map(|c| c.message.content.clone())
             .unwrap_or_default();

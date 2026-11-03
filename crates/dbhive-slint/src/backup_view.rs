@@ -27,7 +27,10 @@ pub struct Context {
 
 impl Context {
     pub fn driver_label(&self) -> String {
-        self.driver.as_ref().map(|d| format!("{d:?}")).unwrap_or_default()
+        self.driver
+            .as_ref()
+            .map(|d| format!("{d:?}"))
+            .unwrap_or_default()
     }
 }
 
@@ -69,7 +72,11 @@ pub fn project(g: &BackupState, m: &BackupManager, c: &Context) {
             &c.database_label,
             m.drop_existing,
         )));
-        g.set_restore_blocker(restore_blocker(entry, Some(driver)).unwrap_or_default().into());
+        g.set_restore_blocker(
+            restore_blocker(entry, Some(driver))
+                .unwrap_or_default()
+                .into(),
+        );
         g.set_drop_applies(drop_existing_applies(Some(driver)));
         g.set_drop_existing(m.drop_existing);
         g.set_restore_label(restore_confirm_label(m.drop_existing, &c.database_label).into());
@@ -115,7 +122,10 @@ pub fn to_row(r: RowView) -> BackupRow {
 /// (newest first).
 pub fn rows_model(m: &dbhive_ui_model::backup_manager::BackupManager) -> ModelRc<BackupRow> {
     ModelRc::new(VecModel::from(
-        m.entries_matching().into_iter().map(|e| to_row(row_view(e))).collect::<Vec<_>>(),
+        m.entries_matching()
+            .into_iter()
+            .map(|e| to_row(row_view(e)))
+            .collect::<Vec<_>>(),
     ))
 }
 
@@ -136,7 +146,11 @@ mod tests {
             file_name: name.into(),
             size_bytes: 10,
             created_at: 1_700_000_000,
-            status: if ok { BackupStatus::Completed } else { BackupStatus::Failed("disk full".into()) },
+            status: if ok {
+                BackupStatus::Completed
+            } else {
+                BackupStatus::Failed("disk full".into())
+            },
             note: None,
         }
     }
@@ -150,7 +164,10 @@ mod tests {
     #[test]
     fn the_driver_label_is_empty_without_a_driver() {
         assert_eq!(Context::default().driver_label(), "");
-        let c = Context { driver: Some(DbDriver::MySql), ..Context::default() };
+        let c = Context {
+            driver: Some(DbDriver::MySql),
+            ..Context::default()
+        };
         assert_eq!(c.driver_label(), "MySql");
     }
 

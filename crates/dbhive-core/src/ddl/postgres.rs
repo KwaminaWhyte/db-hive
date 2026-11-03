@@ -6,9 +6,9 @@
 use crate::ddl::DdlGenerator;
 use crate::models::{
     ddl::{
-        AlterColumnOperation, AlterTableDefinition, CheckConstraint, ColumnDefinition,
-        ColumnType, DdlResult, DropTableDefinition, ForeignKeyAction, ForeignKeyConstraint,
-        TableDefinition, UniqueConstraint,
+        AlterColumnOperation, AlterTableDefinition, CheckConstraint, ColumnDefinition, ColumnType,
+        DdlResult, DropTableDefinition, ForeignKeyAction, ForeignKeyConstraint, TableDefinition,
+        UniqueConstraint,
     },
     DbError,
 };
@@ -98,13 +98,7 @@ impl PostgresDdlGenerator {
     /// Generate foreign key constraint SQL
     fn generate_foreign_key_sql(&self, fk: &ForeignKeyConstraint, table_name: &str) -> String {
         let constraint_name = fk.name.as_ref().map_or_else(
-            || {
-                format!(
-                    "fk_{}_{}",
-                    table_name,
-                    fk.columns.join("_")
-                )
-            },
+            || format!("fk_{}_{}", table_name, fk.columns.join("_")),
             |name| name.clone(),
         );
 
@@ -134,15 +128,13 @@ impl PostgresDdlGenerator {
     }
 
     /// Generate unique constraint SQL
-    fn generate_unique_constraint_sql(&self, unique: &UniqueConstraint, table_name: &str) -> String {
+    fn generate_unique_constraint_sql(
+        &self,
+        unique: &UniqueConstraint,
+        table_name: &str,
+    ) -> String {
         let constraint_name = unique.name.as_ref().map_or_else(
-            || {
-                format!(
-                    "unique_{}_{}",
-                    table_name,
-                    unique.columns.join("_")
-                )
-            },
+            || format!("unique_{}_{}", table_name, unique.columns.join("_")),
             |name| name.clone(),
         );
 
@@ -158,10 +150,10 @@ impl PostgresDdlGenerator {
 
     /// Generate check constraint SQL
     fn generate_check_constraint_sql(&self, check: &CheckConstraint, table_name: &str) -> String {
-        let constraint_name = check.name.as_ref().map_or_else(
-            || format!("check_{}", table_name),
-            |name| name.clone(),
-        );
+        let constraint_name = check
+            .name
+            .as_ref()
+            .map_or_else(|| format!("check_{}", table_name), |name| name.clone());
 
         format!(
             "CONSTRAINT \"{}\" CHECK ({})",
@@ -319,7 +311,10 @@ impl DdlGenerator for PostgresDdlGenerator {
                         self.generate_column_sql(column)?
                     )
                 }
-                AlterColumnOperation::DropColumn { column_name, cascade } => {
+                AlterColumnOperation::DropColumn {
+                    column_name,
+                    cascade,
+                } => {
                     let cascade_clause = if *cascade { " CASCADE" } else { "" };
                     format!(
                         "ALTER TABLE {} DROP COLUMN \"{}\"{};",
@@ -332,7 +327,10 @@ impl DdlGenerator for PostgresDdlGenerator {
                         table_name, old_name, new_name
                     )
                 }
-                AlterColumnOperation::AlterType { column_name, new_type } => {
+                AlterColumnOperation::AlterType {
+                    column_name,
+                    new_type,
+                } => {
                     format!(
                         "ALTER TABLE {} ALTER COLUMN \"{}\" TYPE {};",
                         table_name,
@@ -340,14 +338,24 @@ impl DdlGenerator for PostgresDdlGenerator {
                         self.column_type_to_sql(new_type)
                     )
                 }
-                AlterColumnOperation::SetNotNull { column_name, not_null } => {
-                    let action = if *not_null { "SET NOT NULL" } else { "DROP NOT NULL" };
+                AlterColumnOperation::SetNotNull {
+                    column_name,
+                    not_null,
+                } => {
+                    let action = if *not_null {
+                        "SET NOT NULL"
+                    } else {
+                        "DROP NOT NULL"
+                    };
                     format!(
                         "ALTER TABLE {} ALTER COLUMN \"{}\" {};",
                         table_name, column_name, action
                     )
                 }
-                AlterColumnOperation::SetDefault { column_name, default } => {
+                AlterColumnOperation::SetDefault {
+                    column_name,
+                    default,
+                } => {
                     if let Some(default_value) = default {
                         format!(
                             "ALTER TABLE {} ALTER COLUMN \"{}\" SET DEFAULT {};",
@@ -510,7 +518,9 @@ mod tests {
         let result = generator.generate_alter_table(&alter).unwrap();
         assert!(result.sql[0].contains("ALTER TABLE"));
         assert!(result.sql[0].contains("ADD COLUMN"));
-        assert!(result.sql[0].contains("\"created_at\" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP"));
+        assert!(
+            result.sql[0].contains("\"created_at\" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP")
+        );
     }
 
     #[test]

@@ -47,7 +47,8 @@ fn type_text_with_caret(w: &AppWindow, text: &str, caret: usize) {
 fn tables_columns_accept_dismiss_and_strings() {
     i_slint_backend_testing::init_integration_test_with_system_time();
 
-    let dir = std::env::temp_dir().join(format!("dbhive-slint-autocomplete-{}", std::process::id()));
+    let dir =
+        std::env::temp_dir().join(format!("dbhive-slint-autocomplete-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     std::env::set_var(dbhive_core::storage::DATA_DIR_ENV, &dir);
@@ -121,7 +122,10 @@ fn tables_columns_accept_dismiss_and_strings() {
             }
             3 => {
                 if w.get_workspace_editor_text() != "SELECT * FROM customers" {
-                    return bail(format!("accepted text was {:?}", w.get_workspace_editor_text()));
+                    return bail(format!(
+                        "accepted text was {:?}",
+                        w.get_workspace_editor_text()
+                    ));
                 }
                 if !labels(&w).is_empty() {
                     return bail("the popup should close once a choice is applied".into());
@@ -159,7 +163,11 @@ fn tables_columns_accept_dismiss_and_strings() {
             }
             5 if !labels(&w).is_empty() => {
                 let l = labels(&w);
-                if l != vec!["id".to_string(), "total".to_string(), "customer_id".to_string()] {
+                if l != vec![
+                    "id".to_string(),
+                    "total".to_string(),
+                    "customer_id".to_string(),
+                ] {
                     return bail(format!("alias columns were {l:?}"));
                 }
                 // Nothing inside a string literal.
@@ -168,7 +176,10 @@ fn tables_columns_accept_dismiss_and_strings() {
             }
             6 => {
                 if !labels(&w).is_empty() {
-                    return bail(format!("no completion inside a string, got {:?}", labels(&w)));
+                    return bail(format!(
+                        "no completion inside a string, got {:?}",
+                        labels(&w)
+                    ));
                 }
                 // Open a popup again, then run: running closes it.
                 type_text(&w, "SELECT * FROM cu");

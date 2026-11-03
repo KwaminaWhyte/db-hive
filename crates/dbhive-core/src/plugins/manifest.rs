@@ -856,10 +856,7 @@ mod tests {
             permission_summary(&[PluginPermission::ReadFiles, PluginPermission::NetworkAccess]),
             "Read Files, Network Access"
         );
-        assert_eq!(
-            permission_summary(&[]),
-            "No special permissions required"
-        );
+        assert_eq!(permission_summary(&[]), "No special permissions required");
     }
 
     #[test]

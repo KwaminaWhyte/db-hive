@@ -185,10 +185,7 @@ pub fn catalog() -> Vec<MarketplacePlugin> {
                 category: PluginCategory::Export,
                 main: "index.js".into(),
                 plugin_type: PluginType::JavaScript,
-                permissions: vec![
-                    PluginPermission::ExecuteQuery,
-                    PluginPermission::WriteFiles,
-                ],
+                permissions: vec![PluginPermission::ExecuteQuery, PluginPermission::WriteFiles],
                 min_version: "0.13.0".into(),
                 max_version: None,
                 icon: Some("csv-icon.svg".into()),
@@ -344,9 +341,21 @@ mod tests {
         };
 
         assert_eq!(find("csv"), vec!["com.dbhive.csv-exporter"]);
-        assert_eq!(find("CSV"), vec!["com.dbhive.csv-exporter"], "case-insensitive");
-        assert_eq!(find("beautify"), vec!["com.dbhive.sql-formatter"], "keyword");
-        assert_eq!(find("accent colors"), vec!["com.dbhive.dark-theme-plus"], "description");
+        assert_eq!(
+            find("CSV"),
+            vec!["com.dbhive.csv-exporter"],
+            "case-insensitive"
+        );
+        assert_eq!(
+            find("beautify"),
+            vec!["com.dbhive.sql-formatter"],
+            "keyword"
+        );
+        assert_eq!(
+            find("accent colors"),
+            vec!["com.dbhive.dark-theme-plus"],
+            "description"
+        );
         assert!(find("no such plugin").is_empty());
         assert_eq!(find("   ").len(), 3, "a blank search filters nothing");
     }
@@ -381,35 +390,61 @@ mod tests {
     fn every_sort_order_matches_the_web_shell() {
         let all = catalog();
         let ids = |sort: SortOption| {
-            filter_and_sort(&all, &Filters { sort, ..Default::default() })
-                .into_iter()
-                .map(|p| p.manifest.name)
-                .collect::<Vec<_>>()
+            filter_and_sort(
+                &all,
+                &Filters {
+                    sort,
+                    ..Default::default()
+                },
+            )
+            .into_iter()
+            .map(|p| p.manifest.name)
+            .collect::<Vec<_>>()
         };
 
         // stars: 890, 567, 342
         assert_eq!(
             ids(SortOption::Popular),
-            vec!["SQL Formatter Pro", "Dark Theme Plus", "Advanced CSV Exporter"]
+            vec![
+                "SQL Formatter Pro",
+                "Dark Theme Plus",
+                "Advanced CSV Exporter"
+            ]
         );
         // downloads: 45678, 28456, 15234
         assert_eq!(
             ids(SortOption::Downloads),
-            vec!["SQL Formatter Pro", "Dark Theme Plus", "Advanced CSV Exporter"]
+            vec![
+                "SQL Formatter Pro",
+                "Dark Theme Plus",
+                "Advanced CSV Exporter"
+            ]
         );
         // rating: 4.9, 4.8, 4.7
         assert_eq!(
             ids(SortOption::Rating),
-            vec!["Dark Theme Plus", "Advanced CSV Exporter", "SQL Formatter Pro"]
+            vec![
+                "Dark Theme Plus",
+                "Advanced CSV Exporter",
+                "SQL Formatter Pro"
+            ]
         );
         // updatedAt: Nov 22, Nov 20, Nov 15
         assert_eq!(
             ids(SortOption::Recent),
-            vec!["SQL Formatter Pro", "Advanced CSV Exporter", "Dark Theme Plus"]
+            vec![
+                "SQL Formatter Pro",
+                "Advanced CSV Exporter",
+                "Dark Theme Plus"
+            ]
         );
         assert_eq!(
             ids(SortOption::Name),
-            vec!["Advanced CSV Exporter", "Dark Theme Plus", "SQL Formatter Pro"]
+            vec![
+                "Advanced CSV Exporter",
+                "Dark Theme Plus",
+                "SQL Formatter Pro"
+            ]
         );
     }
 

@@ -62,10 +62,9 @@ impl Stub {
 
     /// The newest chat request whose system prompt contains `marker`.
     fn last_chat(&self, marker: &str) -> Option<Seen> {
-        self.seen()
-            .into_iter()
-            .rev()
-            .find(|s| s.path.ends_with("/chat/completions") && system_prompt(&s.body).contains(marker))
+        self.seen().into_iter().rev().find(|s| {
+            s.path.ends_with("/chat/completions") && system_prompt(&s.body).contains(marker)
+        })
     }
 }
 
@@ -135,12 +134,22 @@ fn handle(mut stream: TcpStream, seen: Arc<Mutex<Vec<Seen>>>, fail_chat: Arc<Ato
         }
         buf.extend_from_slice(&tmp[..n]);
     }
-    let body = String::from_utf8_lossy(&buf[header_end..(header_end + length).min(buf.len())]).to_string();
-    seen.lock().unwrap().push(Seen { method: method.clone(), path: path.clone(), auth: auth.clone(), body: body.clone() });
+    let body =
+        String::from_utf8_lossy(&buf[header_end..(header_end + length).min(buf.len())]).to_string();
+    seen.lock().unwrap().push(Seen {
+        method: method.clone(),
+        path: path.clone(),
+        auth: auth.clone(),
+        body: body.clone(),
+    });
 
     let authorised = auth == format!("Bearer {KEY}");
     if !authorised {
-        respond(&mut stream, "401 Unauthorized", r#"{"error":{"message":"Incorrect API key provided"}}"#);
+        respond(
+            &mut stream,
+            "401 Unauthorized",
+            r#"{"error":{"message":"Incorrect API key provided"}}"#,
+        );
         return;
     }
     if method == "GET" && path.ends_with("/models") {
@@ -154,7 +163,11 @@ fn handle(mut stream: TcpStream, seen: Arc<Mutex<Vec<Seen>>>, fail_chat: Arc<Ato
     }
     if method == "POST" && path.ends_with("/chat/completions") {
         if fail_chat.swap(false, Ordering::SeqCst) {
-            respond(&mut stream, "500 Internal Server Error", r#"{"error":{"message":"boom: upstream exploded"}}"#);
+            respond(
+                &mut stream,
+                "500 Internal Server Error",
+                r#"{"error":{"message":"boom: upstream exploded"}}"#,
+            );
             return;
         }
         let system = system_prompt(&body);
@@ -172,7 +185,11 @@ fn handle(mut stream: TcpStream, seen: Arc<Mutex<Vec<Seen>>>, fail_chat: Arc<Ato
         respond(&mut stream, "200 OK", &chat_reply(content));
         return;
     }
-    respond(&mut stream, "404 Not Found", r#"{"error":{"message":"no such route"}}"#);
+    respond(
+        &mut stream,
+        "404 Not Found",
+        r#"{"error":{"message":"no such route"}}"#,
+    );
 }
 
 fn start_stub() -> Stub {
@@ -188,7 +205,11 @@ fn start_stub() -> Stub {
             std::thread::spawn(move || handle(stream, s, f));
         }
     });
-    Stub { base: format!("http://127.0.0.1:{port}/v1"), seen, fail_chat }
+    Stub {
+        base: format!("http://127.0.0.1:{port}/v1"),
+        seen,
+        fail_chat,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -224,8 +245,16 @@ fn configure_ask_apply_and_fix_against_a_stub_provider() {
     let db = dir.join("widgets.sqlite");
     {
         let conn = rusqlite::Connection::open(&db).unwrap();
-        conn.execute("CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)", []).unwrap();
-        conn.execute("INSERT INTO widgets (name) VALUES ('sprocket'), ('gizmo')", []).unwrap();
+        conn.execute(
+            "CREATE TABLE widgets (id INTEGER PRIMARY KEY, name TEXT)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO widgets (name) VALUES ('sprocket'), ('gizmo')",
+            [],
+        )
+        .unwrap();
     }
     {
         let mut profile = ConnectionProfile::new(
@@ -261,8 +290,14 @@ fn configure_ask_apply_and_fix_against_a_stub_provider() {
     let started = Instant::now();
     let timer = Timer::default();
 
-    let (weak, fail, step2, stub2, store2, dir2) =
-        (w.as_weak(), failure.clone(), step.clone(), Rc::new(stub), store.clone(), dir.clone());
+    let (weak, fail, step2, stub2, store2, dir2) = (
+        w.as_weak(),
+        failure.clone(),
+        step.clone(),
+        Rc::new(stub),
+        store.clone(),
+        dir.clone(),
+    );
     let dir_text = dir.to_string_lossy().to_string();
 
     timer.start(TimerMode::Repeated, Duration::from_millis(20), move || {
@@ -678,5 +713,8 @@ fn configure_ask_apply_and_fix_against_a_stub_provider() {
     }
     assert_eq!(step.get(), 99, "the scenario did not run to its end");
     assert!(leaked.is_empty(), "the API key was written to {leaked:?}");
-    assert!(ai_json.contains("openai"), "ai.json should hold the non-secret settings");
+    assert!(
+        ai_json.contains("openai"),
+        "ai.json should hold the non-secret settings"
+    );
 }

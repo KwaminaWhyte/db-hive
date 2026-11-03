@@ -8,7 +8,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use super::provider::{AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage};
+use super::provider::{
+    AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage,
+};
 
 /// Anthropic API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -219,7 +221,9 @@ impl AiProvider for AnthropicProvider {
             temperature,
         };
 
-        let response = self.client.post(&url)
+        let response = self
+            .client
+            .post(&url)
             .header("x-api-key", &self.config.api_key)
             .header("anthropic-version", "2023-06-01")
             .header("Content-Type", "application/json")
@@ -229,8 +233,8 @@ impl AiProvider for AnthropicProvider {
             .map_err(|e| format!("Failed to send request: {}", e))?;
 
         if !response.status().is_success() {
-            let error: AnthropicErrorResponse = response.json().await
-                .unwrap_or(AnthropicErrorResponse {
+            let error: AnthropicErrorResponse =
+                response.json().await.unwrap_or(AnthropicErrorResponse {
                     error: AnthropicError {
                         message: "Unknown error".to_string(),
                         error_type: "unknown".to_string(),
@@ -245,7 +249,8 @@ impl AiProvider for AnthropicProvider {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         // Extract text content
-        let content = api_response.content
+        let content = api_response
+            .content
             .iter()
             .filter(|c| c.content_type == "text")
             .filter_map(|c| c.text.clone())

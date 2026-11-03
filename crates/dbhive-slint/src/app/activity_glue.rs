@@ -129,7 +129,10 @@ impl Default for MonitorSession {
 
 fn strings(items: impl IntoIterator<Item = String>) -> ModelRc<SharedString> {
     ModelRc::new(VecModel::from(
-        items.into_iter().map(SharedString::from).collect::<Vec<_>>(),
+        items
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
     ))
 }
 
@@ -146,7 +149,9 @@ impl Ctx {
     // -- Projection ---------------------------------------------------------
 
     pub(super) fn refresh_activity_panel(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let a = w.global::<ActivityState>();
         let on_workspace = w.get_screen() == Screen::Workspace;
 
@@ -186,7 +191,9 @@ impl Ctx {
                 .and_then(|d| m.databases.iter().position(|x| x == d))
                 .map_or(0, |i| i as i32 + 1),
         );
-        a.set_filter_ranges(strings(mon::TimeRange::ALL.iter().map(|r| r.label().to_string())));
+        a.set_filter_ranges(strings(
+            mon::TimeRange::ALL.iter().map(|r| r.label().to_string()),
+        ));
         a.set_filter_range(
             mon::TimeRange::ALL
                 .iter()
@@ -276,7 +283,11 @@ impl Ctx {
             .into(),
         );
         a.set_server_connections(strings(open.iter().map(|p| {
-            format!("{} ({})", p.name, crate::connection_list::driver_label(&p.driver))
+            format!(
+                "{} ({})",
+                p.name,
+                crate::connection_list::driver_label(&p.driver)
+            )
         })));
         a.set_server_connection(
             m.live_connection
@@ -287,8 +298,12 @@ impl Ctx {
         a.set_span_options(strings(CHART_SPANS.iter().map(|(_, l)| l.to_string())));
         a.set_span_index(m.span_index as i32);
 
-        let window = m.series.window(CHART_SPANS[m.span_index].0.map(|s| s * 1_000));
-        let rate = (m.series.len() >= 2).then(|| m.series.latest().map(|s| s.tx_per_sec)).flatten();
+        let window = m
+            .series
+            .window(CHART_SPANS[m.span_index].0.map(|s| s * 1_000));
+        let rate = (m.series.len() >= 2)
+            .then(|| m.series.latest().map(|s| s.tx_per_sec))
+            .flatten();
         a.set_live_tiles(view::tiles(&live_tiles(m.latest.as_ref(), rate)));
         a.set_sessions_chart(view::chart(sessions_chart(window).as_ref()));
         a.set_tx_chart(view::chart(transactions_chart(window).as_ref()));
@@ -301,7 +316,8 @@ impl Ctx {
             .into(),
         );
 
-        let (pcols, prows, pwidth) = view::grid(&process_grid(&m.processes), &PROCESS_COLUMN_WIDTHS);
+        let (pcols, prows, pwidth) =
+            view::grid(&process_grid(&m.processes), &PROCESS_COLUMN_WIDTHS);
         a.set_process_columns(pcols);
         a.set_process_rows(prows);
         a.set_process_width(pwidth);
@@ -360,7 +376,10 @@ impl Ctx {
         m.databases = databases;
         m.overall = overall;
         // The selection is an id; a page that no longer holds it drops it.
-        if m.selected_log.as_ref().is_some_and(|id| !m.logs.iter().any(|l| &l.id == id)) {
+        if m.selected_log
+            .as_ref()
+            .is_some_and(|id| !m.logs.iter().any(|l| &l.id == id))
+        {
             m.selected_log = None;
         }
     }
@@ -386,7 +405,10 @@ impl Ctx {
         let open = self.monitor_open_profiles();
         let mut s = self.session.borrow_mut();
         let current = s.monitor.live_connection.clone();
-        if current.as_ref().is_some_and(|id| open.iter().any(|p| &p.id == id)) {
+        if current
+            .as_ref()
+            .is_some_and(|id| open.iter().any(|p| &p.id == id))
+        {
             return current;
         }
         let workspace = s.workspace.connection_id.clone();
@@ -429,7 +451,9 @@ impl Ctx {
     // -- Open and close -------------------------------------------------------
 
     pub(super) fn open_activity_monitor(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         {
             let mut s = self.session.borrow_mut();
             s.monitor.gate.set_visible(true);
@@ -457,13 +481,11 @@ impl Ctx {
     fn monitor_start_timer(self: &Rc<Self>) {
         // One tick a second is plenty for a 5 second minimum interval, and a
         // tick that finds the gate shut costs nothing.
-        self.session
-            .borrow()
-            .monitor
-            .timer
-            .start(TimerMode::Repeated, Duration::from_secs(1), || {
-                with_ctx(|ctx| ctx.monitor_tick())
-            });
+        self.session.borrow().monitor.timer.start(
+            TimerMode::Repeated,
+            Duration::from_secs(1),
+            || with_ctx(|ctx| ctx.monitor_tick()),
+        );
     }
 
     // -- Polling --------------------------------------------------------------
@@ -480,12 +502,12 @@ impl Ctx {
         };
         let live = self.monitor_live_target();
         let requests = if live.is_some() { 2 } else { 1 };
-        let started = self
-            .session
-            .borrow_mut()
-            .monitor
-            .gate
-            .try_begin(interval, requests, Instant::now());
+        let started =
+            self.session
+                .borrow_mut()
+                .monitor
+                .gate
+                .try_begin(interval, requests, Instant::now());
         if started {
             self.monitor_reload_logs();
             self.monitor_run_poll(live);
@@ -533,7 +555,11 @@ impl Ctx {
         );
     }
 
-    fn monitor_stats_done(&self, ticket: &runtime::Ticket, result: Result<mon::ServerStats, DbError>) {
+    fn monitor_stats_done(
+        &self,
+        ticket: &runtime::Ticket,
+        result: Result<mon::ServerStats, DbError>,
+    ) {
         if !ticket.is_current() {
             return;
         }
@@ -651,7 +677,11 @@ impl Ctx {
         {
             let mut s = self.session.borrow_mut();
             let m = &mut s.monitor;
-            m.page = if forward { m.page + 1 } else { m.page.saturating_sub(1) };
+            m.page = if forward {
+                m.page + 1
+            } else {
+                m.page.saturating_sub(1)
+            };
             m.selected_log = None;
         }
         self.monitor_reload_logs();
@@ -661,7 +691,11 @@ impl Ctx {
     fn monitor_selected_sql(&self) -> Option<String> {
         let s = self.session.borrow();
         let id = s.monitor.selected_log.as_ref()?;
-        s.monitor.logs.iter().find(|l| &l.id == id).map(|l| l.sql.clone())
+        s.monitor
+            .logs
+            .iter()
+            .find(|l| &l.id == id)
+            .map(|l| l.sql.clone())
     }
 
     fn monitor_reset_filters(&self) {
@@ -681,7 +715,8 @@ impl Ctx {
         let path = match dbhive_core::storage::app_data_dir() {
             Ok(dir) => dir.join(export_file_name(format, Local::now())),
             Err(e) => {
-                self.session.borrow_mut().monitor.error = format!("Could not choose an export path: {e}");
+                self.session.borrow_mut().monitor.error =
+                    format!("Could not choose an export path: {e}");
                 self.refresh_activity_panel();
                 return;
             }
@@ -724,7 +759,11 @@ impl Ctx {
     fn monitor_clear_asked(&self) {
         let count = self.session.borrow().monitor.overall;
         self.session.borrow_mut().pending_action = Some(PendingAction::ClearActivityLog);
-        self.show_confirm("Clear the activity log?", &clear_logs_message(count), "Clear log");
+        self.show_confirm(
+            "Clear the activity log?",
+            &clear_logs_message(count),
+            "Clear log",
+        );
     }
 
     pub(super) fn monitor_clear_confirmed(self: &Rc<Self>) {
@@ -737,7 +776,11 @@ impl Ctx {
         self.monitor_reload_logs();
         self.refresh_activity_panel();
         self.toast(
-            format!("Cleared {} {}", removed, if removed == 1 { "query" } else { "queries" }),
+            format!(
+                "Cleared {} {}",
+                removed,
+                if removed == 1 { "query" } else { "queries" }
+            ),
             Tone::Success,
         );
     }
@@ -747,7 +790,10 @@ impl Ctx {
             let s = self.session.borrow();
             s.monitor.process_selected.and_then(|pid| {
                 s.monitor.processes.iter().find(|p| p.pid == pid).map(|p| {
-                    (pid, kill_message(pid, p.user.as_deref(), p.query_text.as_deref()))
+                    (
+                        pid,
+                        kill_message(pid, p.user.as_deref(), p.query_text.as_deref()),
+                    )
                 })
             })
         };
@@ -769,8 +815,13 @@ impl Ctx {
                 with_ctx(|ctx| {
                     ctx.session.borrow_mut().monitor.kill_busy = false;
                     match result {
-                        Ok(()) => ctx.toast(format!("Cancel signal sent to process {pid}"), Tone::Success),
-                        Err(e) => ctx.toast(format!("Could not cancel process {pid}: {e}"), Tone::Danger),
+                        Ok(()) => ctx.toast(
+                            format!("Cancel signal sent to process {pid}"),
+                            Tone::Success,
+                        ),
+                        Err(e) => {
+                            ctx.toast(format!("Could not cancel process {pid}: {e}"), Tone::Danger)
+                        }
                     }
                     // Show the effect without waiting for the next tick.
                     ctx.monitor_poll_live();
@@ -781,7 +832,9 @@ impl Ctx {
 
     fn monitor_pick_connection(self: &Rc<Self>, index: i32) {
         let open = self.monitor_open_profiles();
-        let Some(profile) = usize::try_from(index).ok().and_then(|i| open.get(i)) else { return };
+        let Some(profile) = usize::try_from(index).ok().and_then(|i| open.get(i)) else {
+            return;
+        };
         {
             let mut s = self.session.borrow_mut();
             if s.monitor.live_connection.as_ref() == Some(&profile.id) {
@@ -825,7 +878,8 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         c.refresh_activity_panel();
     });
     on!(on_interval_selected, |c, i| {
-        c.session.borrow_mut().monitor.interval_index = (i.max(0) as usize).min(REFRESH_SECONDS.len() - 1);
+        c.session.borrow_mut().monitor.interval_index =
+            (i.max(0) as usize).min(REFRESH_SECONDS.len() - 1);
         c.refresh_activity_panel();
     });
 
@@ -861,7 +915,10 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         let (min, max) = match c.window.upgrade() {
             Some(w) => {
                 let a = w.global::<ActivityState>();
-                (a.get_min_duration().to_string(), a.get_max_duration().to_string())
+                (
+                    a.get_min_duration().to_string(),
+                    a.get_max_duration().to_string(),
+                )
             }
             None => return,
         };
@@ -885,8 +942,10 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         })
     });
     on!(on_filters_reset, |c| c.monitor_reset_filters());
-    on!(on_sort_clicked, |c, col| c.monitor_sort_clicked(col.max(0) as usize));
-    on!(on_row_clicked, |c, r| c.monitor_row_clicked(r.max(0) as usize));
+    on!(on_sort_clicked, |c, col| c
+        .monitor_sort_clicked(col.max(0) as usize));
+    on!(on_row_clicked, |c, r| c
+        .monitor_row_clicked(r.max(0) as usize));
     on!(on_prev_page, |c| c.monitor_go_page(false));
     on!(on_next_page, |c| c.monitor_go_page(true));
     on!(on_page_size_picked, |c, i| {
@@ -923,7 +982,8 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         c.refresh_activity_panel();
     });
 
-    on!(on_server_connection_picked, |c, i| c.monitor_pick_connection(i));
+    on!(on_server_connection_picked, |c, i| c
+        .monitor_pick_connection(i));
     on!(on_span_picked, |c, i| {
         c.session.borrow_mut().monitor.span_index = (i.max(0) as usize).min(CHART_SPANS.len() - 1);
         c.refresh_activity_panel();

@@ -2,7 +2,9 @@
 //! string, and optionally dial it. Not part of the app; delete after use.
 
 use dbhive_core::models::DbDriver;
-use dbhive_ui_model::connection_editor::{apply_connection_string, parse_connection_string, ConnectionForm};
+use dbhive_ui_model::connection_editor::{
+    apply_connection_string, parse_connection_string, ConnectionForm,
+};
 
 #[tokio::main]
 async fn main() {
@@ -13,7 +15,10 @@ async fn main() {
 
     let mut form = ConnectionForm::new_for(DbDriver::Postgres);
     let password = apply_connection_string(&mut form, &parsed);
-    println!("host={} port={} username={} database={:?}", form.host, form.port, form.username, form.database);
+    println!(
+        "host={} port={} username={} database={:?}",
+        form.host, form.port, form.username, form.database
+    );
     println!("password captured: {}", password.is_some());
 
     let opts = dbhive_core::drivers::ConnectionOptions {
@@ -21,7 +26,11 @@ async fn main() {
         port: form.port.parse().unwrap_or(5432),
         username: form.username.clone(),
         password: password.clone(),
-        database: if form.database.is_empty() { None } else { Some(form.database.clone()) },
+        database: if form.database.is_empty() {
+            None
+        } else {
+            Some(form.database.clone())
+        },
         timeout: None,
         require_tls: false,
     };

@@ -98,56 +98,51 @@ fn outcome_tone(o: Outcome) -> Tone {
 /// Everything the panel shows, from the session. The text fields the user
 /// types into are left alone: they are set when a session starts or a
 /// suggestion is applied, never here.
-pub fn project(
-    g: &ImportExportState,
-    d: &DataSession,
-    location: &str,
-    driver: Option<&DbDriver>,
-) {
+pub fn project(g: &ImportExportState, d: &DataSession, location: &str, driver: Option<&DbDriver>) {
     let wz = &d.wizard;
     g.set_location(location.into());
-        g.set_tab(d.tab);
-        g.set_tab_labels(strings(&forms::tab_labels()));
-        g.set_tables(strings(&wz.tables));
-        g.set_tables_loading(d.tables_loading);
-        g.set_tables_error(d.tables_error.clone().into());
+    g.set_tab(d.tab);
+    g.set_tab_labels(strings(&forms::tab_labels()));
+    g.set_tables(strings(&wz.tables));
+    g.set_tables_loading(d.tables_loading);
+    g.set_tables_error(d.tables_error.clone().into());
 
-        // -- Import wizard
-        g.set_step(wz.step.index() as i32);
-        g.set_reachable_step(wz.step.index() as i32);
-        g.set_busy(!d.busy.is_empty());
-        g.set_busy_text(d.busy.clone().into());
-        g.set_import_path_error(d.import_path_error.clone().into());
-        g.set_import_header(wz.options.first_row_is_header);
-        g.set_delimiter_index(wz.delimiter_index());
-        g.set_spreadsheet(wz.is_spreadsheet());
-        g.set_sheet_options(strings(&wz.sheet_names()));
-        g.set_sheet_index(wz.sheet_index());
-        g.set_preview_summary(
-            wz.preview
-                .as_ref()
-                .map(dbhive_ui_model::import_export::preview_summary)
-                .unwrap_or_default()
-                .into(),
-        );
-        g.set_table_value(
-            if wz.options.table_name.is_empty() {
-                "Choose a table".to_string()
-            } else if wz.is_new_table() {
-                format!("{} (new)", wz.options.table_name)
-            } else {
-                wz.options.table_name.clone()
-            }
+    // -- Import wizard
+    g.set_step(wz.step.index() as i32);
+    g.set_reachable_step(wz.step.index() as i32);
+    g.set_busy(!d.busy.is_empty());
+    g.set_busy_text(d.busy.clone().into());
+    g.set_import_path_error(d.import_path_error.clone().into());
+    g.set_import_header(wz.options.first_row_is_header);
+    g.set_delimiter_index(wz.delimiter_index());
+    g.set_spreadsheet(wz.is_spreadsheet());
+    g.set_sheet_options(strings(&wz.sheet_names()));
+    g.set_sheet_index(wz.sheet_index());
+    g.set_preview_summary(
+        wz.preview
+            .as_ref()
+            .map(dbhive_ui_model::import_export::preview_summary)
+            .unwrap_or_default()
             .into(),
-        );
-        g.set_mapping(mapping_rows(wz));
-        g.set_target_choices(strings(&wz.target_choices()));
-        g.set_mapping_summary(wz.mapping_summary().into());
-        g.set_mapping_hint(wz.mapping_hint().into());
-        g.set_mapping_ready(wz.mapping_ready());
-        g.set_loading_columns(d.columns_loading);
-        g.set_truncate(wz.options.truncate_before);
-        g.set_options_note(
+    );
+    g.set_table_value(
+        if wz.options.table_name.is_empty() {
+            "Choose a table".to_string()
+        } else if wz.is_new_table() {
+            format!("{} (new)", wz.options.table_name)
+        } else {
+            wz.options.table_name.clone()
+        }
+        .into(),
+    );
+    g.set_mapping(mapping_rows(wz));
+    g.set_target_choices(strings(&wz.target_choices()));
+    g.set_mapping_summary(wz.mapping_summary().into());
+    g.set_mapping_hint(wz.mapping_hint().into());
+    g.set_mapping_ready(wz.mapping_ready());
+    g.set_loading_columns(d.columns_loading);
+    g.set_truncate(wz.options.truncate_before);
+    g.set_options_note(
             if wz.is_new_table() {
                 format!(
                     "\"{}\" does not exist yet. The import creates it from the file's columns, then writes the rows.",
@@ -158,106 +153,119 @@ pub fn project(
             }
             .into(),
         );
-        g.set_import_error(wz.error.clone().into());
+    g.set_import_error(wz.error.clone().into());
 
-        match &wz.plan {
-            Some(p) => {
-                g.set_plan_target(p.target.clone().into());
-                g.set_plan_columns(p.target_columns.join(", ").into());
-                g.set_plan_rows(format!("{} in {} statement(s)", p.row_count, p.batch_count).into());
-                g.set_plan_skipped(p.skipped_columns.join(", ").into());
-                g.set_plan_source(wz.file_path.trim().to_string().into());
-                g.set_plan_create(p.create_statement.clone().unwrap_or_default().into());
-                g.set_plan_truncate(p.truncate_statement.clone().unwrap_or_default().into());
-                g.set_plan_samples_label(
-                    format!(
-                        "First {} of {} statement(s), verbatim:",
-                        p.sample_statements.len(),
-                        p.batch_count
-                    )
+    match &wz.plan {
+        Some(p) => {
+            g.set_plan_target(p.target.clone().into());
+            g.set_plan_columns(p.target_columns.join(", ").into());
+            g.set_plan_rows(format!("{} in {} statement(s)", p.row_count, p.batch_count).into());
+            g.set_plan_skipped(p.skipped_columns.join(", ").into());
+            g.set_plan_source(wz.file_path.trim().to_string().into());
+            g.set_plan_create(p.create_statement.clone().unwrap_or_default().into());
+            g.set_plan_truncate(p.truncate_statement.clone().unwrap_or_default().into());
+            g.set_plan_samples_label(
+                format!(
+                    "First {} of {} statement(s), verbatim:",
+                    p.sample_statements.len(),
+                    p.batch_count
+                )
+                .into(),
+            );
+            g.set_plan_samples(strings(
+                &p.sample_statements
+                    .iter()
+                    .map(|s| truncate_middle(s, 600))
+                    .collect::<Vec<_>>(),
+            ));
+        }
+        None => {
+            g.set_plan_target("".into());
+            g.set_plan_columns("".into());
+            g.set_plan_rows("".into());
+            g.set_plan_skipped("".into());
+            g.set_plan_source("".into());
+            g.set_plan_create("".into());
+            g.set_plan_truncate("".into());
+            g.set_plan_samples(strings(&[]));
+        }
+    }
+    g.set_needs_typed(wz.needs_typed_confirmation());
+    g.set_confirm_prompt(
+        format!(
+            "Type {} to confirm deleting its existing rows.",
+            wz.options.table_name
+        )
+        .into(),
+    );
+    g.set_can_import(wz.can_import());
+    g.set_import_label(wz.import_button_label().into());
+    g.set_running_text(
+        wz.plan
+            .as_ref()
+            .map(|p| format!("Writing {} rows to {}", p.row_count, p.target))
+            .unwrap_or_default()
+            .into(),
+    );
+    if let Some(r) = &wz.result {
+        let list = error_list(r);
+        g.set_result_tone(tone(result_tone(r)));
+        g.set_result_summary(import_summary(r).into());
+        g.set_result_errors(strings(&list.lines));
+        g.set_result_more(list.more.into());
+    }
+
+    // -- Run a SQL file
+    g.set_sql_path_error(d.sql_path_error.clone().into());
+    g.set_sql_transaction(d.sql.use_transaction);
+    g.set_sql_continue(d.sql.continue_on_error);
+    g.set_sql_note(d.sql.option_note().into());
+    g.set_sql_running(d.sql_running);
+    g.set_sql_error(d.sql_error.clone().into());
+    match &d.sql_result {
+        Some(r) => {
+            g.set_sql_has_result(true);
+            g.set_sql_result_tone(outcome_tone(sql_import_outcome(r)));
+            g.set_sql_result_summary(sql_import_summary(r).into());
+            g.set_sql_result_detail(
+                r.first_error
+                    .as_deref()
+                    .map(|e| truncate_middle(e, 400))
+                    .unwrap_or_default()
                     .into(),
-                );
-                g.set_plan_samples(strings(
-                    &p.sample_statements.iter().map(|s| truncate_middle(s, 600)).collect::<Vec<_>>(),
-                ));
-            }
-            None => {
-                g.set_plan_target("".into());
-                g.set_plan_columns("".into());
-                g.set_plan_rows("".into());
-                g.set_plan_skipped("".into());
-                g.set_plan_source("".into());
-                g.set_plan_create("".into());
-                g.set_plan_truncate("".into());
-                g.set_plan_samples(strings(&[]));
-            }
+            );
+            g.set_sql_log_file(r.log_file.clone().unwrap_or_default().into());
         }
-        g.set_needs_typed(wz.needs_typed_confirmation());
-        g.set_confirm_prompt(
-            format!("Type {} to confirm deleting its existing rows.", wz.options.table_name).into(),
-        );
-        g.set_can_import(wz.can_import());
-        g.set_import_label(wz.import_button_label().into());
-        g.set_running_text(
-            wz.plan
-                .as_ref()
-                .map(|p| format!("Writing {} rows to {}", p.row_count, p.target))
-                .unwrap_or_default()
-                .into(),
-        );
-        if let Some(r) = &wz.result {
-            let list = error_list(r);
-            g.set_result_tone(tone(result_tone(r)));
-            g.set_result_summary(import_summary(r).into());
-            g.set_result_errors(strings(&list.lines));
-            g.set_result_more(list.more.into());
+        None => g.set_sql_has_result(false),
+    }
+
+    // -- Export a table
+    g.set_export_table_value(
+        if d.export.table.is_empty() {
+            "Choose a table".to_string()
+        } else {
+            d.export.table.clone()
         }
+        .into(),
+    );
+    g.set_export_format_options(strings(&forms::table_format_labels()));
+    g.set_export_format_index(d.export.format as i32);
+    g.set_export_is_csv(d.export.is_csv());
+    g.set_export_delimiter_index(d.export.delimiter as i32);
+    g.set_export_headers(d.export.include_headers);
+    g.set_export_error(d.export_error.clone().into());
+    g.set_export_running(d.export_running);
+    g.set_export_result(d.export_result.clone().into());
 
-        // -- Run a SQL file
-        g.set_sql_path_error(d.sql_path_error.clone().into());
-        g.set_sql_transaction(d.sql.use_transaction);
-        g.set_sql_continue(d.sql.continue_on_error);
-        g.set_sql_note(d.sql.option_note().into());
-        g.set_sql_running(d.sql_running);
-        g.set_sql_error(d.sql_error.clone().into());
-        match &d.sql_result {
-            Some(r) => {
-                g.set_sql_has_result(true);
-                g.set_sql_result_tone(outcome_tone(sql_import_outcome(r)));
-                g.set_sql_result_summary(sql_import_summary(r).into());
-                g.set_sql_result_detail(
-                    r.first_error.as_deref().map(|e| truncate_middle(e, 400)).unwrap_or_default().into(),
-                );
-                g.set_sql_log_file(r.log_file.clone().unwrap_or_default().into());
-            }
-            None => g.set_sql_has_result(false),
-        }
-
-        // -- Export a table
-        g.set_export_table_value(
-            if d.export.table.is_empty() { "Choose a table".to_string() } else { d.export.table.clone() }
-                .into(),
-        );
-        g.set_export_format_options(strings(&forms::table_format_labels()));
-        g.set_export_format_index(d.export.format as i32);
-        g.set_export_is_csv(d.export.is_csv());
-        g.set_export_delimiter_index(d.export.delimiter as i32);
-        g.set_export_headers(d.export.include_headers);
-        g.set_export_error(d.export_error.clone().into());
-        g.set_export_running(d.export_running);
-        g.set_export_result(d.export_result.clone().into());
-
-        // -- SQL dump
-        g.set_dump_drop(d.dump.include_drop);
-        g.set_dump_create(d.dump.include_create);
-        g.set_dump_data(d.dump.include_data);
-        g.set_dump_scope(d.dump.scope_summary().into());
-        g.set_dump_note(
-            driver.map(forms::dump_note).unwrap_or_default().into(),
-        );
-        g.set_dump_error(d.dump_error.clone().into());
-        g.set_dump_running(d.dump_running);
-        g.set_dump_result(d.dump_result.clone().into());
+    // -- SQL dump
+    g.set_dump_drop(d.dump.include_drop);
+    g.set_dump_create(d.dump.include_create);
+    g.set_dump_data(d.dump.include_data);
+    g.set_dump_scope(d.dump.scope_summary().into());
+    g.set_dump_note(driver.map(forms::dump_note).unwrap_or_default().into());
+    g.set_dump_error(d.dump_error.clone().into());
+    g.set_dump_running(d.dump_running);
+    g.set_dump_result(d.dump_result.clone().into());
 }
 
 pub fn tone(t: ResultTone) -> Tone {
@@ -282,7 +290,8 @@ pub fn column_widths(titles: &[String], rows: &[Vec<String>]) -> Vec<f32> {
                 .map(|c| c.chars().count())
                 .max()
                 .unwrap_or(0);
-            let width = (cells as f32 * CHAR_WIDTH).max(title.chars().count() as f32 * HEADER_CHAR_WIDTH);
+            let width =
+                (cells as f32 * CHAR_WIDTH).max(title.chars().count() as f32 * HEADER_CHAR_WIDTH);
             (width + 28.0).clamp(MIN_COLUMN, MAX_COLUMN)
         })
         .collect()
@@ -329,7 +338,11 @@ fn mapping_row(m: &ColumnMapping, sample: &str) -> MappingRow {
         source: m.source_column.as_str().into(),
         sample: sample.into(),
         target: m.target_column.as_str().into(),
-        type_label: m.target_type.clone().unwrap_or_else(|| "TEXT".to_string()).into(),
+        type_label: m
+            .target_type
+            .clone()
+            .unwrap_or_else(|| "TEXT".to_string())
+            .into(),
         default_value: m.default_value.clone().unwrap_or_default().into(),
         skip: m.skip || m.target_column.trim().is_empty(),
     }
@@ -344,7 +357,10 @@ pub fn mapping_rows(w: &ImportWizard) -> ModelRc<MappingRow> {
         .iter()
         .enumerate()
         .map(|(i, m)| {
-            let sample = first.and_then(|r| r.get(i)).map(String::as_str).unwrap_or("");
+            let sample = first
+                .and_then(|r| r.get(i))
+                .map(String::as_str)
+                .unwrap_or("");
             mapping_row(m, sample)
         })
         .collect();
@@ -372,7 +388,11 @@ mod tests {
 
     fn preview() -> ImportPreview {
         ImportPreview {
-            columns: vec!["id".into(), "a_rather_long_column_title_here".into(), "n".into()],
+            columns: vec![
+                "id".into(),
+                "a_rather_long_column_title_here".into(),
+                "n".into(),
+            ],
             rows: vec![
                 vec!["1".into(), "x".into(), "y".into()],
                 vec!["2".into(), "z".into()],
@@ -388,7 +408,10 @@ mod tests {
     fn widths_follow_content_within_bounds() {
         let p = preview();
         let w = column_widths(&p.columns, &p.rows);
-        assert_eq!(w[0], MIN_COLUMN, "short columns do not shrink below the minimum");
+        assert_eq!(
+            w[0], MIN_COLUMN,
+            "short columns do not shrink below the minimum"
+        );
         assert!(w[1] > w[0] && w[1] <= MAX_COLUMN);
         let huge = vec![vec!["x".repeat(500)]];
         assert_eq!(column_widths(&["c".to_string()], &huge)[0], MAX_COLUMN);
@@ -422,7 +445,10 @@ mod tests {
         assert_eq!(location_label("Shop", "public"), "Shop · public");
         assert_eq!(location_label("Shop", "Shop"), "Shop");
         assert_eq!(location_label("Shop", ""), "Shop");
-        assert_eq!(location_label("Local", "/Users/me/data/shop.sqlite"), "Local · shop.sqlite");
+        assert_eq!(
+            location_label("Local", "/Users/me/data/shop.sqlite"),
+            "Local · shop.sqlite"
+        );
     }
 
     #[test]

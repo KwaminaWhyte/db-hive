@@ -58,7 +58,10 @@ impl Ctx {
     fn migration_profiles(&self) -> Vec<ConnectionProfile> {
         let mut profiles = self.profiles();
         profiles.sort_by(|a, b| {
-            a.name.to_lowercase().cmp(&b.name.to_lowercase()).then_with(|| a.id.cmp(&b.id))
+            a.name
+                .to_lowercase()
+                .cmp(&b.name.to_lowercase())
+                .then_with(|| a.id.cmp(&b.id))
         });
         profiles
     }
@@ -71,7 +74,9 @@ impl Ctx {
     // -- Projection ---------------------------------------------------------
 
     pub(super) fn refresh_migrations_panel(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let m = w.global::<MigrationsState>();
         let dark = w.global::<Theme>().get_dark();
 
@@ -92,7 +97,8 @@ impl Ctx {
 
         // A note under the pickers: what is not open, then mixed dialects.
         let find = |id: &Option<String>| {
-            id.as_deref().and_then(|id| profiles.iter().find(|p| p.id == id))
+            id.as_deref()
+                .and_then(|id| profiles.iter().find(|p| p.id == id))
         };
         let (source, target) = (find(&wz.source_id), find(&wz.target_id));
         let offline = dbhive_ui_model::migrations::offline_selection(source, target, &connected);
@@ -139,7 +145,11 @@ impl Ctx {
         m.set_acknowledged(wz.acknowledged);
 
         // Footer and result.
-        m.set_blocked_reason(blocked_reason(wz, &profiles, &connected).unwrap_or_default().into());
+        m.set_blocked_reason(
+            blocked_reason(wz, &profiles, &connected)
+                .unwrap_or_default()
+                .into(),
+        );
         m.set_busy(g.busy);
         m.set_busy_label(g.busy_label.into());
         m.set_error(wz.last_error.clone().unwrap_or_default().into());
@@ -159,7 +169,9 @@ impl Ctx {
     // -- Open and close ---------------------------------------------------------
 
     pub(super) fn open_migrations(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         {
             let mut s = self.session.borrow_mut();
             // Start at step one but keep the connections and schema the user
@@ -368,7 +380,10 @@ impl Ctx {
                         match result {
                             Ok(applied) => {
                                 toast = Some(if applied.is_success() {
-                                    (dbhive_ui_model::migrations::apply_summary(&applied), Tone::Success)
+                                    (
+                                        dbhive_ui_model::migrations::apply_summary(&applied),
+                                        Tone::Success,
+                                    )
                                 } else {
                                     ("The migration failed".to_string(), Tone::Danger)
                                 });
@@ -433,10 +448,16 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         c.refresh_migrations_panel();
     });
     on!(on_generate, |c| c.migration_generate());
-    on!(on_sql_changed, |c, t| c.migration_edit(|wz| wz.sql = t.to_string()));
-    on!(on_reset_sql, |c| c.migration_edit(|wz| wz.sql = statements_to_text(&wz.generated)));
-    on!(on_transaction_toggled, |c| c.migration_edit(|wz| wz.use_transaction = !wz.use_transaction));
-    on!(on_acknowledge_toggled, |c| c.migration_edit(|wz| wz.acknowledged = !wz.acknowledged));
+    on!(on_sql_changed, |c, t| c
+        .migration_edit(|wz| wz.sql = t.to_string()));
+    on!(on_reset_sql, |c| c.migration_edit(
+        |wz| wz.sql = statements_to_text(&wz.generated)
+    ));
+    on!(on_transaction_toggled, |c| c.migration_edit(|wz| wz
+        .use_transaction =
+        !wz.use_transaction));
+    on!(on_acknowledge_toggled, |c| c
+        .migration_edit(|wz| wz.acknowledged = !wz.acknowledged));
     on!(on_back, |c| c.migration_back());
     on!(on_apply_requested, |c| c.migration_apply_asked());
 }

@@ -61,7 +61,9 @@ impl Drop for Scratch {
 
 async fn scratch(tag: &str) -> (MysqlDriver, Scratch) {
     let name = format!("dbhive_{tag}_{}", std::process::id());
-    let admin = MysqlDriver::connect(opts(None)).await.expect("connect to mysql");
+    let admin = MysqlDriver::connect(opts(None))
+        .await
+        .expect("connect to mysql");
     admin
         .execute_query(&format!("DROP DATABASE IF EXISTS `{name}`"))
         .await
@@ -78,7 +80,10 @@ async fn scratch(tag: &str) -> (MysqlDriver, Scratch) {
 }
 
 async fn scalar(d: &MysqlDriver, sql: &str) -> String {
-    let r = d.execute_query(sql).await.unwrap_or_else(|e| panic!("{sql}: {e}"));
+    let r = d
+        .execute_query(sql)
+        .await
+        .unwrap_or_else(|e| panic!("{sql}: {e}"));
     match &r.rows[0][0] {
         serde_json::Value::String(s) => s.clone(),
         other => other.to_string(),
@@ -97,7 +102,9 @@ async fn mysql_transactions_commit_roll_back_and_leave_the_pool_usable() {
     d.execute_query("CREATE TABLE t (id INT PRIMARY KEY, name VARCHAR(20) NOT NULL) ENGINE=InnoDB")
         .await
         .unwrap();
-    d.execute_query("INSERT INTO t VALUES (1, 'a'), (2, 'b')").await.unwrap();
+    d.execute_query("INSERT INTO t VALUES (1, 'a'), (2, 'b')")
+        .await
+        .unwrap();
 
     // Commit: every statement applies, with a count each.
     let affected = d
@@ -109,7 +116,10 @@ async fn mysql_transactions_commit_roll_back_and_leave_the_pool_usable() {
         .await
         .unwrap();
     assert_eq!(affected, vec![1, 1, 1]);
-    let r = d.execute_query("SELECT id, name FROM t ORDER BY id").await.unwrap();
+    let r = d
+        .execute_query("SELECT id, name FROM t ORDER BY id")
+        .await
+        .unwrap();
     assert_eq!(r.rows.len(), 2);
     assert_eq!(r.rows[0][1], serde_json::json!("z"));
 
@@ -123,7 +133,10 @@ async fn mysql_transactions_commit_roll_back_and_leave_the_pool_usable() {
         .await
         .unwrap_err();
     assert_eq!(err.index, 1);
-    let r = d.execute_query("SELECT name FROM t WHERE id = 1").await.unwrap();
+    let r = d
+        .execute_query("SELECT name FROM t WHERE id = 1")
+        .await
+        .unwrap();
     assert_eq!(r.rows[0][0], serde_json::json!("z"));
     assert_eq!(count(&d).await, 2);
 
@@ -139,7 +152,9 @@ async fn mysql_transactions_commit_roll_back_and_leave_the_pool_usable() {
         assert_eq!(e.index, 0, "round {i}");
         assert_eq!(count(&d).await, 2, "round {i}");
     }
-    d.execute_query("INSERT INTO t VALUES (4, 'd')").await.unwrap();
+    d.execute_query("INSERT INTO t VALUES (4, 'd')")
+        .await
+        .unwrap();
     assert_eq!(count(&d).await, 3);
 }
 
@@ -182,12 +197,20 @@ async fn generated_mysql_ddl_is_accepted_and_does_what_it_says() {
         columns: vec![id, email],
         primary_key: None,
         foreign_keys: vec![],
-        unique_constraints: vec![UniqueConstraint { name: Some("uq_owner_email".into()), columns: vec!["email".into()] }],
+        unique_constraints: vec![UniqueConstraint {
+            name: Some("uq_owner_email".into()),
+            columns: vec!["email".into()],
+        }],
         check_constraints: vec![],
         comment: Some("People who own things".into()),
         if_not_exists: false,
     };
-    run(&d, "create owners", g.generate_create_table(&owners).unwrap()).await;
+    run(
+        &d,
+        "create owners",
+        g.generate_create_table(&owners).unwrap(),
+    )
+    .await;
 
     // -- a child with the column types MySQL has, a name with a backtick -------------
     let mut pid = col("id", ColumnType::BigInt);
@@ -201,7 +224,13 @@ async fn generated_mysql_ddl_is_accepted_and_does_what_it_says() {
     let types: Vec<ColumnDefinition> = vec![
         col("c_small", ColumnType::SmallInt),
         col("c_int", ColumnType::Integer),
-        col("c_dec", ColumnType::Decimal { precision: 10, scale: 2 }),
+        col(
+            "c_dec",
+            ColumnType::Decimal {
+                precision: 10,
+                scale: 2,
+            },
+        ),
         col("c_real", ColumnType::Real),
         col("c_double", ColumnType::DoublePrecision),
         col("c_char", ColumnType::Char { length: 3 }),
@@ -228,8 +257,14 @@ async fn generated_mysql_ddl_is_accepted_and_does_what_it_says() {
             on_delete: ForeignKeyAction::Cascade,
             on_update: ForeignKeyAction::NoAction,
         }],
-        unique_constraints: vec![UniqueConstraint { name: Some("uq_pet_label".into()), columns: vec!["owner_id".into(), "label".into()] }],
-        check_constraints: vec![CheckConstraint { name: Some("ck_small".into()), expression: "c_small IS NULL OR c_small >= 0".into() }],
+        unique_constraints: vec![UniqueConstraint {
+            name: Some("uq_pet_label".into()),
+            columns: vec!["owner_id".into(), "label".into()],
+        }],
+        check_constraints: vec![CheckConstraint {
+            name: Some("ck_small".into()),
+            expression: "c_small IS NULL OR c_small >= 0".into(),
+        }],
         comment: None,
         if_not_exists: false,
     };
@@ -240,7 +275,11 @@ async fn generated_mysql_ddl_is_accepted_and_does_what_it_says() {
         "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'we`ird pets'",
     )
     .await;
-    assert_eq!(n_cols, n_expected.to_string(), "every requested column should exist");
+    assert_eq!(
+        n_cols,
+        n_expected.to_string(),
+        "every requested column should exist"
+    );
     let fk = scalar(
         &d,
         "SELECT delete_rule FROM information_schema.referential_constraints WHERE constraint_schema = DATABASE() AND constraint_name = 'fk_pet_owner'",
@@ -256,13 +295,23 @@ async fn generated_mysql_ddl_is_accepted_and_does_what_it_says() {
 
     // The constraints work.
     assert!(
-        d.execute_query("INSERT INTO `we``ird pets` (owner_id) VALUES (999)").await.is_err(),
+        d.execute_query("INSERT INTO `we``ird pets` (owner_id) VALUES (999)")
+            .await
+            .is_err(),
         "the foreign key should refuse a pet with no owner"
     );
-    d.execute_query("INSERT INTO owners (email) VALUES ('a@example.com')").await.unwrap();
-    d.execute_query("INSERT INTO `we``ird pets` (owner_id, c_small) VALUES (1, 3)").await.unwrap();
+    d.execute_query("INSERT INTO owners (email) VALUES ('a@example.com')")
+        .await
+        .unwrap();
+    d.execute_query("INSERT INTO `we``ird pets` (owner_id, c_small) VALUES (1, 3)")
+        .await
+        .unwrap();
     assert!(
-        d.execute_query("INSERT INTO `we``ird pets` (owner_id, label, c_small) VALUES (1, 'x', -1)").await.is_err(),
+        d.execute_query(
+            "INSERT INTO `we``ird pets` (owner_id, label, c_small) VALUES (1, 'x', -1)"
+        )
+        .await
+        .is_err(),
         "the check constraint should refuse a negative c_small"
     );
 
@@ -275,9 +324,18 @@ async fn generated_mysql_ddl_is_accepted_and_does_what_it_says() {
         name: "we`ird pets".into(),
         operations: vec![
             AlterColumnOperation::AddColumn { column: added },
-            AlterColumnOperation::RenameColumn { old_name: "c_text".into(), new_name: "notes".into() },
-            AlterColumnOperation::AlterType { column_name: "c_int".into(), new_type: ColumnType::BigInt },
-            AlterColumnOperation::DropColumn { column_name: "c_json".into(), cascade: false },
+            AlterColumnOperation::RenameColumn {
+                old_name: "c_text".into(),
+                new_name: "notes".into(),
+            },
+            AlterColumnOperation::AlterType {
+                column_name: "c_int".into(),
+                new_type: ColumnType::BigInt,
+            },
+            AlterColumnOperation::DropColumn {
+                column_name: "c_json".into(),
+                cascade: false,
+            },
         ],
     };
     run(&d, "alter pets", g.generate_alter_table(&alter).unwrap()).await;
@@ -286,8 +344,14 @@ async fn generated_mysql_ddl_is_accepted_and_does_what_it_says() {
         "SELECT GROUP_CONCAT(column_name ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'we`ird pets'",
     )
     .await;
-    assert!(cols.contains("added_at") && cols.contains("notes"), "columns: {cols}");
-    assert!(!cols.contains("c_json") && !cols.contains("c_text"), "columns: {cols}");
+    assert!(
+        cols.contains("added_at") && cols.contains("notes"),
+        "columns: {cols}"
+    );
+    assert!(
+        !cols.contains("c_json") && !cols.contains("c_text"),
+        "columns: {cols}"
+    );
     let int_type = scalar(
         &d,
         "SELECT data_type FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'we`ird pets' AND column_name = 'c_int'",
@@ -296,10 +360,25 @@ async fn generated_mysql_ddl_is_accepted_and_does_what_it_says() {
     assert_eq!(int_type.to_lowercase(), "bigint");
 
     // -- drop the child, then the parent ------------------------------------------------
-    let drop_pets = DropTableDefinition { schema: None, name: "we`ird pets".into(), cascade: false, if_exists: true };
+    let drop_pets = DropTableDefinition {
+        schema: None,
+        name: "we`ird pets".into(),
+        cascade: false,
+        if_exists: true,
+    };
     run(&d, "drop pets", g.generate_drop_table(&drop_pets).unwrap()).await;
-    let drop_owners = DropTableDefinition { schema: None, name: "owners".into(), cascade: false, if_exists: false };
-    run(&d, "drop owners", g.generate_drop_table(&drop_owners).unwrap()).await;
+    let drop_owners = DropTableDefinition {
+        schema: None,
+        name: "owners".into(),
+        cascade: false,
+        if_exists: false,
+    };
+    run(
+        &d,
+        "drop owners",
+        g.generate_drop_table(&drop_owners).unwrap(),
+    )
+    .await;
     let left = scalar(
         &d,
         "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()",

@@ -83,7 +83,14 @@ fn live_metrics_process_list_cancel_and_polling_against_postgres() {
             1 if w.get_workspace_connection_name() == "Local PG" => {
                 // Another session, running a statement we can find and cancel.
                 let child = Command::new("psql")
-                    .args(["-h", "localhost", "-d", "postgres", "-c", "SELECT pg_sleep(120) /* dbhive-live-test */"])
+                    .args([
+                        "-h",
+                        "localhost",
+                        "-d",
+                        "postgres",
+                        "-c",
+                        "SELECT pg_sleep(120) /* dbhive-live-test */",
+                    ])
                     .stdout(Stdio::null())
                     .stderr(Stdio::piped())
                     .spawn()
@@ -98,12 +105,15 @@ fn live_metrics_process_list_cancel_and_polling_against_postgres() {
             }
             // Metrics and the process list arrive.
             2 if a.get_server_state() == MonitorServerState::Ready
-                && a.get_process_rows().iter().any(|r| {
-                    r.cells.iter().any(|c| c.text.contains("dbhive-live-test"))
-                }) =>
+                && a.get_process_rows()
+                    .iter()
+                    .any(|r| r.cells.iter().any(|c| c.text.contains("dbhive-live-test"))) =>
             {
-                let tiles: Vec<String> =
-                    a.get_live_tiles().iter().map(|t| format!("{}={}", t.label, t.value)).collect();
+                let tiles: Vec<String> = a
+                    .get_live_tiles()
+                    .iter()
+                    .map(|t| format!("{}={}", t.label, t.value))
+                    .collect();
                 if tiles[0].ends_with("=-") || tiles[1].ends_with("=-") {
                     return bail(format!("live tiles are empty: {tiles:?}"));
                 }
@@ -119,13 +129,23 @@ fn live_metrics_process_list_cancel_and_polling_against_postgres() {
                 }
                 a.invoke_cancel_requested();
                 if !w.get_show_confirm() || w.get_confirm_title() != "Cancel this query?" {
-                    return bail(format!("no cancel confirmation: {:?}", w.get_confirm_title()));
+                    return bail(format!(
+                        "no cancel confirmation: {:?}",
+                        w.get_confirm_title()
+                    ));
                 }
                 // Declining leaves it running.
                 w.invoke_confirm_cancelled();
                 w.set_show_confirm(false);
                 std::thread::sleep(Duration::from_millis(300));
-                if sleeper2.borrow_mut().as_mut().unwrap().try_wait().unwrap().is_some() {
+                if sleeper2
+                    .borrow_mut()
+                    .as_mut()
+                    .unwrap()
+                    .try_wait()
+                    .unwrap()
+                    .is_some()
+                {
                     return bail("declining the confirmation still stopped the query".into());
                 }
                 a.invoke_cancel_requested();
@@ -139,7 +159,9 @@ fn live_metrics_process_list_cancel_and_polling_against_postgres() {
                 let child = guard.as_mut().unwrap();
                 if let Some(status) = child.try_wait().unwrap() {
                     if status.success() {
-                        return bail("the sleeping query finished instead of being cancelled".into());
+                        return bail(
+                            "the sleeping query finished instead of being cancelled".into(),
+                        );
                     }
                     drop(guard);
                     step2.set(4);

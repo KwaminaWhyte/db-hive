@@ -8,7 +8,9 @@
 
 use std::rc::Rc;
 
-use slint::platform::software_renderer::{MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType};
+use slint::platform::software_renderer::{
+    MinimalSoftwareWindow, PremultipliedRgbaColor, RepaintBufferType,
+};
 use slint::platform::{Platform, WindowAdapter, WindowEvent};
 use slint::ComponentHandle;
 
@@ -75,7 +77,11 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                 c.set_workspace_loading_tables(true);
             } else if name.starts_with("workspace-query") {
                 let dark = c.global::<Theme>().get_dark();
-                let tab = |title: &str, query: bool| TabInfo { title: title.into(), query, busy: name == "workspace-query-running" && query };
+                let tab = |title: &str, query: bool| TabInfo {
+                    title: title.into(),
+                    query,
+                    busy: name == "workspace-query-running" && query,
+                };
                 c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![
                     tab("Query 1", true),
                     tab("customers", false),
@@ -84,7 +90,9 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                 c.set_workspace_active_is_query(true);
                 if name != "workspace-query-blank" {
                     c.set_workspace_editor_text(SAMPLE_SQL.into());
-                    c.set_workspace_editor_lines(dbhive_slint::sql_highlight::to_model_for(SAMPLE_SQL, dark));
+                    c.set_workspace_editor_lines(dbhive_slint::sql_highlight::to_model_for(
+                        SAMPLE_SQL, dark,
+                    ));
                 }
                 c.set_workspace_result_title("Results".into());
                 match name {
@@ -102,34 +110,49 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                     "workspace-query-complete" | "workspace-query-complete-light" => {
                         let sql = "SELECT c.na, count(*)\n  FROM customers c\n  JOIN orders o ON o.customer_id = c.id\n GROUP BY c.na";
                         c.set_workspace_editor_text(sql.into());
-                        c.set_workspace_editor_lines(dbhive_slint::sql_highlight::to_model_for(sql, dark));
-                        let item = |label: &str, detail: &str, kind: &str| dbhive_slint::CompletionItem {
-                            label: label.into(),
-                            detail: detail.into(),
-                            kind: kind.into(),
-                        };
-                        c.set_workspace_completions(slint::ModelRc::new(slint::VecModel::from(vec![
-                            item("name", "text", "column"),
-                            item("national_id", "varchar(32)", "column"),
-                            item("count", "function", "function"),
-                            item("natural", "keyword", "keyword"),
-                            item("notes", "public", "table"),
-                        ])));
+                        c.set_workspace_editor_lines(dbhive_slint::sql_highlight::to_model_for(
+                            sql, dark,
+                        ));
+                        let item =
+                            |label: &str, detail: &str, kind: &str| dbhive_slint::CompletionItem {
+                                label: label.into(),
+                                detail: detail.into(),
+                                kind: kind.into(),
+                            };
+                        c.set_workspace_completions(slint::ModelRc::new(slint::VecModel::from(
+                            vec![
+                                item("name", "text", "column"),
+                                item("national_id", "varchar(32)", "column"),
+                                item("count", "function", "function"),
+                                item("natural", "keyword", "keyword"),
+                                item("notes", "public", "table"),
+                            ],
+                        )));
                         c.set_workspace_completion_selected(0);
                         // Puts the caret after `c.na` on the first line so the
                         // popup draws beneath it.
                         c.set_workspace_editor_pending_cursor("SELECT c.na".len() as i32);
                     }
                     _ => {
-                        let cols = vec!["id".to_string(), "name".to_string(), "revenue".to_string()];
+                        let cols =
+                            vec!["id".to_string(), "name".to_string(), "revenue".to_string()];
                         let widths = vec![80.0f32, 240.0, 160.0];
-                        let (columns, width) = dbhive_slint::grid_model::layout_columns(&cols, &widths);
+                        let (columns, width) =
+                            dbhive_slint::grid_model::layout_columns(&cols, &widths);
                         c.set_workspace_columns(columns);
                         c.set_workspace_grid_width(width);
                         let rows: Vec<Vec<Option<String>>> = (1..=6)
-                            .map(|i| vec![Some(i.to_string()), Some(format!("Customer {i}")), Some(format!("{}.50", 4200 - i * 310))])
+                            .map(|i| {
+                                vec![
+                                    Some(i.to_string()),
+                                    Some(format!("Customer {i}")),
+                                    Some(format!("{}.50", 4200 - i * 310)),
+                                ]
+                            })
                             .collect();
-                        c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(rows))));
+                        c.set_workspace_rows(slint::ModelRc::new(
+                            dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(rows)),
+                        ));
                         c.set_workspace_row_count(6);
                         c.set_workspace_visible_row_count(6);
                         c.set_workspace_has_result(true);
@@ -138,21 +161,36 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                 }
                 if name == "workspace-query-confirm" {
                     c.set_confirm_title("Run this statement?".into());
-                    c.set_confirm_message("• DELETE without WHERE removes every row of orders".into());
+                    c.set_confirm_message(
+                        "• DELETE without WHERE removes every row of orders".into(),
+                    );
                     c.set_confirm_label("Run anyway".into());
                     c.set_show_confirm(true);
                 }
             } else if name == "workspace" || name == "workspace-light" || name == "workspace-long" {
                 c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![
-                    TabInfo { title: "customers".into(), query: false, busy: false },
-                    TabInfo { title: "Query 1".into(), query: true, busy: false },
+                    TabInfo {
+                        title: "customers".into(),
+                        query: false,
+                        busy: false,
+                    },
+                    TabInfo {
+                        title: "Query 1".into(),
+                        query: true,
+                        busy: false,
+                    },
                 ])));
                 c.set_workspace_active_tab(0);
                 c.set_workspace_result_title("customers".into());
                 c.set_workspace_has_result(true);
                 c.set_workspace_result_summary("8 rows · 12ms".into());
                 c.set_workspace_selected_table("customers".into());
-                let cols = vec!["id".to_string(), "name".to_string(), "email".to_string(), "plan".to_string()];
+                let cols = vec![
+                    "id".to_string(),
+                    "name".to_string(),
+                    "email".to_string(),
+                    "plan".to_string(),
+                ];
                 let widths = vec![80.0f32, 220.0, 260.0, 140.0];
                 let (columns, width) = dbhive_slint::grid_model::layout_columns(&cols, &widths);
                 c.set_workspace_columns(columns);
@@ -162,14 +200,18 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                         vec![
                             Some(i.to_string()),
                             Some(format!("Customer {i}")),
-                            if i == 3 { None } else { Some(format!("user{i}@example.com")) },
+                            if i == 3 {
+                                None
+                            } else {
+                                Some(format!("user{i}@example.com"))
+                            },
                             Some(if i % 2 == 0 { "pro" } else { "free" }.to_string()),
                         ]
                     })
                     .collect();
-                c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(
-                    std::rc::Rc::new(rows),
-                )));
+                c.set_workspace_rows(slint::ModelRc::new(
+                    dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(rows)),
+                ));
                 c.set_workspace_row_count(8);
                 c.set_workspace_visible_row_count(8);
             }
@@ -188,16 +230,22 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
         //   palette-window, palette-empty, palette-bottom, palette-light,
         //   palette-light-filtered, shortcuts, shortcuts-filtered,
         //   shortcuts-empty, shortcuts-light.
-        _ if name.starts_with("palette") || name.starts_with("shortcuts") => {
-            command_overlay(name)
-        }
+        _ if name.starts_with("palette") || name.starts_with("shortcuts") => command_overlay(name),
         "connections" | "connections-light" => {
             let c = AppWindow::new().expect("AppWindow");
             if name == "connections-light" {
                 c.global::<Theme>().set_dark(false);
             }
             c.set_app_version("0.21.0".into());
-            let item = |id: &str, n: &str, host: &str, ini: &str, rgb: (u8, u8, u8), env: &str, tone: Tone, fav: bool, connected: bool| ConnectionItem {
+            let item = |id: &str,
+                        n: &str,
+                        host: &str,
+                        ini: &str,
+                        rgb: (u8, u8, u8),
+                        env: &str,
+                        tone: Tone,
+                        fav: bool,
+                        connected: bool| ConnectionItem {
                 id: id.into(),
                 name: n.into(),
                 host: host.into(),
@@ -210,10 +258,50 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                 connecting: false,
             };
             let items = vec![
-                item("1", "Production Postgres", "PostgreSQL • db.prod.internal:5432", "PG", (56, 118, 171), "Production", Tone::Danger, true, true),
-                item("2", "Local MySQL", "MySQL • localhost:3306", "MY", (0, 117, 143), "Local", Tone::Neutral, false, false),
-                item("3", "Analytics SQLite", "SQLite • /data/analytics.db", "SL", (0, 121, 168), "", Tone::Neutral, false, false),
-                item("4", "Staging Mongo", "MongoDB • staging.example.com:27017", "MG", (77, 179, 61), "Staging", Tone::Warning, false, false),
+                item(
+                    "1",
+                    "Production Postgres",
+                    "PostgreSQL • db.prod.internal:5432",
+                    "PG",
+                    (56, 118, 171),
+                    "Production",
+                    Tone::Danger,
+                    true,
+                    true,
+                ),
+                item(
+                    "2",
+                    "Local MySQL",
+                    "MySQL • localhost:3306",
+                    "MY",
+                    (0, 117, 143),
+                    "Local",
+                    Tone::Neutral,
+                    false,
+                    false,
+                ),
+                item(
+                    "3",
+                    "Analytics SQLite",
+                    "SQLite • /data/analytics.db",
+                    "SL",
+                    (0, 121, 168),
+                    "",
+                    Tone::Neutral,
+                    false,
+                    false,
+                ),
+                item(
+                    "4",
+                    "Staging Mongo",
+                    "MongoDB • staging.example.com:27017",
+                    "MG",
+                    (77, 179, 61),
+                    "Staging",
+                    Tone::Warning,
+                    false,
+                    false,
+                ),
             ];
             c.set_connection_total(items.len() as i32);
             c.set_connections(slint::ModelRc::new(slint::VecModel::from(items)));
@@ -246,7 +334,9 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                     u.set_about_status("Version 0.22.0 is available.".into());
                     u.set_has_update(true);
                 }
-                "about-current" => u.set_about_status("You are up to date (version 0.21.0).".into()),
+                "about-current" => {
+                    u.set_about_status("You are up to date (version 0.21.0).".into())
+                }
                 "about-failed" => {
                     u.set_banner_visible(true);
                     u.set_banner_message("Could not check for updates: Update check failed: the server replied 500 Internal Server Error".into());
@@ -305,9 +395,9 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
         // -loading, -error, -confirm.
         _ if name.starts_with("settings") => {
             use dbhive_core::models::settings::AppSettings;
+            use dbhive_slint::settings_view::{self, Banner, Load, View};
             use dbhive_ui_model::settings::{KeyModifiers, Section, ShortcutField};
             use dbhive_ui_model::settings_editor::SettingsEditor;
-            use dbhive_slint::settings_view::{self, Banner, Load, View};
 
             let c = AppWindow::new().expect("AppWindow");
             c.set_app_version("0.21.0".into());
@@ -331,23 +421,41 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                 ed.pick_accent_preset(1);
             }
             if has("errors") {
-                ed.set_number_text(dbhive_ui_model::settings_editor::NumberField::EditorFontSize, "40");
-                ed.set_number_text(dbhive_ui_model::settings_editor::NumberField::QueryTimeout, "soon");
+                ed.set_number_text(
+                    dbhive_ui_model::settings_editor::NumberField::EditorFontSize,
+                    "40",
+                );
+                ed.set_number_text(
+                    dbhive_ui_model::settings_editor::NumberField::QueryTimeout,
+                    "soon",
+                );
                 ed.set_number_text(dbhive_ui_model::settings_editor::NumberField::MaxRows, "5");
                 ed.set_accent_text("#12");
                 ed.set_auto_check(true);
-                ed.set_number_text(dbhive_ui_model::settings_editor::NumberField::UpdateInterval, "0");
+                ed.set_number_text(
+                    dbhive_ui_model::settings_editor::NumberField::UpdateInterval,
+                    "0",
+                );
             }
             if has("recording") {
                 ed.start_recording_index(1);
             }
             if has("duplicate") {
-                let ctrl = KeyModifiers { ctrl: true, command: true, ..Default::default() };
+                let ctrl = KeyModifiers {
+                    ctrl: true,
+                    command: true,
+                    ..Default::default()
+                };
                 ed.start_recording(ShortcutField::NewTab);
-                if let dbhive_ui_model::settings_editor::RecordOutcome::Bound { warning: Some(message), .. } =
-                    ed.record(ctrl, "W", false)
+                if let dbhive_ui_model::settings_editor::RecordOutcome::Bound {
+                    warning: Some(message),
+                    ..
+                } = ed.record(ctrl, "W", false)
                 {
-                    view.banner = Some(Banner { message, tone: Tone::Warning });
+                    view.banner = Some(Banner {
+                        message,
+                        tone: Tone::Warning,
+                    });
                 }
             }
             if has("unbound") {
@@ -417,7 +525,10 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
-        _ if name.starts_with("history") || name.starts_with("snippets") || name.starts_with("templates") => {
+        _ if name.starts_with("history")
+            || name.starts_with("snippets")
+            || name.starts_with("templates") =>
+        {
             history_panel_window(name)
         }
         _ if name.starts_with("import") || name.starts_with("export") => import_export_window(name),
@@ -464,7 +575,10 @@ fn history_panel_window(name: &str) -> Box<dyn std::any::Any> {
     c.set_workspace_location_label("app · public".into());
     let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products"]
         .iter()
-        .map(|n| TableItem { name: (*n).into(), row_count: "~1240".into() })
+        .map(|n| TableItem {
+            name: (*n).into(),
+            row_count: "~1240".into(),
+        })
         .collect();
     c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
     c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![TabInfo {
@@ -480,19 +594,39 @@ fn history_panel_window(name: &str) -> Box<dyn std::any::Any> {
     let now = chrono::Utc::now();
     let ago = |mins: i64| (now - chrono::Duration::minutes(mins)).to_rfc3339();
 
-    let tab = if name.starts_with("snippets") { 1 } else if name.starts_with("templates") { 2 } else { 0 };
+    let tab = if name.starts_with("snippets") {
+        1
+    } else if name.starts_with("templates") {
+        2
+    } else {
+        0
+    };
     h.set_tab(tab);
     h.set_scope_label("Production Postgres / app".into());
     h.set_tab_labels(strings_model(&[
         "History".into(),
-        if name == "snippets-empty" { "Snippets".into() } else { "Snippets (4)".into() },
-        if name == "templates-empty" { "Templates".into() } else { "Templates (3)".into() },
+        if name == "snippets-empty" {
+            "Snippets".into()
+        } else {
+            "Snippets (4)".into()
+        },
+        if name == "templates-empty" {
+            "Templates".into()
+        } else {
+            "Templates (3)".into()
+        },
     ]));
 
     // History.
     let q = |sql: &str, mins: i64, ms: u64, rows: u64| {
-        QueryHistory::new("c1".into(), "Production Postgres".into(), "app".into(), sql.into(), ago(mins))
-            .with_success(ms, Some(rows))
+        QueryHistory::new(
+            "c1".into(),
+            "Production Postgres".into(),
+            "app".into(),
+            sql.into(),
+            ago(mins),
+        )
+        .with_success(ms, Some(rows))
     };
     let mut entries = vec![
         q("SELECT c.id, c.name, SUM(o.total) AS revenue\n  FROM customers c JOIN orders o ON o.customer_id = c.id", 2, 38, 25),
@@ -516,7 +650,9 @@ fn history_panel_window(name: &str) -> Box<dyn std::any::Any> {
         h.set_loading(true);
     }
     if name == "history-error" {
-        h.set_error("Cleared, but the change could not be saved: Permission denied (os error 13)".into());
+        h.set_error(
+            "Cleared, but the change could not be saved: Permission denied (os error 13)".into(),
+        );
     }
 
     // Snippets.
@@ -546,8 +682,14 @@ fn history_panel_window(name: &str) -> Box<dyn std::any::Any> {
 
     // Templates.
     let mk = |n: &str, d: Option<&str>, sql: &str, cat: Option<&str>, tags: &[&str]| {
-        QueryTemplate::new(n.into(), d.map(Into::into), sql.into(), sync_parameters(sql, &[]), cat.map(Into::into),
-            (!tags.is_empty()).then(|| tags.iter().map(|t| t.to_string()).collect()))
+        QueryTemplate::new(
+            n.into(),
+            d.map(Into::into),
+            sql.into(),
+            sync_parameters(sql, &[]),
+            cat.map(Into::into),
+            (!tags.is_empty()).then(|| tags.iter().map(|t| t.to_string()).collect()),
+        )
     };
     let templates = vec![
         mk("Orders by status and date", Some("Filter orders for a day"), "SELECT * FROM orders WHERE status = {{status}} AND created_at >= {{since:date}} AND total > {{min_total:decimal}}", Some("Reports"), &["orders"]),
@@ -628,7 +770,9 @@ fn history_panel_window(name: &str) -> Box<dyn std::any::Any> {
 /// inspector, -filters, -panel, -empty, -loading, -error, -deep, -long,
 /// -structure, -structure-loading, -structure-error, -structure-empty.
 fn inspector(name: &str) -> Box<dyn std::any::Any> {
-    use dbhive_slint::{ColumnRowItem, FilterRowItem, IndexRowItem, InspectorBridge, RelationRowItem};
+    use dbhive_slint::{
+        ColumnRowItem, FilterRowItem, IndexRowItem, InspectorBridge, RelationRowItem,
+    };
 
     let c = AppWindow::new().expect("AppWindow");
     if name.ends_with("-light") {
@@ -643,20 +787,35 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
     let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products", "refunds"]
         .iter()
         .enumerate()
-        .map(|(i, n)| TableItem { name: (*n).into(), row_count: format!("~{}", (i + 1) * 1240).into() })
+        .map(|(i, n)| TableItem {
+            name: (*n).into(),
+            row_count: format!("~{}", (i + 1) * 1240).into(),
+        })
         .collect();
     c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
     c.set_workspace_selected_table("orders".into());
     c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![
-        TabInfo { title: "Query 1".into(), query: true, busy: false },
-        TabInfo { title: "orders".into(), query: false, busy: v == "inspector-loading" },
+        TabInfo {
+            title: "Query 1".into(),
+            query: true,
+            busy: false,
+        },
+        TabInfo {
+            title: "orders".into(),
+            query: false,
+            busy: v == "inspector-loading",
+        },
     ])));
     c.set_workspace_active_tab(1);
     c.set_workspace_active_is_query(false);
 
     let b = c.global::<InspectorBridge>();
     let s = |x: &str| -> slint::SharedString { x.into() };
-    let strs = |xs: &[&str]| slint::ModelRc::new(slint::VecModel::from(xs.iter().map(|x| s(x)).collect::<Vec<_>>()));
+    let strs = |xs: &[&str]| {
+        slint::ModelRc::new(slint::VecModel::from(
+            xs.iter().map(|x| s(x)).collect::<Vec<_>>(),
+        ))
+    };
 
     // Pager and toolbar, shared by every data variant.
     b.set_view(if structure { 1 } else { 0 });
@@ -665,7 +824,12 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
     b.set_page_label(s("Page 2 of 5"));
     b.set_range_label(s("26-50 of 112 rows"));
     b.set_page_size_label(s("25 / page"));
-    b.set_page_size_options(strs(&["25 / page", "50 / page", "100 / page", "250 / page"]));
+    b.set_page_size_options(strs(&[
+        "25 / page",
+        "50 / page",
+        "100 / page",
+        "250 / page",
+    ]));
     b.set_can_first(true);
     b.set_can_prev(true);
     b.set_can_next(true);
@@ -673,7 +837,10 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
     b.set_filter_ops(strs(&["contains", "equals", "starts with", "is null"]));
 
     // The page of rows.
-    let cols: Vec<String> = ["id", "customer_id", "note", "total", "created_at"].iter().map(|x| x.to_string()).collect();
+    let cols: Vec<String> = ["id", "customer_id", "note", "total", "created_at"]
+        .iter()
+        .map(|x| x.to_string())
+        .collect();
     let widths = vec![80.0f32, 140.0, 240.0, 120.0, 200.0];
     let (columns, width) = dbhive_slint::grid_model::layout_columns(&cols, &widths);
     let data: Vec<Vec<Option<String>>> = (26..=50)
@@ -681,7 +848,13 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
             vec![
                 Some(i.to_string()),
                 Some(((i % 5) + 1).to_string()),
-                if i == 28 { None } else if i % 10 == 0 { Some(format!("gift-{i}")) } else { Some(format!("order-{i}")) },
+                if i == 28 {
+                    None
+                } else if i % 10 == 0 {
+                    Some(format!("gift-{i}"))
+                } else {
+                    Some(format!("order-{i}"))
+                },
                 Some(format!("{}.50", i * 10)),
                 Some(format!("2026-10-{:02} 09:{:02}:00", (i % 28) + 1, i % 60)),
             ]
@@ -759,10 +932,12 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
                 marks[last].added = true;
                 marks[last].placeholder = vec![true, false, false, true, true];
                 let rows = data.len() as i32;
-                c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::with_marks(
-                    std::rc::Rc::new(data),
-                    std::rc::Rc::new(marks),
-                )));
+                c.set_workspace_rows(slint::ModelRc::new(
+                    dbhive_slint::grid_model::LazyRows::with_marks(
+                        std::rc::Rc::new(data),
+                        std::rc::Rc::new(marks),
+                    ),
+                ));
                 c.set_workspace_row_count(rows);
                 c.set_workspace_visible_row_count(rows);
                 b.set_editable(true);
@@ -812,16 +987,20 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
                         ..RowMark::default()
                     })
                     .collect();
-                c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::with_marks(
-                    std::rc::Rc::new(data),
-                    std::rc::Rc::new(marks),
-                )));
+                c.set_workspace_rows(slint::ModelRc::new(
+                    dbhive_slint::grid_model::LazyRows::with_marks(
+                        std::rc::Rc::new(data),
+                        std::rc::Rc::new(marks),
+                    ),
+                ));
                 c.set_workspace_row_count(n as i32);
                 c.set_workspace_visible_row_count(n as i32);
                 b.set_editable(true);
                 b.set_checked_count(2);
             } else {
-                c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(data))));
+                c.set_workspace_rows(slint::ModelRc::new(
+                    dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(data)),
+                ));
                 c.set_workspace_row_count(n as i32);
                 c.set_workspace_visible_row_count(n as i32);
                 b.set_editable(v != "inspector-readonly");
@@ -846,8 +1025,18 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
                 b.set_total_label(s("13 rows match"));
                 b.set_filters_dirty(v == "inspector-filters");
                 b.set_filter_rows(slint::ModelRc::new(slint::VecModel::from(vec![
-                    FilterRowItem { column: s("note"), op: s("contains"), value: s("gift"), takes_value: true },
-                    FilterRowItem { column: s("created_at"), op: s("is null"), value: s(""), takes_value: false },
+                    FilterRowItem {
+                        column: s("note"),
+                        op: s("contains"),
+                        value: s("gift"),
+                        takes_value: true,
+                    },
+                    FilterRowItem {
+                        column: s("created_at"),
+                        op: s("is null"),
+                        value: s(""),
+                        takes_value: false,
+                    },
                 ])));
             }
             if v == "inspector-panel" {
@@ -862,10 +1051,19 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
             // Structure variants.
             match v {
                 "inspector-structure-loading" => b.set_meta_loading(true),
-                "inspector-structure-error" => b.set_meta_error(s("Could not read the schema: permission denied for table orders")),
+                "inspector-structure-error" => b.set_meta_error(s(
+                    "Could not read the schema: permission denied for table orders",
+                )),
                 "inspector-structure-empty" => {}
                 _ => {
-                    let col = |name: &str, ty: &str, nullable: bool, def: &str, pk: bool, auto: bool, fk: &str, fk_table: &str| ColumnRowItem {
+                    let col = |name: &str,
+                               ty: &str,
+                               nullable: bool,
+                               def: &str,
+                               pk: bool,
+                               auto: bool,
+                               fk: &str,
+                               fk_table: &str| ColumnRowItem {
                         name: s(name),
                         data_type: s(ty),
                         nullable,
@@ -876,20 +1074,73 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
                         foreign_table: s(fk_table),
                     };
                     b.set_struct_columns(slint::ModelRc::new(slint::VecModel::from(vec![
-                        col("id", "integer", false, "nextval('orders_id_seq')", true, true, "", ""),
-                        col("customer_id", "integer", false, "(none)", false, false, "customers(id)", "customers"),
+                        col(
+                            "id",
+                            "integer",
+                            false,
+                            "nextval('orders_id_seq')",
+                            true,
+                            true,
+                            "",
+                            "",
+                        ),
+                        col(
+                            "customer_id",
+                            "integer",
+                            false,
+                            "(none)",
+                            false,
+                            false,
+                            "customers(id)",
+                            "customers",
+                        ),
                         col("note", "text", true, "(none)", false, false, "", ""),
                         col("total", "numeric(10,2)", false, "0", false, false, "", ""),
-                        col("created_at", "timestamp with time zone", true, "now()", false, false, "", ""),
+                        col(
+                            "created_at",
+                            "timestamp with time zone",
+                            true,
+                            "now()",
+                            false,
+                            false,
+                            "",
+                            "",
+                        ),
                     ])));
                     b.set_struct_indexes(slint::ModelRc::new(slint::VecModel::from(vec![
-                        IndexRowItem { name: s("orders_pkey"), columns: s("id"), kind: s("PRIMARY") },
-                        IndexRowItem { name: s("ix_orders_customer"), columns: s("customer_id, created_at"), kind: s("INDEX") },
-                        IndexRowItem { name: s("uq_orders_ref"), columns: s("note"), kind: s("UNIQUE") },
+                        IndexRowItem {
+                            name: s("orders_pkey"),
+                            columns: s("id"),
+                            kind: s("PRIMARY"),
+                        },
+                        IndexRowItem {
+                            name: s("ix_orders_customer"),
+                            columns: s("customer_id, created_at"),
+                            kind: s("INDEX"),
+                        },
+                        IndexRowItem {
+                            name: s("uq_orders_ref"),
+                            columns: s("note"),
+                            kind: s("UNIQUE"),
+                        },
                     ])));
                     b.set_struct_relations(slint::ModelRc::new(slint::VecModel::from(vec![
-                        RelationRowItem { constraint: s("orders_customer_id_fkey"), outgoing: true, from: s("orders(customer_id)"), to: s("customers(id)"), actions: s("CASCADE / NO ACTION"), other_table: s("customers") },
-                        RelationRowItem { constraint: s("order_items_order_id_fkey"), outgoing: false, from: s("order_items(order_id)"), to: s("orders(id)"), actions: s("CASCADE / NO ACTION"), other_table: s("order_items") },
+                        RelationRowItem {
+                            constraint: s("orders_customer_id_fkey"),
+                            outgoing: true,
+                            from: s("orders(customer_id)"),
+                            to: s("customers(id)"),
+                            actions: s("CASCADE / NO ACTION"),
+                            other_table: s("customers"),
+                        },
+                        RelationRowItem {
+                            constraint: s("order_items_order_id_fkey"),
+                            outgoing: false,
+                            from: s("order_items(order_id)"),
+                            to: s("orders(id)"),
+                            actions: s("CASCADE / NO ACTION"),
+                            other_table: s("order_items"),
+                        },
                     ])));
                 }
             }
@@ -898,7 +1149,6 @@ fn inspector(name: &str) -> Box<dyn std::any::Any> {
     c.show().unwrap();
     Box::new(c)
 }
-
 
 /// `palette*` and `shortcuts*` variants. The screen behind is the populated
 /// workspace unless the name says otherwise (`palette` alone is the connection
@@ -915,7 +1165,9 @@ fn command_overlay(name: &str) -> Box<dyn std::any::Any> {
         (false, false) => "workspace-query",
         (false, true) => "workspace-query-light",
     };
-    let c = *instantiate(backdrop).downcast::<AppWindow>().expect("AppWindow");
+    let c = *instantiate(backdrop)
+        .downcast::<AppWindow>()
+        .expect("AppWindow");
 
     let mut ctx = if on_connections {
         CommandContext::connections()
@@ -976,7 +1228,10 @@ fn panel_backdrop(c: &AppWindow) {
     c.set_workspace_location_label("app · public".into());
     let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products"]
         .iter()
-        .map(|n| TableItem { name: (*n).into(), row_count: "~1240".into() })
+        .map(|n| TableItem {
+            name: (*n).into(),
+            row_count: "~1240".into(),
+        })
         .collect();
     c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
     c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![TabInfo {
@@ -1016,8 +1271,19 @@ fn activity_window(name: &str) -> Box<dyn std::any::Any> {
     // A morning's worth of queries.
     let now = chrono::Utc::now();
     let long_sql = "SELECT c.id, c.name, c.email, SUM(o.total) AS revenue, COUNT(o.id) AS orders, MAX(o.created_at) AS last_order FROM customers c JOIN orders o ON o.customer_id = c.id WHERE o.status = 'paid' GROUP BY c.id, c.name, c.email HAVING SUM(o.total) > 1000 ORDER BY revenue DESC LIMIT 100";
-    let mk = |i: usize, conn: &str, db: &str, sql: &str, mins: i64, outcome: Result<(u64, u64), (u64, &str)>| {
-        let mut l = QueryLog::new(format!("log-{i}"), conn.to_lowercase(), conn.into(), Some(db.into()), sql.into());
+    let mk = |i: usize,
+              conn: &str,
+              db: &str,
+              sql: &str,
+              mins: i64,
+              outcome: Result<(u64, u64), (u64, &str)>| {
+        let mut l = QueryLog::new(
+            format!("log-{i}"),
+            conn.to_lowercase(),
+            conn.into(),
+            Some(db.into()),
+            sql.into(),
+        );
         l.started_at = now - chrono::Duration::minutes(mins);
         match outcome {
             Ok((ms, rows)) => l.complete(ms, Some(rows)),
@@ -1037,9 +1303,13 @@ fn activity_window(name: &str) -> Box<dyn std::any::Any> {
         mk(9, "Local MySQL", "shop", "SELECT p.name, SUM(i.qty) FROM items i JOIN products p ON p.id = i.product_id GROUP BY p.name", 88, Ok((260, 48))),
     ];
     if name == "activity-long" {
-        logs[0].connection_name = "A connection with a very long display name that cannot fit its column".into();
+        logs[0].connection_name =
+            "A connection with a very long display name that cannot fit its column".into();
     }
-    if name == "activity-empty" || name == "activity-stats-empty" || name == "activity-empty-filtered" {
+    if name == "activity-empty"
+        || name == "activity-stats-empty"
+        || name == "activity-empty-filtered"
+    {
         logs.clear();
     }
 
@@ -1052,7 +1322,11 @@ fn activity_window(name: &str) -> Box<dyn std::any::Any> {
     }
     a.set_filters_open(name == "activity-filters" || name == "activity-empty-filtered");
     a.set_filters_active(filtered);
-    a.set_filter_connections(view_strings(&["All connections", "Production Postgres", "Local MySQL"]));
+    a.set_filter_connections(view_strings(&[
+        "All connections",
+        "Production Postgres",
+        "Local MySQL",
+    ]));
     a.set_filter_databases(view_strings(&["All databases", "app", "shop"]));
     a.set_filter_ranges(view_strings(&mon::TimeRange::ALL.map(|r| r.label())));
     a.set_filter_range(if filtered { 2 } else { 0 });
@@ -1073,18 +1347,28 @@ fn activity_window(name: &str) -> Box<dyn std::any::Any> {
         a.set_min_duration("10".into());
     }
 
-    let shown: Vec<QueryLog> = if name == "activity-empty-filtered" { Vec::new() } else { logs.clone() };
+    let shown: Vec<QueryLog> = if name == "activity-empty-filtered" {
+        Vec::new()
+    } else {
+        logs.clone()
+    };
     let (columns, rows, width) = view::grid(&ap::log_grid(&shown), &ap::LOG_COLUMN_WIDTHS);
     a.set_columns(columns);
     a.set_rows(rows);
     a.set_grid_width(width);
-    a.set_log_total(if name == "activity-empty-filtered" { 9 } else { logs.len() as i32 });
+    a.set_log_total(if name == "activity-empty-filtered" {
+        9
+    } else {
+        logs.len() as i32
+    });
     a.set_summary(ap::log_summary(shown.len(), a.get_log_total() as usize, filtered).into());
     a.set_page_label(ap::page_label(0, 1, shown.len()).into());
     a.set_sort_column(0);
     a.set_sort_desc(true);
     if name == "activity-error" {
-        a.set_error("Export failed: Failed to write /nonexistent/query-logs.csv: permission denied".into());
+        a.set_error(
+            "Export failed: Failed to write /nonexistent/query-logs.csv: permission denied".into(),
+        );
     }
     // Expand the failed query, which shows the error line too.
     if name == "activity" || name == "activity-long" {
@@ -1106,7 +1390,10 @@ fn activity_window(name: &str) -> Box<dyn std::any::Any> {
     a.set_status_bars(view::bars(&ap::status_breakdown(&stats)));
 
     // Server.
-    a.set_server_connections(view_strings(&["Production Postgres (PostgreSQL)", "Local MySQL (MySQL)"]));
+    a.set_server_connections(view_strings(&[
+        "Production Postgres (PostgreSQL)",
+        "Local MySQL (MySQL)",
+    ]));
     a.set_server_connection(0);
     let mut series = mon::MetricSeries::default();
     for i in 0..90i64 {
@@ -1130,7 +1417,10 @@ fn activity_window(name: &str) -> Box<dyn std::any::Any> {
         deadlocks: Some(0),
     };
     let window = series.window(Some(300_000));
-    a.set_live_tiles(view::tiles(&ap::live_tiles(Some(&latest), series.latest().map(|s| s.tx_per_sec))));
+    a.set_live_tiles(view::tiles(&ap::live_tiles(
+        Some(&latest),
+        series.latest().map(|s| s.tx_per_sec),
+    )));
     a.set_sessions_chart(view::chart(ap::sessions_chart(window).as_ref()));
     a.set_tx_chart(view::chart(ap::transactions_chart(window).as_ref()));
     a.set_updated_label("Updated 09:41:12".into());
@@ -1165,7 +1455,10 @@ fn activity_window(name: &str) -> Box<dyn std::any::Any> {
         _ => MonitorServerState::Ready,
     });
     a.set_server_message(match name {
-        "activity-server-error" => "connection to server at \"db.internal\" (10.0.4.12), port 5432 failed: timeout expired".into(),
+        "activity-server-error" => {
+            "connection to server at \"db.internal\" (10.0.4.12), port 5432 failed: timeout expired"
+                .into()
+        }
         "activity-server-unsupported" => "Not supported for this driver (Sqlite)".into(),
         _ => "".into(),
     });
@@ -1182,7 +1475,10 @@ fn activity_window(name: &str) -> Box<dyn std::any::Any> {
 
 fn view_strings(items: &[&str]) -> slint::ModelRc<slint::SharedString> {
     slint::ModelRc::new(slint::VecModel::from(
-        items.iter().map(|s| slint::SharedString::from(*s)).collect::<Vec<_>>(),
+        items
+            .iter()
+            .map(|s| slint::SharedString::from(*s))
+            .collect::<Vec<_>>(),
     ))
 }
 
@@ -1211,20 +1507,67 @@ fn migrations_window(name: &str) -> Box<dyn std::any::Any> {
     // Two schemas that differ in every way the tree can show.
     let col = |n: &str, t: &str, nullable: bool| ColumnInfo::new(n.into(), t.into(), nullable);
     let table = |n: &str, cols: Vec<ColumnInfo>, idx: Vec<IndexInfo>| TableWithFks {
-        schema: TableSchema::new(TableInfo::new(n.into(), "public".into(), "TABLE".into()), cols, idx),
+        schema: TableSchema::new(
+            TableInfo::new(n.into(), "public".into(), "TABLE".into()),
+            cols,
+            idx,
+        ),
         foreign_keys: vec![],
     };
     let source = vec![
-        table("customers", vec![col("id", "integer", false), col("email", "varchar(320)", false), col("phone", "text", true)], vec![]),
-        table("orders", vec![col("id", "integer", false), col("customer_id", "integer", false), col("total", "numeric(12,2)", false)], vec![]),
-        table("invoices", vec![col("id", "integer", false), col("order_id", "integer", false)], vec![]),
+        table(
+            "customers",
+            vec![
+                col("id", "integer", false),
+                col("email", "varchar(320)", false),
+                col("phone", "text", true),
+            ],
+            vec![],
+        ),
+        table(
+            "orders",
+            vec![
+                col("id", "integer", false),
+                col("customer_id", "integer", false),
+                col("total", "numeric(12,2)", false),
+            ],
+            vec![],
+        ),
+        table(
+            "invoices",
+            vec![
+                col("id", "integer", false),
+                col("order_id", "integer", false),
+            ],
+            vec![],
+        ),
     ];
     let target = vec![
-        table("customers", vec![col("id", "integer", false), col("email", "varchar(100)", true), col("fax", "text", true)], vec![]),
-        table("orders", vec![col("id", "integer", false), col("customer_id", "integer", false), col("total", "numeric(12,2)", false)], vec![]),
+        table(
+            "customers",
+            vec![
+                col("id", "integer", false),
+                col("email", "varchar(100)", true),
+                col("fax", "text", true),
+            ],
+            vec![],
+        ),
+        table(
+            "orders",
+            vec![
+                col("id", "integer", false),
+                col("customer_id", "integer", false),
+                col("total", "numeric(12,2)", false),
+            ],
+            vec![],
+        ),
         table("legacy_exports", vec![col("id", "integer", false)], vec![]),
     ];
-    let diff = if name == "migrations-diff-empty" { compute_diff(&source, &source) } else { compute_diff(&source, &target) };
+    let diff = if name == "migrations-diff-empty" {
+        compute_diff(&source, &source)
+    } else {
+        compute_diff(&source, &target)
+    };
 
     m.set_connections(slint::ModelRc::new(slint::VecModel::from(vec![
         slint::SharedString::from("● Staging Postgres (PostgreSQL)"),
@@ -1242,14 +1585,24 @@ fn migrations_window(name: &str) -> Box<dyn std::any::Any> {
     m.set_step(step);
 
     if name == "migrations-select-empty" {
-        m.set_connections(slint::ModelRc::new(slint::VecModel::from(Vec::<slint::SharedString>::new())));
+        m.set_connections(slint::ModelRc::new(slint::VecModel::from(Vec::<
+            slint::SharedString,
+        >::new())));
     } else {
         m.set_source_index(1);
-        m.set_target_index(if name == "migrations-select" || name == "migrations-select-busy" { 0 } else { 0 });
+        m.set_target_index(
+            if name == "migrations-select" || name == "migrations-select-busy" {
+                0
+            } else {
+                0
+            },
+        );
     }
     if name == "migrations-select-warning" {
         m.set_target_index(2);
-        m.set_select_warning("Not connected: Local MySQL. Open it from the connections screen first.".into());
+        m.set_select_warning(
+            "Not connected: Local MySQL. Open it from the connections screen first.".into(),
+        );
         m.set_blocked_reason("Connect first: Local MySQL".into());
     }
     if name == "migrations-select-error" {
@@ -1263,7 +1616,11 @@ fn migrations_window(name: &str) -> Box<dyn std::any::Any> {
     // Diff.
     m.set_diff_empty(mg::is_empty_diff(&diff));
     m.set_diff_summary(mp::diff_summary(&diff).into());
-    let expanded = if name == "migrations-diff-collapsed" { Default::default() } else { mp::default_expanded(&diff) };
+    let expanded = if name == "migrations-diff-collapsed" {
+        Default::default()
+    } else {
+        mp::default_expanded(&diff)
+    };
     m.set_diff_rows(view::diff_rows(&mp::diff_tree(&diff, &expanded)));
 
     // SQL.
@@ -1280,18 +1637,26 @@ fn migrations_window(name: &str) -> Box<dyn std::any::Any> {
     m.set_use_transaction(name != "migrations-sql-failed-partial");
 
     let outcome = match name {
-        "migrations-sql-success" => Some(ApplyResult { executed: statements.len() as u32, succeeded: statements.len() as u32, ..Default::default() }),
+        "migrations-sql-success" => Some(ApplyResult {
+            executed: statements.len() as u32,
+            succeeded: statements.len() as u32,
+            ..Default::default()
+        }),
         "migrations-sql-failed" => Some(ApplyResult {
             executed: 3,
             succeeded: 2,
-            failed_statement: Some("ALTER TABLE \"public\".\"customers\" ALTER COLUMN \"email\" SET NOT NULL".into()),
+            failed_statement: Some(
+                "ALTER TABLE \"public\".\"customers\" ALTER COLUMN \"email\" SET NOT NULL".into(),
+            ),
             error: Some("column \"email\" of relation \"customers\" contains null values".into()),
         }),
         "migrations-sql-failed-partial" => Some(ApplyResult {
             executed: 3,
             succeeded: 2,
             failed_statement: Some("DROP TABLE \"public\".\"legacy_exports\"".into()),
-            error: Some("cannot drop table legacy_exports because other objects depend on it".into()),
+            error: Some(
+                "cannot drop table legacy_exports because other objects depend on it".into(),
+            ),
         }),
         _ => None,
     };
@@ -1307,7 +1672,11 @@ fn migrations_window(name: &str) -> Box<dyn std::any::Any> {
         m.set_busy(true);
         m.set_busy_label("Applying the migration…".into());
     }
-    if name.starts_with("migrations-sql") && name != "migrations-sql-applying" && m.get_blocked_reason().is_empty() && !m.get_acknowledged() {
+    if name.starts_with("migrations-sql")
+        && name != "migrations-sql-applying"
+        && m.get_blocked_reason().is_empty()
+        && !m.get_acknowledged()
+    {
         m.set_blocked_reason("Tick the box to enable Apply".into());
     }
     if name == "migrations-diff-empty" {
@@ -1340,7 +1709,10 @@ fn workspace_behind(c: &AppWindow, light: bool, connection: &str, location: &str
     c.set_workspace_location_label(location.into());
     let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products"]
         .iter()
-        .map(|n| TableItem { name: (*n).into(), row_count: "~1240".into() })
+        .map(|n| TableItem {
+            name: (*n).into(),
+            row_count: "~1240".into(),
+        })
         .collect();
     c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
     c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![TabInfo {
@@ -1354,11 +1726,27 @@ fn workspace_behind(c: &AppWindow, light: bool, connection: &str, location: &str
 
 fn sample_preview(rows: usize, sheets: bool) -> dbhive_core::service_import_export::ImportPreview {
     use dbhive_core::service_import_export::ImportPreview;
-    let columns: Vec<String> = ["id", "full_name", "email", "plan", "signup_date", "monthly_spend"]
-        .iter()
-        .map(|s| s.to_string())
-        .collect();
-    let names = ["Ada Lovelace", "Grace Hopper", "Alan Turing", "Edsger Dijkstra", "Barbara Liskov", "Donald Knuth", "Margaret Hamilton", "Ken Thompson"];
+    let columns: Vec<String> = [
+        "id",
+        "full_name",
+        "email",
+        "plan",
+        "signup_date",
+        "monthly_spend",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let names = [
+        "Ada Lovelace",
+        "Grace Hopper",
+        "Alan Turing",
+        "Edsger Dijkstra",
+        "Barbara Liskov",
+        "Donald Knuth",
+        "Margaret Hamilton",
+        "Ken Thompson",
+    ];
     let data: Vec<Vec<String>> = (0..rows)
         .map(|i| {
             let n = names[i % names.len()];
@@ -1373,10 +1761,19 @@ fn sample_preview(rows: usize, sheets: bool) -> dbhive_core::service_import_expo
         })
         .collect();
     ImportPreview {
-        detected_types: ["INTEGER", "TEXT", "TEXT", "TEXT", "DATE", "DECIMAL"].iter().map(|s| s.to_string()).collect(),
+        detected_types: ["INTEGER", "TEXT", "TEXT", "TEXT", "DATE", "DECIMAL"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
         total_rows: sheets.then_some(940),
         file_type: if sheets { "xlsx" } else { "csv" }.to_string(),
-        sheet_names: sheets.then(|| vec!["Customers".to_string(), "Churned".to_string(), "Notes".to_string()]),
+        sheet_names: sheets.then(|| {
+            vec![
+                "Customers".to_string(),
+                "Churned".to_string(),
+                "Notes".to_string(),
+            ]
+        }),
         columns,
         rows: data,
     }
@@ -1408,7 +1805,12 @@ fn wizard_at(step: &str) -> dbhive_ui_model::import_wizard::ImportWizard {
 
     let mut w = ImportWizard::new("public");
     w.set_file_path("/Users/me/Downloads/customers.csv");
-    w.set_tables(vec!["customers".into(), "order_items".into(), "orders".into(), "products".into()]);
+    w.set_tables(vec![
+        "customers".into(),
+        "order_items".into(),
+        "orders".into(),
+        "products".into(),
+    ]);
     if step == "file" {
         return w;
     }
@@ -1465,7 +1867,12 @@ fn wizard_at(step: &str) -> dbhive_ui_model::import_wizard::ImportWizard {
         },
     };
     w.options.batch_size = 100;
-    let plan = svc::build_import_plan(&dbhive_core::models::DbDriver::Postgres, &source, &w.options).unwrap();
+    let plan = svc::build_import_plan(
+        &dbhive_core::models::DbDriver::Postgres,
+        &source,
+        &w.options,
+    )
+    .unwrap();
     w.apply_plan(source, plan);
     w
 }
@@ -1519,7 +1926,12 @@ fn import_export_window(name: &str) -> Box<dyn std::any::Any> {
             d.wizard = wizard_at("confirm");
             d.wizard.import_started();
             let r = if step == Some("done") {
-                ImportResult { rows_imported: 240, rows_failed: 0, errors: vec![], success: true }
+                ImportResult {
+                    rows_imported: 240,
+                    rows_failed: 0,
+                    errors: vec![],
+                    success: true,
+                }
             } else {
                 ImportResult {
                     rows_imported: 232,
@@ -1532,13 +1944,21 @@ fn import_export_window(name: &str) -> Box<dyn std::any::Any> {
             };
             d.wizard.import_finished(r);
         }
-        Some("sql") | Some("sql-running") | Some("sql-result") | Some("sql-error") | Some("sql-partial") => {
+        Some("sql") | Some("sql-running") | Some("sql-result") | Some("sql-error")
+        | Some("sql-partial") => {
             d.tab = 1;
             d.sql.path = "/Users/me/Downloads/shop_2026-10-21.sql".into();
             match step {
                 Some("sql-running") => d.sql_running = true,
                 Some("sql-result") => {
-                    d.sql_result = Some(SqlImportResult { executed: 1840, errors_count: 0, skipped: 12, first_error: None, cancelled: false, log_file: None });
+                    d.sql_result = Some(SqlImportResult {
+                        executed: 1840,
+                        errors_count: 0,
+                        skipped: 12,
+                        first_error: None,
+                        cancelled: false,
+                        log_file: None,
+                    });
                 }
                 Some("sql-partial") => {
                     d.sql.continue_on_error = true;
@@ -1546,9 +1966,13 @@ fn import_export_window(name: &str) -> Box<dyn std::any::Any> {
                         executed: 1790,
                         errors_count: 3,
                         skipped: 12,
-                        first_error: Some("ERROR: relation \"order_items\" already exists (statement 214)".into()),
+                        first_error: Some(
+                            "ERROR: relation \"order_items\" already exists (statement 214)".into(),
+                        ),
                         cancelled: false,
-                        log_file: Some("/Users/me/Downloads/shop_2026-10-21_import_errors.log".into()),
+                        log_file: Some(
+                            "/Users/me/Downloads/shop_2026-10-21_import_errors.log".into(),
+                        ),
                     });
                 }
                 Some("sql-error") => {
@@ -1564,20 +1988,31 @@ fn import_export_window(name: &str) -> Box<dyn std::any::Any> {
     // Export and dump tabs.
     if name.starts_with("export") {
         d.wizard = wizard_at("file");
-        d.tab = if name.starts_with("export-dump") { 3 } else { 2 };
+        d.tab = if name.starts_with("export-dump") {
+            3
+        } else {
+            2
+        };
         d.export.table = "customers".into();
         d.export.path = "/Users/me/Downloads/customers_2026-10-21.csv".into();
         d.dump.path = "/Users/me/Downloads/app_2026-10-21.sql".into();
         match name {
-            "export-done" => d.export_result = "Exported 1,240 rows to /Users/me/Downloads/customers_2026-10-21.csv".into(),
-            "export-error" => d.export_error = "Export failed: permission denied for table customers".into(),
+            "export-done" => {
+                d.export_result =
+                    "Exported 1,240 rows to /Users/me/Downloads/customers_2026-10-21.csv".into()
+            }
+            "export-error" => {
+                d.export_error = "Export failed: permission denied for table customers".into()
+            }
             "export-empty" => d.wizard.set_tables(vec![]),
             "export-loading" => {
                 d.wizard.set_tables(vec![]);
                 d.tables_loading = true;
             }
             "export-running" => d.export_running = true,
-            "export-dump-done" => d.dump_result = "Dumped 4 tables to /Users/me/Downloads/app_2026-10-21.sql".into(),
+            "export-dump-done" => {
+                d.dump_result = "Dumped 4 tables to /Users/me/Downloads/app_2026-10-21.sql".into()
+            }
             "export-dump-error" => d.dump_error = "The folder does not exist.".into(),
             "export-dump" => {
                 d.dump.include_drop = true;
@@ -1613,18 +2048,21 @@ fn import_export_window(name: &str) -> Box<dyn std::any::Any> {
 fn backup_entries() -> Vec<dbhive_core::models::backup::BackupEntry> {
     use dbhive_core::models::backup::{BackupEntry, BackupStatus};
     let now = chrono::Utc::now().timestamp();
-    let e = |file: &str, size: u64, mins: i64, note: Option<&str>, status: BackupStatus| BackupEntry {
-        id: file.into(),
-        connection_id: "c1".into(),
-        connection_name: "Production Postgres".into(),
-        driver: "Postgres".into(),
-        file_path: format!("/Users/me/Library/Application Support/com.kwamina.db-hive/backups/{file}"),
-        file_name: file.into(),
-        size_bytes: size,
-        created_at: now - mins * 60,
-        status,
-        note: note.map(str::to_string),
-    };
+    let e =
+        |file: &str, size: u64, mins: i64, note: Option<&str>, status: BackupStatus| BackupEntry {
+            id: file.into(),
+            connection_id: "c1".into(),
+            connection_name: "Production Postgres".into(),
+            driver: "Postgres".into(),
+            file_path: format!(
+                "/Users/me/Library/Application Support/com.kwamina.db-hive/backups/{file}"
+            ),
+            file_name: file.into(),
+            size_bytes: size,
+            created_at: now - mins * 60,
+            status,
+            note: note.map(str::to_string),
+        };
     vec![
         e("Production_Postgres_1761043800.sql", 48_234_112, 12, Some("before the orders migration"), BackupStatus::Completed),
         e("Production_Postgres_1760957400.sql", 47_901_888, 60 * 24, None, BackupStatus::Completed),
@@ -1755,7 +2193,10 @@ fn builder_workspace_behind(light: bool, loading: bool) -> AppWindow {
     c.set_workspace_location_label("app · public".into());
     let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products"]
         .iter()
-        .map(|n| TableItem { name: (*n).into(), row_count: "~1240".into() })
+        .map(|n| TableItem {
+            name: (*n).into(),
+            row_count: "~1240".into(),
+        })
         .collect();
     c.set_workspace_loading_tables(loading);
     if !loading {
@@ -1784,9 +2225,15 @@ fn builder_window(name: &str) -> Box<dyn std::any::Any> {
     let q = |x: &str| format!("\"{}\"", x.replace('"', "\"\""));
     let esc = |x: &str| x.replace('\'', "''");
     let pg = rules_for(&dbhive_core::models::DbDriver::Postgres);
-    let cols = |l: &[(&str, &str)]| l.iter().map(|(a, b)| (a.to_string(), b.to_string())).collect::<Vec<_>>();
-    let catalog: Vec<String> =
-        ["customers", "orders", "order_items", "products", "refunds"].iter().map(|s| s.to_string()).collect();
+    let cols = |l: &[(&str, &str)]| {
+        l.iter()
+            .map(|(a, b)| (a.to_string(), b.to_string()))
+            .collect::<Vec<_>>()
+    };
+    let catalog: Vec<String> = ["customers", "orders", "order_items", "products", "refunds"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
     let keys = vec![ForeignKeyInfo {
         name: "orders_customer_fk".into(),
         table: "orders".into(),
@@ -1801,8 +2248,26 @@ fn builder_window(name: &str) -> Box<dyn std::any::Any> {
 
     let mut e = BuilderEditor::new();
     if name != "builder-empty" && name != "builder-loading" {
-        e.add_table("public", "customers", cols(&[("id", "integer"), ("name", "text"), ("plan", "text"), ("active", "boolean")]));
-        e.add_table("public", "orders", cols(&[("id", "integer"), ("customer_id", "integer"), ("total", "numeric"), ("status", "text")]));
+        e.add_table(
+            "public",
+            "customers",
+            cols(&[
+                ("id", "integer"),
+                ("name", "text"),
+                ("plan", "text"),
+                ("active", "boolean"),
+            ]),
+        );
+        e.add_table(
+            "public",
+            "orders",
+            cols(&[
+                ("id", "integer"),
+                ("customer_id", "integer"),
+                ("total", "numeric"),
+                ("status", "text"),
+            ]),
+        );
         let k = &keys;
         if name != "builder-error" {
             e.apply("join-suggest", 0, 0, "", k);
@@ -1853,10 +2318,14 @@ fn builder_window(name: &str) -> Box<dyn std::any::Any> {
         b.set_pending_note("Reading the columns of orders…".into());
     }
     if name == "builder-error" {
-        b.set_error("Could not read the columns of refunds: relation \"public.refunds\" does not exist".into());
+        b.set_error(
+            "Could not read the columns of refunds: relation \"public.refunds\" does not exist"
+                .into(),
+        );
         b.set_error_retry(true);
     }
-    let can_use = !view.sql.is_empty() && view.limit_error.is_empty() && view.offset_error.is_empty();
+    let can_use =
+        !view.sql.is_empty() && view.limit_error.is_empty() && view.offset_error.is_empty();
     dbhive_slint::builder_view::apply(&c, &view, Change::Structure, can_use, dark);
     dbhive_slint::builder_view::reset_fields(&c, &view);
     c.show().unwrap();
@@ -1873,7 +2342,10 @@ fn table_dialog_window(name: &str) -> Box<dyn std::any::Any> {
     let c = builder_workspace_behind(light, false);
     let dark = !light;
     let pg = DbDriver::Postgres;
-    let tables: Vec<String> = ["customers", "orders", "order_items", "products"].iter().map(|s| s.to_string()).collect();
+    let tables: Vec<String> = ["customers", "orders", "order_items", "products"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
 
     let d = c.global::<TableDialogState>();
     d.set_visible(true);
@@ -1902,7 +2374,9 @@ fn table_dialog_window(name: &str) -> Box<dyn std::any::Any> {
                 d.set_subtitle("public.customers".into());
             }
             "tabledialog-edit-error" => {
-                d.set_load_error("Could not read customers: permission denied for table customers".into());
+                d.set_load_error(
+                    "Could not read customers: permission denied for table customers".into(),
+                );
                 d.set_mode(1);
                 d.set_title("Edit table".into());
                 d.set_subtitle("public.customers".into());
@@ -1919,12 +2393,24 @@ fn table_dialog_window(name: &str) -> Box<dyn std::any::Any> {
                     e.apply("col-remove", 0, 0, "");
                 }
                 let mut rep = Vec::new();
-                if name == "tabledialog-edit-preview" || name == "tabledialog-edit-failed" || name == "tabledialog-edit-done" {
+                if name == "tabledialog-edit-preview"
+                    || name == "tabledialog-edit-failed"
+                    || name == "tabledialog-edit-done"
+                {
                     e.step = 1;
                 }
                 let stmts = e.statements(&pg).unwrap_or_default();
                 if name == "tabledialog-edit-failed" {
-                    rep = report(&stmts, &[Ok(()), Err("column \"signup_date\" of relation \"customers\" already exists".into())]);
+                    rep = report(
+                        &stmts,
+                        &[
+                            Ok(()),
+                            Err(
+                                "column \"signup_date\" of relation \"customers\" already exists"
+                                    .into(),
+                            ),
+                        ],
+                    );
                 }
                 if name == "tabledialog-edit-done" {
                     let ok: Vec<Result<(), String>> = stmts.iter().map(|_| Ok(())).collect();
@@ -1938,7 +2424,13 @@ fn table_dialog_window(name: &str) -> Box<dyn std::any::Any> {
         let mut w = CreateWizard::new("public");
         if name != "tabledialog-basics-empty" {
             w.apply("name", 0, 0, "invoices", &tables);
-            w.apply("desc", 0, 0, "One row per invoice sent to a customer", &tables);
+            w.apply(
+                "desc",
+                0,
+                0,
+                "One row per invoice sent to a customer",
+                &tables,
+            );
         }
         if name == "tabledialog-basics" || name == "tabledialog-basics-empty" {
             // Step one as it opens.
@@ -1966,7 +2458,10 @@ fn table_dialog_window(name: &str) -> Box<dyn std::any::Any> {
             w.apply("fk-add", 0, 0, "", &tables);
             w.apply("fk-col", 0, 1, "", &tables); // customer_id
             w.apply("fk-table", 0, 0, "", &tables); // customers
-            w.ref_columns.insert("customers".into(), RefColumns::Loaded(vec!["id".into(), "name".into(), "plan".into()]));
+            w.ref_columns.insert(
+                "customers".into(),
+                RefColumns::Loaded(vec!["id".into(), "name".into(), "plan".into()]),
+            );
             w.apply("fk-rcol", 0, 0, "", &tables);
             w.apply("fk-del", 0, 2, "", &tables);
             w.step = 2;
@@ -1983,8 +2478,6 @@ fn table_dialog_window(name: &str) -> Box<dyn std::any::Any> {
     c.show().unwrap();
     Box::new(c)
 }
-
-
 
 // -- ER diagram and schema designer ---------------------------------------------
 //
@@ -2035,19 +2528,136 @@ fn er_fk(table: &str, col: &str, parent: &str) -> dbhive_core::models::ForeignKe
 
 fn sample_er_scene() -> dbhive_ui_model::erd_scene::ErdScene {
     use dbhive_ui_model::er_diagram::DiagramTable;
-    let t = |name: &str, cols: Vec<dbhive_core::models::ColumnInfo>| DiagramTable { name: name.into(), columns: cols };
+    let t = |name: &str, cols: Vec<dbhive_core::models::ColumnInfo>| DiagramTable {
+        name: name.into(),
+        columns: cols,
+    };
     let tables = vec![
-        t("customers", vec![er_col("id", "integer", true), er_col("email", "varchar(255)", false), er_col("name", "text", false), er_col("created_at", "timestamp", false)]),
-        t("addresses", vec![er_col("id", "integer", true), er_col("customer_id", "integer", false), er_col("line1", "varchar(120)", false), er_col("city", "varchar(80)", false), er_col("country", "char(2)", false)]),
-        t("products", vec![er_col("id", "integer", true), er_col("sku", "varchar(32)", false), er_col("name", "varchar(120)", false), er_col("price", "numeric(10,2)", false), er_col("active", "boolean", false)]),
-        t("categories", vec![er_col("id", "integer", true), er_col("name", "text", false), er_col("parent_id", "integer", false)]),
-        t("product_categories", vec![er_col("product_id", "integer", true), er_col("category_id", "integer", true)]),
-        t("orders", vec![er_col("id", "integer", true), er_col("customer_id", "integer", false), er_col("address_id", "integer", false), er_col("status", "varchar(20)", false), er_col("total", "numeric(12,2)", false), er_col("placed_at", "timestamp", false)]),
-        t("order_items", vec![er_col("id", "integer", true), er_col("order_id", "integer", false), er_col("product_id", "integer", false), er_col("quantity", "integer", false), er_col("unit_price", "numeric(10,2)", false)]),
-        t("payments", vec![er_col("id", "integer", true), er_col("order_id", "integer", false), er_col("provider", "varchar(40)", false), er_col("amount", "numeric(12,2)", false), er_col("paid_at", "timestamp", false)]),
-        t("refunds", vec![er_col("id", "integer", true), er_col("payment_id", "integer", false), er_col("amount", "numeric(12,2)", false), er_col("reason", "text", false)]),
-        t("audit_log", (0..14).map(|i| er_col(if i == 0 { "id" } else { ["actor_id", "action", "entity", "entity_id", "before", "after", "ip", "user_agent", "session_id", "request_id", "created_at", "retention_until", "checksum"][i - 1] }, if i == 0 { "bigint" } else { "text" }, i == 0)).collect()),
-        t("a_table_with_a_very_long_name_that_must_be_elided_not_overflow_0001", vec![er_col("id", "integer", true), er_col("a_column_with_a_very_long_name_that_must_be_elided_too", "text", false)]),
+        t(
+            "customers",
+            vec![
+                er_col("id", "integer", true),
+                er_col("email", "varchar(255)", false),
+                er_col("name", "text", false),
+                er_col("created_at", "timestamp", false),
+            ],
+        ),
+        t(
+            "addresses",
+            vec![
+                er_col("id", "integer", true),
+                er_col("customer_id", "integer", false),
+                er_col("line1", "varchar(120)", false),
+                er_col("city", "varchar(80)", false),
+                er_col("country", "char(2)", false),
+            ],
+        ),
+        t(
+            "products",
+            vec![
+                er_col("id", "integer", true),
+                er_col("sku", "varchar(32)", false),
+                er_col("name", "varchar(120)", false),
+                er_col("price", "numeric(10,2)", false),
+                er_col("active", "boolean", false),
+            ],
+        ),
+        t(
+            "categories",
+            vec![
+                er_col("id", "integer", true),
+                er_col("name", "text", false),
+                er_col("parent_id", "integer", false),
+            ],
+        ),
+        t(
+            "product_categories",
+            vec![
+                er_col("product_id", "integer", true),
+                er_col("category_id", "integer", true),
+            ],
+        ),
+        t(
+            "orders",
+            vec![
+                er_col("id", "integer", true),
+                er_col("customer_id", "integer", false),
+                er_col("address_id", "integer", false),
+                er_col("status", "varchar(20)", false),
+                er_col("total", "numeric(12,2)", false),
+                er_col("placed_at", "timestamp", false),
+            ],
+        ),
+        t(
+            "order_items",
+            vec![
+                er_col("id", "integer", true),
+                er_col("order_id", "integer", false),
+                er_col("product_id", "integer", false),
+                er_col("quantity", "integer", false),
+                er_col("unit_price", "numeric(10,2)", false),
+            ],
+        ),
+        t(
+            "payments",
+            vec![
+                er_col("id", "integer", true),
+                er_col("order_id", "integer", false),
+                er_col("provider", "varchar(40)", false),
+                er_col("amount", "numeric(12,2)", false),
+                er_col("paid_at", "timestamp", false),
+            ],
+        ),
+        t(
+            "refunds",
+            vec![
+                er_col("id", "integer", true),
+                er_col("payment_id", "integer", false),
+                er_col("amount", "numeric(12,2)", false),
+                er_col("reason", "text", false),
+            ],
+        ),
+        t(
+            "audit_log",
+            (0..14)
+                .map(|i| {
+                    er_col(
+                        if i == 0 {
+                            "id"
+                        } else {
+                            [
+                                "actor_id",
+                                "action",
+                                "entity",
+                                "entity_id",
+                                "before",
+                                "after",
+                                "ip",
+                                "user_agent",
+                                "session_id",
+                                "request_id",
+                                "created_at",
+                                "retention_until",
+                                "checksum",
+                            ][i - 1]
+                        },
+                        if i == 0 { "bigint" } else { "text" },
+                        i == 0,
+                    )
+                })
+                .collect(),
+        ),
+        t(
+            "a_table_with_a_very_long_name_that_must_be_elided_not_overflow_0001",
+            vec![
+                er_col("id", "integer", true),
+                er_col(
+                    "a_column_with_a_very_long_name_that_must_be_elided_too",
+                    "text",
+                    false,
+                ),
+            ],
+        ),
     ];
     let fks = vec![
         er_fk("addresses", "customer_id", "customers"),
@@ -2084,7 +2694,11 @@ fn er_window(name: &str) -> Box<dyn std::any::Any> {
     erd_workspace_behind(&c, light);
 
     let mut scene = sample_er_scene();
-    let orders = scene.tables.iter().position(|t| t.name == "orders").unwrap();
+    let orders = scene
+        .tables
+        .iter()
+        .position(|t| t.name == "orders")
+        .unwrap();
     match name {
         "er-selected" | "er-zoomed" => scene.selected = Some(orders),
         "er-filter" => scene.filter = "order".into(),
@@ -2095,12 +2709,20 @@ fn er_window(name: &str) -> Box<dyn std::any::Any> {
     let mut diagram = Diagram::new(Vec::new(), Vec::new()).with_flow(Flow::Vertical, true);
     diagram.hide_edges = !scene.options.show_relationships;
     diagram.selected = scene.selected;
-    diagram.replace(dbhive_slint::erd_view::nodes(&scene), dbhive_slint::erd_view::links(&scene));
+    diagram.replace(
+        dbhive_slint::erd_view::nodes(&scene),
+        dbhive_slint::erd_view::links(&scene),
+    );
 
     let (vw, vh) = canvas_size();
     let view = if name == "er-zoomed" {
         let r = scene.rect(orders);
-        View { zoom: 1.0, pan_x: 0.0, pan_y: 0.0 }.center_on(r.cx(), r.cy(), vw, vh)
+        View {
+            zoom: 1.0,
+            pan_x: 0.0,
+            pan_y: 0.0,
+        }
+        .center_on(r.cx(), r.cy(), vw, vh)
     } else {
         fit(scene.bounds().unwrap(), vw, vh)
     };
@@ -2109,7 +2731,10 @@ fn er_window(name: &str) -> Box<dyn std::any::Any> {
     st.set_visible(true);
     let (loading, error) = match name {
         "er-loading" => (true, "Could not read the schema: x"),
-        "er-error" => (false, "Could not read the schema: permission denied for schema public"),
+        "er-error" => (
+            false,
+            "Could not read the schema: permission denied for schema public",
+        ),
         _ => (false, ""),
     };
     let error = if name == "er-error" { error } else { "" };
@@ -2118,9 +2743,19 @@ fn er_window(name: &str) -> Box<dyn std::any::Any> {
     } else {
         Some(&scene)
     };
-    let empty_scene = dbhive_ui_model::erd_scene::ErdScene::new(vec![], vec![], &std::collections::HashMap::new());
-    let scene_ref = if name == "er-empty" { Some(&empty_scene) } else { scene_ref };
-    dbhive_slint::erd_view::project(&st, scene_ref, &diagram, view.zoom, loading, error, "public");
+    let empty_scene = dbhive_ui_model::erd_scene::ErdScene::new(
+        vec![],
+        vec![],
+        &std::collections::HashMap::new(),
+    );
+    let scene_ref = if name == "er-empty" {
+        Some(&empty_scene)
+    } else {
+        scene_ref
+    };
+    dbhive_slint::erd_view::project(
+        &st, scene_ref, &diagram, view.zoom, loading, error, "public",
+    );
     st.set_pan_x(view.pan_x);
     st.set_pan_y(view.pan_y);
     st.set_viewport_width(vw);
@@ -2139,7 +2774,9 @@ fn er_window(name: &str) -> Box<dyn std::any::Any> {
 
 fn designer_window(name: &str) -> Box<dyn std::any::Any> {
     use dbhive_slint::diagram_model::Diagram;
-    use dbhive_ui_model::designer_session::{action_index, type_index, Designer, Outcome, TableResult};
+    use dbhive_ui_model::designer_session::{
+        action_index, type_index, Designer, Outcome, TableResult,
+    };
     use dbhive_ui_model::erd_scene::{fit, Flow};
     use dbhive_ui_model::table_editor::TypeKind;
 
@@ -2174,7 +2811,11 @@ fn designer_window(name: &str) -> Box<dyn std::any::Any> {
         d.set_column_type(orders, user_id, type_index(TypeKind::BigInt));
         d.set_reference_table(orders, user_id, "users");
         d.set_reference_column(orders, user_id, "id");
-        d.set_on_delete(orders, user_id, action_index(&dbhive_core::models::ForeignKeyAction::Cascade));
+        d.set_on_delete(
+            orders,
+            user_id,
+            action_index(&dbhive_core::models::ForeignKeyAction::Cascade),
+        );
         let placed = d.add_column(orders).unwrap();
         d.rename_column(orders, placed, "placed_at");
         d.set_column_type(orders, placed, type_index(TypeKind::Timestamp));
@@ -2213,7 +2854,10 @@ fn designer_window(name: &str) -> Box<dyn std::any::Any> {
 
     let mut diagram = Diagram::new(Vec::new(), Vec::new()).with_flow(Flow::Horizontal, true);
     diagram.selected = d.selected_index();
-    diagram.replace(dbhive_slint::designer_view::nodes(&d), dbhive_slint::designer_view::links(&d));
+    diagram.replace(
+        dbhive_slint::designer_view::nodes(&d),
+        dbhive_slint::designer_view::links(&d),
+    );
     let (vw, vh) = canvas_size();
     let view = match d.bounds() {
         Some(b) => fit(b, vw - 340.0, vh),
@@ -2222,7 +2866,14 @@ fn designer_window(name: &str) -> Box<dyn std::any::Any> {
 
     let st = c.global::<DesignerState>();
     st.set_visible(true);
-    dbhive_slint::designer_view::project(&st, &d, &diagram, view.zoom, name == "designer-applying", "Sqlite");
+    dbhive_slint::designer_view::project(
+        &st,
+        &d,
+        &diagram,
+        view.zoom,
+        name == "designer-applying",
+        "Sqlite",
+    );
     st.set_pan_x(view.pan_x);
     st.set_pan_y(view.pan_y);
     st.set_viewport_width(vw - 340.0);
@@ -2235,10 +2886,22 @@ fn designer_window(name: &str) -> Box<dyn std::any::Any> {
     }
     if name == "designer-result" {
         let results = vec![
-            TableResult { name: "users".into(), outcome: Outcome::Created },
-            TableResult { name: "products".into(), outcome: Outcome::Created },
-            TableResult { name: "orders".into(), outcome: Outcome::Failed("table \"orders\" already exists".into()) },
-            TableResult { name: "order_items".into(), outcome: Outcome::Skipped("orders was not created".into()) },
+            TableResult {
+                name: "users".into(),
+                outcome: Outcome::Created,
+            },
+            TableResult {
+                name: "products".into(),
+                outcome: Outcome::Created,
+            },
+            TableResult {
+                name: "orders".into(),
+                outcome: Outcome::Failed("table \"orders\" already exists".into()),
+            },
+            TableResult {
+                name: "order_items".into(),
+                outcome: Outcome::Skipped("orders was not created".into()),
+            },
         ];
         st.set_results(dbhive_slint::designer_view::result_rows(&results));
         st.set_results_summary(dbhive_ui_model::designer_session::results_summary(&results).into());
@@ -2249,7 +2912,11 @@ fn designer_window(name: &str) -> Box<dyn std::any::Any> {
 }
 
 fn email_index(d: &dbhive_ui_model::designer_session::Designer) -> usize {
-    d.tables[0].columns.iter().position(|c| c.base.name == "email").unwrap_or(0)
+    d.tables[0]
+        .columns
+        .iter()
+        .position(|c| c.base.name == "email")
+        .unwrap_or(0)
 }
 
 // -- Plugin manager ---------------------------------------------------------
@@ -2282,7 +2949,12 @@ const PLUGINS_MANIFEST: &str = r#"{
   } }
 }"#;
 
-fn plugins_sample(id: &str, name: &str, version: &str, enabled: bool) -> dbhive_core::plugins::Plugin {
+fn plugins_sample(
+    id: &str,
+    name: &str,
+    version: &str,
+    enabled: bool,
+) -> dbhive_core::plugins::Plugin {
     use dbhive_core::plugins::{Plugin, PluginManifest, PluginStats};
     let mut manifest = PluginManifest::parse(PLUGINS_MANIFEST).expect("sample manifest");
     manifest.id = id.into();
@@ -2391,14 +3063,18 @@ fn plugins_window(name: &str) -> Box<dyn std::any::Any> {
         "plugins-settings" | "plugins-settings-error" => {
             p.open_settings("com.example.alpha");
             if name == "plugins-settings-error" {
-                p.set_number(dbhive_ui_model::plugins_panel::Scope::Form, "maxRows", "lots");
+                p.set_number(
+                    dbhive_ui_model::plugins_panel::Scope::Form,
+                    "maxRows",
+                    "lots",
+                );
             }
         }
         "plugins-empty" => p.apply_scan(Ok((vec![], vec![]))),
         "plugins-loading" | "plugins-market-loading" => p.load = Load::Loading,
-        "plugins-error" | "plugins-market-error" => {
-            p.apply_scan(Err("Could not read the plugin folder: permission denied (os error 13)".into()))
-        }
+        "plugins-error" | "plugins-market-error" => p.apply_scan(Err(
+            "Could not read the plugin folder: permission denied (os error 13)".into(),
+        )),
         "plugins-problems" => p.apply_scan(Ok((
             plugins_sample_list(),
             vec![
@@ -2414,15 +3090,22 @@ fn plugins_window(name: &str) -> Box<dyn std::any::Any> {
                 true,
             );
             long.manifest.description = "This description keeps going to prove that long copy wraps inside the detail pane instead of running off the edge of the panel, and stays readable. ".repeat(3);
-            long.manifest.author.name = "An author with a very long name, Incorporated and Associates".into();
+            long.manifest.author.name =
+                "An author with a very long name, Incorporated and Associates".into();
             let mut list = plugins_sample_list();
             list.insert(0, long);
             p.apply_scan(Ok((list, vec![])));
             p.select("com.example.long");
         }
         "plugins-market" => {
-            p.upsert(plugins_sample("com.dbhive.csv-exporter", "Advanced CSV Exporter", "1.0.0", true));
-            p.busy.insert("com.dbhive.dark-theme-plus".into(), Busy::Installing);
+            p.upsert(plugins_sample(
+                "com.dbhive.csv-exporter",
+                "Advanced CSV Exporter",
+                "1.0.0",
+                true,
+            ));
+            p.busy
+                .insert("com.dbhive.dark-theme-plus".into(), Busy::Installing);
             p.install_errors.insert(
                 "com.dbhive.sql-formatter".into(),
                 "SQL Formatter Pro is not bundled with this build, and downloading plugins is not supported yet.".into(),
@@ -2473,7 +3156,10 @@ fn ai_models() -> Vec<dbhive_core::ai::AiModel> {
         .iter()
         .map(|id| AiModel {
             id: (*id).into(),
-            name: id.to_uppercase().replace("GPT-4O", "GPT-4o").replace("-MINI", " Mini"),
+            name: id
+                .to_uppercase()
+                .replace("GPT-4O", "GPT-4o")
+                .replace("-MINI", " Mini"),
             provider: AiProviderType::OpenAI,
             description: Some("128K context".into()),
             context_window: Some(128_000),
@@ -2483,17 +3169,30 @@ fn ai_models() -> Vec<dbhive_core::ai::AiModel> {
 
 fn ai_sample_context() -> String {
     use dbhive_core::service_ai::{build_schema_context, SchemaColumn, SchemaTable};
-    let col = |n: &str, t: &str| SchemaColumn { name: n.into(), data_type: t.into() };
+    let col = |n: &str, t: &str| SchemaColumn {
+        name: n.into(),
+        data_type: t.into(),
+    };
     let tables = vec![
         SchemaTable {
             schema: "public".into(),
             table: "customers".into(),
-            columns: vec![col("id", "integer"), col("name", "text"), col("email", "text"), col("created_at", "timestamp")],
+            columns: vec![
+                col("id", "integer"),
+                col("name", "text"),
+                col("email", "text"),
+                col("created_at", "timestamp"),
+            ],
         },
         SchemaTable {
             schema: "public".into(),
             table: "orders".into(),
-            columns: vec![col("id", "integer"), col("customer_id", "integer"), col("total", "numeric"), col("status", "text")],
+            columns: vec![
+                col("id", "integer"),
+                col("customer_id", "integer"),
+                col("total", "numeric"),
+                col("status", "text"),
+            ],
         },
     ];
     build_schema_context("app", &tables)
@@ -2517,7 +3216,14 @@ fn ai_ready_panel() -> dbhive_ui_model::ai_panel::AiPanel {
     settings.active_provider = OpenAI;
     settings.openai.default_model = "gpt-4o".into();
     p.settings_result(Ok(settings));
-    p.status_result(OpenAI, ProviderStatus { provider: OpenAI, available: true, configured: true });
+    p.status_result(
+        OpenAI,
+        ProviderStatus {
+            provider: OpenAI,
+            available: true,
+            configured: true,
+        },
+    );
     p.begin_models();
     p.models_result(OpenAI, Ok(ai_models()));
     let key = ("conn".to_string(), "app".to_string());
@@ -2544,7 +3250,10 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
     c.set_workspace_location_label("app · public".into());
     let tables: Vec<TableItem> = ["customers", "orders", "order_items", "products"]
         .iter()
-        .map(|n| TableItem { name: (*n).into(), row_count: "~1240".into() })
+        .map(|n| TableItem {
+            name: (*n).into(),
+            row_count: "~1240".into(),
+        })
         .collect();
     c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
     c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![TabInfo {
@@ -2580,7 +3289,11 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
 
     let mut p = ai_ready_panel();
     let mut prompt: &'static str = "";
-    let inputs = |prompt: &'static str| Inputs { current_sql: sql, last_error: error, prompt };
+    let inputs = |prompt: &'static str| Inputs {
+        current_sql: sql,
+        last_error: error,
+        prompt,
+    };
 
     match base {
         "ai-answers" | "ai-long" => {
@@ -2613,7 +3326,14 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
         }
         "ai-failed" => {
             p.start(Kind::Optimize, inputs(""));
-            p.finish(OpenAI, Kind::Optimize, Err("OpenAI API error: Rate limit reached for gpt-4o. Please try again in 20s.".into()));
+            p.finish(
+                OpenAI,
+                Kind::Optimize,
+                Err(
+                    "OpenAI API error: Rate limit reached for gpt-4o. Please try again in 20s."
+                        .into(),
+                ),
+            );
         }
         "ai-context" | "ai-context-off" => {
             p.toggle_context_viewer();
@@ -2630,7 +3350,10 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
         "ai-models-error" => {
             p.refresh_models();
             p.begin_models();
-            p.models_result(OpenAI, Err("OpenAI API error: Incorrect API key provided".into()));
+            p.models_result(
+                OpenAI,
+                Err("OpenAI API error: Incorrect API key provided".into()),
+            );
         }
         "ai-models-loading" => {
             p.refresh_models();
@@ -2639,7 +3362,14 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
         "ai-key" | "ai-key-saved" => {
             p.show_settings(true);
             if base == "ai-key" {
-                p.status_result(OpenAI, ProviderStatus { provider: OpenAI, available: false, configured: false });
+                p.status_result(
+                    OpenAI,
+                    ProviderStatus {
+                        provider: OpenAI,
+                        available: false,
+                        configured: false,
+                    },
+                );
             }
         }
         "ai-checking" => p.begin_status_check(),
@@ -2647,11 +3377,22 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
             p.change_provider(AiProviderType::Ollama);
             p.status_result(
                 AiProviderType::Ollama,
-                ProviderStatus { provider: AiProviderType::Ollama, available: false, configured: true },
+                ProviderStatus {
+                    provider: AiProviderType::Ollama,
+                    available: false,
+                    configured: true,
+                },
             );
         }
         "ai-unavailable" => {
-            p.status_result(OpenAI, ProviderStatus { provider: OpenAI, available: false, configured: true });
+            p.status_result(
+                OpenAI,
+                ProviderStatus {
+                    provider: OpenAI,
+                    available: false,
+                    configured: true,
+                },
+            );
         }
         other => {
             eprintln!("unknown AI variant {:?}", other);
@@ -2666,7 +3407,10 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
     dbhive_slint::ai_view::apply(
         &c,
         &view,
-        &dbhive_slint::ai_view::Extras { sync_base_url: true, ..Default::default() },
+        &dbhive_slint::ai_view::Extras {
+            sync_base_url: true,
+            ..Default::default()
+        },
     );
     c.show().unwrap();
     Box::new(c)
@@ -2683,17 +3427,27 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
 
 fn results_sample() -> (Vec<String>, Vec<Vec<serde_json::Value>>) {
     use serde_json::json;
-    let cols = ["id", "name", "email", "active", "balance", "profile", "note"];
+    let cols = [
+        "id", "name", "email", "active", "balance", "profile", "note",
+    ];
     let rows = (1..=24)
         .map(|i| {
             vec![
                 json!(i),
                 json!(format!("Customer {i}")),
-                if i == 3 { json!(null) } else { json!(format!("user{i}@example.com")) },
+                if i == 3 {
+                    json!(null)
+                } else {
+                    json!(format!("user{i}@example.com"))
+                },
                 json!(i % 2 == 0),
                 json!(4200.5 - (i as f64) * 31.25),
                 json!({"plan": if i % 2 == 0 { "pro" } else { "free" }, "seats": i}),
-                if i == 5 { json!("line one\nline \"two\", with comma") } else { json!("") },
+                if i == 5 {
+                    json!("line one\nline \"two\", with comma")
+                } else {
+                    json!("")
+                },
             ]
         })
         .collect();
@@ -2711,30 +3465,53 @@ fn results_fill(c: &AppWindow, columns: &[String], rows: &[Vec<serde_json::Value
         .iter()
         .map(|r| {
             r.iter()
-                .map(|v| if v.is_null() { None } else { Some(cell_text(v).0) })
+                .map(|v| {
+                    if v.is_null() {
+                        None
+                    } else {
+                        Some(cell_text(v).0)
+                    }
+                })
                 .collect()
         })
         .collect();
-    c.set_workspace_rows(slint::ModelRc::new(dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(grid))));
+    c.set_workspace_rows(slint::ModelRc::new(
+        dbhive_slint::grid_model::LazyRows::new(std::rc::Rc::new(grid)),
+    ));
     c.set_workspace_row_count(rows.len() as i32);
     c.set_workspace_visible_row_count(rows.len() as i32);
     c.set_workspace_has_result(true);
     c.set_workspace_result_summary(format!("{} rows · 12ms", rows.len()).into());
 }
 
-fn results_view_fill(c: &AppWindow, mode: i32, columns: &[String], rows: &[Vec<serde_json::Value>]) {
+fn results_view_fill(
+    c: &AppWindow,
+    mode: i32,
+    columns: &[String],
+    rows: &[Vec<serde_json::Value>],
+) {
     use dbhive_slint::results_view::{lines_model, LineStyle};
     use dbhive_ui_model::result_export as rx;
     let g = c.global::<ResultsState>();
     g.set_mode(mode);
     let (mut view, style) = if mode == 2 {
-        (rx::text_view(columns, rows, rx::VIEW_ROW_CAP), LineStyle::Text)
+        (
+            rx::text_view(columns, rows, rx::VIEW_ROW_CAP),
+            LineStyle::Text,
+        )
     } else {
-        (rx::json_view(columns, rows, rx::VIEW_ROW_CAP), LineStyle::Json)
+        (
+            rx::json_view(columns, rows, rx::VIEW_ROW_CAP),
+            LineStyle::Json,
+        )
     };
     view.total_rows = rows.len();
     g.set_view_max_columns(view.max_columns() as i32);
-    g.set_view_notice(rx::truncation_notice(view.shown_rows, view.total_rows).unwrap_or_default().into());
+    g.set_view_notice(
+        rx::truncation_notice(view.shown_rows, view.total_rows)
+            .unwrap_or_default()
+            .into(),
+    );
     g.set_view_lines(lines_model(view.lines, style));
 }
 
@@ -2744,13 +3521,22 @@ fn results_window(name: &str) -> Box<dyn std::any::Any> {
     let c = AppWindow::new().expect("AppWindow");
     workspace_behind(&c, light, "Production Postgres", "app · public");
     c.set_workspace_editor_text(SAMPLE_SQL.into());
-    c.set_workspace_editor_lines(dbhive_slint::sql_highlight::to_model_for(SAMPLE_SQL, !light));
+    c.set_workspace_editor_lines(dbhive_slint::sql_highlight::to_model_for(
+        SAMPLE_SQL, !light,
+    ));
     c.set_workspace_result_title("Results".into());
 
     let (columns, mut rows) = results_sample();
     if base.ends_with("_truncated") {
         rows = (0..2500)
-            .map(|i| rows[i % rows.len()].iter().cloned().enumerate().map(|(k, v)| if k == 0 { serde_json::json!(i + 1) } else { v }).collect())
+            .map(|i| {
+                rows[i % rows.len()]
+                    .iter()
+                    .cloned()
+                    .enumerate()
+                    .map(|(k, v)| if k == 0 { serde_json::json!(i + 1) } else { v })
+                    .collect()
+            })
             .collect();
     }
     let g = c.global::<ResultsState>();
@@ -2770,23 +3556,51 @@ fn results_window(name: &str) -> Box<dyn std::any::Any> {
         "results_running" => c.set_workspace_running(true),
         // results_chart_bar, results_chart_line, results_chart_empty,
         // results_chart_many (100 groups, capped).
-        "results_chart_bar" | "results_chart_line" | "results_chart_empty" | "results_chart_many" => {
+        "results_chart_bar"
+        | "results_chart_line"
+        | "results_chart_empty"
+        | "results_chart_many" => {
             use dbhive_ui_model::result_chart as ch;
-            let (cols, data): (Vec<String>, Vec<Vec<serde_json::Value>>) = if base == "results_chart_many" {
+            let (cols, data): (Vec<String>, Vec<Vec<serde_json::Value>>) = if base
+                == "results_chart_many"
+            {
                 (
                     vec!["day".into(), "orders".into()],
-                    (1..=140).map(|i| vec![serde_json::json!(format!("2026-{:02}-{:02}", 1 + i / 30, 1 + i % 28)), serde_json::json!(40 + (i * 37) % 90)]).collect(),
+                    (1..=140)
+                        .map(|i| {
+                            vec![
+                                serde_json::json!(format!(
+                                    "2026-{:02}-{:02}",
+                                    1 + i / 30,
+                                    1 + i % 28
+                                )),
+                                serde_json::json!(40 + (i * 37) % 90),
+                            ]
+                        })
+                        .collect(),
                 )
             } else if base == "results_chart_empty" {
-                (vec!["name".into(), "email".into()], (1..=6).map(|i| vec![serde_json::json!(format!("C{i}")), serde_json::json!("x")]).collect())
+                (
+                    vec!["name".into(), "email".into()],
+                    (1..=6)
+                        .map(|i| vec![serde_json::json!(format!("C{i}")), serde_json::json!("x")])
+                        .collect(),
+                )
             } else {
                 (
                     vec!["region".into(), "revenue".into()],
-                    ["North", "South", "East", "West", "Central", "Islands", "Overseas"]
-                        .iter()
-                        .enumerate()
-                        .map(|(i, r)| vec![serde_json::json!(r), serde_json::json!(12000 + (i as i64 * 7919) % 9000 - 2000)])
-                        .collect(),
+                    [
+                        "North", "South", "East", "West", "Central", "Islands", "Overseas",
+                    ]
+                    .iter()
+                    .enumerate()
+                    .map(|(i, r)| {
+                        vec![
+                            serde_json::json!(r),
+                            serde_json::json!(12000 + (i as i64 * 7919) % 9000 - 2000),
+                        ]
+                    })
+                    .collect(),
                 )
             };
             results_fill(&c, &cols, &data);
@@ -2794,8 +3608,17 @@ fn results_window(name: &str) -> Box<dyn std::any::Any> {
             g.set_mode(3);
             let refs: Vec<&Vec<serde_json::Value>> = data.iter().collect();
             let numeric = ch::numeric_columns(&cols, &refs);
-            g.set_chart_x_options(slint::ModelRc::new(slint::VecModel::from(cols.iter().map(|s| s.as_str().into()).collect::<Vec<slint::SharedString>>())));
-            g.set_chart_y_options(slint::ModelRc::new(slint::VecModel::from(numeric.iter().map(|&i| cols[i].as_str().into()).collect::<Vec<slint::SharedString>>())));
+            g.set_chart_x_options(slint::ModelRc::new(slint::VecModel::from(
+                cols.iter()
+                    .map(|s| s.as_str().into())
+                    .collect::<Vec<slint::SharedString>>(),
+            )));
+            g.set_chart_y_options(slint::ModelRc::new(slint::VecModel::from(
+                numeric
+                    .iter()
+                    .map(|&i| cols[i].as_str().into())
+                    .collect::<Vec<slint::SharedString>>(),
+            )));
             match ch::default_spec(&cols, &refs) {
                 None => g.set_chart_message("This result has no numeric column. Chart a query that returns numbers, or cast a column to one.".into()),
                 Some(mut spec) => {
@@ -2847,10 +3670,17 @@ fn results_window(name: &str) -> Box<dyn std::any::Any> {
     if base.starts_with("results_export") {
         use dbhive_ui_model::result_export::{format_hint, scope_note, ExportScope, ResultFormat};
         let json = base == "results_export_json";
-        let format = if json { ResultFormat::Json } else { ResultFormat::Csv };
+        let format = if json {
+            ResultFormat::Json
+        } else {
+            ResultFormat::Csv
+        };
         g.set_export_visible(true);
         g.set_export_formats(slint::ModelRc::new(slint::VecModel::from(
-            ResultFormat::labels().into_iter().map(Into::into).collect::<Vec<slint::SharedString>>(),
+            ResultFormat::labels()
+                .into_iter()
+                .map(Into::into)
+                .collect::<Vec<slint::SharedString>>(),
         )));
         g.set_export_format(format.index());
         g.set_export_hint(format_hint(format).into());
@@ -2869,7 +3699,10 @@ fn results_window(name: &str) -> Box<dyn std::any::Any> {
             "results_export_done" => {
                 g.set_export_done(true);
                 g.set_export_done_message(
-                    format!("Exported 24 rows to /Users/ada/Downloads/query_results_2026-10-21.{ext}").into(),
+                    format!(
+                        "Exported 24 rows to /Users/ada/Downloads/query_results_2026-10-21.{ext}"
+                    )
+                    .into(),
                 );
             }
             _ => {}
@@ -2894,8 +3727,13 @@ fn main() {
     }))
     .expect("platform");
 
-    let (pw, ph) = ((width as f32 * scale) as u32, (height as f32 * scale) as u32);
-    window.dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: scale });
+    let (pw, ph) = (
+        (width as f32 * scale) as u32,
+        (height as f32 * scale) as u32,
+    );
+    window.dispatch_event(WindowEvent::ScaleFactorChanged {
+        scale_factor: scale,
+    });
     window.set_size(slint::PhysicalSize::new(pw, ph));
 
     let _keep = instantiate(name);
@@ -2925,7 +3763,11 @@ fn main() {
 // ---------------------------------------------------------------------------
 
 fn schema_table(name: &str, kind: &str, rows: Option<u64>) -> dbhive_core::models::TableInfo {
-    let mut t = dbhive_core::models::TableInfo::new(name.to_string(), "public".to_string(), kind.to_string());
+    let mut t = dbhive_core::models::TableInfo::new(
+        name.to_string(),
+        "public".to_string(),
+        kind.to_string(),
+    );
     t.row_count = rows;
     t
 }
@@ -2975,7 +3817,12 @@ fn schema_mysql_tree() -> dbhive_ui_model::schema_tree::SchemaTree {
     let mut t = dbhive_ui_model::schema_tree::SchemaTree::new();
     t.apply_overview(
         &Overview {
-            databases: vec!["app".into(), "information_schema".into(), "mysql".into(), "sys".into()],
+            databases: vec![
+                "app".into(),
+                "information_schema".into(),
+                "mysql".into(),
+                "sys".into(),
+            ],
             database: "app".into(),
             schemas: vec![],
         },
@@ -2998,8 +3845,14 @@ fn schema_click(c: &AppWindow, x: f32, y: f32) {
     let pos = slint::LogicalPosition::new(x, y);
     let w = c.window();
     w.dispatch_event(WindowEvent::PointerMoved { position: pos });
-    w.dispatch_event(WindowEvent::PointerPressed { position: pos, button: slint::platform::PointerEventButton::Left });
-    w.dispatch_event(WindowEvent::PointerReleased { position: pos, button: slint::platform::PointerEventButton::Left });
+    w.dispatch_event(WindowEvent::PointerPressed {
+        position: pos,
+        button: slint::platform::PointerEventButton::Left,
+    });
+    w.dispatch_event(WindowEvent::PointerReleased {
+        position: pos,
+        button: slint::platform::PointerEventButton::Left,
+    });
     // Take the pointer away again so no row is left drawn as hovered.
     w.dispatch_event(WindowEvent::PointerExited);
 }
@@ -3011,7 +3864,11 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
     let c = AppWindow::new().expect("AppWindow");
     let light = name.contains("light");
     workspace_behind(&c, light, "Production Postgres", "app · public");
-    let caps = Caps { ddl: true, switch_database: true, create_database: true };
+    let caps = Caps {
+        ddl: true,
+        switch_database: true,
+        create_database: true,
+    };
 
     let mut tree = match name {
         _ if name.starts_with("schema_mysql") => schema_mysql_tree(),
@@ -3029,7 +3886,11 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
             use dbhive_core::service_schema::Overview;
             let mut t = SchemaTree::new();
             t.apply_overview(
-                &Overview { databases: vec!["app".into(), "postgres".into()], database: "app".into(), schemas: vec![] },
+                &Overview {
+                    databases: vec!["app".into(), "postgres".into()],
+                    database: "app".into(),
+                    schemas: vec![],
+                },
                 "app",
             );
             t.set_tables("app", Ok(vec![]));
@@ -3040,7 +3901,9 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
             t.toggle(&NodeId::Schema("audit".into()));
             match name {
                 "schema_subloading" => t.begin_schema("audit"),
-                "schema_suberror" => t.set_tables("audit", Err("permission denied for schema audit".into())),
+                "schema_suberror" => {
+                    t.set_tables("audit", Err("permission denied for schema audit".into()))
+                }
                 _ => t.set_tables("audit", Ok(vec![])),
             }
             t
@@ -3055,9 +3918,20 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
     }
     // The keyboard cursor: on a table, so the ring and the fill both show.
     if name.contains("keyboard") || name.contains("menu") || name.contains("drop") {
-        let schema = if name.starts_with("schema_mysql") { "app" } else { "public" };
-        let table = if name.starts_with("schema_mysql") { "users" } else { "orders" };
-        tree.set_cursor(Some(NodeId::Table { schema: schema.into(), name: table.into() }));
+        let schema = if name.starts_with("schema_mysql") {
+            "app"
+        } else {
+            "public"
+        };
+        let table = if name.starts_with("schema_mysql") {
+            "users"
+        } else {
+            "orders"
+        };
+        tree.set_cursor(Some(NodeId::Table {
+            schema: schema.into(),
+            name: table.into(),
+        }));
     }
     if name.contains("walk") {
         for _ in 0..3 {
@@ -3072,9 +3946,15 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
     if name.contains("menu") {
         let id = match name {
             "schema_menu_schema" => NodeId::Schema("billing".into()),
-            "schema_menu_view" => NodeId::Table { schema: "public".into(), name: "order_totals".into() },
+            "schema_menu_view" => NodeId::Table {
+                schema: "public".into(),
+                name: "order_totals".into(),
+            },
             "schema_menu_db" => NodeId::Database("analytics".into()),
-            _ => NodeId::Table { schema: "public".into(), name: "orders".into() },
+            _ => NodeId::Table {
+                schema: "public".into(),
+                name: "orders".into(),
+            },
         };
         let entries = tree.menu_for(&id, caps);
         // At the pointer: window coordinates of a right click on the `orders`
@@ -3088,12 +3968,24 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
         match name {
             "schema_drop_checking" => {}
             "schema_drop_clear" => d.dependents = Dependents::Ready(vec![]),
-            "schema_drop_failed" => d.dependents = Dependents::Failed("permission denied for table pg_constraint".into()),
+            "schema_drop_failed" => {
+                d.dependents =
+                    Dependents::Failed("permission denied for table pg_constraint".into())
+            }
             _ => {
                 d.dependents = Dependents::Ready(vec![
-                    TableRef { schema: "public".into(), name: "orders".into() },
-                    TableRef { schema: "public".into(), name: "refunds".into() },
-                    TableRef { schema: "billing".into(), name: "invoices".into() },
+                    TableRef {
+                        schema: "public".into(),
+                        name: "orders".into(),
+                    },
+                    TableRef {
+                        schema: "public".into(),
+                        name: "refunds".into(),
+                    },
+                    TableRef {
+                        schema: "billing".into(),
+                        name: "invoices".into(),
+                    },
                 ]);
                 if name == "schema_drop_cascade" {
                     d.cascade = true;
@@ -3101,7 +3993,8 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
                 }
                 if name == "schema_drop_error" {
                     d.typed = "customers".into();
-                    d.error = "cannot drop table customers because other objects depend on it".into();
+                    d.error =
+                        "cannot drop table customers because other objects depend on it".into();
                 }
             }
         }
@@ -3117,7 +4010,8 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
     }
 
     // Postgres and MySQL have stored routines, so the footer entry shows.
-    c.global::<TreeState>().set_routines_supported(!name.contains("sqlite"));
+    c.global::<TreeState>()
+        .set_routines_supported(!name.contains("sqlite"));
 
     if name.starts_with("schema_createdb") {
         use dbhive_ui_model::schema_tree::CreateDatabaseDialog;
@@ -3151,13 +4045,49 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
             argument_signature: sig.into(),
         };
         let all = vec![
-            proc("billing", "close_month", RoutineKind::Procedure, "(period date)", None),
-            proc("billing", "invoice_total", RoutineKind::Function, "(invoice_id bigint)", Some("numeric")),
-            proc("public", "add_numbers", RoutineKind::Function, "(a integer, b integer)", Some("integer")),
-            proc("public", "refresh_order_totals", RoutineKind::Procedure, "()", None),
-            proc("public", "slugify", RoutineKind::Function, "(title text)", Some("text")),
+            proc(
+                "billing",
+                "close_month",
+                RoutineKind::Procedure,
+                "(period date)",
+                None,
+            ),
+            proc(
+                "billing",
+                "invoice_total",
+                RoutineKind::Function,
+                "(invoice_id bigint)",
+                Some("numeric"),
+            ),
+            proc(
+                "public",
+                "add_numbers",
+                RoutineKind::Function,
+                "(a integer, b integer)",
+                Some("integer"),
+            ),
+            proc(
+                "public",
+                "refresh_order_totals",
+                RoutineKind::Procedure,
+                "()",
+                None,
+            ),
+            proc(
+                "public",
+                "slugify",
+                RoutineKind::Function,
+                "(title text)",
+                Some("text"),
+            ),
         ];
-        let query = if name.contains("nomatch") { "zzzz" } else if name.contains("search") { "tot" } else { "" };
+        let query = if name.contains("nomatch") {
+            "zzzz"
+        } else if name.contains("search") {
+            "tot"
+        } else {
+            ""
+        };
         let picked_routine = all[1].clone();
         let selected = name.contains("picked").then_some(&picked_routine);
         let (list_rows, _) = rows(&all, query, selected);
@@ -3167,7 +4097,11 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
             "schema_routines_empty" => (false, "", &[]),
             _ => (false, "", &all),
         };
-        let (list_rows, items_for_status) = if shown.is_empty() { (Vec::new(), &[][..]) } else { (list_rows, &all[..]) };
+        let (list_rows, items_for_status) = if shown.is_empty() {
+            (Vec::new(), &[][..])
+        } else {
+            (list_rows, &all[..])
+        };
         let definition = "CREATE OR REPLACE FUNCTION billing.invoice_total(invoice_id bigint)\n RETURNS numeric\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  RETURN (SELECT COALESCE(SUM(quantity * unit_price), 0)\n            FROM billing.invoice_lines\n           WHERE invoice_lines.invoice_id = invoice_total.invoice_id);\nEND;\n$function$\n";
         let view = RoutinesView {
             status: status(loading, error, false, items_for_status, query),
@@ -3179,10 +4113,19 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
                 title: "billing.invoice_total".into(),
                 signature: "(invoice_id bigint) returns numeric".into(),
                 meta: "function · plpgsql".into(),
-                definition: if name.contains("defloading") { String::new() } else { definition.to_string() },
+                definition: if name.contains("defloading") {
+                    String::new()
+                } else {
+                    definition.to_string()
+                },
             }),
             def_loading: name.contains("defloading"),
-            def_error: if name.contains("deferror") { "Could not read the definition: permission denied for function invoice_total".to_string() } else { String::new() },
+            def_error: if name.contains("deferror") {
+                "Could not read the definition: permission denied for function invoice_total"
+                    .to_string()
+            } else {
+                String::new()
+            },
         };
         apply_routines(&c, &view);
         c.global::<TreeState>().set_routines_filter(query.into());

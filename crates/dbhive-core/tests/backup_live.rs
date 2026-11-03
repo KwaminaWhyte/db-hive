@@ -64,16 +64,23 @@ impl Drop for Scratch {
     fn drop(&mut self) {
         let (postgres, name) = (self.postgres, self.name.clone());
         let _ = std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
             rt.block_on(async {
                 if postgres {
                     if let Ok(a) = PostgresDriver::connect(pg_opts("postgres")).await {
                         let _ = a
-                            .execute_query(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"))
+                            .execute_query(&format!(
+                                "DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"
+                            ))
                             .await;
                     }
                 } else if let Ok(a) = MysqlDriver::connect(my_opts(None)).await {
-                    let _ = a.execute_query(&format!("DROP DATABASE IF EXISTS `{name}`")).await;
+                    let _ = a
+                        .execute_query(&format!("DROP DATABASE IF EXISTS `{name}`"))
+                        .await;
                 }
             });
         })
@@ -95,14 +102,25 @@ async fn state_with(profile: ConnectionProfile) -> (Mutex<AppState>, String) {
 /// The rows of the test table, read through the app's own connection (the
 /// one a restore has to get out from under).
 async fn rows_via_app(state: &Mutex<AppState>, id: &str) -> Vec<Vec<serde_json::Value>> {
-    let d = state.lock().unwrap().get_connection(id).cloned().expect("connected");
+    let d = state
+        .lock()
+        .unwrap()
+        .get_connection(id)
+        .cloned()
+        .expect("connected");
     d.execute_query("SELECT id, name, note FROM items ORDER BY id")
         .await
         .unwrap_or_else(|e| panic!("read through the app's connection: {e}"))
         .rows
 }
 
-async fn scenario<D: DatabaseDriver>(d: &D, state: &Mutex<AppState>, id: &str, create: &str, tag: &str) {
+async fn scenario<D: DatabaseDriver>(
+    d: &D,
+    state: &Mutex<AppState>,
+    id: &str,
+    create: &str,
+    tag: &str,
+) {
     d.execute_query(create).await.unwrap();
     let note = d.escape_string_literal("tab\there 'quoted' \\ back \"dq\" 😀\nnewline");
     d.execute_query(&format!(
@@ -131,13 +149,20 @@ async fn scenario<D: DatabaseDriver>(d: &D, state: &Mutex<AppState>, id: &str, c
     assert!(entry.size_bytes > 0, "the backup file is empty: {entry:?}");
 
     // Damage the database, then restore over it while the app is still connected.
-    d.execute_query("DELETE FROM items WHERE id = 2").await.unwrap();
-    d.execute_query("UPDATE items SET name = 'changed' WHERE id = 1").await.unwrap();
+    d.execute_query("DELETE FROM items WHERE id = 2")
+        .await
+        .unwrap();
+    d.execute_query("UPDATE items SET name = 'changed' WHERE id = 1")
+        .await
+        .unwrap();
 
     restore_backup(
         state,
         id,
-        RestoreOptions { file_path: entry.file_path.clone(), drop_existing: true },
+        RestoreOptions {
+            file_path: entry.file_path.clone(),
+            drop_existing: true,
+        },
         ProgressSink::default(),
     )
     .await
@@ -147,14 +172,20 @@ async fn scenario<D: DatabaseDriver>(d: &D, state: &Mutex<AppState>, id: &str, c
     let mut after = None;
     for _ in 0..3 {
         let d = state.lock().unwrap().get_connection(id).cloned().unwrap();
-        if let Ok(r) = d.execute_query("SELECT id, name, note FROM items ORDER BY id").await {
+        if let Ok(r) = d
+            .execute_query("SELECT id, name, note FROM items ORDER BY id")
+            .await
+        {
             after = Some(r.rows);
             break;
         }
         tokio::time::sleep(std::time::Duration::from_millis(300)).await;
     }
     let after = after.expect("the app's own connection should still work after a restore");
-    assert_eq!(after, before, "the restored table differs from the backed-up one");
+    assert_eq!(
+        after, before,
+        "the restored table differs from the backed-up one"
+    );
 
     // A restore that hits errors must say so, not report success. A dump with a
     // statement the server rejects, after statements that would apply, must
@@ -169,7 +200,10 @@ async fn scenario<D: DatabaseDriver>(d: &D, state: &Mutex<AppState>, id: &str, c
     let again = restore_backup(
         state,
         id,
-        RestoreOptions { file_path: broken.to_string_lossy().to_string(), drop_existing: false },
+        RestoreOptions {
+            file_path: broken.to_string_lossy().to_string(),
+            drop_existing: false,
+        },
         ProgressSink::default(),
     )
     .await;
@@ -188,16 +222,41 @@ async fn postgres_backup_restores_the_rows_and_failures_are_reported() {
     std::env::set_var(dbhive_core::storage::DATA_DIR_ENV, &dir);
 
     let name = format!("dbhive_bak_{}", std::process::id());
-    let admin = PostgresDriver::connect(pg_opts("postgres")).await.expect("connect to postgres");
-    admin.execute_query(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)")).await.unwrap();
-    admin.execute_query(&format!("CREATE DATABASE \"{name}\"")).await.unwrap();
-    let _guard = Scratch { postgres: true, name: name.clone() };
+    let admin = PostgresDriver::connect(pg_opts("postgres"))
+        .await
+        .expect("connect to postgres");
+    admin
+        .execute_query(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"))
+        .await
+        .unwrap();
+    admin
+        .execute_query(&format!("CREATE DATABASE \"{name}\""))
+        .await
+        .unwrap();
+    let _guard = Scratch {
+        postgres: true,
+        name: name.clone(),
+    };
 
-    let mut p = ConnectionProfile::new("pg".into(), "PG".into(), DbDriver::Postgres, "localhost".into(), 5432, user());
+    let mut p = ConnectionProfile::new(
+        "pg".into(),
+        "PG".into(),
+        DbDriver::Postgres,
+        "localhost".into(),
+        5432,
+        user(),
+    );
     p.database = Some(name.clone());
     let (state, id) = state_with(p).await;
     let d = PostgresDriver::connect(pg_opts(&name)).await.unwrap();
-    scenario(&d, &state, &id, "CREATE TABLE items (id integer PRIMARY KEY, name text, note text)", "pg").await;
+    scenario(
+        &d,
+        &state,
+        &id,
+        "CREATE TABLE items (id integer PRIMARY KEY, name text, note text)",
+        "pg",
+    )
+    .await;
     let _ = std::fs::remove_dir_all(dir);
 }
 
@@ -209,15 +268,40 @@ async fn mysql_backup_restores_the_rows_and_failures_are_reported() {
     std::env::set_var(dbhive_core::storage::DATA_DIR_ENV, &dir);
 
     let name = format!("dbhive_bak_{}", std::process::id());
-    let admin = MysqlDriver::connect(my_opts(None)).await.expect("connect to mysql");
-    admin.execute_query(&format!("DROP DATABASE IF EXISTS `{name}`")).await.unwrap();
-    admin.execute_query(&format!("CREATE DATABASE `{name}`")).await.unwrap();
-    let _guard = Scratch { postgres: false, name: name.clone() };
+    let admin = MysqlDriver::connect(my_opts(None))
+        .await
+        .expect("connect to mysql");
+    admin
+        .execute_query(&format!("DROP DATABASE IF EXISTS `{name}`"))
+        .await
+        .unwrap();
+    admin
+        .execute_query(&format!("CREATE DATABASE `{name}`"))
+        .await
+        .unwrap();
+    let _guard = Scratch {
+        postgres: false,
+        name: name.clone(),
+    };
 
-    let mut p = ConnectionProfile::new("my".into(), "MY".into(), DbDriver::MySql, "127.0.0.1".into(), 3306, "root".into());
+    let mut p = ConnectionProfile::new(
+        "my".into(),
+        "MY".into(),
+        DbDriver::MySql,
+        "127.0.0.1".into(),
+        3306,
+        "root".into(),
+    );
     p.database = Some(name.clone());
     let (state, id) = state_with(p).await;
     let d = MysqlDriver::connect(my_opts(Some(&name))).await.unwrap();
-    scenario(&d, &state, &id, "CREATE TABLE items (id INT PRIMARY KEY, name VARCHAR(50), note TEXT)", "my").await;
+    scenario(
+        &d,
+        &state,
+        &id,
+        "CREATE TABLE items (id INT PRIMARY KEY, name VARCHAR(50), note TEXT)",
+        "my",
+    )
+    .await;
     let _ = std::fs::remove_dir_all(dir);
 }

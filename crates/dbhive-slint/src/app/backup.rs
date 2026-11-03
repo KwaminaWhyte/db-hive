@@ -72,7 +72,10 @@ impl Source {
         if svc::supports_backup(&self.profile.driver) {
             String::new()
         } else {
-            format!("Backups are not supported for {:?} connections.", self.profile.driver)
+            format!(
+                "Backups are not supported for {:?} connections.",
+                self.profile.driver
+            )
         }
     }
 }
@@ -84,13 +87,18 @@ impl Ctx {
             return None;
         }
         let guard = self.state.lock().unwrap();
-        guard.get_profile(&id).cloned().map(|profile| Source { profile })
+        guard
+            .get_profile(&id)
+            .cloned()
+            .map(|profile| Source { profile })
     }
 
     // -- Projection -------------------------------------------------------------
 
     pub(super) fn refresh_backup_panel(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let source = self.backup_source();
         let s = self.session.borrow();
         let context = match &source {
@@ -109,9 +117,14 @@ impl Ctx {
     // -- Open and close -------------------------------------------------------------
 
     pub(super) fn open_backup_panel(self: &Rc<Self>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         if self.backup_source().is_none() {
-            self.toast("Open a connection to back it up or restore into it.", Tone::Neutral);
+            self.toast(
+                "Open a connection to back it up or restore into it.",
+                Tone::Neutral,
+            );
             return;
         }
         self.hide_history_panel();
@@ -154,7 +167,10 @@ impl Ctx {
             let mut s = self.session.borrow_mut();
             s.backups.mgr.loading = true;
             s.backups.mgr.list_error.clear();
-            (optional(&s.backups.mgr.form.output_dir), s.backups.list_latest.begin())
+            (
+                optional(&s.backups.mgr.form.output_dir),
+                s.backups.list_latest.begin(),
+            )
         };
         self.refresh_backup_panel();
         runtime::spawn(
@@ -187,7 +203,9 @@ impl Ctx {
                                 m.directory = dir;
                                 m.entries = entries;
                             }
-                            Err(e) => m.list_error = format!("Could not read the backup folder: {e}"),
+                            Err(e) => {
+                                m.list_error = format!("Could not read the backup folder: {e}")
+                            }
                         }
                     }
                     ctx.refresh_backup_panel();
@@ -223,7 +241,9 @@ impl Ctx {
     }
 
     fn backup_create(self: &Rc<Self>) {
-        let Some(source) = self.backup_source() else { return };
+        let Some(source) = self.backup_source() else {
+            return;
+        };
         let options = {
             let mut s = self.session.borrow_mut();
             let m = &mut s.backups.mgr;
@@ -263,7 +283,10 @@ impl Ctx {
                     op.error = None;
                     op.message = format!("Backup written to {}", entry.file_path);
                     m.form.note.clear();
-                    (format!("Backup created: {}", entry.file_path), Tone::Success)
+                    (
+                        format!("Backup created: {}", entry.file_path),
+                        Tone::Success,
+                    )
                 }
                 Err(e) => {
                     op.error = Some(e.to_string());
@@ -281,7 +304,9 @@ impl Ctx {
         {
             let mut s = self.session.borrow_mut();
             let elapsed = s.backups.started.map(|t| t.elapsed());
-            let Some(op) = s.backups.mgr.op.as_mut() else { return };
+            let Some(op) = s.backups.mgr.op.as_mut() else {
+                return;
+            };
             // The completion handler is authoritative once it has run.
             if op.done {
                 return;
@@ -303,18 +328,24 @@ impl Ctx {
     fn backup_restore_asked(&self, path: &str) {
         {
             let mut s = self.session.borrow_mut();
-            let Some(entry) = s.backups.mgr.find(path).cloned() else { return };
+            let Some(entry) = s.backups.mgr.find(path).cloned() else {
+                return;
+            };
             s.backups.mgr.open_restore(entry);
         }
         self.refresh_backup_panel();
     }
 
     fn backup_restore(self: &Rc<Self>) {
-        let Some(source) = self.backup_source() else { return };
+        let Some(source) = self.backup_source() else {
+            return;
+        };
         let (options, file) = {
             let mut s = self.session.borrow_mut();
             let m = &mut s.backups.mgr;
-            let Some(entry) = m.restore_target.clone() else { return };
+            let Some(entry) = m.restore_target.clone() else {
+                return;
+            };
             if restore_blocker(&entry, Some(&source.profile.driver)).is_some() {
                 return;
             }
@@ -370,9 +401,12 @@ impl Ctx {
     // -- Delete ---------------------------------------------------------------------------------
 
     fn backup_delete_asked(&self, path: &str) {
-        let Some(entry) = self.session.borrow().backups.mgr.find(path).cloned() else { return };
-        self.session.borrow_mut().pending_action =
-            Some(PendingAction::Backup(Pending::DeleteBackup(entry.file_path.clone())));
+        let Some(entry) = self.session.borrow().backups.mgr.find(path).cloned() else {
+            return;
+        };
+        self.session.borrow_mut().pending_action = Some(PendingAction::Backup(
+            Pending::DeleteBackup(entry.file_path.clone()),
+        ));
         self.show_confirm("Delete this backup?", &delete_message(&entry), "Delete");
     }
 
@@ -452,8 +486,20 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         }
         c.refresh_backup_panel();
     });
-    on!(on_note_edited, |c, t| c.session.borrow_mut().backups.mgr.form.note = t.to_string());
-    on!(on_tables_edited, |c, t| c.session.borrow_mut().backups.mgr.form.tables = t.to_string());
+    on!(on_note_edited, |c, t| c
+        .session
+        .borrow_mut()
+        .backups
+        .mgr
+        .form
+        .note = t.to_string());
+    on!(on_tables_edited, |c, t| c
+        .session
+        .borrow_mut()
+        .backups
+        .mgr
+        .form
+        .tables = t.to_string());
     on!(on_output_dir_edited, |c, t| {
         let mut s = c.session.borrow_mut();
         s.backups.mgr.form.output_dir = t.to_string();

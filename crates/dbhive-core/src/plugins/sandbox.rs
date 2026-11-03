@@ -83,7 +83,9 @@ impl PluginSandbox {
         if self.has_permission(permission) {
             Ok(())
         } else {
-            Err(PluginError::PermissionDenied(permission.label().to_string()))
+            Err(PluginError::PermissionDenied(
+                permission.label().to_string(),
+            ))
         }
     }
 
@@ -140,7 +142,10 @@ impl PluginSandbox {
                 "Invalid path: path traversal not allowed".to_string(),
             ));
         }
-        Ok(PathBuf::from(format!("plugin-data/{}/{}", self.plugin_id, path)))
+        Ok(PathBuf::from(format!(
+            "plugin-data/{}/{}",
+            self.plugin_id, path
+        )))
     }
 }
 

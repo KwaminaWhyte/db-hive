@@ -34,13 +34,19 @@ pub fn tab_index(tab: Tab) -> i32 {
 }
 
 pub fn tab_at(index: i32) -> Tab {
-    usize::try_from(index).ok().and_then(|i| TABS.get(i)).copied().unwrap_or(Tab::Import)
+    usize::try_from(index)
+        .ok()
+        .and_then(|i| TABS.get(i))
+        .copied()
+        .unwrap_or(Tab::Import)
 }
 
 /// A leading `~` as the home directory, since nothing else will expand it:
 /// the paths typed here are handed straight to the file APIs.
 pub fn expand_home(path: &str) -> String {
-    let home = std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).ok();
+    let home = std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .ok();
     expand_home_with(path, home.as_deref())
 }
 
@@ -57,7 +63,9 @@ pub fn expand_home_with(path: &str, home: Option<&str>) -> String {
 
 /// A date-stamped path for a new file in `dir`: `<dir>/<stem>_<today>.<ext>`.
 pub fn suggest_path(dir: &Path, stem: &str, extension: &str, today: &str) -> String {
-    dir.join(default_file_name(stem, extension, today)).to_string_lossy().to_string()
+    dir.join(default_file_name(stem, extension, today))
+        .to_string_lossy()
+        .to_string()
 }
 
 /// Why `path` cannot be written, or `None` when it can. Checked before a job
@@ -116,7 +124,10 @@ pub const TABLE_FORMATS: [ExportFormat; 3] =
     [ExportFormat::Csv, ExportFormat::Json, ExportFormat::Excel];
 
 pub fn table_format_labels() -> Vec<String> {
-    TABLE_FORMATS.iter().map(|f| f.label().to_string()).collect()
+    TABLE_FORMATS
+        .iter()
+        .map(|f| f.label().to_string())
+        .collect()
 }
 
 #[derive(Debug, Clone)]
@@ -144,7 +155,10 @@ impl Default for TableExportForm {
 
 impl TableExportForm {
     pub fn format(&self) -> ExportFormat {
-        TABLE_FORMATS.get(self.format).copied().unwrap_or(ExportFormat::Csv)
+        TABLE_FORMATS
+            .get(self.format)
+            .copied()
+            .unwrap_or(ExportFormat::Csv)
     }
 
     pub fn is_csv(&self) -> bool {
@@ -159,7 +173,9 @@ impl TableExportForm {
         }
         match t.parse::<usize>() {
             Ok(n) if n > 0 => Ok(Some(n)),
-            _ => Err(format!("Row limit must be a positive whole number, got \"{t}\"")),
+            _ => Err(format!(
+                "Row limit must be a positive whole number, got \"{t}\""
+            )),
         }
     }
 
@@ -190,7 +206,11 @@ impl TableExportForm {
 
     /// The default file name for the current table and format.
     pub fn suggested_path(&self, dir: &Path, today: &str) -> String {
-        let stem = if self.table.is_empty() { "export" } else { self.table.as_str() };
+        let stem = if self.table.is_empty() {
+            "export"
+        } else {
+            self.table.as_str()
+        };
         suggest_path(dir, stem, self.format().extension(), today)
     }
 
@@ -201,7 +221,10 @@ impl TableExportForm {
         let ext = self.format().extension();
         let p = Path::new(self.path.trim());
         let known = ["csv", "json", "xls"];
-        if p.extension().and_then(|e| e.to_str()).is_some_and(|e| known.contains(&e)) {
+        if p.extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| known.contains(&e))
+        {
             self.path = p.with_extension(ext).to_string_lossy().to_string();
         }
     }
@@ -252,7 +275,16 @@ impl DumpForm {
     }
 
     pub fn suggested_path(&self, dir: &Path, database: &str, today: &str) -> String {
-        suggest_path(dir, if database.is_empty() { "dump" } else { database }, "sql", today)
+        suggest_path(
+            dir,
+            if database.is_empty() {
+                "dump"
+            } else {
+                database
+            },
+            "sql",
+            today,
+        )
     }
 
     /// "All tables" or "3 tables: a, b, c".
@@ -272,7 +304,8 @@ pub fn dump_note(driver: &DbDriver) -> String {
     if !s.drop && !s.create && !s.data {
         "SQL dumps are not available for this kind of database.".to_string()
     } else if !s.create {
-        "This database cannot write CREATE TABLE; the file carries a comment in its place.".to_string()
+        "This database cannot write CREATE TABLE; the file carries a comment in its place."
+            .to_string()
     } else {
         String::new()
     }
@@ -317,9 +350,12 @@ impl SqlFileForm {
         match (self.use_transaction, self.continue_on_error) {
             (true, false) => "All or nothing: the first error rolls everything back.".to_string(),
             (true, true) => {
-                "Errors are logged and skipped; the statements that worked are committed.".to_string()
+                "Errors are logged and skipped; the statements that worked are committed."
+                    .to_string()
             }
-            (false, false) => "Stops at the first error. Statements already run stay applied.".to_string(),
+            (false, false) => {
+                "Stops at the first error. Statements already run stay applied.".to_string()
+            }
             (false, true) => "Errors are logged and skipped. Nothing is rolled back.".to_string(),
         }
     }
@@ -349,7 +385,10 @@ mod tests {
 
     #[test]
     fn a_leading_tilde_is_the_home_directory() {
-        assert_eq!(expand_home_with("~/Downloads/a.csv", Some("/Users/me")), "/Users/me/Downloads/a.csv");
+        assert_eq!(
+            expand_home_with("~/Downloads/a.csv", Some("/Users/me")),
+            "/Users/me/Downloads/a.csv"
+        );
         assert_eq!(expand_home_with("  ~ ", Some("/Users/me")), "/Users/me");
         assert_eq!(expand_home_with("~/x", Some("/Users/me/")), "/Users/me/x");
         assert_eq!(expand_home_with("~other/x", Some("/Users/me")), "~other/x");
@@ -359,20 +398,35 @@ mod tests {
 
     #[test]
     fn a_suggested_path_is_date_stamped_in_the_folder() {
-        let p = suggest_path(Path::new("/home/u/Downloads"), "order details", "csv", "2026-10-21");
+        let p = suggest_path(
+            Path::new("/home/u/Downloads"),
+            "order details",
+            "csv",
+            "2026-10-21",
+        );
         assert_eq!(p, "/home/u/Downloads/order_details_2026-10-21.csv");
     }
 
     #[test]
     fn output_paths_are_checked_before_anything_runs() {
         let dir = temp_dir("out");
-        assert!(output_path_problem("", "sql").unwrap().contains("Enter the path"));
-        assert!(output_path_problem("rel/x.sql", "sql").unwrap().contains("full path"));
-        assert!(output_path_problem(dir.to_str().unwrap(), "sql").unwrap().contains("folder"));
+        assert!(output_path_problem("", "sql")
+            .unwrap()
+            .contains("Enter the path"));
+        assert!(output_path_problem("rel/x.sql", "sql")
+            .unwrap()
+            .contains("full path"));
+        assert!(output_path_problem(dir.to_str().unwrap(), "sql")
+            .unwrap()
+            .contains("folder"));
         let missing = dir.join("nope").join("x.sql");
-        assert!(output_path_problem(missing.to_str().unwrap(), "sql").unwrap().contains("does not exist"));
+        assert!(output_path_problem(missing.to_str().unwrap(), "sql")
+            .unwrap()
+            .contains("does not exist"));
         let wrong_ext = dir.join("x.txt");
-        assert!(output_path_problem(wrong_ext.to_str().unwrap(), "sql").unwrap().contains(".sql"));
+        assert!(output_path_problem(wrong_ext.to_str().unwrap(), "sql")
+            .unwrap()
+            .contains(".sql"));
         let good = dir.join("x.SQL");
         assert_eq!(output_path_problem(good.to_str().unwrap(), "sql"), None);
     }
@@ -381,9 +435,13 @@ mod tests {
     fn input_paths_must_be_existing_files() {
         let dir = temp_dir("in");
         assert!(input_path_problem("").is_some());
-        assert!(input_path_problem(dir.to_str().unwrap()).unwrap().contains("folder"));
+        assert!(input_path_problem(dir.to_str().unwrap())
+            .unwrap()
+            .contains("folder"));
         let f = dir.join("a.sql");
-        assert!(input_path_problem(f.to_str().unwrap()).unwrap().contains("No file"));
+        assert!(input_path_problem(f.to_str().unwrap())
+            .unwrap()
+            .contains("No file"));
         std::fs::write(&f, "SELECT 1;").unwrap();
         assert_eq!(input_path_problem(f.to_str().unwrap()), None);
     }
@@ -391,7 +449,10 @@ mod tests {
     #[test]
     fn a_table_export_form_becomes_export_options() {
         let dir = temp_dir("tbl");
-        let mut f = TableExportForm { table: "orders".into(), ..Default::default() };
+        let mut f = TableExportForm {
+            table: "orders".into(),
+            ..Default::default()
+        };
         f.path = dir.join("orders.csv").to_string_lossy().to_string();
         f.delimiter = 1;
         f.include_headers = false;
@@ -422,7 +483,10 @@ mod tests {
 
     #[test]
     fn changing_the_format_retargets_the_extension_of_our_own_paths_only() {
-        let mut f = TableExportForm { path: "/x/orders_2026.csv".into(), ..Default::default() };
+        let mut f = TableExportForm {
+            path: "/x/orders_2026.csv".into(),
+            ..Default::default()
+        };
         f.format = 1;
         f.retarget_extension();
         assert_eq!(f.path, "/x/orders_2026.json");
@@ -464,8 +528,14 @@ mod tests {
         assert_eq!(f.scope_summary(), "1 table: orders");
         f.tables_text = "a, b".into();
         assert_eq!(f.scope_summary(), "2 tables: a, b");
-        assert_eq!(f.suggested_path(Path::new("/d"), "shop", "2026-10-21"), "/d/shop_2026-10-21.sql");
-        assert_eq!(f.suggested_path(Path::new("/d"), "", "2026-10-21"), "/d/dump_2026-10-21.sql");
+        assert_eq!(
+            f.suggested_path(Path::new("/d"), "shop", "2026-10-21"),
+            "/d/shop_2026-10-21.sql"
+        );
+        assert_eq!(
+            f.suggested_path(Path::new("/d"), "", "2026-10-21"),
+            "/d/dump_2026-10-21.sql"
+        );
     }
 
     #[test]

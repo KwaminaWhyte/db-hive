@@ -265,7 +265,10 @@ mod tests {
     fn test_general_settings_default() {
         let general = GeneralSettings::default();
         assert_eq!(general.language, "en");
-        assert_eq!(general.startup_behavior, StartupBehavior::ShowConnectionList);
+        assert_eq!(
+            general.startup_behavior,
+            StartupBehavior::ShowConnectionList
+        );
         assert!(general.auto_save_connections);
         assert!(!general.enable_telemetry);
     }
@@ -306,6 +309,9 @@ mod tests {
 
         assert_eq!(settings.general.language, deserialized.general.language);
         assert_eq!(settings.theme.mode, deserialized.theme.mode);
-        assert_eq!(settings.query.timeout_seconds, deserialized.query.timeout_seconds);
+        assert_eq!(
+            settings.query.timeout_seconds,
+            deserialized.query.timeout_seconds
+        );
     }
 }

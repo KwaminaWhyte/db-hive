@@ -273,21 +273,14 @@ mod tests {
 
         assert_eq!(snippet.name, "User Backup");
         assert_eq!(snippet.query, "SELECT * FROM users");
-        assert_eq!(
-            snippet.description,
-            Some("Backup all users".to_string())
-        );
+        assert_eq!(snippet.description, Some("Backup all users".to_string()));
         assert!(!snippet.id.is_empty());
     }
 
     #[test]
     fn test_query_snippet_update() {
-        let mut snippet = QuerySnippet::new(
-            "Original".to_string(),
-            "SELECT 1".to_string(),
-            None,
-            None,
-        );
+        let mut snippet =
+            QuerySnippet::new("Original".to_string(), "SELECT 1".to_string(), None, None);
 
         let original_created = snippet.created_at.clone();
 
@@ -300,10 +293,7 @@ mod tests {
 
         assert_eq!(snippet.name, "Updated");
         assert_eq!(snippet.query, "SELECT 2");
-        assert_eq!(
-            snippet.description,
-            Some("New description".to_string())
-        );
+        assert_eq!(snippet.description, Some("New description".to_string()));
         assert_eq!(snippet.created_at, original_created);
         assert_ne!(snippet.updated_at, original_created);
     }

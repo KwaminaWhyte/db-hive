@@ -9,7 +9,8 @@ use std::sync::{Arc, Mutex as StdMutex};
 
 use super::{ConnectionOptions, DatabaseDriver, QueryResult, TransactionFailure, MAX_RESULT_ROWS};
 use crate::models::{
-    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
+    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo,
+    TableSchema,
 };
 
 /// A name as a quoted SQLite identifier: `"x""y"` escapes a double quote.
@@ -35,18 +36,19 @@ pub struct SqliteDriver {
 
 impl SqliteDriver {
     /// Convert a rusqlite Row to a Vec of JSON values
-    fn row_to_json_vec(row: &Row, column_count: usize) -> Result<Vec<serde_json::Value>, rusqlite::Error> {
+    fn row_to_json_vec(
+        row: &Row,
+        column_count: usize,
+    ) -> Result<Vec<serde_json::Value>, rusqlite::Error> {
         let mut values = Vec::new();
 
         for i in 0..column_count {
             let value = match row.get_ref(i)? {
                 rusqlite::types::ValueRef::Null => serde_json::Value::Null,
                 rusqlite::types::ValueRef::Integer(n) => serde_json::Value::Number(n.into()),
-                rusqlite::types::ValueRef::Real(f) => {
-                    serde_json::Number::from_f64(f)
-                        .map(serde_json::Value::Number)
-                        .unwrap_or(serde_json::Value::Null)
-                }
+                rusqlite::types::ValueRef::Real(f) => serde_json::Number::from_f64(f)
+                    .map(serde_json::Value::Number)
+                    .unwrap_or(serde_json::Value::Null),
                 rusqlite::types::ValueRef::Text(s) => {
                     let text = std::str::from_utf8(s).unwrap_or("");
                     serde_json::Value::String(text.to_string())
@@ -107,8 +109,9 @@ impl DatabaseDriver for SqliteDriver {
         .map_err(|e| DbError::ConnectionError(format!("Failed to open SQLite database: {}", e)))?;
 
         // Enable foreign keys (disabled by default in SQLite)
-        conn.execute("PRAGMA foreign_keys = ON", [])
-            .map_err(|e| DbError::ConnectionError(format!("Failed to enable foreign keys: {}", e)))?;
+        conn.execute("PRAGMA foreign_keys = ON", []).map_err(|e| {
+            DbError::ConnectionError(format!("Failed to enable foreign keys: {}", e))
+        })?;
 
         Ok(Self {
             conn: Arc::new(StdMutex::new(conn)),
@@ -135,11 +138,8 @@ impl DatabaseDriver for SqliteDriver {
 
             if column_count > 0 {
                 // This is a SELECT query
-                let column_names: Vec<String> = stmt
-                    .column_names()
-                    .iter()
-                    .map(|s| s.to_string())
-                    .collect();
+                let column_names: Vec<String> =
+                    stmt.column_names().iter().map(|s| s.to_string()).collect();
 
                 let mut rows_data = Vec::new();
 
@@ -151,8 +151,9 @@ impl DatabaseDriver for SqliteDriver {
                     .next()
                     .map_err(|e| DbError::QueryError(format!("Failed to fetch row: {}", e)))?
                 {
-                    let row_values = Self::row_to_json_vec(row, column_count)
-                        .map_err(|e| DbError::QueryError(format!("Failed to convert row: {}", e)))?;
+                    let row_values = Self::row_to_json_vec(row, column_count).map_err(|e| {
+                        DbError::QueryError(format!("Failed to convert row: {}", e))
+                    })?;
                     rows_data.push(row_values);
 
                     // Enforce the row cap inside the step loop so an unbounded
@@ -168,9 +169,9 @@ impl DatabaseDriver for SqliteDriver {
             } else {
                 // This is an INSERT/UPDATE/DELETE/CREATE/etc.
                 drop(stmt); // Drop statement before executing
-                let rows_affected = conn
-                    .execute(&sql, [])
-                    .map_err(|e| DbError::QueryError(format!("Failed to execute statement: {}", e)))?;
+                let rows_affected = conn.execute(&sql, []).map_err(|e| {
+                    DbError::QueryError(format!("Failed to execute statement: {}", e))
+                })?;
 
                 Ok(QueryResult::with_affected(rows_affected as u64))
             }
@@ -241,9 +242,7 @@ impl DatabaseDriver for SqliteDriver {
                 .unwrap_or("database.db")
                 .to_string(),
             owner: None,
-            size: std::fs::metadata(&self.db_path)
-                .ok()
-                .map(|m| m.len()),
+            size: std::fs::metadata(&self.db_path).ok().map(|m| m.len()),
         }])
     }
 
@@ -309,7 +308,10 @@ impl DatabaseDriver for SqliteDriver {
                     .map(|name| {
                         let ident = name.replace('"', "\"\"");
                         let lit = name.replace('\'', "''");
-                        format!("SELECT '{}' AS n, (SELECT COUNT(*) FROM \"{}\") AS c", lit, ident)
+                        format!(
+                            "SELECT '{}' AS n, (SELECT COUNT(*) FROM \"{}\") AS c",
+                            lit, ident
+                        )
                     })
                     .collect::<Vec<_>>()
                     .join(" UNION ALL ");
@@ -323,8 +325,8 @@ impl DatabaseDriver for SqliteDriver {
                     })
                     .map_err(|e| DbError::QueryError(format!("Failed to count rows: {}", e)))?;
                 for r in count_rows {
-                    let (n, c) = r
-                        .map_err(|e| DbError::QueryError(format!("Failed to read count: {}", e)))?;
+                    let (n, c) =
+                        r.map_err(|e| DbError::QueryError(format!("Failed to read count: {}", e)))?;
                     counts.insert(n, c);
                 }
             }
@@ -501,8 +503,8 @@ impl DatabaseDriver for SqliteDriver {
             let mut current: Option<(String, i64)> = None;
 
             for row in fk_iter {
-                let (tbl, id, _seq, ref_table, from_col, to_col, on_update, on_delete) =
-                    row.map_err(|e| {
+                let (tbl, id, _seq, ref_table, from_col, to_col, on_update, on_delete) = row
+                    .map_err(|e| {
                         DbError::QueryError(format!("Failed to read foreign key data: {}", e))
                     })?;
 
@@ -552,8 +554,8 @@ mod tests {
         let db_path = temp_dir.join("test_db.sqlite");
 
         let opts = ConnectionOptions {
-            host: String::new(), // Not used for SQLite
-            port: 0,             // Not used for SQLite
+            host: String::new(),     // Not used for SQLite
+            port: 0,                 // Not used for SQLite
             username: String::new(), // Not used for SQLite
             password: None,
             database: Some(db_path.to_str().unwrap().to_string()),
@@ -568,7 +570,9 @@ mod tests {
 
         // Create a test table
         let create_result = driver
-            .execute_query("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)")
+            .execute_query(
+                "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)",
+            )
             .await
             .unwrap();
         assert_eq!(create_result.rows_affected, Some(0));
@@ -581,10 +585,7 @@ mod tests {
         assert_eq!(insert_result.rows_affected, Some(1));
 
         // Query data
-        let query_result = driver
-            .execute_query("SELECT * FROM users")
-            .await
-            .unwrap();
+        let query_result = driver.execute_query("SELECT * FROM users").await.unwrap();
 
         assert_eq!(query_result.columns.len(), 3);
         assert_eq!(query_result.rows.len(), 1);
@@ -654,7 +655,8 @@ mod transaction_tests {
     use super::*;
 
     async fn fresh(name: &str) -> (SqliteDriver, std::path::PathBuf) {
-        let path = std::env::temp_dir().join(format!("dbhive-tx-{}-{}.sqlite", std::process::id(), name));
+        let path =
+            std::env::temp_dir().join(format!("dbhive-tx-{}-{}.sqlite", std::process::id(), name));
         let _ = std::fs::remove_file(&path);
         let driver = SqliteDriver::connect(ConnectionOptions {
             host: String::new(),
@@ -684,8 +686,12 @@ mod transaction_tests {
         d.execute_query("CREATE TABLE \"we\"\"ird\" (id INTEGER PRIMARY KEY, v TEXT)")
             .await
             .unwrap();
-        d.execute_query("CREATE INDEX \"ix\"\"v\" ON \"we\"\"ird\"(v)").await.unwrap();
-        d.execute_query("INSERT INTO \"we\"\"ird\" (v) VALUES ('a'), ('b')").await.unwrap();
+        d.execute_query("CREATE INDEX \"ix\"\"v\" ON \"we\"\"ird\"(v)")
+            .await
+            .unwrap();
+        d.execute_query("INSERT INTO \"we\"\"ird\" (v) VALUES ('a'), ('b')")
+            .await
+            .unwrap();
 
         let s = d.get_table_schema("main", "we\"ird").await.unwrap();
         let cols: Vec<_> = s.columns.iter().map(|c| c.name.as_str()).collect();
@@ -717,7 +723,10 @@ mod transaction_tests {
             .await
             .unwrap();
         assert_eq!(affected, vec![1, 1, 1]);
-        let r = d.execute_query("SELECT id, name FROM t ORDER BY id").await.unwrap();
+        let r = d
+            .execute_query("SELECT id, name FROM t ORDER BY id")
+            .await
+            .unwrap();
         assert_eq!(
             r.rows,
             vec![
@@ -742,11 +751,17 @@ mod transaction_tests {
             .unwrap_err();
         assert_eq!(err.index, 1);
         // Nothing of the first statement survived, and the delete never ran.
-        let r = d.execute_query("SELECT name FROM t WHERE id = 1").await.unwrap();
+        let r = d
+            .execute_query("SELECT name FROM t WHERE id = 1")
+            .await
+            .unwrap();
         assert_eq!(r.rows[0][0], serde_json::json!("a"));
         assert_eq!(count(&d).await, 2);
         // The driver is still usable afterwards.
-        assert!(d.execute_transaction(&["DELETE FROM t WHERE id = 2".to_string()]).await.is_ok());
+        assert!(d
+            .execute_transaction(&["DELETE FROM t WHERE id = 2".to_string()])
+            .await
+            .is_ok());
         assert_eq!(count(&d).await, 1);
         let _ = std::fs::remove_file(path);
     }

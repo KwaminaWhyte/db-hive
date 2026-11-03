@@ -29,14 +29,85 @@ pub struct Run {
 }
 
 const KEYWORDS: &[&str] = &[
-    "ADD", "ALL", "ALTER", "AND", "ANY", "AS", "ASC", "BEGIN", "BETWEEN", "BY", "CASCADE", "CASE",
-    "CHECK", "COLUMN", "COMMIT", "CONSTRAINT", "CREATE", "CROSS", "DATABASE", "DEFAULT", "DELETE",
-    "DESC", "DISTINCT", "DROP", "ELSE", "END", "EXCEPT", "EXISTS", "EXPLAIN", "FALSE", "FETCH",
-    "FOREIGN", "FROM", "FULL", "GRANT", "GROUP", "HAVING", "IF", "ILIKE", "IN", "INDEX", "INNER",
-    "INSERT", "INTERSECT", "INTO", "IS", "JOIN", "KEY", "LEFT", "LIKE", "LIMIT", "NOT", "NULL",
-    "OFFSET", "ON", "OR", "ORDER", "OUTER", "PRIMARY", "REFERENCES", "RETURNING", "REVOKE",
-    "RIGHT", "ROLLBACK", "SELECT", "SET", "TABLE", "THEN", "TRUE", "TRUNCATE", "UNION", "UNIQUE",
-    "UPDATE", "USING", "VALUES", "VIEW", "WHEN", "WHERE", "WITH",
+    "ADD",
+    "ALL",
+    "ALTER",
+    "AND",
+    "ANY",
+    "AS",
+    "ASC",
+    "BEGIN",
+    "BETWEEN",
+    "BY",
+    "CASCADE",
+    "CASE",
+    "CHECK",
+    "COLUMN",
+    "COMMIT",
+    "CONSTRAINT",
+    "CREATE",
+    "CROSS",
+    "DATABASE",
+    "DEFAULT",
+    "DELETE",
+    "DESC",
+    "DISTINCT",
+    "DROP",
+    "ELSE",
+    "END",
+    "EXCEPT",
+    "EXISTS",
+    "EXPLAIN",
+    "FALSE",
+    "FETCH",
+    "FOREIGN",
+    "FROM",
+    "FULL",
+    "GRANT",
+    "GROUP",
+    "HAVING",
+    "IF",
+    "ILIKE",
+    "IN",
+    "INDEX",
+    "INNER",
+    "INSERT",
+    "INTERSECT",
+    "INTO",
+    "IS",
+    "JOIN",
+    "KEY",
+    "LEFT",
+    "LIKE",
+    "LIMIT",
+    "NOT",
+    "NULL",
+    "OFFSET",
+    "ON",
+    "OR",
+    "ORDER",
+    "OUTER",
+    "PRIMARY",
+    "REFERENCES",
+    "RETURNING",
+    "REVOKE",
+    "RIGHT",
+    "ROLLBACK",
+    "SELECT",
+    "SET",
+    "TABLE",
+    "THEN",
+    "TRUE",
+    "TRUNCATE",
+    "UNION",
+    "UNIQUE",
+    "UPDATE",
+    "USING",
+    "VALUES",
+    "VIEW",
+    "WHEN",
+    "WHERE",
+    "WITH",
 ];
 
 fn is_keyword(word: &str) -> bool {
@@ -131,7 +202,11 @@ pub fn highlight(sql: &str) -> Vec<Vec<Run>> {
                 while i < chars.len() && chars[i].is_whitespace() {
                     i += 1;
                 }
-                push(&mut runs, chars[start..i].iter().collect(), Kind::Whitespace);
+                push(
+                    &mut runs,
+                    chars[start..i].iter().collect(),
+                    Kind::Whitespace,
+                );
                 continue;
             }
             if c.is_ascii_digit() {
@@ -297,7 +372,11 @@ mod contrast_tests {
     fn lum(r: u8, g: u8, b: u8) -> f64 {
         let f = |c: u8| {
             let c = c as f64 / 255.0;
-            if c <= 0.03928 { c / 12.92 } else { ((c + 0.055) / 1.055).powf(2.4) }
+            if c <= 0.03928 {
+                c / 12.92
+            } else {
+                ((c + 0.055) / 1.055).powf(2.4)
+            }
         };
         0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
     }

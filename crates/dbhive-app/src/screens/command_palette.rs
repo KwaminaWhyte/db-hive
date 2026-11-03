@@ -233,7 +233,8 @@ fn scrim(ctx: &egui::Context, palette: &Palette, id: &str) -> bool {
         .interactable(true)
         .show(ctx, |ui| {
             ui.painter().rect_filled(rect, egui::Rounding::ZERO, wash);
-            ui.allocate_response(rect.size(), egui::Sense::click()).clicked()
+            ui.allocate_response(rect.size(), egui::Sense::click())
+                .clicked()
         })
         .inner
 }
@@ -334,13 +335,10 @@ fn draw_palette(app: &mut DbHiveApp, ctx: &egui::Context, screen: Scope) -> Opti
                         if edit.changed() {
                             state.selected = 0;
                         }
-                        ui.with_layout(
-                            egui::Layout::right_to_left(egui::Align::Center),
-                            |ui| {
-                                ui.add_space(14.0);
-                                ui.label(crate::theme::text::muted(palette, "Esc"));
-                            },
-                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.add_space(14.0);
+                            ui.label(crate::theme::text::muted(palette, "Esc"));
+                        });
                     },
                 );
 
@@ -369,10 +367,9 @@ fn draw_palette(app: &mut DbHiveApp, ctx: &egui::Context, screen: Scope) -> Opti
                         }
 
                         let mut flat = 0usize;
-                        for (group, items) in palette_groups(
-                            &app.screens.command_palette.query,
-                            screen,
-                        ) {
+                        for (group, items) in
+                            palette_groups(&app.screens.command_palette.query, screen)
+                        {
                             ui.add_space(4.0);
                             ui.horizontal(|ui| {
                                 ui.add_space(14.0);
@@ -384,8 +381,7 @@ fn draw_palette(app: &mut DbHiveApp, ctx: &egui::Context, screen: Scope) -> Opti
                             for item in items {
                                 let index = flat;
                                 flat += 1;
-                                let response =
-                                    command_row(ui, palette, item, index == selected);
+                                let response = command_row(ui, palette, item, index == selected);
                                 if index == selected && scroll_to {
                                     response.scroll_to_me(Some(egui::Align::Center));
                                 }
@@ -436,7 +432,11 @@ fn command_row(
     item: &'static Command,
     selected: bool,
 ) -> egui::Response {
-    let fill = if selected { palette.accent } else { egui::Color32::TRANSPARENT };
+    let fill = if selected {
+        palette.accent
+    } else {
+        egui::Color32::TRANSPARENT
+    };
     let response = egui::Frame::none()
         .fill(fill)
         .rounding(egui::Rounding::same(6.0))
@@ -490,18 +490,15 @@ fn draw_shortcuts(app: &mut DbHiveApp, ctx: &egui::Context) {
                 egui::Frame::none().inner_margin(inner).show(ui, |ui| {
                     ui.horizontal(|ui| {
                         ui.label(crate::theme::text::heading(palette, "Keyboard Shortcuts"));
-                        ui.with_layout(
-                            egui::Layout::right_to_left(egui::Align::Center),
-                            |ui| {
-                                if ui.button("Close").clicked() {
-                                    close = true;
-                                }
-                                ui.label(crate::theme::text::muted(
-                                    palette,
-                                    if IS_MAC { "macOS" } else { "Windows / Linux" },
-                                ));
-                            },
-                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button("Close").clicked() {
+                                close = true;
+                            }
+                            ui.label(crate::theme::text::muted(
+                                palette,
+                                if IS_MAC { "macOS" } else { "Windows / Linux" },
+                            ));
+                        });
                     });
                     ui.label(crate::theme::text::muted(
                         palette,
@@ -518,43 +515,45 @@ fn draw_shortcuts(app: &mut DbHiveApp, ctx: &egui::Context) {
                     ui.add_space(8.0);
 
                     let groups = help_groups(&app.screens.command_palette.shortcuts_query);
-                    egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
-                        if groups.is_empty() {
-                            ui.add_space(20.0);
-                            ui.vertical_centered(|ui| {
-                                ui.label(crate::theme::text::muted(
-                                    palette,
-                                    "No shortcuts match that search",
-                                ));
-                            });
-                            return;
-                        }
-                        for (group, items) in groups {
-                            ui.add_space(6.0);
-                            ui.label(crate::theme::text::strong(palette, group.title()));
-                            ui.add_space(2.0);
-                            for item in items {
-                                ui.horizontal(|ui| {
-                                    ui.label(item.title);
+                    egui::ScrollArea::vertical()
+                        .max_height(420.0)
+                        .show(ui, |ui| {
+                            if groups.is_empty() {
+                                ui.add_space(20.0);
+                                ui.vertical_centered(|ui| {
                                     ui.label(crate::theme::text::muted(
                                         palette,
-                                        item.description,
+                                        "No shortcuts match that search",
                                     ));
-                                    ui.with_layout(
-                                        egui::Layout::right_to_left(egui::Align::Center),
-                                        |ui| {
-                                            ui.label(crate::theme::text::strong(
-                                                palette,
-                                                item.chord.unwrap().display(),
-                                            ));
-                                        },
-                                    );
                                 });
+                                return;
                             }
-                            ui.add_space(4.0);
-                            ui.separator();
-                        }
-                    });
+                            for (group, items) in groups {
+                                ui.add_space(6.0);
+                                ui.label(crate::theme::text::strong(palette, group.title()));
+                                ui.add_space(2.0);
+                                for item in items {
+                                    ui.horizontal(|ui| {
+                                        ui.label(item.title);
+                                        ui.label(crate::theme::text::muted(
+                                            palette,
+                                            item.description,
+                                        ));
+                                        ui.with_layout(
+                                            egui::Layout::right_to_left(egui::Align::Center),
+                                            |ui| {
+                                                ui.label(crate::theme::text::strong(
+                                                    palette,
+                                                    item.chord.unwrap().display(),
+                                                ));
+                                            },
+                                        );
+                                    });
+                                }
+                                ui.add_space(4.0);
+                                ui.separator();
+                            }
+                        });
                 });
             });
         });
@@ -605,10 +604,22 @@ mod tests {
         let m = egui_modifiers(Chord::cmd_shift(KeyCode::N));
         assert_eq!(
             m,
-            egui::Modifiers { alt: false, ctrl: false, shift: true, mac_cmd: false, command: true }
+            egui::Modifiers {
+                alt: false,
+                ctrl: false,
+                shift: true,
+                mac_cmd: false,
+                command: true
+            }
         );
-        assert_eq!(egui_modifiers(Chord::bare(KeyCode::Escape)), egui::Modifiers::NONE);
-        assert_eq!(egui_modifiers(Chord::cmd(KeyCode::K)), egui::Modifiers::COMMAND);
+        assert_eq!(
+            egui_modifiers(Chord::bare(KeyCode::Escape)),
+            egui::Modifiers::NONE
+        );
+        assert_eq!(
+            egui_modifiers(Chord::cmd(KeyCode::K)),
+            egui::Modifiers::COMMAND
+        );
     }
 
     #[test]

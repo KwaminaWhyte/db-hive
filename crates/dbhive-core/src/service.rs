@@ -238,7 +238,10 @@ pub async fn switch_database(
         let profile = guard
             .get_profile(connection_id)
             .ok_or_else(|| {
-                DbError::NotFound(format!("Profile for connection {} not found", connection_id))
+                DbError::NotFound(format!(
+                    "Profile for connection {} not found",
+                    connection_id
+                ))
             })?
             .clone();
         let password = guard
@@ -408,9 +411,7 @@ pub async fn create_database(
             .clone();
         let connection = guard
             .get_connection(connection_id)
-            .ok_or_else(|| {
-                DbError::NotFound(format!("Connection '{}' not found", connection_id))
-            })?
+            .ok_or_else(|| DbError::NotFound(format!("Connection '{}' not found", connection_id)))?
             .clone();
         (connection, driver)
     };
@@ -465,11 +466,7 @@ mod tests {
     #[test]
     fn punctuation_that_would_change_the_statement_is_rejected() {
         for bad in ["my db", "db;DROP DATABASE x", "db\"", "db'", "db`", "db.x"] {
-            assert!(
-                validate_database_name(bad).is_err(),
-                "accepted {:?}",
-                bad
-            );
+            assert!(validate_database_name(bad).is_err(), "accepted {:?}", bad);
         }
         // The characters servers do allow still pass.
         for good in ["my_db", "my-db", "db$1", "DB"] {
@@ -503,7 +500,11 @@ mod tests {
     #[test]
     fn postgres_flavours_all_create_databases() {
         for driver in [DbDriver::Postgres, DbDriver::Supabase, DbDriver::Neon] {
-            assert!(create_database_sql(&driver, "analytics", &q).is_ok(), "{:?}", driver);
+            assert!(
+                create_database_sql(&driver, "analytics", &q).is_ok(),
+                "{:?}",
+                driver
+            );
         }
     }
 

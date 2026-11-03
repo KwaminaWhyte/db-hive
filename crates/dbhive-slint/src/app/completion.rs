@@ -41,7 +41,9 @@ pub(super) struct CompletionSession {
 impl Ctx {
     /// The popup's rows and selection, projected into the window.
     fn project_completion(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let s = self.session.borrow();
         let c = &s.completion;
         let items: Vec<CompletionItem> = c
@@ -113,7 +115,9 @@ impl Ctx {
     /// The caret moved to byte offset `cursor` (typing moves it too): work out
     /// what to offer.
     pub(super) fn completion_update(self: &Rc<Self>, cursor: usize) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let is_query = self
             .session
             .borrow()
@@ -235,7 +239,12 @@ impl Ctx {
     pub(super) fn completion_move(&self, delta: i32) {
         {
             let mut s = self.session.borrow_mut();
-            let n = s.completion.shown.as_ref().map(|x| x.items.len()).unwrap_or(0);
+            let n = s
+                .completion
+                .shown
+                .as_ref()
+                .map(|x| x.items.len())
+                .unwrap_or(0);
             if n == 0 {
                 return;
             }
@@ -253,10 +262,14 @@ impl Ctx {
     /// Apply a row of the list: replace the word, move the caret after it, and
     /// keep the popup quiet for that word.
     pub(super) fn completion_pick(self: &Rc<Self>, choice: usize) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let (new_text, at, start) = {
             let s = self.session.borrow();
-            let Some(sg) = s.completion.shown.as_ref() else { return };
+            let Some(sg) = s.completion.shown.as_ref() else {
+                return;
+            };
             let text = w.get_workspace_editor_text().to_string();
             let Some((new_text, at)) = apply(&text, sg, choice) else {
                 return;
@@ -290,7 +303,8 @@ impl Ctx {
 pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
     {
         let ctx = ctx.clone();
-        window.on_workspace_cursor_moved(move |offset| ctx.completion_update(offset.max(0) as usize));
+        window
+            .on_workspace_cursor_moved(move |offset| ctx.completion_update(offset.max(0) as usize));
     }
     {
         let ctx = ctx.clone();

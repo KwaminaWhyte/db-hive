@@ -125,7 +125,10 @@ fn table_after(ws: &[String], keyword: &str) -> String {
     ws.iter()
         .position(|w| upper(w) == keyword)
         .and_then(|i| ws.get(i + 1))
-        .map(|t| t.trim_matches(|c| c == '"' || c == '`' || c == '[' || c == ']').to_string())
+        .map(|t| {
+            t.trim_matches(|c| c == '"' || c == '`' || c == '[' || c == ']')
+                .to_string()
+        })
         .unwrap_or_default()
 }
 
@@ -141,11 +144,17 @@ pub fn warnings(sql: &str) -> Vec<Warning> {
         let found = match first.as_str() {
             "DELETE" if !has("WHERE") => Some((
                 Kind::DeleteWithoutWhere,
-                format!("DELETE without WHERE removes every row of {}", table_after(&ws, "FROM")),
+                format!(
+                    "DELETE without WHERE removes every row of {}",
+                    table_after(&ws, "FROM")
+                ),
             )),
             "UPDATE" if !has("WHERE") => Some((
                 Kind::UpdateWithoutWhere,
-                format!("UPDATE without WHERE changes every row of {}", table_after(&ws, "UPDATE")),
+                format!(
+                    "UPDATE without WHERE changes every row of {}",
+                    table_after(&ws, "UPDATE")
+                ),
             )),
             "DROP" => match up.get(1).map(String::as_str) {
                 Some("TABLE") | Some("DATABASE") | Some("SCHEMA") => Some((
@@ -156,7 +165,8 @@ pub fn warnings(sql: &str) -> Vec<Warning> {
             },
             "TRUNCATE" => Some((
                 Kind::Truncate,
-                "TRUNCATE removes every row and cannot be rolled back on most databases".to_string(),
+                "TRUNCATE removes every row and cannot be rolled back on most databases"
+                    .to_string(),
             )),
             "ALTER" if has("TABLE") => up
                 .windows(2)
@@ -191,7 +201,10 @@ mod tests {
     #[test]
     fn delete_and_update_without_where_warn_but_with_where_do_not() {
         assert_eq!(kinds("DELETE FROM users"), vec![Kind::DeleteWithoutWhere]);
-        assert_eq!(kinds("update users set active = false"), vec![Kind::UpdateWithoutWhere]);
+        assert_eq!(
+            kinds("update users set active = false"),
+            vec![Kind::UpdateWithoutWhere]
+        );
         assert!(kinds("DELETE FROM users WHERE id = 1").is_empty());
         assert!(kinds("UPDATE users SET a = 1 WHERE id = 2").is_empty());
     }
@@ -199,7 +212,11 @@ mod tests {
     #[test]
     fn the_description_names_the_table() {
         let w = warnings("DELETE FROM \"audit_log\"");
-        assert!(w[0].description.contains("audit_log"), "{}", w[0].description);
+        assert!(
+            w[0].description.contains("audit_log"),
+            "{}",
+            w[0].description
+        );
         let w = warnings("UPDATE orders SET x = 1");
         assert!(w[0].description.contains("orders"));
     }
@@ -208,7 +225,10 @@ mod tests {
     fn drops_truncate_and_drop_column_warn() {
         assert_eq!(kinds("DROP TABLE t"), vec![Kind::DropObject]);
         assert_eq!(kinds("drop database shop"), vec![Kind::DropObject]);
-        assert_eq!(kinds("DROP SCHEMA IF EXISTS s CASCADE"), vec![Kind::DropObject]);
+        assert_eq!(
+            kinds("DROP SCHEMA IF EXISTS s CASCADE"),
+            vec![Kind::DropObject]
+        );
         assert_eq!(kinds("TRUNCATE TABLE logs"), vec![Kind::Truncate]);
         assert_eq!(kinds("ALTER TABLE t DROP COLUMN c"), vec![Kind::DropColumn]);
     }
@@ -226,8 +246,14 @@ mod tests {
         assert!(kinds("-- DROP TABLE t\nSELECT 1").is_empty());
         assert!(kinds("/* TRUNCATE t; */ SELECT 1").is_empty());
         // A WHERE hidden in a comment does not rescue the DELETE.
-        assert_eq!(kinds("DELETE FROM t -- WHERE id = 1"), vec![Kind::DeleteWithoutWhere]);
-        assert_eq!(kinds("DELETE FROM t WHERE_ok"), vec![Kind::DeleteWithoutWhere]);
+        assert_eq!(
+            kinds("DELETE FROM t -- WHERE id = 1"),
+            vec![Kind::DeleteWithoutWhere]
+        );
+        assert_eq!(
+            kinds("DELETE FROM t WHERE_ok"),
+            vec![Kind::DeleteWithoutWhere]
+        );
     }
 
     #[test]
@@ -240,7 +266,10 @@ mod tests {
 
     #[test]
     fn splitting_ignores_semicolons_in_literals_and_comment_only_tails() {
-        assert_eq!(split_statements("SELECT 'a;b'; SELECT 2;"), vec!["SELECT 'a;b'", "SELECT 2"]);
+        assert_eq!(
+            split_statements("SELECT 'a;b'; SELECT 2;"),
+            vec!["SELECT 'a;b'", "SELECT 2"]
+        );
         assert_eq!(split_statements("SELECT 1; -- done"), vec!["SELECT 1"]);
         assert!(split_statements("   ").is_empty());
     }

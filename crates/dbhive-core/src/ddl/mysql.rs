@@ -6,9 +6,9 @@
 use crate::ddl::DdlGenerator;
 use crate::models::{
     ddl::{
-        AlterColumnOperation, AlterTableDefinition, CheckConstraint, ColumnDefinition,
-        ColumnType, DdlResult, DropTableDefinition, ForeignKeyAction, ForeignKeyConstraint,
-        TableDefinition, UniqueConstraint,
+        AlterColumnOperation, AlterTableDefinition, CheckConstraint, ColumnDefinition, ColumnType,
+        DdlResult, DropTableDefinition, ForeignKeyAction, ForeignKeyConstraint, TableDefinition,
+        UniqueConstraint,
     },
     DbError,
 };
@@ -133,7 +133,11 @@ impl MySqlDdlGenerator {
     }
 
     /// Generate unique constraint SQL
-    fn generate_unique_constraint_sql(&self, unique: &UniqueConstraint, table_name: &str) -> String {
+    fn generate_unique_constraint_sql(
+        &self,
+        unique: &UniqueConstraint,
+        table_name: &str,
+    ) -> String {
         let constraint_name = unique.name.as_ref().map_or_else(
             || format!("unique_{}_{}", table_name, unique.columns.join("_")),
             |name| name.clone(),
@@ -156,7 +160,10 @@ impl MySqlDdlGenerator {
             .as_ref()
             .map_or_else(|| format!("check_{}", table_name), |name| name.clone());
 
-        format!("CONSTRAINT `{}` CHECK ({})", constraint_name, check.expression)
+        format!(
+            "CONSTRAINT `{}` CHECK ({})",
+            constraint_name, check.expression
+        )
     }
 
     /// Generate primary key constraint SQL
@@ -220,7 +227,10 @@ impl DdlGenerator for MySqlDdlGenerator {
 
         // Foreign keys
         for fk in &table.foreign_keys {
-            table_elements.push(format!("  {}", self.generate_foreign_key_sql(fk, &table.name)));
+            table_elements.push(format!(
+                "  {}",
+                self.generate_foreign_key_sql(fk, &table.name)
+            ));
         }
 
         // Unique constraints
@@ -292,16 +302,16 @@ impl DdlGenerator for MySqlDdlGenerator {
                         self.column_type_to_sql(new_type)
                     )
                 }
-                AlterColumnOperation::SetNotNull { column_name, not_null } => {
+                AlterColumnOperation::SetNotNull {
+                    column_name,
+                    not_null,
+                } => {
                     // In MySQL, we need to use MODIFY with the full column definition
                     // This is a simplified version - in production, you'd need to fetch the current column definition
                     let null_clause = if *not_null { "NOT NULL" } else { "NULL" };
                     format!(
                         "ALTER TABLE {} MODIFY COLUMN `{}` {} {};",
-                        table_name,
-                        column_name,
-                        "/* type needed */",
-                        null_clause
+                        table_name, column_name, "/* type needed */", null_clause
                     )
                 }
                 AlterColumnOperation::SetDefault {

@@ -8,7 +8,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use super::provider::{AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage};
+use super::provider::{
+    AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage,
+};
 
 /// OpenAI API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -204,7 +206,9 @@ impl AiProvider for OpenAiProvider {
         // Check by listing models
         let url = format!("{}/models", self.config.base_url);
 
-        let mut request = self.client.get(&url)
+        let mut request = self
+            .client
+            .get(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key));
 
         if let Some(org) = &self.config.organization {
@@ -224,7 +228,9 @@ impl AiProvider for OpenAiProvider {
 
         let url = format!("{}/models", self.config.base_url);
 
-        let mut request = self.client.get(&url)
+        let mut request = self
+            .client
+            .get(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key));
 
         if let Some(org) = &self.config.organization {
@@ -237,13 +243,12 @@ impl AiProvider for OpenAiProvider {
             .map_err(|e| format!("Failed to connect to OpenAI: {}", e))?;
 
         if !response.status().is_success() {
-            let error: OpenAiErrorResponse = response.json().await
-                .unwrap_or(OpenAiErrorResponse {
-                    error: OpenAiError {
-                        message: "Unknown error".to_string(),
-                        error_type: None,
-                    },
-                });
+            let error: OpenAiErrorResponse = response.json().await.unwrap_or(OpenAiErrorResponse {
+                error: OpenAiError {
+                    message: "Unknown error".to_string(),
+                    error_type: None,
+                },
+            });
             return Err(format!("OpenAI API error: {}", error.error.message));
         }
 
@@ -253,7 +258,8 @@ impl AiProvider for OpenAiProvider {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         // Filter to only chat models and sort by preference
-        let mut models: Vec<AiModel> = data.data
+        let mut models: Vec<AiModel> = data
+            .data
             .into_iter()
             .filter(|m| Self::is_chat_model(&m.id))
             .map(|m| {
@@ -304,7 +310,9 @@ impl AiProvider for OpenAiProvider {
             max_tokens,
         };
 
-        let mut request = self.client.post(&url)
+        let mut request = self
+            .client
+            .post(&url)
             .header("Authorization", format!("Bearer {}", self.config.api_key))
             .header("Content-Type", "application/json");
 
@@ -319,13 +327,12 @@ impl AiProvider for OpenAiProvider {
             .map_err(|e| format!("Failed to send request: {}", e))?;
 
         if !response.status().is_success() {
-            let error: OpenAiErrorResponse = response.json().await
-                .unwrap_or(OpenAiErrorResponse {
-                    error: OpenAiError {
-                        message: "Unknown error".to_string(),
-                        error_type: None,
-                    },
-                });
+            let error: OpenAiErrorResponse = response.json().await.unwrap_or(OpenAiErrorResponse {
+                error: OpenAiError {
+                    message: "Unknown error".to_string(),
+                    error_type: None,
+                },
+            });
             return Err(format!("OpenAI API error: {}", error.error.message));
         }
 
@@ -334,7 +341,8 @@ impl AiProvider for OpenAiProvider {
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-        let content = chat_response.choices
+        let content = chat_response
+            .choices
             .first()
             .map(|c| c.message.content.clone())
             .unwrap_or_default();
@@ -377,7 +385,10 @@ mod tests {
     fn test_model_name() {
         assert_eq!(OpenAiProvider::get_model_name("gpt-4o"), "GPT-4o");
         assert_eq!(OpenAiProvider::get_model_name("gpt-4o-mini"), "GPT-4o Mini");
-        assert_eq!(OpenAiProvider::get_model_name("gpt-3.5-turbo"), "GPT-3.5 Turbo");
+        assert_eq!(
+            OpenAiProvider::get_model_name("gpt-3.5-turbo"),
+            "GPT-3.5 Turbo"
+        );
     }
 
     #[test]

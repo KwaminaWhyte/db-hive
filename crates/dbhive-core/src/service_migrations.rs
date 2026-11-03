@@ -71,12 +71,15 @@ fn driver_of(
 /// SQL must work for a target whose connection is only about to be opened.
 fn profile_driver(state: &Mutex<AppState>, connection_id: &str) -> Result<DbDriver, DbError> {
     let guard = state.lock().unwrap();
-    let profile = guard.connection_profiles.get(connection_id).ok_or_else(|| {
-        DbError::NotFound(format!(
-            "Connection profile for '{}' not found",
-            connection_id
-        ))
-    })?;
+    let profile = guard
+        .connection_profiles
+        .get(connection_id)
+        .ok_or_else(|| {
+            DbError::NotFound(format!(
+                "Connection profile for '{}' not found",
+                connection_id
+            ))
+        })?;
     Ok(profile.driver.clone())
 }
 

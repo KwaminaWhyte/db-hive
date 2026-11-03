@@ -29,12 +29,20 @@ pub struct LazyViewLines {
 
 impl LazyViewLines {
     pub fn new(lines: Rc<Vec<String>>, style: LineStyle) -> Self {
-        Self { lines, style, notify: ModelNotify::default() }
+        Self {
+            lines,
+            style,
+            notify: ModelNotify::default(),
+        }
     }
 }
 
 fn run(text: &str, kind: i32, col: i32) -> ResultViewRun {
-    ResultViewRun { text: text.into(), kind, col }
+    ResultViewRun {
+        text: text.into(),
+        kind,
+        col,
+    }
 }
 
 impl Model for LazyViewLines {
@@ -62,7 +70,9 @@ impl Model for LazyViewLines {
             LineStyle::Text if row == 0 => vec![run(line, JsonKind::Key as i32, 0)],
             LineStyle::Text => vec![run(line, JsonKind::Plain as i32, 0)],
         };
-        Some(ResultViewLine { runs: ModelRc::new(VecModel::from(runs)) })
+        Some(ResultViewLine {
+            runs: ModelRc::new(VecModel::from(runs)),
+        })
     }
 
     fn model_tracker(&self) -> &dyn ModelTracker {
@@ -84,15 +94,15 @@ mod tests {
     use super::*;
 
     fn texts(l: &ResultViewLine) -> Vec<(String, i32, i32)> {
-        l.runs.iter().map(|r| (r.text.to_string(), r.kind, r.col)).collect()
+        l.runs
+            .iter()
+            .map(|r| (r.text.to_string(), r.kind, r.col))
+            .collect()
     }
 
     #[test]
     fn json_lines_are_coloured_lazily_with_character_columns() {
-        let m = LazyViewLines::new(
-            Rc::new(vec!["  \"é\": 1,".to_string()]),
-            LineStyle::Json,
-        );
+        let m = LazyViewLines::new(Rc::new(vec!["  \"é\": 1,".to_string()]), LineStyle::Json);
         assert_eq!(m.row_count(), 1);
         let l = m.row_data(0).unwrap();
         let t = texts(&l);
@@ -105,9 +115,18 @@ mod tests {
 
     #[test]
     fn text_view_marks_only_the_header() {
-        let m = LazyViewLines::new(Rc::new(vec!["id  name".into(), "1   a".into()]), LineStyle::Text);
-        assert_eq!(texts(&m.row_data(0).unwrap()), vec![("id  name".to_string(), 1, 0)]);
-        assert_eq!(texts(&m.row_data(1).unwrap()), vec![("1   a".to_string(), 0, 0)]);
+        let m = LazyViewLines::new(
+            Rc::new(vec!["id  name".into(), "1   a".into()]),
+            LineStyle::Text,
+        );
+        assert_eq!(
+            texts(&m.row_data(0).unwrap()),
+            vec![("id  name".to_string(), 1, 0)]
+        );
+        assert_eq!(
+            texts(&m.row_data(1).unwrap()),
+            vec![("1   a".to_string(), 0, 0)]
+        );
         assert!(m.row_data(2).is_none());
     }
 }

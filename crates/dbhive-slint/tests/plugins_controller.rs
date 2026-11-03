@@ -71,7 +71,10 @@ __plugin_exports__ = {
 "#;
 
 fn toasts(w: &dbhive_slint::AppWindow) -> Vec<(String, Tone)> {
-    w.get_toasts().iter().map(|t| (t.text.to_string(), t.tone)).collect()
+    w.get_toasts()
+        .iter()
+        .map(|t| (t.text.to_string(), t.tone))
+        .collect()
 }
 
 fn toast_with(w: &dbhive_slint::AppWindow, needle: &str) -> Option<(String, Tone)> {
@@ -142,7 +145,10 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
                     return bail("a fresh data directory has no plugins".into());
                 }
                 if ps.get_market().row_count() != 3 {
-                    return bail(format!("the catalogue has 3 entries, got {}", ps.get_market().row_count()));
+                    return bail(format!(
+                        "the catalogue has 3 entries, got {}",
+                        ps.get_market().row_count()
+                    ));
                 }
                 ps.invoke_tab_selected(1);
                 if ps.get_tab() != 0 {
@@ -153,14 +159,22 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
                 ps.invoke_install("com.dbhive.sql-formatter".into());
                 match market_state(&ps, "com.dbhive.sql-formatter") {
                     Some((1, _)) => {}
-                    other => return bail(format!("the card should say Installing at once, got {:?}", other)),
+                    other => {
+                        return bail(format!(
+                            "the card should say Installing at once, got {:?}",
+                            other
+                        ))
+                    }
                 }
                 step2.set(2);
             }
             2 if market_state(&ps, "com.dbhive.sql-formatter").is_some_and(|(s, _)| s != 1) => {
                 let (state, note) = market_state(&ps, "com.dbhive.sql-formatter").unwrap();
                 if state != 3 || !note.contains("not bundled") {
-                    return bail(format!("an unbundled entry should fail with a reason, got {} {:?}", state, note));
+                    return bail(format!(
+                        "an unbundled entry should fail with a reason, got {} {:?}",
+                        state, note
+                    ));
                 }
                 if toast_with(&w, "not bundled").is_none_or(|(_, tone)| tone != Tone::Danger) {
                     return bail("the failure should also raise a danger toast".into());
@@ -175,19 +189,32 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
                 }
                 step2.set(3);
             }
-            3 if market_state(&ps, PLUGIN_ID).is_some_and(|(s, _)| s == 2) && ps.get_toolbar().row_count() == 1 => {
-                if !installed_dir2.join("manifest.json").is_file() || !installed_dir2.join("index.js").is_file() {
+            3 if market_state(&ps, PLUGIN_ID).is_some_and(|(s, _)| s == 2)
+                && ps.get_toolbar().row_count() == 1 =>
+            {
+                if !installed_dir2.join("manifest.json").is_file()
+                    || !installed_dir2.join("index.js").is_file()
+                {
                     return bail("the plugin should be copied into the plugin directory".into());
                 }
                 if toast_with(&w, "Temp Exporter installed").is_none() {
-                    return bail(format!("an install toast was expected, got {:?}", toasts(&w)));
+                    return bail(format!(
+                        "an install toast was expected, got {:?}",
+                        toasts(&w)
+                    ));
                 }
                 if ps.get_installed().row_count() != 1 {
                     return bail("the installed list should hold the plugin".into());
                 }
                 let t = ps.get_toolbar().row_data(0).unwrap();
-                if t.label != "Quick export" || t.plugin_id != PLUGIN_ID || !t.tooltip.contains("Temp Exporter") {
-                    return bail(format!("the plugin's toolbar button is wrong: {:?} {:?}", t.label, t.tooltip));
+                if t.label != "Quick export"
+                    || t.plugin_id != PLUGIN_ID
+                    || !t.tooltip.contains("Temp Exporter")
+                {
+                    return bail(format!(
+                        "the plugin's toolbar button is wrong: {:?} {:?}",
+                        t.label, t.tooltip
+                    ));
                 }
                 ps.invoke_tab_selected(0);
                 step2.set(4);
@@ -195,11 +222,15 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
             // Detail: everything the checklist lists.
             4 if ps.get_has_detail() => {
                 let facts = |m: slint::ModelRc<dbhive_slint::PluginFact>| -> Vec<(String, String)> {
-                    m.iter().map(|f| (f.label.to_string(), f.value.to_string())).collect()
+                    m.iter()
+                        .map(|f| (f.label.to_string(), f.value.to_string()))
+                        .collect()
                 };
                 let info = facts(ps.get_d_info());
                 let stats = facts(ps.get_d_stats());
-                let has = |v: &[(String, String)], k: &str, want: &str| v.iter().any(|(a, b)| a == k && b == want);
+                let has = |v: &[(String, String)], k: &str, want: &str| {
+                    v.iter().any(|(a, b)| a == k && b == want)
+                };
                 if ps.get_d_name() != "Temp Exporter"
                     || !has(&info, "Author", "Test Author")
                     || !has(&info, "License", "MIT")
@@ -228,9 +259,13 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
                 if ps.get_d_can_open() {
                     return bail("a disabled plugin must not offer its interface".into());
                 }
-                let state = std::fs::read_to_string(installed_dir2.join(".state.json")).unwrap_or_default();
+                let state =
+                    std::fs::read_to_string(installed_dir2.join(".state.json")).unwrap_or_default();
                 if !state.contains("false") {
-                    return bail(format!("the disabled state should be saved, got {:?}", state));
+                    return bail(format!(
+                        "the disabled state should be saved, got {:?}",
+                        state
+                    ));
                 }
                 if toast_with(&w, "Temp Exporter disabled").is_none() {
                     return bail("a disabled toast was expected".into());
@@ -238,16 +273,27 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
                 ps.invoke_toggle_enabled("".into());
                 step2.set(6);
             }
-            6 if ps.get_d_enabled() && ps.get_d_busy() == "" && ps.get_toolbar().row_count() == 1 => {
+            6 if ps.get_d_enabled()
+                && ps.get_d_busy() == ""
+                && ps.get_toolbar().row_count() == 1 =>
+            {
                 // Settings, from the manifest's schema.
                 ps.invoke_open_settings();
                 step2.set(7);
             }
             7 if ps.get_form_open() => {
-                let kinds: Vec<(i32, String)> =
-                    ps.get_form_items().iter().map(|i| (i.kind, i.id.to_string())).collect();
-                if !kinds.contains(&(7, "delimiter".into())) || !kinds.contains(&(5, "limit".into())) {
-                    return bail(format!("the settings form should hold a select and a number, got {:?}", kinds));
+                let kinds: Vec<(i32, String)> = ps
+                    .get_form_items()
+                    .iter()
+                    .map(|i| (i.kind, i.id.to_string()))
+                    .collect();
+                if !kinds.contains(&(7, "delimiter".into()))
+                    || !kinds.contains(&(5, "limit".into()))
+                {
+                    return bail(format!(
+                        "the settings form should hold a select and a number, got {:?}",
+                        kinds
+                    ));
                 }
                 // Pick ';', type a bad number (Save must refuse), then a good one.
                 ps.invoke_item_select(1, "delimiter".into(), 1);
@@ -264,17 +310,28 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
                 if toast_with(&w, "settings saved").is_none() {
                     return bail("a settings-saved toast was expected".into());
                 }
-                let cfg = std::fs::read_to_string(installed_dir2.join("config.json")).unwrap_or_default();
+                let cfg =
+                    std::fs::read_to_string(installed_dir2.join("config.json")).unwrap_or_default();
                 if !cfg.contains("\";\"") || !cfg.contains('5') {
-                    return bail(format!("the saved config should hold the choices, got {:?}", cfg));
+                    return bail(format!(
+                        "the saved config should hold the choices, got {:?}",
+                        cfg
+                    ));
                 }
                 // Open the interface the plugin describes.
                 ps.invoke_open_interface();
                 step2.set(9);
             }
-            9 if ps.get_d_interface_open() && ps.get_view_items().row_count() > 0 && ps.get_d_busy() == "" => {
+            9 if ps.get_d_interface_open()
+                && ps.get_view_items().row_count() > 0
+                && ps.get_d_busy() == "" =>
+            {
                 if ps.get_view_title() != "Temp exporter" || !ps.get_view_error().is_empty() {
-                    return bail(format!("interface title/error wrong: {:?} {:?}", ps.get_view_title(), ps.get_view_error()));
+                    return bail(format!(
+                        "interface title/error wrong: {:?} {:?}",
+                        ps.get_view_title(),
+                        ps.get_view_error()
+                    ));
                 }
                 let kinds: Vec<i32> = ps.get_view_items().iter().map(|i| i.kind).collect();
                 // header, input, checkbox, button, button
@@ -289,8 +346,13 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
             }
             10 if toast_with(&w, "ran typed.csv").is_some() => {
                 let (text, tone) = toast_with(&w, "ran typed.csv").unwrap();
-                if text != "Exporter: ran typed.csv header=false delimiter=;" || tone != Tone::Success {
-                    return bail(format!("the toast should carry the edits and the saved config, got {:?} {:?}", text, tone));
+                if text != "Exporter: ran typed.csv header=false delimiter=;"
+                    || tone != Tone::Success
+                {
+                    return bail(format!(
+                        "the toast should carry the edits and the saved config, got {:?} {:?}",
+                        text, tone
+                    ));
                 }
                 // The toolbar button, from the header, with no panel in the way.
                 ps.invoke_toolbar_pressed(PLUGIN_ID.into(), "quick".into());
@@ -310,20 +372,43 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
                     return bail("a plugin without writeFiles wrote a file".into());
                 }
                 if !text.contains("Permission denied") || tone != Tone::Danger {
-                    return bail(format!("the refusal should read as a permission error, got {:?} {:?}", text, tone));
+                    return bail(format!(
+                        "the refusal should read as a permission error, got {:?} {:?}",
+                        text, tone
+                    ));
                 }
-                if installed_dir2.join("x.txt").exists() || dir_has_file(&installed_dir2.parent().unwrap().parent().unwrap().join("plugin-data"), "x.txt") {
+                if installed_dir2.join("x.txt").exists()
+                    || dir_has_file(
+                        &installed_dir2
+                            .parent()
+                            .unwrap()
+                            .parent()
+                            .unwrap()
+                            .join("plugin-data"),
+                        "x.txt",
+                    )
+                {
                     return bail("the refused write left a file behind".into());
                 }
                 // Running left its mark on the plugin's statistics.
-                let runs = ps.get_d_stats().iter().find(|f| f.label == "Executions").map(|f| f.value.to_string());
+                let runs = ps
+                    .get_d_stats()
+                    .iter()
+                    .find(|f| f.label == "Executions")
+                    .map(|f| f.value.to_string());
                 if runs.as_deref().is_none_or(|r| r == "0") {
-                    return bail(format!("executions should have been counted, got {:?}", runs));
+                    return bail(format!(
+                        "executions should have been counted, got {:?}",
+                        runs
+                    ));
                 }
                 // Uninstall asks first; cancelling keeps the plugin.
                 ps.invoke_uninstall();
                 if !w.get_show_confirm() || w.get_confirm_title() != "Uninstall plugin?" {
-                    return bail(format!("uninstall should ask first, got {:?}", w.get_confirm_title()));
+                    return bail(format!(
+                        "uninstall should ask first, got {:?}",
+                        w.get_confirm_title()
+                    ));
                 }
                 w.invoke_confirm_cancelled();
                 w.set_show_confirm(false);
@@ -339,7 +424,10 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
                 if installed_dir2.exists() {
                     return bail("the plugin directory should be gone".into());
                 }
-                if ps.get_toolbar().row_count() != 0 || ps.get_has_detail() || ps.get_d_interface_open() {
+                if ps.get_toolbar().row_count() != 0
+                    || ps.get_has_detail()
+                    || ps.get_d_interface_open()
+                {
                     return bail("nothing of the plugin may stay on screen".into());
                 }
                 if toast_with(&w, "Temp Exporter uninstalled").is_none() {
@@ -372,7 +460,9 @@ fn a_plugin_installs_runs_with_a_toast_is_gated_and_uninstalls_through_the_real_
 }
 
 fn dir_has_file(root: &Path, name: &str) -> bool {
-    let Ok(entries) = std::fs::read_dir(root) else { return false };
+    let Ok(entries) = std::fs::read_dir(root) else {
+        return false;
+    };
     entries.flatten().any(|e| {
         let p = e.path();
         p.file_name().is_some_and(|n| n == name) || (p.is_dir() && dir_has_file(&p, name))

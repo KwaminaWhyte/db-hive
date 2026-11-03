@@ -193,7 +193,12 @@ mod tests {
 
     #[test]
     fn indexes_point_back_into_the_transcript() {
-        let turns = vec![turn(true, "a"), turn(false, "b"), turn(true, "c"), turn(false, "d")];
+        let turns = vec![
+            turn(true, "a"),
+            turn(false, "b"),
+            turn(true, "c"),
+            turn(false, "d"),
+        ];
         for (i, t) in newest_first(&turns) {
             assert_eq!(turns[i].heading, t.heading);
         }

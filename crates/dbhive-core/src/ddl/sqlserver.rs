@@ -96,7 +96,7 @@ impl SqlServerDdlGenerator {
     /// Generate foreign key constraint SQL
     fn generate_foreign_key_sql(&self, fk: &ForeignKeyConstraint, table_name: &str) -> String {
         let constraint_name = fk.name.as_ref().map_or_else(
-            || format!("FK_{}_{}",  table_name, fk.columns.join("_")),
+            || format!("FK_{}_{}", table_name, fk.columns.join("_")),
             |name| name.clone(),
         );
 
@@ -126,7 +126,11 @@ impl SqlServerDdlGenerator {
     }
 
     /// Generate unique constraint SQL
-    fn generate_unique_constraint_sql(&self, unique: &UniqueConstraint, table_name: &str) -> String {
+    fn generate_unique_constraint_sql(
+        &self,
+        unique: &UniqueConstraint,
+        table_name: &str,
+    ) -> String {
         let constraint_name = unique.name.as_ref().map_or_else(
             || format!("UQ_{}_{}", table_name, unique.columns.join("_")),
             |name| name.clone(),
@@ -175,7 +179,10 @@ impl DdlGenerator for SqlServerDdlGenerator {
             .as_ref()
             .map_or("dbo".to_string(), |s| s.clone());
 
-        sql_parts.push(format!("CREATE TABLE [{}].[{}] (", schema_prefix, table.name));
+        sql_parts.push(format!(
+            "CREATE TABLE [{}].[{}] (",
+            schema_prefix, table.name
+        ));
 
         // Column definitions
         let mut table_elements = Vec::new();
@@ -273,14 +280,14 @@ impl DdlGenerator for SqlServerDdlGenerator {
                         self.column_type_to_sql(new_type)
                     )
                 }
-                AlterColumnOperation::SetNotNull { column_name, not_null } => {
+                AlterColumnOperation::SetNotNull {
+                    column_name,
+                    not_null,
+                } => {
                     let null_clause = if *not_null { "NOT NULL" } else { "NULL" };
                     format!(
                         "ALTER TABLE {} ALTER COLUMN [{}] {} {};",
-                        table_name,
-                        column_name,
-                        "/* type needed */",
-                        null_clause
+                        table_name, column_name, "/* type needed */", null_clause
                     )
                 }
                 AlterColumnOperation::SetDefault {
@@ -323,12 +330,18 @@ impl DdlGenerator for SqlServerDdlGenerator {
             .map_or("dbo".to_string(), |s| s.clone());
 
         let if_exists = if drop.if_exists {
-            format!("IF OBJECT_ID('[{}].[{}]', 'U') IS NOT NULL ", schema_prefix, drop.name)
+            format!(
+                "IF OBJECT_ID('[{}].[{}]', 'U') IS NOT NULL ",
+                schema_prefix, drop.name
+            )
         } else {
             String::new()
         };
 
-        let sql = format!("{}DROP TABLE [{}].[{}];", if_exists, schema_prefix, drop.name);
+        let sql = format!(
+            "{}DROP TABLE [{}].[{}];",
+            if_exists, schema_prefix, drop.name
+        );
 
         Ok(DdlResult {
             sql: vec![sql],

@@ -13,7 +13,11 @@ use dbhive_core::state::AppState;
 use dbhive_slint::workspace_model;
 
 fn temp_db_path(name: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("dbhive-slint-test-{}-{}.sqlite", std::process::id(), name))
+    std::env::temp_dir().join(format!(
+        "dbhive-slint-test-{}-{}.sqlite",
+        std::process::id(),
+        name
+    ))
 }
 
 #[tokio::test]
@@ -61,7 +65,12 @@ async fn connect_list_tables_and_read_rows_from_a_real_sqlite_file() {
         .expect("connect should succeed against a file it can create");
     assert_eq!(conn_id, profile.id);
 
-    let driver = state.lock().unwrap().get_connection(&conn_id).unwrap().clone();
+    let driver = state
+        .lock()
+        .unwrap()
+        .get_connection(&conn_id)
+        .unwrap()
+        .clone();
 
     let database = workspace_model::connected_database(&profile).unwrap();
     let schema_arg = workspace_model::tables_schema_arg(&DbDriver::Sqlite, &database, None, &[]);
@@ -72,7 +81,10 @@ async fn connect_list_tables_and_read_rows_from_a_real_sqlite_file() {
         "sidebar should list exactly the one table in the file"
     );
 
-    let sql = format!("SELECT * FROM {} ORDER BY id", driver.quote_identifier("widgets"));
+    let sql = format!(
+        "SELECT * FROM {} ORDER BY id",
+        driver.quote_identifier("widgets")
+    );
     let result = driver.execute_query(&sql).await.unwrap();
     assert_eq!(result.columns, vec!["id", "name", "note"]);
 
@@ -90,7 +102,9 @@ async fn connect_list_tables_and_read_rows_from_a_real_sqlite_file() {
         "a database NULL must come through as None, not the text \"NULL\""
     );
 
-    dbhive_core::service::disconnect(&state, &conn_id).await.unwrap();
+    dbhive_core::service::disconnect(&state, &conn_id)
+        .await
+        .unwrap();
     assert!(
         data_dir.join("profiles.json").exists(),
         "connect saved its profile store under DBHIVE_DATA_DIR, not the real data dir"

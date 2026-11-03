@@ -227,8 +227,7 @@ pub fn show(app: &mut DbHiveApp, ui: &mut egui::Ui) {
 /// Profiles and the ids of the connections currently open.
 fn snapshot(app: &DbHiveApp) -> (Vec<ConnectionProfile>, HashSet<String>) {
     let guard = app.state.lock().unwrap();
-    let mut profiles: Vec<ConnectionProfile> =
-        guard.list_profiles().into_iter().cloned().collect();
+    let mut profiles: Vec<ConnectionProfile> = guard.list_profiles().into_iter().cloned().collect();
     profiles.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
     let connected: HashSet<String> = guard.connections.keys().cloned().collect();
     (profiles, connected)
@@ -276,7 +275,10 @@ fn poll_jobs(app: &mut DbHiveApp) {
 
 fn step_bar(ui: &mut egui::Ui, palette: &crate::theme::Palette, current: Step) {
     ui.horizontal(|ui| {
-        for (i, step) in [Step::Select, Step::Diff, Step::Sql].into_iter().enumerate() {
+        for (i, step) in [Step::Select, Step::Diff, Step::Sql]
+            .into_iter()
+            .enumerate()
+        {
             if i > 0 {
                 ui.label(crate::theme::text::muted(palette, "›"));
             }
@@ -310,7 +312,6 @@ fn outcome_banner(ui: &mut egui::Ui, palette: &crate::theme::Palette, outcome: &
     ui.add_space(6.0);
 }
 
-
 // --- Step 1: select -------------------------------------------------------
 
 fn select_step(
@@ -333,7 +334,10 @@ fn select_step(
     }
 
     ui.add_space(8.0);
-    ui.label(crate::theme::text::strong(palette, "Source (desired schema)"));
+    ui.label(crate::theme::text::strong(
+        palette,
+        "Source (desired schema)",
+    ));
     profile_picker(
         ui,
         palette,
@@ -344,7 +348,10 @@ fn select_step(
     );
 
     ui.add_space(10.0);
-    ui.label(crate::theme::text::strong(palette, "Target (will be modified)"));
+    ui.label(crate::theme::text::strong(
+        palette,
+        "Target (will be modified)",
+    ));
     profile_picker(
         ui,
         palette,
@@ -425,7 +432,11 @@ fn profile_picker(
         .show_ui(ui, |ui| {
             for p in profiles {
                 let is_selected = selected.as_deref() == Some(p.id.as_str());
-                let mark = if connected.contains(&p.id) { "•" } else { "○" };
+                let mark = if connected.contains(&p.id) {
+                    "•"
+                } else {
+                    "○"
+                };
                 let text = format!(
                     "{} {} ({})",
                     mark,
@@ -570,12 +581,7 @@ fn section(
 }
 
 fn table_diff_row(ui: &mut egui::Ui, palette: &crate::theme::Palette, td: &TableDiff) {
-    let header = format!(
-        "{}.{}  ({} changes)",
-        td.schema,
-        td.name,
-        change_count(td)
-    );
+    let header = format!("{}.{}  ({} changes)", td.schema, td.name, change_count(td));
     egui::CollapsingHeader::new(egui::RichText::new(header).color(palette.foreground))
         .id_salt(format!("migdiff:{}.{}", td.schema, td.name))
         .default_open(false)
@@ -630,7 +636,8 @@ fn sql_step(app: &mut DbHiveApp, ui: &mut egui::Ui, profiles: &[ConnectionProfil
 
     let statements = split_statements(&app.screens.migrations.sql);
     let executable = executable_count(&statements);
-    let edited = app.screens.migrations.sql != statements_to_text(&app.screens.migrations.generated);
+    let edited =
+        app.screens.migrations.sql != statements_to_text(&app.screens.migrations.generated);
 
     ui.add_space(4.0);
     ui.horizontal(|ui| {
@@ -660,13 +667,7 @@ fn sql_step(app: &mut DbHiveApp, ui: &mut egui::Ui, profiles: &[ConnectionProfil
             // Named fields, not the Deref: the editor and the buffer live on
             // different structs and are borrowed mutably together.
             let m = &mut app.screens.migrations;
-            let _ = sql_editor::show(
-                ui,
-                palette,
-                &mut m.editor,
-                &schema_index,
-                &mut m.wizard.sql,
-            );
+            let _ = sql_editor::show(ui, palette, &mut m.editor, &schema_index, &mut m.wizard.sql);
         });
 
     ui.add_space(6.0);
@@ -696,19 +697,15 @@ fn footer(
 
     let blocked = match step {
         Step::Select => {
-            let problem = selection_problem(
-                m.source_id.as_deref(),
-                m.target_id.as_deref(),
-                &m.schema,
-            );
+            let problem =
+                selection_problem(m.source_id.as_deref(), m.target_id.as_deref(), &m.schema);
             let offline = offline_selection(
                 profile_of(profiles, m.source_id.as_deref()),
                 profile_of(profiles, m.target_id.as_deref()),
                 connected,
             );
             problem.map(|p| p.to_string()).or_else(|| {
-                (!offline.is_empty())
-                    .then(|| format!("Connect first: {}", offline.join(", ")))
+                (!offline.is_empty()).then(|| format!("Connect first: {}", offline.join(", ")))
             })
         }
         Step::Diff => match &m.diff {
@@ -735,8 +732,9 @@ fn footer(
             ui.label(crate::theme::text::muted(palette, reason.clone()));
         }
 
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            match step {
+        ui.with_layout(
+            egui::Layout::right_to_left(egui::Align::Center),
+            |ui| match step {
                 Step::Select => {
                     let btn = ui.add_enabled(
                         !busy && blocked.is_none(),
@@ -750,8 +748,10 @@ fn footer(
                     }
                 }
                 Step::Diff => {
-                    let btn = ui
-                        .add_enabled(!busy && blocked.is_none(), egui::Button::new("Generate SQL"));
+                    let btn = ui.add_enabled(
+                        !busy && blocked.is_none(),
+                        egui::Button::new("Generate SQL"),
+                    );
                     if btn.clicked() {
                         act = Some(Act::GenerateSql);
                     }
@@ -781,8 +781,8 @@ fn footer(
                         act = Some(Act::ResetSql);
                     }
                 }
-            }
-        });
+            },
+        );
     });
 
     act
@@ -795,9 +795,12 @@ fn confirm_dialog(app: &mut DbHiveApp, ctx: &egui::Context) {
     }
     let palette = app.mode.palette();
     let (profiles, _) = snapshot(app);
-    let target_name = profile_of(profiles.as_slice(), app.screens.migrations.target_id.as_deref())
-        .map(|p| p.name.clone())
-        .unwrap_or_else(|| "the target".to_string());
+    let target_name = profile_of(
+        profiles.as_slice(),
+        app.screens.migrations.target_id.as_deref(),
+    )
+    .map(|p| p.name.clone())
+    .unwrap_or_else(|| "the target".to_string());
     let statements = split_statements(&app.screens.migrations.sql);
     let count = executable_count(&statements);
     let use_transaction = app.screens.migrations.use_transaction;
@@ -811,11 +814,13 @@ fn confirm_dialog(app: &mut DbHiveApp, ctx: &egui::Context) {
         .resizable(false)
         .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
         .show(ctx, |ui| {
-            ui.label(egui::RichText::new(format!(
-                "{} statement(s) will run against {}.",
-                count, target_name
-            ))
-            .color(palette.foreground));
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} statement(s) will run against {}.",
+                    count, target_name
+                ))
+                .color(palette.foreground),
+            );
             ui.add_space(4.0);
             ui.label(crate::theme::text::muted(
                 palette,

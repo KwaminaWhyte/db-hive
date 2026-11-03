@@ -30,7 +30,8 @@ pub const ENVIRONMENTS: [Option<Environment>; 4] = [
 ];
 
 /// SSH auth methods in picker order.
-pub const SSH_AUTH_METHODS: [SshAuthMethod; 2] = [SshAuthMethod::Password, SshAuthMethod::PrivateKey];
+pub const SSH_AUTH_METHODS: [SshAuthMethod; 2] =
+    [SshAuthMethod::Password, SshAuthMethod::PrivateKey];
 
 pub fn ssh_auth_label(method: &SshAuthMethod) -> &'static str {
     match method {
@@ -40,7 +41,10 @@ pub fn ssh_auth_label(method: &SshAuthMethod) -> &'static str {
 }
 
 pub fn ssh_auth_options() -> Vec<slint::SharedString> {
-    SSH_AUTH_METHODS.iter().map(|m| ssh_auth_label(m).into()).collect()
+    SSH_AUTH_METHODS
+        .iter()
+        .map(|m| ssh_auth_label(m).into())
+        .collect()
 }
 
 pub fn ssh_auth_at(index: i32) -> SshAuthMethod {

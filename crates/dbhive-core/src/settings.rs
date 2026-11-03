@@ -71,9 +71,8 @@ pub fn from_value(value: &Value) -> Result<AppSettings, DbError> {
     })?;
     deep_merge(&mut merged, value);
 
-    let mut settings: AppSettings = serde_json::from_value(merged).map_err(|e| {
-        DbError::InternalError(format!("Failed to deserialize settings: {}", e))
-    })?;
+    let mut settings: AppSettings = serde_json::from_value(merged)
+        .map_err(|e| DbError::InternalError(format!("Failed to deserialize settings: {}", e)))?;
     sanitize(&mut settings);
     Ok(settings)
 }
@@ -254,7 +253,10 @@ mod tests {
         let reopened = JsonStore::open_at(p.clone()).unwrap();
         let loaded = load_from(&reopened).unwrap();
         assert_eq!(loaded.general.language, "fr");
-        assert_eq!(loaded.general.startup_behavior, StartupBehavior::ShowQueryEditor);
+        assert_eq!(
+            loaded.general.startup_behavior,
+            StartupBehavior::ShowQueryEditor
+        );
         assert_eq!(loaded.theme.mode, ThemeMode::Dark);
         assert_eq!(loaded.theme.accent_color, "#3366ff");
         assert_eq!(loaded.theme.editor_font_size, 18);
@@ -307,7 +309,8 @@ mod tests {
 
     #[test]
     fn unknown_keys_are_ignored_not_fatal() {
-        let stored = serde_json::json!({ "somethingFromTheFuture": 1, "theme": { "mode": "light" } });
+        let stored =
+            serde_json::json!({ "somethingFromTheFuture": 1, "theme": { "mode": "light" } });
         assert_eq!(from_value(&stored).unwrap().theme.mode, ThemeMode::Light);
     }
 
@@ -378,7 +381,10 @@ mod tests {
         let mut s = AppSettings::default();
         s.theme.editor_font_family = "   ".into();
         sanitize(&mut s);
-        assert_eq!(s.theme.editor_font_family, ThemeSettings::default().editor_font_family);
+        assert_eq!(
+            s.theme.editor_font_family,
+            ThemeSettings::default().editor_font_family
+        );
     }
 
     #[test]
@@ -427,7 +433,10 @@ mod tests {
     fn deep_merge_replaces_scalars_and_merges_objects() {
         let mut base = serde_json::json!({"a": {"b": 1, "c": 2}, "d": 3});
         deep_merge(&mut base, &serde_json::json!({"a": {"c": 9}, "e": 4}));
-        assert_eq!(base, serde_json::json!({"a": {"b": 1, "c": 9}, "d": 3, "e": 4}));
+        assert_eq!(
+            base,
+            serde_json::json!({"a": {"b": 1, "c": 9}, "d": 3, "e": 4})
+        );
     }
 
     #[test]

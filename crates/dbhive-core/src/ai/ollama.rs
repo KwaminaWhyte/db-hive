@@ -8,7 +8,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
-use super::provider::{AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage};
+use super::provider::{
+    AiModel, AiProvider, AiProviderType, ChatCompletion, ChatMessage, ChatRole, TokenUsage,
+};
 
 /// Ollama API configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -177,7 +179,8 @@ impl AiProvider for OllamaProvider {
     async fn list_models(&self) -> Result<Vec<AiModel>, String> {
         let url = format!("{}/api/tags", self.config.base_url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .send()
             .await
@@ -192,24 +195,29 @@ impl AiProvider for OllamaProvider {
             .await
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
-        let models = data.models.into_iter().map(|m| {
-            let description = format!(
-                "{} ({})",
-                m.details.as_ref()
-                    .and_then(|d| d.family.as_ref())
-                    .map(|f| f.as_str())
-                    .unwrap_or("Unknown"),
-                Self::format_size(m.size)
-            );
+        let models = data
+            .models
+            .into_iter()
+            .map(|m| {
+                let description = format!(
+                    "{} ({})",
+                    m.details
+                        .as_ref()
+                        .and_then(|d| d.family.as_ref())
+                        .map(|f| f.as_str())
+                        .unwrap_or("Unknown"),
+                    Self::format_size(m.size)
+                );
 
-            AiModel {
-                id: m.name.clone(),
-                name: m.name,
-                provider: AiProviderType::Ollama,
-                description: Some(description),
-                context_window: None,
-            }
-        }).collect();
+                AiModel {
+                    id: m.name.clone(),
+                    name: m.name,
+                    provider: AiProviderType::Ollama,
+                    description: Some(description),
+                    context_window: None,
+                }
+            })
+            .collect();
 
         Ok(models)
     }
@@ -235,7 +243,8 @@ impl AiProvider for OllamaProvider {
             }),
         };
 
-        let response = self.client
+        let response = self
+            .client
             .post(&url)
             .json(&request)
             .send()

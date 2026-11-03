@@ -48,7 +48,10 @@ impl ChartKind {
     }
 
     pub fn at(index: i32) -> Self {
-        usize::try_from(index).ok().and_then(|i| Self::ALL.get(i).copied()).unwrap_or(ChartKind::Bar)
+        usize::try_from(index)
+            .ok()
+            .and_then(|i| Self::ALL.get(i).copied())
+            .unwrap_or(ChartKind::Bar)
     }
 }
 
@@ -108,7 +111,11 @@ pub fn default_spec(columns: &[String], rows: &[&Vec<Value>]) -> Option<ChartSpe
         .find(|c| !numeric.contains(c))
         .or_else(|| (0..columns.len()).find(|&c| c != y))
         .unwrap_or(y);
-    Some(ChartSpec { kind: ChartKind::Bar, x, y })
+    Some(ChartSpec {
+        kind: ChartKind::Bar,
+        x,
+        y,
+    })
 }
 
 /// One group: its label and the sum of its Y values.
@@ -149,7 +156,11 @@ pub fn aggregate(rows: &[&Vec<Value>], spec: ChartSpec) -> ChartData {
     }
     let groups = all.len();
     all.truncate(MAX_POINTS);
-    ChartData { points: all, groups, skipped }
+    ChartData {
+        points: all,
+        groups,
+        skipped,
+    }
 }
 
 /// A number short enough for an axis: `1.2k`, `3.4M`, `0.25`, `-7`.
@@ -174,7 +185,11 @@ pub fn axis_number(v: f64) -> String {
         format!("{:.2}", scaled)
     };
     // Trim "1.50" to "1.5" and "2.00" to "2".
-    let text = if text.contains('.') { text.trim_end_matches('0').trim_end_matches('.').to_string() } else { text };
+    let text = if text.contains('.') {
+        text.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        text
+    };
     format!("{text}{suffix}")
 }
 
@@ -215,7 +230,10 @@ fn f(v: f64) -> String {
 /// a line spans its own values. Never zero wide.
 fn range(points: &[Point], kind: ChartKind) -> (f64, f64) {
     let mut lo = points.iter().map(|p| p.value).fold(f64::INFINITY, f64::min);
-    let mut hi = points.iter().map(|p| p.value).fold(f64::NEG_INFINITY, f64::max);
+    let mut hi = points
+        .iter()
+        .map(|p| p.value)
+        .fold(f64::NEG_INFINITY, f64::max);
     if kind == ChartKind::Bar {
         lo = lo.min(0.0);
         hi = hi.max(0.0);
@@ -245,10 +263,21 @@ pub fn build(columns: &[String], data: &ChartData, spec: ChartSpec) -> Option<Ch
                 let x1 = x0 + width;
                 let y = y_at(p.value);
                 // A zero value still draws a hairline so the group is visible.
-                let (top, bottom) = if (y - zero).abs() < 1.0 { (zero - 1.0, zero) } else { (y.min(zero), y.max(zero)) };
+                let (top, bottom) = if (y - zero).abs() < 1.0 {
+                    (zero - 1.0, zero)
+                } else {
+                    (y.min(zero), y.max(zero))
+                };
                 commands.push_str(&format!(
                     "M {} {} L {} {} L {} {} L {} {} Z ",
-                    f(x0), f(top), f(x1), f(top), f(x1), f(bottom), f(x0), f(bottom)
+                    f(x0),
+                    f(top),
+                    f(x1),
+                    f(top),
+                    f(x1),
+                    f(bottom),
+                    f(x0),
+                    f(bottom)
                 ));
             }
         }
@@ -262,9 +291,20 @@ pub fn build(columns: &[String], data: &ChartData, spec: ChartSpec) -> Option<Ch
                 let y = y_at(p.value);
                 if n == 1 {
                     // One point is a short flat mark.
-                    commands.push_str(&format!("M {} {} L {} {}", f(x - 20.0), f(y), f(x + 20.0), f(y)));
+                    commands.push_str(&format!(
+                        "M {} {} L {} {}",
+                        f(x - 20.0),
+                        f(y),
+                        f(x + 20.0),
+                        f(y)
+                    ));
                 } else {
-                    commands.push_str(&format!("{} {} {} ", if i == 0 { "M" } else { "L" }, f(*x), f(y)));
+                    commands.push_str(&format!(
+                        "{} {} {} ",
+                        if i == 0 { "M" } else { "L" },
+                        f(*x),
+                        f(y)
+                    ));
                 }
             }
             if n > 1 {
@@ -300,7 +340,11 @@ pub fn build(columns: &[String], data: &ChartData, spec: ChartSpec) -> Option<Ch
         y_mid: axis_number((hi + lo) / 2.0),
         y_bottom: axis_number(lo),
         x_start: short(&data.points[0].label, 24),
-        x_end: if n > 1 { short(&data.points[n - 1].label, 24) } else { String::new() },
+        x_end: if n > 1 {
+            short(&data.points[n - 1].label, 24)
+        } else {
+            String::new()
+        },
         caption: if data.groups > data.points.len() {
             format!(
                 "Sum of {y_name} by {x_name}, first {} of {} groups",
@@ -370,18 +414,34 @@ mod tests {
         let rows = vec![vec![json!(1), json!(2)]];
         let s = default_spec(&c, &refs(&rows)).unwrap();
         assert_eq!((s.x, s.y), (1, 0));
-        assert_eq!(default_spec(&cols(&["t"]), &refs(&[vec![json!("x")]])), None);
+        assert_eq!(
+            default_spec(&cols(&["t"]), &refs(&[vec![json!("x")]])),
+            None
+        );
     }
 
     #[test]
     fn aggregate_sums_per_group_in_first_seen_order_and_counts_skips() {
         let (_, rows) = sales();
-        let d = aggregate(&refs(&rows), ChartSpec { kind: ChartKind::Bar, x: 1, y: 2 });
+        let d = aggregate(
+            &refs(&rows),
+            ChartSpec {
+                kind: ChartKind::Bar,
+                x: 1,
+                y: 2,
+            },
+        );
         assert_eq!(
             d.points,
             vec![
-                Point { label: "north".into(), value: 30.0 },
-                Point { label: "south".into(), value: 5.5 },
+                Point {
+                    label: "north".into(),
+                    value: 30.0
+                },
+                Point {
+                    label: "south".into(),
+                    value: 5.5
+                },
             ]
         );
         assert_eq!((d.groups, d.skipped), (2, 1));
@@ -390,16 +450,41 @@ mod tests {
     #[test]
     fn a_null_group_is_labelled_null() {
         let rows = vec![vec![json!(null), json!(3)]];
-        let d = aggregate(&refs(&rows), ChartSpec { kind: ChartKind::Bar, x: 0, y: 1 });
+        let d = aggregate(
+            &refs(&rows),
+            ChartSpec {
+                kind: ChartKind::Bar,
+                x: 0,
+                y: 1,
+            },
+        );
         assert_eq!(d.points[0].label, "NULL");
     }
 
     #[test]
     fn the_point_cap_keeps_the_total_group_count() {
-        let rows: Vec<Vec<Value>> = (0..250).map(|i| vec![json!(format!("g{i}")), json!(i)]).collect();
-        let d = aggregate(&refs(&rows), ChartSpec { kind: ChartKind::Line, x: 0, y: 1 });
+        let rows: Vec<Vec<Value>> = (0..250)
+            .map(|i| vec![json!(format!("g{i}")), json!(i)])
+            .collect();
+        let d = aggregate(
+            &refs(&rows),
+            ChartSpec {
+                kind: ChartKind::Line,
+                x: 0,
+                y: 1,
+            },
+        );
         assert_eq!((d.points.len(), d.groups), (MAX_POINTS, 250));
-        let v = build(&cols(&["g", "v"]), &d, ChartSpec { kind: ChartKind::Line, x: 0, y: 1 }).unwrap();
+        let v = build(
+            &cols(&["g", "v"]),
+            &d,
+            ChartSpec {
+                kind: ChartKind::Line,
+                x: 0,
+                y: 1,
+            },
+        )
+        .unwrap();
         assert_eq!(v.caption, "Sum of v by g, first 100 of 250 groups");
         assert!(v.notice.is_empty());
     }
@@ -407,18 +492,45 @@ mod tests {
     #[test]
     fn bars_draw_one_rectangle_per_group_from_the_zero_line() {
         let d = ChartData {
-            points: vec![Point { label: "a".into(), value: 10.0 }, Point { label: "b".into(), value: 5.0 }],
+            points: vec![
+                Point {
+                    label: "a".into(),
+                    value: 10.0,
+                },
+                Point {
+                    label: "b".into(),
+                    value: 5.0,
+                },
+            ],
             groups: 2,
             skipped: 0,
         };
-        let v = build(&cols(&["x", "y"]), &d, ChartSpec { kind: ChartKind::Bar, x: 0, y: 1 }).unwrap();
+        let v = build(
+            &cols(&["x", "y"]),
+            &d,
+            ChartSpec {
+                kind: ChartKind::Bar,
+                x: 0,
+                y: 1,
+            },
+        )
+        .unwrap();
         assert_eq!(v.commands.matches('M').count(), 2);
         assert_eq!(v.commands.matches('Z').count(), 2);
         // The tallest bar reaches the top (y = 0) and every bar sits on the bottom (zero) line.
         // Two groups: 500 wide slots, bars capped at 160 and centred in them.
-        assert!(v.commands.starts_with("M 170.0 0.0 L 330.0 0.0 L 330.0 1000.0"), "{}", v.commands);
+        assert!(
+            v.commands
+                .starts_with("M 170.0 0.0 L 330.0 0.0 L 330.0 1000.0"),
+            "{}",
+            v.commands
+        );
         // The half-height bar starts at the middle.
-        assert!(v.commands.contains("M 670.0 500.0 L 830.0 500.0"), "{}", v.commands);
+        assert!(
+            v.commands.contains("M 670.0 500.0 L 830.0 500.0"),
+            "{}",
+            v.commands
+        );
         assert!(v.commands.contains("1000.0"), "{}", v.commands);
         assert_eq!((v.y_top.as_str(), v.y_bottom.as_str()), ("10", "0"));
         assert!(v.area.is_empty());
@@ -427,13 +539,34 @@ mod tests {
     #[test]
     fn negative_bars_hang_below_the_zero_line() {
         let d = ChartData {
-            points: vec![Point { label: "a".into(), value: 10.0 }, Point { label: "b".into(), value: -10.0 }],
+            points: vec![
+                Point {
+                    label: "a".into(),
+                    value: 10.0,
+                },
+                Point {
+                    label: "b".into(),
+                    value: -10.0,
+                },
+            ],
             groups: 2,
             skipped: 0,
         };
-        let v = build(&cols(&["x", "y"]), &d, ChartSpec { kind: ChartKind::Bar, x: 0, y: 1 }).unwrap();
+        let v = build(
+            &cols(&["x", "y"]),
+            &d,
+            ChartSpec {
+                kind: ChartKind::Bar,
+                x: 0,
+                y: 1,
+            },
+        )
+        .unwrap();
         // The range is -10..10, so zero is the middle (500) and the labels say so.
-        assert_eq!((v.y_top.as_str(), v.y_mid.as_str(), v.y_bottom.as_str()), ("10", "0", "-10"));
+        assert_eq!(
+            (v.y_top.as_str(), v.y_mid.as_str(), v.y_bottom.as_str()),
+            ("10", "0", "-10")
+        );
         assert!(v.commands.contains("500.0"), "{}", v.commands);
     }
 
@@ -441,14 +574,32 @@ mod tests {
     fn a_line_is_a_polyline_with_a_closed_area_under_it() {
         let d = ChartData {
             points: vec![
-                Point { label: "a".into(), value: 100.0 },
-                Point { label: "b".into(), value: 200.0 },
-                Point { label: "c".into(), value: 150.0 },
+                Point {
+                    label: "a".into(),
+                    value: 100.0,
+                },
+                Point {
+                    label: "b".into(),
+                    value: 200.0,
+                },
+                Point {
+                    label: "c".into(),
+                    value: 150.0,
+                },
             ],
             groups: 3,
             skipped: 0,
         };
-        let v = build(&cols(&["x", "y"]), &d, ChartSpec { kind: ChartKind::Line, x: 0, y: 1 }).unwrap();
+        let v = build(
+            &cols(&["x", "y"]),
+            &d,
+            ChartSpec {
+                kind: ChartKind::Line,
+                x: 0,
+                y: 1,
+            },
+        )
+        .unwrap();
         assert_eq!(v.commands, "M 0.0 1000.0 L 500.0 0.0 L 1000.0 500.0");
         assert!(v.area.starts_with(&v.commands) && v.area.ends_with("Z"));
         // A line spans its own values, not zero to max.
@@ -458,23 +609,67 @@ mod tests {
 
     #[test]
     fn single_values_and_flat_series_do_not_divide_by_zero() {
-        let one = ChartData { points: vec![Point { label: "only".into(), value: 7.0 }], groups: 1, skipped: 0 };
+        let one = ChartData {
+            points: vec![Point {
+                label: "only".into(),
+                value: 7.0,
+            }],
+            groups: 1,
+            skipped: 0,
+        };
         for kind in ChartKind::ALL {
             let v = build(&cols(&["x", "y"]), &one, ChartSpec { kind, x: 0, y: 1 }).unwrap();
-            assert!(!v.commands.contains("NaN") && !v.commands.contains("inf"), "{}", v.commands);
+            assert!(
+                !v.commands.contains("NaN") && !v.commands.contains("inf"),
+                "{}",
+                v.commands
+            );
         }
         let flat = ChartData {
-            points: vec![Point { label: "a".into(), value: 3.0 }, Point { label: "b".into(), value: 3.0 }],
+            points: vec![
+                Point {
+                    label: "a".into(),
+                    value: 3.0,
+                },
+                Point {
+                    label: "b".into(),
+                    value: 3.0,
+                },
+            ],
             groups: 2,
             skipped: 0,
         };
-        let v = build(&cols(&["x", "y"]), &flat, ChartSpec { kind: ChartKind::Line, x: 0, y: 1 }).unwrap();
-        assert!(!v.commands.contains("NaN") && !v.commands.contains("inf"), "{}", v.commands);
+        let v = build(
+            &cols(&["x", "y"]),
+            &flat,
+            ChartSpec {
+                kind: ChartKind::Line,
+                x: 0,
+                y: 1,
+            },
+        )
+        .unwrap();
+        assert!(
+            !v.commands.contains("NaN") && !v.commands.contains("inf"),
+            "{}",
+            v.commands
+        );
     }
 
     #[test]
     fn nothing_to_draw_is_none() {
-        assert_eq!(build(&cols(&["x", "y"]), &ChartData::default(), ChartSpec { kind: ChartKind::Bar, x: 0, y: 1 }), None);
+        assert_eq!(
+            build(
+                &cols(&["x", "y"]),
+                &ChartData::default(),
+                ChartSpec {
+                    kind: ChartKind::Bar,
+                    x: 0,
+                    y: 1
+                }
+            ),
+            None
+        );
     }
 
     #[test]
@@ -495,11 +690,29 @@ mod tests {
     #[test]
     fn long_labels_and_notices() {
         let d = ChartData {
-            points: vec![Point { label: "x".repeat(60), value: 1.0 }, Point { label: "b".into(), value: 2.0 }],
+            points: vec![
+                Point {
+                    label: "x".repeat(60),
+                    value: 1.0,
+                },
+                Point {
+                    label: "b".into(),
+                    value: 2.0,
+                },
+            ],
             groups: 2,
             skipped: 3,
         };
-        let v = build(&cols(&["name", "n"]), &d, ChartSpec { kind: ChartKind::Bar, x: 0, y: 1 }).unwrap();
+        let v = build(
+            &cols(&["name", "n"]),
+            &d,
+            ChartSpec {
+                kind: ChartKind::Bar,
+                x: 0,
+                y: 1,
+            },
+        )
+        .unwrap();
         assert_eq!(v.x_start.chars().count(), 24);
         assert!(v.x_start.ends_with('…'));
         assert_eq!(v.notice, "3 rows with no number in n were left out.");

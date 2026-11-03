@@ -74,7 +74,9 @@ fn is_plain_number(s: &str) -> bool {
     let frac = parts.next();
     !whole.is_empty()
         && whole.chars().all(|c| c.is_ascii_digit())
-        && frac.map_or(true, |f| !f.is_empty() && f.chars().all(|c| c.is_ascii_digit()))
+        && frac.map_or(true, |f| {
+            !f.is_empty() && f.chars().all(|c| c.is_ascii_digit())
+        })
 }
 
 /// Turn what the user typed into a value for `col`.
@@ -272,7 +274,9 @@ impl EditSession {
         if self.is_primary_key(col) {
             return Err("Primary key cells cannot be edited".to_string());
         }
-        let key = self.key_of(row).ok_or("This row has no primary key value")?;
+        let key = self
+            .key_of(row)
+            .ok_or("This row has no primary key value")?;
         if self.delete_index(&key).is_some() {
             return Err("This row is marked for deletion".to_string());
         }
@@ -340,7 +344,9 @@ impl EditSession {
         if let Some(r) = self.refusal() {
             return Err(r.message().to_string());
         }
-        let key = self.key_of(row).ok_or("This row has no primary key value")?;
+        let key = self
+            .key_of(row)
+            .ok_or("This row has no primary key value")?;
         if let Some(i) = self.delete_index(&key) {
             self.deletes.remove(i);
             return Ok(false);
@@ -408,7 +414,10 @@ impl EditSession {
         let mut out = Vec::new();
         for (n, r) in self.inserts.iter().enumerate() {
             if r.values.is_empty() {
-                out.push(format!("New row {} is empty: fill in at least one column", n + 1));
+                out.push(format!(
+                    "New row {} is empty: fill in at least one column",
+                    n + 1
+                ));
                 continue;
             }
             for (i, c) in self.columns.iter().enumerate() {
@@ -546,7 +555,10 @@ pub struct EditUi {
 
 impl EditUi {
     pub fn pending_count(&self) -> usize {
-        self.session.as_ref().map(|s| s.pending_count()).unwrap_or(0)
+        self.session
+            .as_ref()
+            .map(|s| s.pending_count())
+            .unwrap_or(0)
     }
 
     pub fn has_pending(&self) -> bool {
@@ -613,7 +625,14 @@ mod tests {
     }
 
     fn row(id: i64, name: &str) -> Vec<Value> {
-        vec![json!(id), json!(name), Value::Null, json!(5), json!("9.50"), json!(true)]
+        vec![
+            json!(id),
+            json!(name),
+            Value::Null,
+            json!(5),
+            json!("9.50"),
+            json!(true),
+        ]
     }
 
     #[test]
@@ -649,7 +668,7 @@ mod tests {
         assert_eq!(coerce("  ", &c[2]), Ok(Value::Null)); // nullable text
         assert_eq!(coerce("", &c[3]), Ok(Value::Null)); // nullable integer
         assert!(coerce("", &c[0]).is_err()); // not null integer
-        // NOT NULL text may be the empty string.
+                                             // NOT NULL text may be the empty string.
         assert_eq!(coerce("", &c[1]), Ok(json!("")));
     }
 
@@ -692,7 +711,10 @@ mod tests {
         c[0].is_primary_key = false;
         let mut s = EditSession::new(c);
         assert_eq!(s.refusal(), Some(Refusal::NoPrimaryKey));
-        assert!(s.set_cell(&row(1, "a"), 1, "b").unwrap_err().contains("primary key"));
+        assert!(s
+            .set_cell(&row(1, "a"), 1, "b")
+            .unwrap_err()
+            .contains("primary key"));
         assert!(s.toggle_delete(&row(1, "a")).is_err());
         let n = s.add_row();
         assert!(s.set_new_cell(n, 1, "fresh").is_ok());
@@ -776,7 +798,11 @@ mod tests {
         let mut s = EditSession::new(cols());
         s.set_cell(&row(7, "Ada"), 4, "123456789012345.67").unwrap();
         let st = s.statements("t", &Q).unwrap();
-        assert!(st[0].sql.contains("\"price\" = 123456789012345.67"), "{}", st[0].sql);
+        assert!(
+            st[0].sql.contains("\"price\" = 123456789012345.67"),
+            "{}",
+            st[0].sql
+        );
     }
 
     #[test]
@@ -840,6 +866,9 @@ mod tests {
         let r = vec![json!(1), json!("x"), Value::Null];
         s.set_cell(&r, 2, "hello").unwrap();
         let st = s.statements("t", &Q).unwrap();
-        assert_eq!(st[0].sql, "UPDATE t SET \"v\" = 'hello' WHERE \"a\" = 1 AND \"b\" = 'x'");
+        assert_eq!(
+            st[0].sql,
+            "UPDATE t SET \"v\" = 'hello' WHERE \"a\" = 1 AND \"b\" = 'x'"
+        );
     }
 }

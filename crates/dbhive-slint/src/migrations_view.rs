@@ -38,7 +38,13 @@ pub fn connection_labels(options: &[ProfileOption]) -> ModelRc<SharedString> {
     ModelRc::new(VecModel::from(
         options
             .iter()
-            .map(|o| SharedString::from(format!("{} {}", if o.connected { "●" } else { "○" }, o.label)))
+            .map(|o| {
+                SharedString::from(format!(
+                    "{} {}",
+                    if o.connected { "●" } else { "○" },
+                    o.label
+                ))
+            })
             .collect::<Vec<_>>(),
     ))
 }

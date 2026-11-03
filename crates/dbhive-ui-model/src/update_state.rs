@@ -13,8 +13,14 @@ pub enum Phase {
     #[default]
     Idle,
     Checking,
-    UpToDate { current: String },
-    Available { current: String, latest: String, notes: Option<String> },
+    UpToDate {
+        current: String,
+    },
+    Available {
+        current: String,
+        latest: String,
+        notes: Option<String>,
+    },
     Failed(String),
 }
 
@@ -63,9 +69,15 @@ impl UpdateState {
         self.last_checked = Some(now);
         self.phase = match result {
             Ok(UpdateStatus::UpToDate { current }) => Phase::UpToDate { current },
-            Ok(UpdateStatus::Available { current, latest, notes }) => {
-                Phase::Available { current, latest, notes }
-            }
+            Ok(UpdateStatus::Available {
+                current,
+                latest,
+                notes,
+            }) => Phase::Available {
+                current,
+                latest,
+                notes,
+            },
             Err(e) => Phase::Failed(e),
         };
     }
@@ -152,7 +164,10 @@ mod tests {
         let mut s = UpdateState::default();
         assert!(s.begin(false));
         assert!(s.is_checking());
-        assert!(!s.begin(true), "a second check must not start over the first");
+        assert!(
+            !s.begin(true),
+            "a second check must not start over the first"
+        );
         s.finish(Ok(newer()), 100);
         assert!(!s.is_checking());
         assert!(s.begin(true));
@@ -163,7 +178,12 @@ mod tests {
         let mut s = UpdateState::default();
         s.begin(false);
         s.finish(Ok(newer()), 100);
-        assert_eq!(s.banner(), Some(Banner { message: "Version 1.1.0 is available.".into() }));
+        assert_eq!(
+            s.banner(),
+            Some(Banner {
+                message: "Version 1.1.0 is available.".into()
+            })
+        );
         assert!(s.has_update());
         s.dismiss();
         assert_eq!(s.banner(), None, "dismissed for this version");
@@ -175,7 +195,11 @@ mod tests {
         assert_eq!(s.banner(), None);
         s.begin(false);
         s.finish(
-            Ok(UpdateStatus::Available { current: "1.0.0".into(), latest: "1.2.0".into(), notes: None }),
+            Ok(UpdateStatus::Available {
+                current: "1.0.0".into(),
+                latest: "1.2.0".into(),
+                notes: None,
+            }),
             300,
         );
         assert_eq!(s.banner().unwrap().message, "Version 1.2.0 is available.");
@@ -185,7 +209,12 @@ mod tests {
     fn up_to_date_says_so_in_about_and_not_in_the_banner() {
         let mut s = UpdateState::default();
         s.begin(true);
-        s.finish(Ok(UpdateStatus::UpToDate { current: "1.0.0".into() }), 10);
+        s.finish(
+            Ok(UpdateStatus::UpToDate {
+                current: "1.0.0".into(),
+            }),
+            10,
+        );
         assert_eq!(s.banner(), None);
         assert_eq!(s.about_line(), "You are up to date (version 1.0.0).");
         assert!(!s.has_update());
@@ -196,7 +225,11 @@ mod tests {
         let mut quiet = UpdateState::default();
         quiet.begin(false);
         quiet.finish(Err("offline".into()), 10);
-        assert_eq!(quiet.banner(), None, "an automatic check that fails stays quiet");
+        assert_eq!(
+            quiet.banner(),
+            None,
+            "an automatic check that fails stays quiet"
+        );
         assert_eq!(quiet.about_line(), "Could not check for updates: offline");
 
         let mut asked = UpdateState::default();
@@ -212,7 +245,10 @@ mod tests {
     fn the_failure_sentence_does_not_say_the_check_failed_twice() {
         let mut s = UpdateState::default();
         s.begin(true);
-        s.finish(Err("Update check failed: the server replied 500 Internal Server Error".into()), 1);
+        s.finish(
+            Err("Update check failed: the server replied 500 Internal Server Error".into()),
+            1,
+        );
         assert_eq!(
             s.about_line(),
             "Could not check for updates: the server replied 500 Internal Server Error"

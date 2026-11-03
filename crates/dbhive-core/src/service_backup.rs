@@ -240,7 +240,11 @@ pub fn supports_backup(driver: &DbDriver) -> bool {
 pub fn supports_restore(driver: &DbDriver) -> bool {
     matches!(
         driver,
-        DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::MySql | DbDriver::Sqlite
+        DbDriver::Postgres
+            | DbDriver::Supabase
+            | DbDriver::Neon
+            | DbDriver::MySql
+            | DbDriver::Sqlite
     )
 }
 
@@ -326,9 +330,7 @@ pub fn validate_restore_options(driver: &DbDriver, o: &RestoreOptions) -> Result
         )));
     }
     if o.file_path.trim().is_empty() {
-        return Err(DbError::InvalidInput(
-            "No backup file selected".to_string(),
-        ));
+        return Err(DbError::InvalidInput("No backup file selected".to_string()));
     }
     if !Path::new(&o.file_path).is_file() {
         return Err(DbError::NotFound(format!(
@@ -339,8 +341,7 @@ pub fn validate_restore_options(driver: &DbDriver, o: &RestoreOptions) -> Result
     if o.drop_existing && matches!(driver, DbDriver::Sqlite) {
         // Restoring SQLite already replaces the whole file.
         return Err(DbError::InvalidInput(
-            "SQLite restore replaces the database file; drop & recreate does not apply"
-                .to_string(),
+            "SQLite restore replaces the database file; drop & recreate does not apply".to_string(),
         ));
     }
     Ok(())
@@ -587,7 +588,15 @@ pub async fn create_backup(
         let out_dir = out_dir.clone();
         let output_path = output_path.clone();
         move || {
-            let result = run_dump(&profile, &password, &options, &out_dir, &output_path, ts, &sink);
+            let result = run_dump(
+                &profile,
+                &password,
+                &options,
+                &out_dir,
+                &output_path,
+                ts,
+                &sink,
+            );
             (profile, options, result)
         }
     })
@@ -607,7 +616,9 @@ pub async fn create_backup(
         return Err(e);
     }
 
-    let size_bytes = std::fs::metadata(&output_path).map(|m| m.len()).unwrap_or(0);
+    let size_bytes = std::fs::metadata(&output_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
     progress.finished(format!("Wrote {}", filename));
 
     Ok(BackupEntry {
@@ -1116,10 +1127,7 @@ mod tests {
             backup_filename("Local Postgres", 1_700_000_000, &DbDriver::Postgres),
             "Local_Postgres_1700000000.sql"
         );
-        assert_eq!(
-            backup_filename("db", 42, &DbDriver::Sqlite),
-            "db_42.sqlite"
-        );
+        assert_eq!(backup_filename("db", 42, &DbDriver::Sqlite), "db_42.sqlite");
     }
 
     #[test]

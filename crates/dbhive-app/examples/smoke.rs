@@ -19,7 +19,9 @@ macro_rules! step {
 
 #[tokio::main]
 async fn main() {
-    let wanted = std::env::args().nth(1).unwrap_or_else(|| "Local MySQL".into());
+    let wanted = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "Local MySQL".into());
     let mut failures = 0;
 
     let state = Arc::new(Mutex::new(AppState::new()));
@@ -52,7 +54,10 @@ async fn main() {
     ) as i32;
 
     let Some((id, name)) = profiles.iter().find(|(_, n)| n == &wanted).cloned() else {
-        println!("\nno profile named {:?}; skipping the database steps", wanted);
+        println!(
+            "\nno profile named {:?}; skipping the database steps",
+            wanted
+        );
         std::process::exit(if failures == 0 { 0 } else { 1 });
     };
 
@@ -67,7 +72,10 @@ async fn main() {
     let driver = state.lock().unwrap().get_connection(&id).cloned().unwrap();
 
     let dbs = driver.get_databases().await;
-    failures += !step!(dbs.as_ref().map(|d| !d.is_empty()).unwrap_or(false), "list databases") as i32;
+    failures += !step!(
+        dbs.as_ref().map(|d| !d.is_empty()).unwrap_or(false),
+        "list databases"
+    ) as i32;
 
     let q = driver.execute_query("SELECT 1 AS one").await;
     failures += !step!(
@@ -75,8 +83,13 @@ async fn main() {
         "execute a query"
     ) as i32;
 
-    let bad = driver.execute_query("SELECT * FROM a_table_that_does_not_exist").await;
-    failures += !step!(bad.is_err(), "a bad query reports an error rather than empty success") as i32;
+    let bad = driver
+        .execute_query("SELECT * FROM a_table_that_does_not_exist")
+        .await;
+    failures += !step!(
+        bad.is_err(),
+        "a bad query reports an error rather than empty success"
+    ) as i32;
 
     println!("metadata");
     let first_db = dbs.map(|d| d[0].name.clone()).unwrap_or_default();

@@ -351,16 +351,15 @@ impl AppState {
         // Get profiles from store
         if let Some(profiles_value) = store.get("profiles") {
             // Deserialize profiles
-            let profiles: Vec<ConnectionProfile> =
-                serde_json::from_value(profiles_value.clone()).map_err(|e| {
-                    DbError::InternalError(format!("Failed to deserialize profiles: {}", e))
-                })?;
+            let profiles: Vec<ConnectionProfile> = serde_json::from_value(profiles_value.clone())
+                .map_err(|e| {
+                DbError::InternalError(format!("Failed to deserialize profiles: {}", e))
+            })?;
 
             // Add each profile to the in-memory map
             let count = profiles.len();
             for profile in profiles {
-                self.connection_profiles
-                    .insert(profile.id.clone(), profile);
+                self.connection_profiles.insert(profile.id.clone(), profile);
             }
 
             Ok(count)
@@ -504,8 +503,8 @@ impl AppState {
         let mut store = JsonStore::open("history.json")?;
 
         if let Some(history_value) = store.get("history") {
-            let mut history: Vec<QueryHistory> =
-                serde_json::from_value(history_value.clone()).map_err(|e| {
+            let mut history: Vec<QueryHistory> = serde_json::from_value(history_value.clone())
+                .map_err(|e| {
                     DbError::InternalError(format!("Failed to deserialize history: {}", e))
                 })?;
 
@@ -588,8 +587,8 @@ impl AppState {
         let mut store = JsonStore::open("snippets.json")?;
 
         if let Some(snippets_value) = store.get("snippets") {
-            let snippets: Vec<QuerySnippet> =
-                serde_json::from_value(snippets_value.clone()).map_err(|e| {
+            let snippets: Vec<QuerySnippet> = serde_json::from_value(snippets_value.clone())
+                .map_err(|e| {
                     DbError::InternalError(format!("Failed to deserialize snippets: {}", e))
                 })?;
 

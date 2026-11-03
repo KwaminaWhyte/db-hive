@@ -31,7 +31,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use dbhive_core::plugins::manifest::{Plugin, PluginCategory};
 use dbhive_core::plugins::marketplace::{self, Filters, MarketplacePlugin, SortOption};
 use dbhive_core::plugins::ui::{
-    self as descriptor, ButtonStyle, Fields, FieldValue, Icon, Item, PluginUi, TextStyle, UiEvent,
+    self as descriptor, ButtonStyle, FieldValue, Fields, Icon, Item, PluginUi, TextStyle, UiEvent,
 };
 use dbhive_core::plugins::{HostCall, NotificationKind};
 
@@ -248,22 +248,38 @@ impl PluginsPanel {
         {
             self.form = None;
         }
-        let known = self.selected.as_ref().is_some_and(|id| self.is_installed(id));
+        let known = self
+            .selected
+            .as_ref()
+            .is_some_and(|id| self.is_installed(id));
         if !known {
             self.selected = self.installed.first().map(|p| p.manifest.id.clone());
         }
-        let installed: HashSet<&str> = self.installed.iter().map(|p| p.manifest.id.as_str()).collect();
-        self.install_errors.retain(|id, _| !installed.contains(id.as_str()));
+        let installed: HashSet<&str> = self
+            .installed
+            .iter()
+            .map(|p| p.manifest.id.as_str())
+            .collect();
+        self.install_errors
+            .retain(|id, _| !installed.contains(id.as_str()));
     }
 
     /// Replace one plugin after an operation returned its new state.
     pub fn upsert(&mut self, plugin: Plugin) {
-        match self.installed.iter().position(|p| p.manifest.id == plugin.manifest.id) {
+        match self
+            .installed
+            .iter()
+            .position(|p| p.manifest.id == plugin.manifest.id)
+        {
             Some(i) => self.installed[i] = plugin,
             None => {
                 self.installed.push(plugin);
-                self.installed
-                    .sort_by(|a, b| a.manifest.name.to_lowercase().cmp(&b.manifest.name.to_lowercase()));
+                self.installed.sort_by(|a, b| {
+                    a.manifest
+                        .name
+                        .to_lowercase()
+                        .cmp(&b.manifest.name.to_lowercase())
+                });
             }
         }
         self.prune();
@@ -306,7 +322,8 @@ impl PluginsPanel {
         match self.interfaces.get_mut(plugin_id) {
             Some(existing) => existing.replace(next),
             None => {
-                self.interfaces.insert(plugin_id.to_string(), Interface::new(next));
+                self.interfaces
+                    .insert(plugin_id.to_string(), Interface::new(next));
             }
         }
     }
@@ -331,7 +348,10 @@ impl PluginsPanel {
 
     fn interface(&self, scope: Scope) -> Option<&Interface> {
         match scope {
-            Scope::View => self.open_view.as_ref().and_then(|id| self.interfaces.get(id)),
+            Scope::View => self
+                .open_view
+                .as_ref()
+                .and_then(|id| self.interfaces.get(id)),
             Scope::Form => self.form.as_ref().map(|f| &f.interface),
         }
     }
@@ -365,7 +385,10 @@ impl PluginsPanel {
         let (Some(id), Some(i)) = (self.open_view.as_ref(), self.interface(Scope::View)) else {
             return Vec::new();
         };
-        let name = self.find(id).map(|p| p.manifest.name.clone()).unwrap_or_default();
+        let name = self
+            .find(id)
+            .map(|p| p.manifest.name.clone())
+            .unwrap_or_default();
         toolbar_of(id, &name, &i.descriptor)
     }
 
@@ -387,7 +410,8 @@ impl PluginsPanel {
     pub fn set_text(&mut self, scope: Scope, id: &str, text: &str) {
         if let Some(i) = self.interface_mut(scope) {
             if i.descriptor.has_field(id) {
-                i.fields.insert(id.to_string(), FieldValue::Text(text.to_string()));
+                i.fields
+                    .insert(id.to_string(), FieldValue::Text(text.to_string()));
             }
         }
     }
@@ -494,8 +518,12 @@ impl PluginsPanel {
     /// Build the settings form from the manifest's `configSchema`, with the
     /// saved values. Pure data: no plugin code runs.
     pub fn open_settings(&mut self, plugin_id: &str) -> bool {
-        let Some(plugin) = self.find(plugin_id) else { return false };
-        let Some(schema) = plugin.manifest.config_schema.clone() else { return false };
+        let Some(plugin) = self.find(plugin_id) else {
+            return false;
+        };
+        let Some(schema) = plugin.manifest.config_schema.clone() else {
+            return false;
+        };
         let panel = descriptor::config_schema_panel(&schema, plugin.config.as_ref());
         let ui = PluginUi {
             title: None,
@@ -521,7 +549,10 @@ impl PluginsPanel {
         if let Some((id, reason)) = form.interface.bad_numbers.iter().next() {
             return Err(format!("{}: {}", id, reason));
         }
-        Ok((form.plugin_id.clone(), descriptor::fields_to_config(&form.interface.fields)))
+        Ok((
+            form.plugin_id.clone(),
+            descriptor::fields_to_config(&form.interface.fields),
+        ))
     }
 
     // -- Projections --------------------------------------------------------------
@@ -630,15 +661,23 @@ impl PluginsPanel {
     }
 
     pub fn set_category_index(&mut self, index: usize) {
-        self.filters.category = index.checked_sub(1).and_then(|i| PluginCategory::ALL.get(i).copied());
+        self.filters.category = index
+            .checked_sub(1)
+            .and_then(|i| PluginCategory::ALL.get(i).copied());
     }
 
     pub fn sort_options() -> Vec<String> {
-        SortOption::ALL.iter().map(|s| s.label().to_string()).collect()
+        SortOption::ALL
+            .iter()
+            .map(|s| s.label().to_string())
+            .collect()
     }
 
     pub fn sort_index(&self) -> i32 {
-        SortOption::ALL.iter().position(|s| *s == self.filters.sort).unwrap_or(0) as i32
+        SortOption::ALL
+            .iter()
+            .position(|s| *s == self.filters.sort)
+            .unwrap_or(0) as i32
     }
 
     pub fn set_sort_index(&mut self, index: usize) {
@@ -670,8 +709,14 @@ impl PluginsPanel {
             info.insert(1, ("Contact".to_string(), email.clone()));
         }
         let mut stats = vec![
-            ("Installed".to_string(), or_dash(&short_date(&p.stats.install_date))),
-            ("Executions".to_string(), p.stats.execution_count.to_string()),
+            (
+                "Installed".to_string(),
+                or_dash(&short_date(&p.stats.install_date)),
+            ),
+            (
+                "Executions".to_string(),
+                p.stats.execution_count.to_string(),
+            ),
             ("Errors".to_string(), p.stats.error_count.to_string()),
         ];
         if let Some(last) = p.stats.last_used.as_ref() {
@@ -711,7 +756,10 @@ impl PluginsPanel {
     /// in the plugin's own interface, so a chatty plugin cannot push the
     /// application's own buttons out of the header.
     pub fn header_toolbar(&self) -> Vec<ToolbarEntry> {
-        self.toolbar().into_iter().take(HEADER_TOOLBAR_LIMIT).collect()
+        self.toolbar()
+            .into_iter()
+            .take(HEADER_TOOLBAR_LIMIT)
+            .collect()
     }
 
     /// Toolbar buttons of every enabled plugin that has described an
@@ -953,17 +1001,27 @@ fn button_style(s: ButtonStyle) -> i32 {
 }
 
 fn select_options<'a>(ui: &'a PluginUi, id: &str) -> Option<&'a [descriptor::SelectOption]> {
-    ui.panels.iter().flat_map(|p| &p.items).find_map(|i| match i {
-        Item::Select { id: sid, options, .. } if sid == id => Some(options.as_slice()),
-        _ => None,
-    })
+    ui.panels
+        .iter()
+        .flat_map(|p| &p.items)
+        .find_map(|i| match i {
+            Item::Select {
+                id: sid, options, ..
+            } if sid == id => Some(options.as_slice()),
+            _ => None,
+        })
 }
 
 fn number_range(ui: &PluginUi, id: &str) -> Option<(Option<f64>, Option<f64>)> {
-    ui.panels.iter().flat_map(|p| &p.items).find_map(|i| match i {
-        Item::Number { id: nid, min, max, .. } if nid == id => Some((*min, *max)),
-        _ => None,
-    })
+    ui.panels
+        .iter()
+        .flat_map(|p| &p.items)
+        .find_map(|i| match i {
+            Item::Number {
+                id: nid, min, max, ..
+            } if nid == id => Some((*min, *max)),
+            _ => None,
+        })
 }
 
 /// Parse a number field's text, clamping it into the declared range.
@@ -972,7 +1030,9 @@ pub fn parse_number(text: &str, min: Option<f64>, max: Option<f64>) -> Result<f6
     if t.is_empty() {
         return Err("Enter a number".to_string());
     }
-    let n: f64 = t.parse().map_err(|_| format!("\"{}\" is not a number", t))?;
+    let n: f64 = t
+        .parse()
+        .map_err(|_| format!("\"{}\" is not a number", t))?;
     if !n.is_finite() {
         return Err(format!("\"{}\" is not a number", t));
     }
@@ -1017,7 +1077,14 @@ pub fn item_rows(interface: &Interface) -> Vec<ItemRow> {
                     rows.push(r);
                 }
                 Item::Separator => rows.push(base(kind::SEPARATOR)),
-                Item::Button { id, label, tooltip, style, enabled, .. } => {
+                Item::Button {
+                    id,
+                    label,
+                    tooltip,
+                    style,
+                    enabled,
+                    ..
+                } => {
                     let mut r = base(kind::BUTTON);
                     r.id = id.clone();
                     r.label = label.clone();
@@ -1026,7 +1093,14 @@ pub fn item_rows(interface: &Interface) -> Vec<ItemRow> {
                     r.enabled = *enabled;
                     rows.push(r);
                 }
-                Item::Input { id, label, placeholder, multiline, enabled, .. } => {
+                Item::Input {
+                    id,
+                    label,
+                    placeholder,
+                    multiline,
+                    enabled,
+                    ..
+                } => {
                     let mut r = base(kind::INPUT);
                     r.id = id.clone();
                     r.label = label.clone();
@@ -1036,7 +1110,14 @@ pub fn item_rows(interface: &Interface) -> Vec<ItemRow> {
                     r.enabled = *enabled;
                     rows.push(r);
                 }
-                Item::Number { id, label, min, max, enabled, .. } => {
+                Item::Number {
+                    id,
+                    label,
+                    min,
+                    max,
+                    enabled,
+                    ..
+                } => {
                     let mut r = base(kind::NUMBER);
                     r.id = id.clone();
                     r.label = label.clone();
@@ -1046,7 +1127,9 @@ pub fn item_rows(interface: &Interface) -> Vec<ItemRow> {
                     r.enabled = *enabled;
                     rows.push(r);
                 }
-                Item::Checkbox { id, label, enabled, .. } => {
+                Item::Checkbox {
+                    id, label, enabled, ..
+                } => {
                     let mut r = base(kind::CHECKBOX);
                     r.id = id.clone();
                     r.label = label.clone();
@@ -1054,7 +1137,13 @@ pub fn item_rows(interface: &Interface) -> Vec<ItemRow> {
                     r.enabled = *enabled;
                     rows.push(r);
                 }
-                Item::Select { id, label, options, enabled, .. } => {
+                Item::Select {
+                    id,
+                    label,
+                    options,
+                    enabled,
+                    ..
+                } => {
                     let current = fields.get(id).map(|v| v.as_text()).unwrap_or_default();
                     let mut r = base(kind::SELECT);
                     r.id = id.clone();
@@ -1066,16 +1155,32 @@ pub fn item_rows(interface: &Interface) -> Vec<ItemRow> {
                     r.text = options
                         .iter()
                         .find(|o| o.value == current)
-                        .map(|o| if o.label.is_empty() { o.value.clone() } else { o.label.clone() })
+                        .map(|o| {
+                            if o.label.is_empty() {
+                                o.value.clone()
+                            } else {
+                                o.label.clone()
+                            }
+                        })
                         .unwrap_or(current);
                     r.options = options
                         .iter()
-                        .map(|o| if o.label.is_empty() { o.value.clone() } else { o.label.clone() })
+                        .map(|o| {
+                            if o.label.is_empty() {
+                                o.value.clone()
+                            } else {
+                                o.label.clone()
+                            }
+                        })
                         .collect();
                     r.enabled = *enabled;
                     rows.push(r);
                 }
-                Item::Table { title, columns, rows: data } => {
+                Item::Table {
+                    title,
+                    columns,
+                    rows: data,
+                } => {
                     if !title.is_empty() {
                         let mut r = base(kind::TABLE_TITLE);
                         r.text = title.clone();
@@ -1151,7 +1256,11 @@ pub fn absorb(plugin_name: &str, returned: Option<PluginUi>, outbox: Vec<HostCal
     for call in outbox {
         match call {
             HostCall::Notify(n) => {
-                let heading = if n.title.trim().is_empty() { plugin_name } else { n.title.trim() };
+                let heading = if n.title.trim().is_empty() {
+                    plugin_name
+                } else {
+                    n.title.trim()
+                };
                 let text = match (n.message.trim().is_empty(), heading.is_empty()) {
                     (true, _) => heading.to_string(),
                     (false, true) => n.message.clone(),
@@ -1254,16 +1363,33 @@ mod tests {
 
     #[test]
     fn a_scan_selects_the_first_plugin_and_keeps_the_selection_while_it_exists() {
-        let mut p = ready(vec![plugin("com.a", "Alpha", true), plugin("com.b", "Beta", true)]);
+        let mut p = ready(vec![
+            plugin("com.a", "Alpha", true),
+            plugin("com.b", "Beta", true),
+        ]);
         assert_eq!(p.load, Load::Ready);
         assert_eq!(p.selected.as_deref(), Some("com.a"));
 
         p.select("com.b");
-        p.apply_scan(Ok((vec![plugin("com.a", "Alpha", true), plugin("com.b", "Beta", true)], vec![])));
-        assert_eq!(p.selected.as_deref(), Some("com.b"), "a rescan keeps the selection");
+        p.apply_scan(Ok((
+            vec![
+                plugin("com.a", "Alpha", true),
+                plugin("com.b", "Beta", true),
+            ],
+            vec![],
+        )));
+        assert_eq!(
+            p.selected.as_deref(),
+            Some("com.b"),
+            "a rescan keeps the selection"
+        );
 
         p.apply_scan(Ok((vec![plugin("com.a", "Alpha", true)], vec![])));
-        assert_eq!(p.selected.as_deref(), Some("com.a"), "a gone plugin cannot stay selected");
+        assert_eq!(
+            p.selected.as_deref(),
+            Some("com.a"),
+            "a gone plugin cannot stay selected"
+        );
 
         p.apply_scan(Ok((vec![], vec![])));
         assert_eq!(p.selected, None);
@@ -1288,7 +1414,10 @@ mod tests {
 
     #[test]
     fn installed_rows_show_enabled_state_and_what_is_busy() {
-        let mut p = ready(vec![plugin("com.a", "Alpha", true), plugin("com.b", "Beta", false)]);
+        let mut p = ready(vec![
+            plugin("com.a", "Alpha", true),
+            plugin("com.b", "Beta", false),
+        ]);
         p.busy.insert("com.b".into(), Busy::Toggling);
         let rows = p.installed_rows();
         assert_eq!(rows.len(), 2);
@@ -1314,11 +1443,17 @@ mod tests {
         p.busy.remove(&id);
         p.install_errors.insert(id.clone(), "not bundled".into());
         let row = state(&p);
-        assert_eq!((row.state_kind, row.state_note.as_str()), (3, "not bundled"));
+        assert_eq!(
+            (row.state_kind, row.state_note.as_str()),
+            (3, "not bundled")
+        );
 
         p.upsert(plugin(&id, "Installed one", true));
         assert_eq!(state(&p).state_kind, 2);
-        assert!(p.install_errors.is_empty(), "an installed plugin has no stale failure");
+        assert!(
+            p.install_errors.is_empty(),
+            "an installed plugin has no stale failure"
+        );
     }
 
     #[test]
@@ -1336,9 +1471,17 @@ mod tests {
         assert!(!p.filters_active());
         assert_eq!(p.market_rows().len(), all);
 
-        p.set_category_index(1 + PluginCategory::ALL.iter().position(|c| *c == PluginCategory::Theme).unwrap());
+        p.set_category_index(
+            1 + PluginCategory::ALL
+                .iter()
+                .position(|c| *c == PluginCategory::Theme)
+                .unwrap(),
+        );
         assert!(p.market_rows().iter().all(|r| r.category == "Themes"));
-        assert_eq!(PluginsPanel::category_options()[p.category_index() as usize], "Themes");
+        assert_eq!(
+            PluginsPanel::category_options()[p.category_index() as usize],
+            "Themes"
+        );
         p.set_category_index(0);
         assert_eq!(p.filters.category, None);
 
@@ -1347,11 +1490,18 @@ mod tests {
         p.filters.verified_only = false;
 
         p.set_sort_index(4);
-        let names: Vec<String> = p.market_rows().iter().map(|r| r.name.to_lowercase()).collect();
+        let names: Vec<String> = p
+            .market_rows()
+            .iter()
+            .map(|r| r.name.to_lowercase())
+            .collect();
         let mut sorted = names.clone();
         sorted.sort();
         assert_eq!(names, sorted, "sorted by name");
-        assert_eq!(PluginsPanel::sort_options()[p.sort_index() as usize], "Name");
+        assert_eq!(
+            PluginsPanel::sort_options()[p.sort_index() as usize],
+            "Name"
+        );
     }
 
     #[test]
@@ -1385,10 +1535,19 @@ mod tests {
         assert_eq!(stats["Last used"], "2026-02-01");
         assert!(d.has_errors);
         assert_eq!(d.keywords, vec!["csv".to_string(), "export".to_string()]);
-        assert_eq!(d.links, vec![("Homepage".to_string(), "https://example.com/alpha".to_string())]);
+        assert_eq!(
+            d.links,
+            vec![(
+                "Homepage".to_string(),
+                "https://example.com/alpha".to_string()
+            )]
+        );
         assert!(d.has_settings && d.can_open);
         assert_eq!(d.permissions.len(), 3);
-        assert!(d.permissions.iter().any(|x| x.sensitive), "writeFiles is flagged");
+        assert!(
+            d.permissions.iter().any(|x| x.sensitive),
+            "writeFiles is flagged"
+        );
     }
 
     #[test]
@@ -1430,7 +1589,11 @@ mod tests {
         assert_eq!(rows[5].options, vec!["A".to_string(), "B".to_string()]);
         assert_eq!(rows[6].style, 1, "primary button");
         assert!(rows[7].collapsible && rows[7].open);
-        assert_eq!(rows[11].cells, vec!["3".to_string(), String::new()], "short rows are padded");
+        assert_eq!(
+            rows[11].cells,
+            vec!["3".to_string(), String::new()],
+            "short rows are padded"
+        );
     }
 
     #[test]
@@ -1442,18 +1605,27 @@ mod tests {
         p.toggle_panel(Scope::View, 1);
         let folded = p.items(Scope::View);
         assert!(folded.len() < open);
-        assert!(!folded.last().unwrap().open, "the header shows it is folded");
+        assert!(
+            !folded.last().unwrap().open,
+            "the header shows it is folded"
+        );
         p.toggle_panel(Scope::View, 1);
         assert_eq!(p.items(Scope::View).len(), open);
     }
 
     #[test]
     fn long_tables_are_cut_and_counted() {
-        let rows: Vec<Vec<String>> = (0..MAX_TABLE_ROWS_SHOWN + 30).map(|i| vec![i.to_string()]).collect();
+        let rows: Vec<Vec<String>> = (0..MAX_TABLE_ROWS_SHOWN + 30)
+            .map(|i| vec![i.to_string()])
+            .collect();
         let ui = PluginUi {
             panels: vec![descriptor::Panel {
                 title: "P".into(),
-                items: vec![Item::Table { title: String::new(), columns: vec!["n".into()], rows }],
+                items: vec![Item::Table {
+                    title: String::new(),
+                    columns: vec!["n".into()],
+                    rows,
+                }],
                 ..Default::default()
             }],
             ..Default::default()
@@ -1461,7 +1633,14 @@ mod tests {
         let out = item_rows(&Interface::new(ui));
         let shown = out.iter().filter(|r| r.kind == kind::TABLE_ROW).count();
         assert_eq!(shown, MAX_TABLE_ROWS_SHOWN);
-        assert_eq!(out.last().unwrap().text, format!("Showing the first {} of {} rows", MAX_TABLE_ROWS_SHOWN, MAX_TABLE_ROWS_SHOWN + 30));
+        assert_eq!(
+            out.last().unwrap().text,
+            format!(
+                "Showing the first {} of {} rows",
+                MAX_TABLE_ROWS_SHOWN,
+                MAX_TABLE_ROWS_SHOWN + 30
+            )
+        );
     }
 
     #[test]
@@ -1471,11 +1650,28 @@ mod tests {
         p.open_view = Some("com.a".into());
 
         p.set_text(Scope::View, "name", "typed.csv");
-        assert_eq!(p.toggle_check(Scope::View, "flag"), Some(FieldValue::Bool(false)));
-        assert_eq!(p.pick_option(Scope::View, "fmt", 0), Some(FieldValue::Text("a".into())));
-        assert_eq!(p.pick_option(Scope::View, "fmt", 0), None, "same option is no change");
-        assert_eq!(p.pick_option(Scope::View, "fmt", 9), None, "out of range is ignored");
-        assert_eq!(p.set_number(Scope::View, "n", "4"), Some(FieldValue::Number(4.0)));
+        assert_eq!(
+            p.toggle_check(Scope::View, "flag"),
+            Some(FieldValue::Bool(false))
+        );
+        assert_eq!(
+            p.pick_option(Scope::View, "fmt", 0),
+            Some(FieldValue::Text("a".into()))
+        );
+        assert_eq!(
+            p.pick_option(Scope::View, "fmt", 0),
+            None,
+            "same option is no change"
+        );
+        assert_eq!(
+            p.pick_option(Scope::View, "fmt", 9),
+            None,
+            "out of range is ignored"
+        );
+        assert_eq!(
+            p.set_number(Scope::View, "n", "4"),
+            Some(FieldValue::Number(4.0))
+        );
 
         let rows = p.items(Scope::View);
         assert_eq!(rows[2].text, "typed.csv");
@@ -1491,7 +1687,11 @@ mod tests {
         p.open_view = Some("com.a".into());
         p.set_text(Scope::View, "ghost", "x");
         assert_eq!(p.toggle_check(Scope::View, "ghost"), None);
-        assert_eq!(p.set_number(Scope::View, "name", "3"), None, "not a number field");
+        assert_eq!(
+            p.set_number(Scope::View, "name", "3"),
+            None,
+            "not a number field"
+        );
         assert!(p.value_event("ghost").is_none());
         assert!(!p.interfaces["com.a"].fields.contains_key("ghost"));
     }
@@ -1523,9 +1723,12 @@ mod tests {
         p.set_interface("com.a", ui(FORM_UI));
         p.open_view = Some("com.a".into());
         p.set_text(Scope::View, "name", "typed");
-        p.set_interface("com.a", ui(r#"{"panels":[{"title":"x","items":[
+        p.set_interface(
+            "com.a",
+            ui(r#"{"panels":[{"title":"x","items":[
             {"type":"input","id":"name","label":"Name","value":"default"},
-            {"type":"input","id":"fresh","label":"F","value":"new"}]}]}"#));
+            {"type":"input","id":"fresh","label":"F","value":"new"}]}]}"#),
+        );
         let f = &p.interfaces["com.a"].fields;
         assert_eq!(f["name"], FieldValue::Text("typed".into()));
         assert_eq!(f["fresh"], FieldValue::Text("new".into()));
@@ -1556,7 +1759,10 @@ mod tests {
 
     #[test]
     fn toolbar_buttons_come_only_from_enabled_plugins_and_name_their_plugin() {
-        let mut p = ready(vec![plugin("com.a", "Alpha", true), plugin("com.b", "Beta", true)]);
+        let mut p = ready(vec![
+            plugin("com.a", "Alpha", true),
+            plugin("com.b", "Beta", true),
+        ]);
         p.set_interface("com.a", ui(FORM_UI));
         p.set_interface("com.b", ui(FORM_UI));
         let bar = p.toolbar();
@@ -1566,13 +1772,25 @@ mod tests {
         assert_eq!(bar[0].icon, 3, "export icon");
 
         // Disabling drops the plugin's buttons on the next scan.
-        p.apply_scan(Ok((vec![plugin("com.a", "Alpha", false), plugin("com.b", "Beta", true)], vec![])));
+        p.apply_scan(Ok((
+            vec![
+                plugin("com.a", "Alpha", false),
+                plugin("com.b", "Beta", true),
+            ],
+            vec![],
+        )));
         let bar = p.toolbar();
         assert_eq!(bar.len(), 1);
         assert_eq!(bar[0].plugin_id, "com.b");
-        assert!(p.toolbar_event("com.a", "go").is_none(), "a disabled plugin cannot be driven");
+        assert!(
+            p.toolbar_event("com.a", "go").is_none(),
+            "a disabled plugin cannot be driven"
+        );
         assert!(p.toolbar_event("com.b", "go").is_some());
-        assert!(p.toolbar_event("com.b", "ghost").is_some(), "unknown ids are refused later, by dispatch_for");
+        assert!(
+            p.toolbar_event("com.b", "ghost").is_some(),
+            "unknown ids are refused later, by dispatch_for"
+        );
     }
 
     #[test]
@@ -1611,9 +1829,15 @@ mod tests {
         let mut p = ready(vec![plugin("com.a", "Alpha", true)]);
         assert!(p.open_settings("com.a"));
         let rows = p.items(Scope::Form);
-        assert!(rows.iter().any(|r| r.kind == kind::SELECT && r.id == "delimiter"));
-        assert!(rows.iter().any(|r| r.kind == kind::CHECKBOX && r.id == "headers" && r.checked));
-        assert!(rows.iter().any(|r| r.kind == kind::NUMBER && r.id == "limit" && r.text == "10"));
+        assert!(rows
+            .iter()
+            .any(|r| r.kind == kind::SELECT && r.id == "delimiter"));
+        assert!(rows
+            .iter()
+            .any(|r| r.kind == kind::CHECKBOX && r.id == "headers" && r.checked));
+        assert!(rows
+            .iter()
+            .any(|r| r.kind == kind::NUMBER && r.id == "limit" && r.text == "10"));
 
         p.pick_option(Scope::Form, "delimiter", 1);
         p.toggle_check(Scope::Form, "headers");
@@ -1657,18 +1881,27 @@ mod tests {
 
     #[test]
     fn selecting_another_plugin_closes_its_neighbours_view_and_form() {
-        let mut p = ready(vec![plugin("com.a", "Alpha", true), plugin("com.b", "Beta", true)]);
+        let mut p = ready(vec![
+            plugin("com.a", "Alpha", true),
+            plugin("com.b", "Beta", true),
+        ]);
         p.set_interface("com.a", ui(FORM_UI));
         p.open_view = Some("com.a".into());
         p.open_settings("com.a");
         p.select("com.b");
         assert!(p.open_view.is_none() && p.form.is_none());
-        assert!(p.interfaces.contains_key("com.a"), "its toolbar stays registered");
+        assert!(
+            p.interfaces.contains_key("com.a"),
+            "its toolbar stays registered"
+        );
     }
 
     #[test]
     fn removing_a_plugin_drops_its_interface_busy_flag_and_selection() {
-        let mut p = ready(vec![plugin("com.a", "Alpha", true), plugin("com.b", "Beta", true)]);
+        let mut p = ready(vec![
+            plugin("com.a", "Alpha", true),
+            plugin("com.b", "Beta", true),
+        ]);
         p.set_interface("com.a", ui(FORM_UI));
         p.busy.insert("com.a".into(), Busy::Uninstalling);
         p.remove("com.a");
@@ -1679,37 +1912,65 @@ mod tests {
     #[test]
     fn the_outbox_becomes_toasts_and_set_ui_wins() {
         let notify = |t: &str, m: &str, k| {
-            HostCall::Notify(Notification { title: t.into(), message: m.into(), kind: k })
+            HostCall::Notify(Notification {
+                title: t.into(),
+                message: m.into(),
+                kind: k,
+            })
         };
-        let pushed = PluginUi { title: Some("pushed".into()), ..Default::default() };
+        let pushed = PluginUi {
+            title: Some("pushed".into()),
+            ..Default::default()
+        };
         let out = absorb(
             "Alpha",
-            Some(PluginUi { title: Some("returned".into()), ..Default::default() }),
+            Some(PluginUi {
+                title: Some("returned".into()),
+                ..Default::default()
+            }),
             vec![
                 notify("CSV", "done", NotificationKind::Success),
                 notify("", "plain", NotificationKind::Error),
                 notify("Title only", "", NotificationKind::Warning),
                 HostCall::SetUi(Box::new(pushed.clone())),
                 HostCall::OpenTab { title: "t".into() },
-                HostCall::Message { to: "x".into(), body: "y".into() },
+                HostCall::Message {
+                    to: "x".into(),
+                    body: "y".into(),
+                },
             ],
         );
         assert_eq!(out.descriptor, Some(pushed));
         assert_eq!(
             out.toasts,
             vec![
-                PluginToast { text: "CSV: done".into(), tone: NoteTone::Success },
-                PluginToast { text: "Alpha: plain".into(), tone: NoteTone::Danger },
-                PluginToast { text: "Title only".into(), tone: NoteTone::Warning },
+                PluginToast {
+                    text: "CSV: done".into(),
+                    tone: NoteTone::Success
+                },
+                PluginToast {
+                    text: "Alpha: plain".into(),
+                    tone: NoteTone::Danger
+                },
+                PluginToast {
+                    text: "Title only".into(),
+                    tone: NoteTone::Warning
+                },
             ]
         );
     }
 
     #[test]
     fn install_failures_read_as_a_sentence_about_the_plugin() {
-        let m = install_error_message("Dark Theme Plus", "Not available to plugins: downloading 'x'");
+        let m = install_error_message(
+            "Dark Theme Plus",
+            "Not available to plugins: downloading 'x'",
+        );
         assert!(m.starts_with("Dark Theme Plus is not bundled"));
-        assert_eq!(install_error_message("X", "Incompatible version: requires 9"), "Incompatible version: requires 9");
+        assert_eq!(
+            install_error_message("X", "Incompatible version: requires 9"),
+            "Incompatible version: requires 9"
+        );
     }
 
     #[test]
@@ -1720,7 +1981,10 @@ mod tests {
         p.fail_interface("com.a", "no interface".into());
         assert_eq!(p.view_error(), "no interface");
         assert!(p.items(Scope::View).is_empty());
-        assert!(p.toolbar().is_empty(), "an empty interface registers no buttons");
+        assert!(
+            p.toolbar().is_empty(),
+            "an empty interface registers no buttons"
+        );
         assert_eq!(p.view_title(), "Plugin interface");
     }
 
@@ -1729,8 +1993,10 @@ mod tests {
         let mut p = ready(vec![plugin("com.a", "Alpha", true)]);
         p.set_interface(
             "com.a",
-            ui(r#"{"panels":[{"title":"Closed","collapsible":true,"open":false,"items":[
-                {"type":"text","text":"hidden"}]}]}"#),
+            ui(
+                r#"{"panels":[{"title":"Closed","collapsible":true,"open":false,"items":[
+                {"type":"text","text":"hidden"}]}]}"#,
+            ),
         );
         p.open_view = Some("com.a".into());
         let rows = p.items(Scope::View);
@@ -1743,8 +2009,16 @@ mod tests {
     #[test]
     fn icons_map_to_distinct_indexes() {
         let all = [
-            Icon::Plug, Icon::Database, Icon::Code, Icon::Export, Icon::Import,
-            Icon::Palette, Icon::Settings, Icon::Chart, Icon::Search, Icon::Box,
+            Icon::Plug,
+            Icon::Database,
+            Icon::Code,
+            Icon::Export,
+            Icon::Import,
+            Icon::Palette,
+            Icon::Settings,
+            Icon::Chart,
+            Icon::Search,
+            Icon::Box,
         ];
         let mut seen: Vec<i32> = all.iter().map(|i| icon_index(*i)).collect();
         seen.sort();

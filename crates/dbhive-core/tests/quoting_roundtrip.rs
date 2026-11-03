@@ -55,7 +55,10 @@ const NAMES: &[&str] = &[
 async fn roundtrip<D: DatabaseDriver>(d: &D) {
     for v in VALUES {
         let sql = format!("SELECT '{}' AS v", d.escape_string_literal(v));
-        let r = d.execute_query(&sql).await.unwrap_or_else(|e| panic!("{v:?}: {e}\n{sql}"));
+        let r = d
+            .execute_query(&sql)
+            .await
+            .unwrap_or_else(|e| panic!("{v:?}: {e}\n{sql}"));
         assert_eq!(
             r.rows[0][0],
             serde_json::Value::String(v.to_string()),
@@ -63,22 +66,37 @@ async fn roundtrip<D: DatabaseDriver>(d: &D) {
         );
     }
 
-    d.execute_query("CREATE TABLE victim (id INTEGER)").await.unwrap();
+    d.execute_query("CREATE TABLE victim (id INTEGER)")
+        .await
+        .unwrap();
     for (i, n) in NAMES.iter().enumerate() {
         let q = d.quote_identifier(n);
         let sql = format!("CREATE TABLE {q} ({q} VARCHAR(50), n INTEGER)");
-        d.execute_query(&sql).await.unwrap_or_else(|e| panic!("{n:?}: {e}\n{sql}"));
+        d.execute_query(&sql)
+            .await
+            .unwrap_or_else(|e| panic!("{n:?}: {e}\n{sql}"));
         let v = VALUES[i % VALUES.len()];
-        let insert = format!("INSERT INTO {q} ({q}, n) VALUES ('{}', {i})", d.escape_string_literal(v));
-        d.execute_query(&insert).await.unwrap_or_else(|e| panic!("{n:?}: {e}\n{insert}"));
+        let insert = format!(
+            "INSERT INTO {q} ({q}, n) VALUES ('{}', {i})",
+            d.escape_string_literal(v)
+        );
+        d.execute_query(&insert)
+            .await
+            .unwrap_or_else(|e| panic!("{n:?}: {e}\n{insert}"));
         let r = d
             .execute_query(&format!("SELECT {q} FROM {q} WHERE n = {i}"))
             .await
             .unwrap_or_else(|e| panic!("{n:?}: {e}"));
-        assert_eq!(r.rows[0][0], serde_json::Value::String(v.to_string()), "name {n:?}");
+        assert_eq!(
+            r.rows[0][0],
+            serde_json::Value::String(v.to_string()),
+            "name {n:?}"
+        );
     }
     // None of the hostile values dropped the canary table.
-    d.execute_query("SELECT id FROM victim").await.expect("the canary table must still exist");
+    d.execute_query("SELECT id FROM victim")
+        .await
+        .expect("the canary table must still exist");
 }
 
 #[tokio::test]
@@ -130,16 +148,23 @@ impl Drop for Scratch {
     fn drop(&mut self) {
         let (postgres, name) = (self.postgres, self.name.clone());
         let _ = std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
             rt.block_on(async {
                 if postgres {
                     if let Ok(a) = PostgresDriver::connect(pg_opts("postgres")).await {
                         let _ = a
-                            .execute_query(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"))
+                            .execute_query(&format!(
+                                "DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"
+                            ))
                             .await;
                     }
                 } else if let Ok(a) = MysqlDriver::connect(my_opts(None)).await {
-                    let _ = a.execute_query(&format!("DROP DATABASE IF EXISTS `{name}`")).await;
+                    let _ = a
+                        .execute_query(&format!("DROP DATABASE IF EXISTS `{name}`"))
+                        .await;
                 }
             });
         })
@@ -151,10 +176,21 @@ impl Drop for Scratch {
 #[ignore = "needs a local PostgreSQL on localhost:5432 (trust auth)"]
 async fn postgres_quoting_round_trips() {
     let name = format!("dbhive_quote_{}", std::process::id());
-    let admin = PostgresDriver::connect(pg_opts("postgres")).await.expect("connect to postgres");
-    admin.execute_query(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)")).await.unwrap();
-    admin.execute_query(&format!("CREATE DATABASE \"{name}\"")).await.unwrap();
-    let _guard = Scratch { postgres: true, name: name.clone() };
+    let admin = PostgresDriver::connect(pg_opts("postgres"))
+        .await
+        .expect("connect to postgres");
+    admin
+        .execute_query(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"))
+        .await
+        .unwrap();
+    admin
+        .execute_query(&format!("CREATE DATABASE \"{name}\""))
+        .await
+        .unwrap();
+    let _guard = Scratch {
+        postgres: true,
+        name: name.clone(),
+    };
     let d = PostgresDriver::connect(pg_opts(&name)).await.unwrap();
     roundtrip(&d).await;
 }
@@ -163,10 +199,21 @@ async fn postgres_quoting_round_trips() {
 #[ignore = "needs a local MySQL on localhost:3306 (root, no password)"]
 async fn mysql_quoting_round_trips() {
     let name = format!("dbhive_quote_{}", std::process::id());
-    let admin = MysqlDriver::connect(my_opts(None)).await.expect("connect to mysql");
-    admin.execute_query(&format!("DROP DATABASE IF EXISTS `{name}`")).await.unwrap();
-    admin.execute_query(&format!("CREATE DATABASE `{name}`")).await.unwrap();
-    let _guard = Scratch { postgres: false, name: name.clone() };
+    let admin = MysqlDriver::connect(my_opts(None))
+        .await
+        .expect("connect to mysql");
+    admin
+        .execute_query(&format!("DROP DATABASE IF EXISTS `{name}`"))
+        .await
+        .unwrap();
+    admin
+        .execute_query(&format!("CREATE DATABASE `{name}`"))
+        .await
+        .unwrap();
+    let _guard = Scratch {
+        postgres: false,
+        name: name.clone(),
+    };
     let d = MysqlDriver::connect(my_opts(Some(&name))).await.unwrap();
     roundtrip(&d).await;
 }

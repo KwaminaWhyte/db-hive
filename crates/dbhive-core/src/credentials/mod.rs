@@ -27,8 +27,9 @@ impl CredentialManager {
     /// * `Ok(())` on success
     /// * `Err(DbError)` on failure
     pub fn save_password(connection_id: &str, password: &str) -> Result<(), DbError> {
-        let entry = Entry::new(SERVICE_NAME, connection_id)
-            .map_err(|e| DbError::CredentialError(format!("Failed to create keyring entry: {}", e)))?;
+        let entry = Entry::new(SERVICE_NAME, connection_id).map_err(|e| {
+            DbError::CredentialError(format!("Failed to create keyring entry: {}", e))
+        })?;
 
         entry
             .set_password(password)
@@ -47,8 +48,9 @@ impl CredentialManager {
     /// * `Ok(None)` if password not found
     /// * `Err(DbError)` on other errors
     pub fn get_password(connection_id: &str) -> Result<Option<String>, DbError> {
-        let entry = Entry::new(SERVICE_NAME, connection_id)
-            .map_err(|e| DbError::CredentialError(format!("Failed to create keyring entry: {}", e)))?;
+        let entry = Entry::new(SERVICE_NAME, connection_id).map_err(|e| {
+            DbError::CredentialError(format!("Failed to create keyring entry: {}", e))
+        })?;
 
         match entry.get_password() {
             Ok(password) => Ok(Some(password)),
@@ -69,8 +71,9 @@ impl CredentialManager {
     /// * `Ok(())` on success or if entry doesn't exist
     /// * `Err(DbError)` on other errors
     pub fn delete_password(connection_id: &str) -> Result<(), DbError> {
-        let entry = Entry::new(SERVICE_NAME, connection_id)
-            .map_err(|e| DbError::CredentialError(format!("Failed to create keyring entry: {}", e)))?;
+        let entry = Entry::new(SERVICE_NAME, connection_id).map_err(|e| {
+            DbError::CredentialError(format!("Failed to create keyring entry: {}", e))
+        })?;
 
         match entry.delete_credential() {
             Ok(()) => Ok(()),

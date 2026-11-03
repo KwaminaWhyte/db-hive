@@ -79,7 +79,10 @@ async fn run(d: &PostgresDriver, what: &str, r: DdlResult) {
 }
 
 async fn scalar(d: &PostgresDriver, sql: &str) -> String {
-    let r = d.execute_query(sql).await.unwrap_or_else(|e| panic!("{sql}: {e}"));
+    let r = d
+        .execute_query(sql)
+        .await
+        .unwrap_or_else(|e| panic!("{sql}: {e}"));
     match &r.rows[0][0] {
         serde_json::Value::String(s) => s.clone(),
         other => other.to_string(),
@@ -90,7 +93,9 @@ async fn scalar(d: &PostgresDriver, sql: &str) -> String {
 #[ignore = "needs a local PostgreSQL on localhost:5432 (trust auth)"]
 async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
     let name = format!("dbhive_ddl_{}", std::process::id());
-    let admin = PostgresDriver::connect(opts("postgres")).await.expect("connect to postgres");
+    let admin = PostgresDriver::connect(opts("postgres"))
+        .await
+        .expect("connect to postgres");
     admin
         .execute_query(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"))
         .await
@@ -100,7 +105,9 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
         .await
         .expect("create the scratch database");
     let _guard = Scratch { name: name.clone() };
-    let d = PostgresDriver::connect(opts(&name)).await.expect("connect to the scratch database");
+    let d = PostgresDriver::connect(opts(&name))
+        .await
+        .expect("connect to the scratch database");
     let g = get_ddl_generator(&DbDriver::Postgres).unwrap();
 
     // -- a parent table ------------------------------------------------------
@@ -116,12 +123,20 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
         columns: vec![id, email],
         primary_key: None,
         foreign_keys: vec![],
-        unique_constraints: vec![UniqueConstraint { name: Some("uq_owner_email".into()), columns: vec!["email".into()] }],
+        unique_constraints: vec![UniqueConstraint {
+            name: Some("uq_owner_email".into()),
+            columns: vec!["email".into()],
+        }],
         check_constraints: vec![],
         comment: Some("People who own things".into()),
         if_not_exists: false,
     };
-    run(&d, "create owners", g.generate_create_table(&owners).unwrap()).await;
+    run(
+        &d,
+        "create owners",
+        g.generate_create_table(&owners).unwrap(),
+    )
+    .await;
 
     // -- a table with every column type, a name with a quote in it -----------
     let mut pid = col("id", ColumnType::BigInt);
@@ -135,7 +150,13 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
     let types: Vec<ColumnDefinition> = vec![
         col("c_small", ColumnType::SmallInt),
         col("c_int", ColumnType::Integer),
-        col("c_dec", ColumnType::Decimal { precision: 10, scale: 2 }),
+        col(
+            "c_dec",
+            ColumnType::Decimal {
+                precision: 10,
+                scale: 2,
+            },
+        ),
         col("c_real", ColumnType::Real),
         col("c_double", ColumnType::DoublePrecision),
         col("c_char", ColumnType::Char { length: 3 }),
@@ -149,8 +170,18 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
         col("c_json", ColumnType::Json),
         col("c_jsonb", ColumnType::JsonB),
         col("c_uuid", ColumnType::Uuid),
-        col("c_array", ColumnType::Array { element_type: Box::new(ColumnType::Text) }),
-        col("c_custom", ColumnType::Custom { type_name: "inet".into() }),
+        col(
+            "c_array",
+            ColumnType::Array {
+                element_type: Box::new(ColumnType::Text),
+            },
+        ),
+        col(
+            "c_custom",
+            ColumnType::Custom {
+                type_name: "inet".into(),
+            },
+        ),
     ];
     let mut columns = vec![pid, owner, label];
     columns.extend(types);
@@ -167,8 +198,14 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
             on_delete: ForeignKeyAction::Cascade,
             on_update: ForeignKeyAction::NoAction,
         }],
-        unique_constraints: vec![UniqueConstraint { name: Some("uq_pet_label".into()), columns: vec!["owner_id".into(), "label".into()] }],
-        check_constraints: vec![CheckConstraint { name: Some("ck_small".into()), expression: "c_small IS NULL OR c_small >= 0".into() }],
+        unique_constraints: vec![UniqueConstraint {
+            name: Some("uq_pet_label".into()),
+            columns: vec!["owner_id".into(), "label".into()],
+        }],
+        check_constraints: vec![CheckConstraint {
+            name: Some("ck_small".into()),
+            expression: "c_small IS NULL OR c_small >= 0".into(),
+        }],
         comment: None,
         if_not_exists: false,
     };
@@ -186,9 +223,17 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
     )
     .await;
     assert_eq!(fk_action, "c", "the foreign key should cascade on delete");
-    let uq = scalar(&d, "SELECT count(*) FROM pg_constraint WHERE conname IN ('uq_pet_label', 'uq_owner_email')").await;
+    let uq = scalar(
+        &d,
+        "SELECT count(*) FROM pg_constraint WHERE conname IN ('uq_pet_label', 'uq_owner_email')",
+    )
+    .await;
     assert_eq!(uq, "2");
-    let ck = scalar(&d, "SELECT count(*) FROM pg_constraint WHERE conname = 'ck_small' AND contype = 'c'").await;
+    let ck = scalar(
+        &d,
+        "SELECT count(*) FROM pg_constraint WHERE conname = 'ck_small' AND contype = 'c'",
+    )
+    .await;
     assert_eq!(ck, "1");
     let dflt = scalar(
         &d,
@@ -201,13 +246,23 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
 
     // The constraints work: a missing owner is refused, a delete cascades.
     assert!(
-        d.execute_query("INSERT INTO \"we\"\"ird pets\" (owner_id) VALUES (999)").await.is_err(),
+        d.execute_query("INSERT INTO \"we\"\"ird pets\" (owner_id) VALUES (999)")
+            .await
+            .is_err(),
         "the foreign key should refuse a pet with no owner"
     );
-    d.execute_query("INSERT INTO owners (email) VALUES ('a@example.com')").await.unwrap();
-    d.execute_query("INSERT INTO \"we\"\"ird pets\" (owner_id, c_small) VALUES (1, 3)").await.unwrap();
+    d.execute_query("INSERT INTO owners (email) VALUES ('a@example.com')")
+        .await
+        .unwrap();
+    d.execute_query("INSERT INTO \"we\"\"ird pets\" (owner_id, c_small) VALUES (1, 3)")
+        .await
+        .unwrap();
     assert!(
-        d.execute_query("INSERT INTO \"we\"\"ird pets\" (owner_id, label, c_small) VALUES (1, 'x', -1)").await.is_err(),
+        d.execute_query(
+            "INSERT INTO \"we\"\"ird pets\" (owner_id, label, c_small) VALUES (1, 'x', -1)"
+        )
+        .await
+        .is_err(),
         "the check constraint should refuse a negative c_small"
     );
 
@@ -220,11 +275,26 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
         name: "we\"ird pets".into(),
         operations: vec![
             AlterColumnOperation::AddColumn { column: added },
-            AlterColumnOperation::RenameColumn { old_name: "c_text".into(), new_name: "notes".into() },
-            AlterColumnOperation::AlterType { column_name: "c_int".into(), new_type: ColumnType::BigInt },
-            AlterColumnOperation::SetNotNull { column_name: "c_double".into(), not_null: false },
-            AlterColumnOperation::SetDefault { column_name: "c_bool".into(), default: Some("true".into()) },
-            AlterColumnOperation::DropColumn { column_name: "c_custom".into(), cascade: false },
+            AlterColumnOperation::RenameColumn {
+                old_name: "c_text".into(),
+                new_name: "notes".into(),
+            },
+            AlterColumnOperation::AlterType {
+                column_name: "c_int".into(),
+                new_type: ColumnType::BigInt,
+            },
+            AlterColumnOperation::SetNotNull {
+                column_name: "c_double".into(),
+                not_null: false,
+            },
+            AlterColumnOperation::SetDefault {
+                column_name: "c_bool".into(),
+                default: Some("true".into()),
+            },
+            AlterColumnOperation::DropColumn {
+                column_name: "c_custom".into(),
+                cascade: false,
+            },
         ],
     };
     run(&d, "alter pets", g.generate_alter_table(&alter).unwrap()).await;
@@ -233,8 +303,14 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
         "SELECT string_agg(column_name, ',' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_name = 'we\"ird pets'",
     )
     .await;
-    assert!(cols.contains("added_at") && cols.contains("notes"), "columns: {cols}");
-    assert!(!cols.contains("c_custom") && !cols.contains("c_text"), "columns: {cols}");
+    assert!(
+        cols.contains("added_at") && cols.contains("notes"),
+        "columns: {cols}"
+    );
+    assert!(
+        !cols.contains("c_custom") && !cols.contains("c_text"),
+        "columns: {cols}"
+    );
     let int_type = scalar(
         &d,
         "SELECT data_type FROM information_schema.columns WHERE table_name = 'we\"ird pets' AND column_name = 'c_int'",
@@ -242,7 +318,11 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
     .await;
     assert_eq!(int_type, "bigint");
     // The existing row took the new column's default.
-    let n = scalar(&d, "SELECT count(*) FROM \"we\"\"ird pets\" WHERE added_at IS NOT NULL").await;
+    let n = scalar(
+        &d,
+        "SELECT count(*) FROM \"we\"\"ird pets\" WHERE added_at IS NOT NULL",
+    )
+    .await;
     assert_eq!(n, "1");
 
     // -- drop the child, then the parent ---------------------------------------
@@ -259,7 +339,12 @@ async fn generated_postgres_ddl_is_accepted_and_does_what_it_says() {
         cascade: true,
         if_exists: false,
     };
-    run(&d, "drop owners", g.generate_drop_table(&drop_owners).unwrap()).await;
+    run(
+        &d,
+        "drop owners",
+        g.generate_drop_table(&drop_owners).unwrap(),
+    )
+    .await;
     let left = scalar(
         &d,
         "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public'",

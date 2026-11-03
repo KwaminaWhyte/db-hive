@@ -9,9 +9,9 @@
 use crate::ddl::DdlGenerator;
 use crate::models::{
     ddl::{
-        AlterColumnOperation, AlterTableDefinition, CheckConstraint, ColumnDefinition,
-        ColumnType, DdlResult, DropTableDefinition, ForeignKeyAction, ForeignKeyConstraint,
-        TableDefinition, UniqueConstraint,
+        AlterColumnOperation, AlterTableDefinition, CheckConstraint, ColumnDefinition, ColumnType,
+        DdlResult, DropTableDefinition, ForeignKeyAction, ForeignKeyConstraint, TableDefinition,
+        UniqueConstraint,
     },
     DbError,
 };
@@ -24,7 +24,9 @@ impl SqliteDdlGenerator {
     fn column_type_to_sql(&self, col_type: &ColumnType) -> String {
         // SQLite has dynamic typing with type affinities
         match col_type {
-            ColumnType::SmallInt | ColumnType::Integer | ColumnType::BigInt => "INTEGER".to_string(),
+            ColumnType::SmallInt | ColumnType::Integer | ColumnType::BigInt => {
+                "INTEGER".to_string()
+            }
             ColumnType::Decimal { .. } | ColumnType::Real | ColumnType::DoublePrecision => {
                 "REAL".to_string()
             }
@@ -34,7 +36,10 @@ impl SqliteDdlGenerator {
             | ColumnType::Uuid => "TEXT".to_string(),
             ColumnType::Bytea => "BLOB".to_string(),
             ColumnType::Boolean => "INTEGER".to_string(), // 0 or 1
-            ColumnType::Date | ColumnType::Time | ColumnType::Timestamp | ColumnType::TimestampTz => {
+            ColumnType::Date
+            | ColumnType::Time
+            | ColumnType::Timestamp
+            | ColumnType::TimestampTz => {
                 "TEXT".to_string() // Store as ISO 8601 strings
             }
             ColumnType::Json | ColumnType::JsonB => "TEXT".to_string(),
@@ -167,7 +172,10 @@ impl DdlGenerator for SqliteDdlGenerator {
             ""
         };
 
-        sql_parts.push(format!("CREATE TABLE {}\"{}\" (", if_not_exists, table.name));
+        sql_parts.push(format!(
+            "CREATE TABLE {}\"{}\" (",
+            if_not_exists, table.name
+        ));
 
         // Column definitions
         let mut table_elements = Vec::new();
@@ -248,7 +256,10 @@ impl DdlGenerator for SqliteDdlGenerator {
                 }
                 AlterColumnOperation::DropColumn { column_name, .. } => {
                     // SQLite 3.35.0+ supports DROP COLUMN
-                    format!("ALTER TABLE {} DROP COLUMN \"{}\";", table_name, column_name)
+                    format!(
+                        "ALTER TABLE {} DROP COLUMN \"{}\";",
+                        table_name, column_name
+                    )
                 }
                 AlterColumnOperation::AlterType { .. }
                 | AlterColumnOperation::SetNotNull { .. }

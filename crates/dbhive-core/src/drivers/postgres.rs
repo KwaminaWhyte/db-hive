@@ -10,7 +10,8 @@ use tokio_postgres::NoTls;
 
 use super::{ConnectionOptions, DatabaseDriver, QueryResult, TransactionFailure, MAX_RESULT_ROWS};
 use crate::models::{
-    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo, TableSchema,
+    ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo,
+    TableSchema,
 };
 
 /// Quote a PostgreSQL identifier to prevent SQL injection.
@@ -298,33 +299,32 @@ impl PostgresDriver {
                                 .map(serde_json::Value::String)
                         })
                         .unwrap_or(serde_json::Value::Null)
-                },
+                }
                 "json" | "jsonb" => {
                     // With the with-serde_json-1 feature, tokio-postgres can deserialize JSON directly
                     row.try_get::<_, Option<serde_json::Value>>(i)
                         .ok()
                         .flatten()
                         .unwrap_or(serde_json::Value::Null)
-                },
+                }
                 // pgvector: deserialize as a JSON array of numbers
-                "vector" => {
-                    row.try_get::<_, Option<pgvector::Vector>>(i)
-                        .ok()
-                        .flatten()
-                        .map(|v| {
-                            serde_json::Value::Array(
-                                v.to_vec()
-                                    .iter()
-                                    .map(|&f| {
-                                        serde_json::Number::from_f64(f as f64)
-                                            .map(serde_json::Value::Number)
-                                            .unwrap_or(serde_json::Value::Null)
-                                    })
-                                    .collect(),
-                            )
-                        })
-                        .unwrap_or(serde_json::Value::Null)
-                },
+                "vector" => row
+                    .try_get::<_, Option<pgvector::Vector>>(i)
+                    .ok()
+                    .flatten()
+                    .map(|v| {
+                        serde_json::Value::Array(
+                            v.to_vec()
+                                .iter()
+                                .map(|&f| {
+                                    serde_json::Number::from_f64(f as f64)
+                                        .map(serde_json::Value::Number)
+                                        .unwrap_or(serde_json::Value::Null)
+                                })
+                                .collect(),
+                        )
+                    })
+                    .unwrap_or(serde_json::Value::Null),
                 // PostgreSQL array types: type names start with '_'
                 t if t.starts_with('_') => {
                     let inner = &t[1..];
@@ -367,7 +367,9 @@ impl PostgresDriver {
                             .flatten()
                             .map(|v| {
                                 serde_json::Value::Array(
-                                    v.iter().map(|&n| serde_json::Value::Number(n.into())).collect(),
+                                    v.iter()
+                                        .map(|&n| serde_json::Value::Number(n.into()))
+                                        .collect(),
                                 )
                             })
                             .unwrap_or(serde_json::Value::Null),
@@ -377,7 +379,9 @@ impl PostgresDriver {
                             .flatten()
                             .map(|v| {
                                 serde_json::Value::Array(
-                                    v.iter().map(|&n| serde_json::Value::Number(n.into())).collect(),
+                                    v.iter()
+                                        .map(|&n| serde_json::Value::Number(n.into()))
+                                        .collect(),
                                 )
                             })
                             .unwrap_or(serde_json::Value::Null),
@@ -387,7 +391,9 @@ impl PostgresDriver {
                             .flatten()
                             .map(|v| {
                                 serde_json::Value::Array(
-                                    v.iter().map(|&n| serde_json::Value::Number(n.into())).collect(),
+                                    v.iter()
+                                        .map(|&n| serde_json::Value::Number(n.into()))
+                                        .collect(),
                                 )
                             })
                             .unwrap_or(serde_json::Value::Null),
@@ -413,7 +419,7 @@ impl PostgresDriver {
                             })
                             .unwrap_or(serde_json::Value::Null),
                     }
-                },
+                }
                 // For unknown/custom types, try to get as string
                 _ => row
                     .try_get::<_, Option<String>>(i)
@@ -522,10 +528,9 @@ impl DatabaseDriver for PostgresDriver {
         // dollar-quoted strings, and comments (PERF-11), so a single query
         // like `SELECT 'a;b'` is no longer misrouted here.
         if count_statements(sql) > 1 {
-            client
-                .batch_execute(sql)
-                .await
-                .map_err(|e| DbError::QueryError(format!("Transaction execution failed: {}", pg_message(&e))))?;
+            client.batch_execute(sql).await.map_err(|e| {
+                DbError::QueryError(format!("Transaction execution failed: {}", pg_message(&e)))
+            })?;
 
             // Return empty result for batch execution (no way to get affected rows count for all statements)
             return Ok(QueryResult::empty());
@@ -869,7 +874,8 @@ impl DatabaseDriver for PostgresDriver {
                     })
                     .unwrap_or(false);
 
-                let is_auto_increment = data_type.to_lowercase().contains("serial") || has_sequence_default;
+                let is_auto_increment =
+                    data_type.to_lowercase().contains("serial") || has_sequence_default;
 
                 ColumnInfo {
                     name,
@@ -987,8 +993,10 @@ impl DatabaseDriver for PostgresDriver {
         // Group the rows of a composite foreign key. A constraint is keyed by
         // its table as well as its name: two tables may reuse a name.
         use std::collections::HashMap;
-        let mut fk_map: HashMap<(String, String, String), (ForeignKeyInfo, Vec<String>, Vec<String>)> =
-            HashMap::new();
+        let mut fk_map: HashMap<
+            (String, String, String),
+            (ForeignKeyInfo, Vec<String>, Vec<String>),
+        > = HashMap::new();
 
         for row in rows {
             let fk_name: String = row.get("name");
@@ -1032,9 +1040,8 @@ impl DatabaseDriver for PostgresDriver {
                 fk
             })
             .collect();
-        foreign_keys.sort_by(|a, b| {
-            (&a.schema, &a.table, &a.name).cmp(&(&b.schema, &b.table, &b.name))
-        });
+        foreign_keys
+            .sort_by(|a, b| (&a.schema, &a.table, &a.name).cmp(&(&b.schema, &b.table, &b.name)));
 
         Ok(foreign_keys)
     }
@@ -1126,10 +1133,7 @@ mod tests {
     fn test_count_statements_multiple() {
         assert_eq!(count_statements("SELECT 1; SELECT 2"), 2);
         assert_eq!(count_statements("SELECT 1; SELECT 2;"), 2);
-        assert_eq!(
-            count_statements("BEGIN; UPDATE t SET x = 1; COMMIT;"),
-            3
-        );
+        assert_eq!(count_statements("BEGIN; UPDATE t SET x = 1; COMMIT;"), 3);
     }
 
     #[test]

@@ -84,10 +84,16 @@ impl Ctx {
     /// text fields the user types into are not touched here: they are set
     /// only when a session starts or a suggestion is applied.
     pub(super) fn refresh_data_panel(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let s = self.session.borrow();
         let ws = &s.workspace;
-        let place = ws.schema.clone().or_else(|| ws.database.clone()).unwrap_or_default();
+        let place = ws
+            .schema
+            .clone()
+            .or_else(|| ws.database.clone())
+            .unwrap_or_default();
         view::project(
             &w.global::<ImportExportState>(),
             &s.data,
@@ -98,7 +104,9 @@ impl Ctx {
 
     /// Put a file preview in the grid, or empty it.
     fn set_preview_models(&self) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let s = self.session.borrow();
         view::set_preview(&w.global::<ImportExportState>(), &s.data.wizard);
     }
@@ -108,7 +116,9 @@ impl Ctx {
     /// Open the panel on a connection. `table` preselects a table (the table
     /// tab that is open, for instance).
     pub(super) fn open_import_export(self: &Rc<Self>, tab: Option<i32>) {
-        let Some(w) = self.window.upgrade() else { return };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
         let Some(target) = self.data_target() else {
             self.toast("Open a connection to import or export data.", Tone::Neutral);
             return;
@@ -130,13 +140,15 @@ impl Ctx {
         {
             let mut s = self.session.borrow_mut();
             if fresh {
-                s.data = DataSession { connection_id: target.id.clone(), ..DataSession::default() };
+                s.data = DataSession {
+                    connection_id: target.id.clone(),
+                    ..DataSession::default()
+                };
                 s.data.wizard = ImportWizard::new(&target.schema());
-                s.data.dump.path = s.data.dump.suggested_path(
-                    &suggest_dir(),
-                    &target.raw_schema_name(),
-                    &today(),
-                );
+                s.data.dump.path =
+                    s.data
+                        .dump
+                        .suggested_path(&suggest_dir(), &target.raw_schema_name(), &today());
                 g.set_import_path("".into());
                 g.set_new_table_text("".into());
                 g.set_skip_rows("".into());
@@ -151,7 +163,8 @@ impl Ctx {
             let d = &mut s.data;
             // The schema may have been discovered since the last opening.
             d.wizard.schema = target.schema();
-            d.wizard.options.schema = (!d.wizard.schema.is_empty()).then(|| d.wizard.schema.clone());
+            d.wizard.options.schema =
+                (!d.wizard.schema.is_empty()).then(|| d.wizard.schema.clone());
             if let Some(t) = tab {
                 d.tab = t.clamp(0, forms::TABS.len() as i32 - 1);
             }
@@ -191,7 +204,9 @@ impl Ctx {
     // -- Tables --------------------------------------------------------------
 
     fn load_data_tables(self: &Rc<Self>) {
-        let Some(target) = self.data_target() else { return };
+        let Some(target) = self.data_target() else {
+            return;
+        };
         let ticket = {
             let mut s = self.session.borrow_mut();
             s.data.tables_loading = true;
@@ -289,7 +304,9 @@ impl Ctx {
                 // runtime threads the drivers use.
                 tokio::task::spawn_blocking(move || svc::preview_import_file(&path, &opts))
                     .await
-                    .unwrap_or_else(|e| Err(DbError::InternalError(format!("Preview task failed: {e}"))))
+                    .unwrap_or_else(|e| {
+                        Err(DbError::InternalError(format!("Preview task failed: {e}")))
+                    })
             },
             move |result| {
                 with_ctx(|ctx| {
@@ -333,7 +350,9 @@ impl Ctx {
     }
 
     fn load_target_columns(self: &Rc<Self>) {
-        let Some(target) = self.data_target() else { return };
+        let Some(target) = self.data_target() else {
+            return;
+        };
         let (table, ticket) = {
             let mut s = self.session.borrow_mut();
             let d = &mut s.data;
@@ -341,7 +360,10 @@ impl Ctx {
                 return;
             }
             d.columns_loading = true;
-            (d.wizard.options.table_name.clone(), d.columns_latest.begin())
+            (
+                d.wizard.options.table_name.clone(),
+                d.columns_latest.begin(),
+            )
         };
         self.refresh_data_panel();
         let state = self.state.clone();
@@ -367,7 +389,9 @@ impl Ctx {
                                 d.wizard.apply_target_columns(cols)
                             }
                             Ok(_) => {}
-                            Err(e) => d.wizard.error = format!("Could not read the table's columns: {e}"),
+                            Err(e) => {
+                                d.wizard.error = format!("Could not read the table's columns: {e}")
+                            }
                         }
                     }
                     ctx.refresh_data_panel();
@@ -384,17 +408,27 @@ impl Ctx {
     }
 
     fn import_step_picked(&self, index: i32) {
-        if let Some(step) = usize::try_from(index).ok().and_then(|i| Step::ORDER.get(i)).copied() {
+        if let Some(step) = usize::try_from(index)
+            .ok()
+            .and_then(|i| Step::ORDER.get(i))
+            .copied()
+        {
             self.session.borrow_mut().data.wizard.go_to(step);
         }
         self.refresh_data_panel();
     }
 
     fn import_table_picked(self: &Rc<Self>, index: i32) {
-        let picked = self.session.borrow_mut().data.wizard.set_target_table_by_index(index);
+        let picked = self
+            .session
+            .borrow_mut()
+            .data
+            .wizard
+            .set_target_table_by_index(index);
         if picked.is_some() {
             if let Some(w) = self.window.upgrade() {
-                w.global::<ImportExportState>().set_new_table_text("".into());
+                w.global::<ImportExportState>()
+                    .set_new_table_text("".into());
             }
             self.refresh_data_panel();
             self.load_target_columns();
@@ -415,7 +449,9 @@ impl Ctx {
     /// Plan the import: read the whole file and build the statements that
     /// would run. Nothing is written until the user has seen them.
     fn import_review(self: &Rc<Self>) {
-        let Some(target) = self.data_target() else { return };
+        let Some(target) = self.data_target() else {
+            return;
+        };
         let (path, options, cached, ticket) = {
             let mut s = self.session.borrow_mut();
             let d = &mut s.data;
@@ -470,14 +506,18 @@ impl Ctx {
     }
 
     fn import_run(self: &Rc<Self>) {
-        let Some(target) = self.data_target() else { return };
+        let Some(target) = self.data_target() else {
+            return;
+        };
         let (source, options, cancel) = {
             let mut s = self.session.borrow_mut();
             let d = &mut s.data;
             if !d.wizard.can_import() {
                 return;
             }
-            let Some(source) = d.wizard.source.clone() else { return };
+            let Some(source) = d.wizard.source.clone() else {
+                return;
+            };
             d.wizard.import_started();
             d.import_cancel.store(false, Ordering::Relaxed);
             (source, d.wizard.options.clone(), d.import_cancel.clone())
@@ -499,7 +539,11 @@ impl Ctx {
             match result {
                 Ok(r) => {
                     let summary = import_summary(&r);
-                    let tone = if r.success { Tone::Success } else { Tone::Warning };
+                    let tone = if r.success {
+                        Tone::Success
+                    } else {
+                        Tone::Warning
+                    };
                     reload = r.rows_imported > 0;
                     d.wizard.import_finished(r);
                     (summary, tone)
@@ -537,7 +581,9 @@ impl Ctx {
     // -- SQL file --------------------------------------------------------------
 
     fn sql_run(self: &Rc<Self>) {
-        let Some(target) = self.data_target() else { return };
+        let Some(target) = self.data_target() else {
+            return;
+        };
         let (path, options, cancel) = {
             let mut s = self.session.borrow_mut();
             let d = &mut s.data;
@@ -558,7 +604,11 @@ impl Ctx {
             d.sql_result = None;
             d.sql_running = true;
             d.sql_cancel.store(false, Ordering::Relaxed);
-            (forms::expand_home(d.sql.path.trim()), options, d.sql_cancel.clone())
+            (
+                forms::expand_home(d.sql.path.trim()),
+                options,
+                d.sql_cancel.clone(),
+            )
         };
         self.refresh_data_panel();
         let state = self.state.clone();
@@ -626,7 +676,10 @@ impl Ctx {
         {
             let mut s = self.session.borrow_mut();
             let d = &mut s.data;
-            if let Some(t) = usize::try_from(index).ok().and_then(|i| d.wizard.tables.get(i)) {
+            if let Some(t) = usize::try_from(index)
+                .ok()
+                .and_then(|i| d.wizard.tables.get(i))
+            {
                 d.export.table = t.clone();
             }
             d.export_result.clear();
@@ -652,7 +705,9 @@ impl Ctx {
     }
 
     fn export_run(self: &Rc<Self>) {
-        let Some(target) = self.data_target() else { return };
+        let Some(target) = self.data_target() else {
+            return;
+        };
         let (table, opts) = {
             let mut s = self.session.borrow_mut();
             let d = &mut s.data;
@@ -708,12 +763,16 @@ impl Ctx {
     // -- SQL dump ----------------------------------------------------------------
 
     fn suggest_dump_path(&self) {
-        let Some(target) = self.data_target() else { return };
+        let Some(target) = self.data_target() else {
+            return;
+        };
         let path = {
             let mut s = self.session.borrow_mut();
             let d = &mut s.data;
             d.dump_path_touched = false;
-            d.dump.path = d.dump.suggested_path(&suggest_dir(), &target.raw_schema_name(), &today());
+            d.dump.path =
+                d.dump
+                    .suggested_path(&suggest_dir(), &target.raw_schema_name(), &today());
             d.dump.path.clone()
         };
         if let Some(w) = self.window.upgrade() {
@@ -722,7 +781,9 @@ impl Ctx {
     }
 
     fn dump_run(self: &Rc<Self>) {
-        let Some(target) = self.data_target() else { return };
+        let Some(target) = self.data_target() else {
+            return;
+        };
         let (opts, path) = {
             let mut s = self.session.borrow_mut();
             let d = &mut s.data;
@@ -840,7 +901,11 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     on!(on_import_review, |c| c.import_review());
     on!(on_import_run, |c| c.import_run());
     on!(on_import_stop, |c| {
-        c.session.borrow().data.import_cancel.store(true, Ordering::Relaxed);
+        c.session
+            .borrow()
+            .data
+            .import_cancel
+            .store(true, Ordering::Relaxed);
     });
     on!(on_import_again, |c| c.import_again());
     on!(on_table_picked, |c, i| c.import_table_picked(i));
@@ -850,20 +915,36 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         c.refresh_data_panel();
     });
     on!(on_mapping_target, |c, row, choice| {
-        c.session.borrow_mut().data.wizard.set_mapping_target(row.max(0) as usize, choice.max(0) as usize);
+        c.session
+            .borrow_mut()
+            .data
+            .wizard
+            .set_mapping_target(row.max(0) as usize, choice.max(0) as usize);
         c.refresh_data_panel();
     });
     on!(on_mapping_type, |c, row, ty| {
-        c.session.borrow_mut().data.wizard.set_mapping_type(row.max(0) as usize, ty.max(0) as usize);
+        c.session
+            .borrow_mut()
+            .data
+            .wizard
+            .set_mapping_type(row.max(0) as usize, ty.max(0) as usize);
         c.refresh_data_panel();
     });
     on!(on_mapping_default, |c, row, t| {
         // No refresh: rebuilding the rows would take focus from the field
         // being typed in.
-        c.session.borrow_mut().data.wizard.set_mapping_default(row.max(0) as usize, &t);
+        c.session
+            .borrow_mut()
+            .data
+            .wizard
+            .set_mapping_default(row.max(0) as usize, &t);
     });
     on!(on_mapping_skip, |c, row| {
-        c.session.borrow_mut().data.wizard.toggle_skip(row.max(0) as usize);
+        c.session
+            .borrow_mut()
+            .data
+            .wizard
+            .toggle_skip(row.max(0) as usize);
         c.refresh_data_panel();
     });
     on!(on_truncate_toggled, |c| {
@@ -874,8 +955,18 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         }
         c.refresh_data_panel();
     });
-    on!(on_skip_rows_edited, |c, t| c.session.borrow_mut().data.wizard.set_skip_rows_text(&t));
-    on!(on_batch_size_edited, |c, t| c.session.borrow_mut().data.wizard.set_batch_size_text(&t));
+    on!(on_skip_rows_edited, |c, t| c
+        .session
+        .borrow_mut()
+        .data
+        .wizard
+        .set_skip_rows_text(&t));
+    on!(on_batch_size_edited, |c, t| c
+        .session
+        .borrow_mut()
+        .data
+        .wizard
+        .set_batch_size_text(&t));
     on!(on_confirm_edited, |c, t| {
         c.session.borrow_mut().data.wizard.confirm_input = t.to_string();
         c.refresh_data_panel();
@@ -905,7 +996,11 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     });
     on!(on_sql_run, |c| c.sql_run());
     on!(on_sql_stop, |c| {
-        c.session.borrow().data.sql_cancel.store(true, Ordering::Relaxed);
+        c.session
+            .borrow()
+            .data
+            .sql_cancel
+            .store(true, Ordering::Relaxed);
     });
     on!(on_sql_again, |c| {
         {
@@ -946,7 +1041,13 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
         }
         c.refresh_data_panel();
     });
-    on!(on_export_limit_edited, |c, t| c.session.borrow_mut().data.export.limit_text = t.to_string());
+    on!(on_export_limit_edited, |c, t| c
+        .session
+        .borrow_mut()
+        .data
+        .export
+        .limit_text =
+        t.to_string());
     on!(on_export_run, |c| c.export_run());
 
     on!(on_dump_drop_toggled, |c| {

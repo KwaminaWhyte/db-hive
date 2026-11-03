@@ -134,7 +134,10 @@ impl ImportWizard {
 
     pub fn delimiter_index(&self) -> i32 {
         let d = self.options.delimiter.unwrap_or(',');
-        DELIMITERS.iter().position(|(_, c)| *c == d).map_or(0, |i| i as i32)
+        DELIMITERS
+            .iter()
+            .position(|(_, c)| *c == d)
+            .map_or(0, |i| i as i32)
     }
 
     pub fn set_delimiter_index(&mut self, index: i32) {
@@ -147,7 +150,10 @@ impl ImportWizard {
     }
 
     pub fn is_spreadsheet(&self) -> bool {
-        matches!(svc::file_kind(self.file_path.trim()).as_str(), "xlsx" | "xls")
+        matches!(
+            svc::file_kind(self.file_path.trim()).as_str(),
+            "xlsx" | "xls"
+        )
     }
 
     pub fn preview_options(&self) -> PreviewOptions {
@@ -197,7 +203,10 @@ impl ImportWizard {
             &self.target_columns,
         );
         if self.options.sheet_name.is_none() {
-            self.options.sheet_name = preview.sheet_names.as_ref().and_then(|n| n.first().cloned());
+            self.options.sheet_name = preview
+                .sheet_names
+                .as_ref()
+                .and_then(|n| n.first().cloned());
         }
         self.preview = Some(preview);
         self.error.clear();
@@ -236,7 +245,10 @@ impl ImportWizard {
     }
 
     pub fn set_target_table_by_index(&mut self, index: i32) -> Option<String> {
-        let name = usize::try_from(index).ok().and_then(|i| self.tables.get(i))?.clone();
+        let name = usize::try_from(index)
+            .ok()
+            .and_then(|i| self.tables.get(i))?
+            .clone();
         self.set_target_table(&name);
         Some(name)
     }
@@ -269,7 +281,11 @@ impl ImportWizard {
                 .map(|(i, c)| ColumnMapping {
                     source_column: c.clone(),
                     target_column: c.clone(),
-                    target_type: p.detected_types.get(i).cloned().or_else(|| Some("TEXT".into())),
+                    target_type: p
+                        .detected_types
+                        .get(i)
+                        .cloned()
+                        .or_else(|| Some("TEXT".into())),
                     default_value: None,
                     skip: false,
                 })
@@ -283,7 +299,11 @@ impl ImportWizard {
     /// the user has not started editing it.
     pub fn apply_target_columns(&mut self, columns: Vec<TableColumnInfo>) {
         if let Some(p) = &self.preview {
-            let untouched = self.options.column_mappings.iter().all(|m| m.target_column.is_empty());
+            let untouched = self
+                .options
+                .column_mappings
+                .iter()
+                .all(|m| m.target_column.is_empty());
             if untouched {
                 self.options.column_mappings =
                     svc::auto_map_columns(&p.columns, &p.detected_types, &columns);
@@ -317,8 +337,12 @@ impl ImportWizard {
     /// `choice` indexes [`target_choices`](Self::target_choices).
     pub fn set_mapping_target(&mut self, row: usize, choice: usize) {
         let choices = self.target_choices();
-        let Some(name) = choices.get(choice).cloned() else { return };
-        let Some(m) = self.options.column_mappings.get_mut(row) else { return };
+        let Some(name) = choices.get(choice).cloned() else {
+            return;
+        };
+        let Some(m) = self.options.column_mappings.get_mut(row) else {
+            return;
+        };
         if choice == 0 {
             m.target_column.clear();
             m.skip = true;
@@ -335,7 +359,10 @@ impl ImportWizard {
     }
 
     pub fn set_mapping_type(&mut self, row: usize, type_index: usize) {
-        if let (Some(m), Some(t)) = (self.options.column_mappings.get_mut(row), svc::DATA_TYPES.get(type_index)) {
+        if let (Some(m), Some(t)) = (
+            self.options.column_mappings.get_mut(row),
+            svc::DATA_TYPES.get(type_index),
+        ) {
             m.target_type = Some((*t).to_string());
             self.invalidate_plan();
         }
@@ -415,7 +442,8 @@ impl ImportWizard {
                 }
             }
         };
-        self.options.schema = (!self.schema.trim().is_empty()).then(|| self.schema.trim().to_string());
+        self.options.schema =
+            (!self.schema.trim().is_empty()).then(|| self.schema.trim().to_string());
         // A name that is not a table yet is created from the file's columns.
         self.options.create_table = self.is_new_table();
         Ok(())
@@ -686,7 +714,11 @@ mod tests {
         w.set_delimiter_index(1);
         assert_eq!(w.options.delimiter, Some(';'));
         w.set_file_path("/x/a.tsv");
-        assert_eq!(w.options.delimiter, Some(';'), "a deliberate choice is kept");
+        assert_eq!(
+            w.options.delimiter,
+            Some(';'),
+            "a deliberate choice is kept"
+        );
     }
 
     #[test]
@@ -698,7 +730,10 @@ mod tests {
         assert!(!m[0].skip);
         assert_eq!(m[1].target_column, "name");
         assert_eq!(m[2].target_column, "");
-        assert!(m[2].skip, "an unmatched column is skipped until the user picks a target");
+        assert!(
+            m[2].skip,
+            "an unmatched column is skipped until the user picks a target"
+        );
         assert_eq!(w.mapping_summary(), "2 of 3 columns will be imported");
         assert!(w.mapping_ready());
         assert_eq!(w.step, Step::Preview);
@@ -708,7 +743,11 @@ mod tests {
     fn choosing_a_table_clears_suggestions_that_belonged_to_the_old_one() {
         let mut w = ready_wizard();
         w.set_target_table("gadgets");
-        assert!(w.options.column_mappings.iter().all(|m| m.target_column.is_empty() && m.skip));
+        assert!(w
+            .options
+            .column_mappings
+            .iter()
+            .all(|m| m.target_column.is_empty() && m.skip));
         assert!(!w.mapping_ready());
         // Its columns arrive: the untouched mapping is suggested again.
         w.apply_target_columns(vec![target("name", "text"), target("extra", "text")]);
@@ -734,13 +773,22 @@ mod tests {
         assert_eq!(w.options.column_mappings[0].target_column, "");
         w.set_mapping_target(0, 1);
         assert_eq!(w.options.column_mappings[0].target_column, "id");
-        assert_eq!(w.options.column_mappings[0].target_type.as_deref(), Some("integer"));
+        assert_eq!(
+            w.options.column_mappings[0].target_type.as_deref(),
+            Some("integer")
+        );
         assert!(!w.options.column_mappings[0].skip);
 
         w.set_mapping_type(1, 0);
-        assert_eq!(w.options.column_mappings[1].target_type.as_deref(), Some(svc::DATA_TYPES[0]));
+        assert_eq!(
+            w.options.column_mappings[1].target_type.as_deref(),
+            Some(svc::DATA_TYPES[0])
+        );
         w.set_mapping_default(1, "n/a");
-        assert_eq!(w.options.column_mappings[1].default_value.as_deref(), Some("n/a"));
+        assert_eq!(
+            w.options.column_mappings[1].default_value.as_deref(),
+            Some("n/a")
+        );
         w.set_mapping_default(1, "");
         assert_eq!(w.options.column_mappings[1].default_value, None);
 
@@ -827,7 +875,11 @@ mod tests {
         assert_eq!(w.step, Step::Confirm);
         w.set_batch_size_text("5");
         assert!(w.plan.is_none());
-        assert_eq!(w.step, Step::Options, "a stale plan must never be confirmable");
+        assert_eq!(
+            w.step,
+            Step::Options,
+            "a stale plan must never be confirmable"
+        );
     }
 
     fn plan(rows: usize, destructive: bool) -> ImportPlan {
@@ -872,7 +924,10 @@ mod tests {
         assert!(!w.can_enter(Step::Mapping));
         w.apply_preview(preview(&["id"]));
         assert!(w.can_enter(Step::Mapping));
-        assert!(!w.can_enter(Step::Options), "no target table or mapping yet");
+        assert!(
+            !w.can_enter(Step::Options),
+            "no target table or mapping yet"
+        );
         assert!(!w.can_enter(Step::Confirm));
         assert!(w.next()); // Preview -> Mapping
         assert_eq!(w.step, Step::Mapping);
@@ -884,7 +939,10 @@ mod tests {
         w.back();
         assert_eq!(w.step, Step::Mapping);
         assert!(w.go_to(Step::File));
-        assert!(!w.go_to(Step::Options), "forward jumps go through the buttons");
+        assert!(
+            !w.go_to(Step::Options),
+            "forward jumps go through the buttons"
+        );
     }
 
     #[test]
@@ -902,14 +960,23 @@ mod tests {
         w.import_started();
         assert_eq!(w.step, Step::Running);
         assert!(!w.can_enter(Step::File));
-        w.import_finished(ImportResult { rows_imported: 5, rows_failed: 0, errors: vec![], success: true });
+        w.import_finished(ImportResult {
+            rows_imported: 5,
+            rows_failed: 0,
+            errors: vec![],
+            success: true,
+        });
         assert_eq!(w.step, Step::Complete);
         assert!(!w.can_enter(Step::Options));
         w.restart();
         assert_eq!(w.step, Step::File);
         assert_eq!(w.schema, "public");
         assert!(w.result.is_none());
-        assert_eq!(w.tables, vec!["widgets"], "the table list survives a restart");
+        assert_eq!(
+            w.tables,
+            vec!["widgets"],
+            "the table list survives a restart"
+        );
     }
 
     #[test]
@@ -925,12 +992,22 @@ mod tests {
     #[test]
     fn the_error_list_is_cut_and_counts_what_was_not_shown() {
         let errors: Vec<String> = (1..=10).map(|i| format!("Row {i}: bad")).collect();
-        let r = ImportResult { rows_imported: 90, rows_failed: 100, errors, success: false };
+        let r = ImportResult {
+            rows_imported: 90,
+            rows_failed: 100,
+            errors,
+            success: false,
+        };
         let list = error_list(&r);
         assert_eq!(list.lines.len(), ERROR_LIST_SHOWN);
         assert_eq!(list.more, "...and 94 more failed rows");
 
-        let short = ImportResult { rows_imported: 0, rows_failed: 2, errors: vec!["a".into(), "b".into()], success: false };
+        let short = ImportResult {
+            rows_imported: 0,
+            rows_failed: 2,
+            errors: vec!["a".into(), "b".into()],
+            success: false,
+        };
         let list = error_list(&short);
         assert_eq!(list.lines, vec!["a", "b"]);
         assert_eq!(list.more, "");
@@ -946,11 +1023,26 @@ mod tests {
 
     #[test]
     fn the_result_banner_distinguishes_clean_partial_and_failed() {
-        let ok = ImportResult { rows_imported: 3, rows_failed: 0, errors: vec![], success: true };
+        let ok = ImportResult {
+            rows_imported: 3,
+            rows_failed: 0,
+            errors: vec![],
+            success: true,
+        };
         assert_eq!(result_tone(&ok), ResultTone::Success);
-        let partial = ImportResult { rows_imported: 3, rows_failed: 1, errors: vec![], success: false };
+        let partial = ImportResult {
+            rows_imported: 3,
+            rows_failed: 1,
+            errors: vec![],
+            success: false,
+        };
         assert_eq!(result_tone(&partial), ResultTone::Warning);
-        let none = ImportResult { rows_imported: 0, rows_failed: 4, errors: vec![], success: false };
+        let none = ImportResult {
+            rows_imported: 0,
+            rows_failed: 4,
+            errors: vec![],
+            success: false,
+        };
         assert_eq!(result_tone(&none), ResultTone::Failure);
     }
 

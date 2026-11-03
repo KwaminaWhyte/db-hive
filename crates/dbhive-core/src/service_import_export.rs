@@ -681,7 +681,10 @@ pub fn parse_table_filter(input: &str) -> Vec<String> {
 pub fn drop_statement(driver: &DbDriver, schema: &str, table: &str) -> String {
     match driver {
         DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon | DbDriver::Sqlite => {
-            format!("DROP TABLE IF EXISTS {} CASCADE;", qualify(driver, schema, table))
+            format!(
+                "DROP TABLE IF EXISTS {} CASCADE;",
+                qualify(driver, schema, table)
+            )
         }
         DbDriver::Turso => format!("DROP TABLE IF EXISTS {};", quote_ident(driver, table)),
         DbDriver::MySql => {
@@ -763,9 +766,7 @@ pub fn driver_kind(state: &Mutex<AppState>, connection_id: &str) -> Result<DbDri
     guard
         .get_profile(connection_id)
         .map(|p| p.driver.clone())
-        .ok_or_else(|| {
-            DbError::NotFound(format!("Connection profile {} not found", connection_id))
-        })
+        .ok_or_else(|| DbError::NotFound(format!("Connection profile {} not found", connection_id)))
 }
 
 /// Export schema and/or data to a SQL file. Returns the number of tables written.
@@ -793,7 +794,10 @@ pub async fn export_to_sql(
     let stamp = chrono::Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
     write_sql(&mut out, &dump_header(&kind, &stamp))?;
 
-    let schema = options.schema.clone().unwrap_or_else(|| "public".to_string());
+    let schema = options
+        .schema
+        .clone()
+        .unwrap_or_else(|| "public".to_string());
     // What table names are qualified with in the file. SQLite has no schema
     // to name, and the shell hands over the database path or "main" there.
     let qualifier = effective_schema(&kind, &schema);
@@ -819,7 +823,10 @@ pub async fn export_to_sql(
         write_sql(&mut out, &format!("\n-- Table: {}\n", shown(table)))?;
 
         if options.include_drop {
-            write_sql(&mut out, &format!("{}\n", drop_statement(&kind, &qualifier, table)))?;
+            write_sql(
+                &mut out,
+                &format!("{}\n", drop_statement(&kind, &qualifier, table)),
+            )?;
         }
 
         if options.include_create {
@@ -848,10 +855,7 @@ pub async fn export_to_sql(
             if result.rows.is_empty() {
                 write_sql(&mut out, "-- No data in table\n")?;
             } else {
-                write_sql(
-                    &mut out,
-                    &format!("\n-- Data for table {}\n", shown(table)),
-                )?;
+                write_sql(&mut out, &format!("\n-- Data for table {}\n", shown(table)))?;
                 let cols: Vec<String> = result
                     .columns
                     .iter()
@@ -1699,10 +1703,7 @@ pub fn map_row(
                 .map(|s| s.as_str())
                 .unwrap_or("");
             if raw.is_empty() {
-                m.default_value
-                    .as_ref()
-                    .filter(|d| !d.is_empty())
-                    .cloned()
+                m.default_value.as_ref().filter(|d| !d.is_empty()).cloned()
             } else {
                 Some(boolean_cell(raw, m.target_type.as_deref()))
             }
@@ -1880,7 +1881,12 @@ pub fn build_import_plan(
     let sample_statements: Vec<String> = mapped
         .chunks(batch)
         .take(PLAN_SAMPLE_STATEMENTS)
-        .map(|chunk| format!("{};", insert_statement(driver, &target, &target_columns, chunk)))
+        .map(|chunk| {
+            format!(
+                "{};",
+                insert_statement(driver, &target, &target_columns, chunk)
+            )
+        })
         .collect();
 
     let row_count = rows.len();
@@ -1980,8 +1986,8 @@ fn read_csv_data(file_path: &str, options: &DataImportOptions) -> Result<ImportS
 
     let mut rows: Vec<Vec<String>> = Vec::new();
     for result in reader.records() {
-        let record = result
-            .map_err(|e| DbError::ImportError(format!("Failed to read CSV row: {}", e)))?;
+        let record =
+            result.map_err(|e| DbError::ImportError(format!("Failed to read CSV row: {}", e)))?;
         rows.push(record.iter().map(|s| s.to_string()).collect());
     }
 
@@ -2241,7 +2247,11 @@ mod tests {
         assert_eq!(effective_schema(&DbDriver::Postgres, " app "), "app");
         assert_eq!(effective_schema(&DbDriver::MySql, "shop"), "shop");
         // A path that went through qualify would not run on SQLite.
-        let t = qualify(&DbDriver::Sqlite, &effective_schema(&DbDriver::Sqlite, "/d/x.db"), "t");
+        let t = qualify(
+            &DbDriver::Sqlite,
+            &effective_schema(&DbDriver::Sqlite, "/d/x.db"),
+            "t",
+        );
         assert_eq!(t, "\"t\"");
     }
 
@@ -2297,10 +2307,7 @@ mod tests {
             "a,b",
             "a comma is safe when the delimiter is a semicolon"
         );
-        assert_eq!(
-            escape_csv_value("a;b", ';', CsvQuoting::Minimal),
-            "\"a;b\""
-        );
+        assert_eq!(escape_csv_value("a;b", ';', CsvQuoting::Minimal), "\"a;b\"");
         assert_eq!(
             escape_csv_value("a\tb", '\t', CsvQuoting::Minimal),
             "\"a\tb\""
@@ -2315,7 +2322,10 @@ mod tests {
             "\"hello \"\"world\"\"\""
         );
         // A lone quote still forces quoting, even with no delimiter present.
-        assert_eq!(escape_csv_value("a\"b", ',', CsvQuoting::Minimal), "\"a\"\"b\"");
+        assert_eq!(
+            escape_csv_value("a\"b", ',', CsvQuoting::Minimal),
+            "\"a\"\"b\""
+        );
     }
 
     #[test]
@@ -2447,10 +2457,7 @@ mod tests {
 
     #[test]
     fn xml_special_characters_cannot_break_out_of_a_cell() {
-        assert_eq!(
-            xml_escape("<Cell>&\"'"),
-            "&lt;Cell&gt;&amp;&quot;&apos;"
-        );
+        assert_eq!(xml_escape("<Cell>&\"'"), "&lt;Cell&gt;&amp;&quot;&apos;");
         // A control byte would make Excel reject the workbook outright.
         assert_eq!(xml_escape("a\u{1}b"), "ab");
     }
@@ -2462,7 +2469,11 @@ mod tests {
             &["n".to_string(), "s".to_string()],
             &[vec![json!(42), Value::Null]],
         );
-        assert!(out.contains("<Data ss:Type=\"Number\">42</Data>"), "{}", out);
+        assert!(
+            out.contains("<Data ss:Type=\"Number\">42</Data>"),
+            "{}",
+            out
+        );
         assert!(out.contains("<Cell/>"), "{}", out);
         assert!(out.contains("ss:Name=\"Results\""), "{}", out);
     }
@@ -2482,8 +2493,8 @@ mod tests {
         let out = sql_value_to_string(&DbDriver::Postgres, &json!(evil));
         assert_eq!(out, "'''); DROP TABLE users; --'");
         assert!(
-            !out[1..out.len() - 1].contains('\''
-                ) || out[1..out.len() - 1].matches('\'').count() % 2 == 0,
+            !out[1..out.len() - 1].contains('\'')
+                || out[1..out.len() - 1].matches('\'').count() % 2 == 0,
             "every quote inside the literal must be doubled: {}",
             out
         );
@@ -2501,11 +2512,23 @@ mod tests {
 
     #[test]
     fn sql_literals_keep_types_that_are_not_strings() {
-        assert_eq!(sql_value_to_string(&DbDriver::Postgres, &Value::Null), "NULL");
-        assert_eq!(sql_value_to_string(&DbDriver::Postgres, &json!(true)), "TRUE");
-        assert_eq!(sql_value_to_string(&DbDriver::Postgres, &json!(false)), "FALSE");
+        assert_eq!(
+            sql_value_to_string(&DbDriver::Postgres, &Value::Null),
+            "NULL"
+        );
+        assert_eq!(
+            sql_value_to_string(&DbDriver::Postgres, &json!(true)),
+            "TRUE"
+        );
+        assert_eq!(
+            sql_value_to_string(&DbDriver::Postgres, &json!(false)),
+            "FALSE"
+        );
         assert_eq!(sql_value_to_string(&DbDriver::Postgres, &json!(42)), "42");
-        assert_eq!(sql_value_to_string(&DbDriver::Postgres, &json!(-1.5)), "-1.5");
+        assert_eq!(
+            sql_value_to_string(&DbDriver::Postgres, &json!(-1.5)),
+            "-1.5"
+        );
     }
 
     #[test]
@@ -2599,7 +2622,9 @@ mod tests {
             &[vec![json!(1), json!("O'Hara")]],
         );
         assert!(
-            sql.contains("INSERT INTO \"public\".\"users\" (\"id\", \"name\") VALUES (1, 'O''Hara');"),
+            sql.contains(
+                "INSERT INTO \"public\".\"users\" (\"id\", \"name\") VALUES (1, 'O''Hara');"
+            ),
             "{}",
             sql
         );
@@ -2751,11 +2776,8 @@ mod tests {
         assert_eq!(src.rows.len(), 2, "the first row is data, not a header");
         assert_eq!(src.rows[0], vec!["1", "ada"]);
 
-        let with_header = read_import_file(
-            path.to_str().unwrap(),
-            &DataImportOptions::default(),
-        )
-        .unwrap();
+        let with_header =
+            read_import_file(path.to_str().unwrap(), &DataImportOptions::default()).unwrap();
         assert_eq!(with_header.columns, vec!["1", "ada"]);
         assert_eq!(with_header.rows.len(), 1);
 
@@ -2827,7 +2849,11 @@ mod tests {
         ];
         let mappings = auto_map_columns(
             &["id".to_string(), "Email".to_string(), "extra".to_string()],
-            &["INTEGER".to_string(), "TEXT".to_string(), "TEXT".to_string()],
+            &[
+                "INTEGER".to_string(),
+                "TEXT".to_string(),
+                "TEXT".to_string(),
+            ],
             &targets,
         );
         assert_eq!(mappings[0].target_column, "ID");
@@ -2872,7 +2898,13 @@ mod tests {
 
     #[test]
     fn boolean_words_become_1_and_0_only_for_boolean_like_columns() {
-        for (raw, want) in [("true", "1"), ("FALSE", "0"), (" Yes ", "1"), ("n", "0"), ("T", "1")] {
+        for (raw, want) in [
+            ("true", "1"),
+            ("FALSE", "0"),
+            (" Yes ", "1"),
+            ("n", "0"),
+            ("T", "1"),
+        ] {
             assert_eq!(boolean_cell(raw, Some("BOOLEAN")), want, "{raw:?}");
             assert_eq!(boolean_cell(raw, Some("tinyint(1)")), want, "{raw:?}");
             assert_eq!(boolean_cell(raw, Some("bool")), want, "{raw:?}");
@@ -2890,8 +2922,14 @@ mod tests {
     fn a_boolean_word_is_converted_when_a_row_is_mapped() {
         let src = source(&["flag", "label"], &[&["true", "true"]]);
         let mappings = vec![
-            ColumnMapping { target_type: Some("BOOLEAN".to_string()), ..mapping("flag", "flag") },
-            ColumnMapping { target_type: Some("TEXT".to_string()), ..mapping("label", "label") },
+            ColumnMapping {
+                target_type: Some("BOOLEAN".to_string()),
+                ..mapping("flag", "flag")
+            },
+            ColumnMapping {
+                target_type: Some("TEXT".to_string()),
+                ..mapping("label", "label")
+            },
         ];
         let row = map_row(&src.columns, &src.rows[0], &mappings);
         assert_eq!(row, vec![Some("1".to_string()), Some("true".to_string())]);
@@ -2980,16 +3018,9 @@ mod tests {
             &DbDriver::Postgres,
             "\"t\"",
             &["a".to_string()],
-            &[
-                vec![Some("1".into())],
-                vec![None],
-                vec![Some("3".into())],
-            ],
+            &[vec![Some("1".into())], vec![None], vec![Some("3".into())]],
         );
-        assert_eq!(
-            sql,
-            "INSERT INTO \"t\" (\"a\") VALUES ('1'), (NULL), ('3')"
-        );
+        assert_eq!(sql, "INSERT INTO \"t\" (\"a\") VALUES ('1'), (NULL), ('3')");
     }
 
     #[test]
@@ -3030,7 +3061,10 @@ mod tests {
 
     #[test]
     fn the_plan_reports_the_target_row_count_and_batching() {
-        let src = source(&["id", "name"], &[&["1", "ada"], &["2", "grace"], &["3", "x"]]);
+        let src = source(
+            &["id", "name"],
+            &[&["1", "ada"], &["2", "grace"], &["3", "x"]],
+        );
         let options = DataImportOptions {
             table_name: "users".into(),
             schema: Some("public".into()),
@@ -3068,7 +3102,11 @@ mod tests {
         };
         let plan = build_import_plan(&DbDriver::Postgres, &src, &options).unwrap();
         assert_eq!(plan.row_count, 1);
-        assert!(plan.sample_statements[0].contains("('3')"), "{}", plan.sample_statements[0]);
+        assert!(
+            plan.sample_statements[0].contains("('3')"),
+            "{}",
+            plan.sample_statements[0]
+        );
 
         // Skipping past the end is empty, not a panic.
         let options = DataImportOptions {
@@ -3095,8 +3133,14 @@ mod tests {
         };
         let plan = build_import_plan(&DbDriver::Postgres, &src, &options).unwrap();
         assert!(plan.is_destructive());
-        assert_eq!(plan.truncate_statement.as_deref(), Some("TRUNCATE TABLE \"t\";"));
-        assert!(plan.create_statement.unwrap().starts_with("CREATE TABLE IF NOT EXISTS"));
+        assert_eq!(
+            plan.truncate_statement.as_deref(),
+            Some("TRUNCATE TABLE \"t\";")
+        );
+        assert!(plan
+            .create_statement
+            .unwrap()
+            .starts_with("CREATE TABLE IF NOT EXISTS"));
     }
 
     #[test]

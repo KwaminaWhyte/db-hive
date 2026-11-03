@@ -21,7 +21,10 @@ use dbhive_slint::{AppWindow, Screen};
 use slint::{ComponentHandle, Model, Timer, TimerMode};
 
 fn tab_titles(w: &AppWindow) -> Vec<String> {
-    w.get_workspace_tabs().iter().map(|t| t.title.to_string()).collect()
+    w.get_workspace_tabs()
+        .iter()
+        .map(|t| t.title.to_string())
+        .collect()
 }
 
 fn saved(dir: &std::path::Path) -> String {
@@ -69,8 +72,13 @@ fn tabs_and_sql_come_back_when_the_connection_is_reopened() {
     let started = Instant::now();
     let timer = Timer::default();
 
-    let (weak, fail, step2, dir2, db2) =
-        (w.as_weak(), failure.clone(), step.clone(), dir.clone(), db.clone());
+    let (weak, fail, step2, dir2, db2) = (
+        w.as_weak(),
+        failure.clone(),
+        step.clone(),
+        dir.clone(),
+        db.clone(),
+    );
     timer.start(TimerMode::Repeated, Duration::from_millis(20), move || {
         let w = weak.upgrade().unwrap();
         let bail = |msg: String| {
@@ -95,8 +103,13 @@ fn tabs_and_sql_come_back_when_the_connection_is_reopened() {
                 w.invoke_connect("notes-db".into());
                 step2.set(1);
             }
-            1 if w.get_screen() == Screen::Workspace && w.get_workspace_tables().row_count() == 2 => {
-                expect!(saved(&dir2).is_empty(), "nothing should be saved before anything is typed");
+            1 if w.get_screen() == Screen::Workspace
+                && w.get_workspace_tables().row_count() == 2 =>
+            {
+                expect!(
+                    saved(&dir2).is_empty(),
+                    "nothing should be saved before anything is typed"
+                );
                 w.invoke_workspace_editor_edited("SELECT 'first tab' AS marker".into());
                 step2.set(2);
             }
@@ -151,7 +164,9 @@ fn tabs_and_sql_come_back_when_the_connection_is_reopened() {
             {
                 let titles = tab_titles(&w);
                 expect!(
-                    titles[1] == "items" && titles[0].starts_with("Query") && titles[2].starts_with("Query"),
+                    titles[1] == "items"
+                        && titles[0].starts_with("Query")
+                        && titles[2].starts_with("Query"),
                     "tab order was {titles:?} (temp_notes was dropped and must not return)"
                 );
                 expect!(
@@ -183,7 +198,10 @@ fn tabs_and_sql_come_back_when_the_connection_is_reopened() {
                     w.get_workspace_editor_text()
                 );
                 // The restore did not run the query for us.
-                expect!(!w.get_workspace_has_result(), "a restored query must not have run");
+                expect!(
+                    !w.get_workspace_has_result(),
+                    "a restored query must not have run"
+                );
 
                 // Blank both editors and close the table: nothing is worth keeping.
                 w.invoke_workspace_editor_edited("".into());

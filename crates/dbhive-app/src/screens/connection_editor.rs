@@ -30,7 +30,6 @@ use crate::task::Job;
 // Screen state
 // ===========================================================================
 
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum EditorAction {
     /// The profile with this id was created or updated.
@@ -268,7 +267,8 @@ fn poll_jobs(app: &mut DbHiveApp) -> Option<EditorAction> {
             Err(e) => {
                 let msg = e.to_string();
                 app.screens.connection_editor.last_error = Some(msg.clone());
-                app.toasts.error(format!("Could not save connection: {}", msg));
+                app.toasts
+                    .error(format!("Could not save connection: {}", msg));
             }
         }
     }
@@ -436,7 +436,11 @@ fn connection_section(
             .show_ui(ui, |ui| {
                 for driver in ALL_DRIVERS {
                     let selected = ed.form.driver == driver;
-                    if ui.selectable_label(selected, driver_label(&driver)).clicked() && !selected {
+                    if ui
+                        .selectable_label(selected, driver_label(&driver))
+                        .clicked()
+                        && !selected
+                    {
                         next_driver = Some(driver.clone());
                     }
                 }
@@ -450,7 +454,10 @@ fn connection_section(
         // Paste-a-URI shortcut. Parsed on every edit like the web form did, so
         // a paste fills the fields without a second click.
         if !fields.file_path {
-            ui.label(crate::theme::text::muted(palette, "Connection string (optional)"));
+            ui.label(crate::theme::text::muted(
+                palette,
+                "Connection string (optional)",
+            ));
             let resp = ui.add(
                 egui::TextEdit::singleline(&mut ed.connection_string)
                     .hint_text(connection_string_placeholder(&ed.form.driver))
@@ -475,7 +482,9 @@ fn connection_section(
                 ui,
                 palette,
                 database_label(&ed.form.driver),
-                show_errors.then_some(validation.database.as_ref()).flatten(),
+                show_errors
+                    .then_some(validation.database.as_ref())
+                    .flatten(),
                 |ui| {
                     text_field(ui, &mut ed.form.database, "/path/to/database.sqlite");
                 },
@@ -547,7 +556,9 @@ fn connection_section(
                 ui,
                 palette,
                 label,
-                show_errors.then_some(validation.username.as_ref()).flatten(),
+                show_errors
+                    .then_some(validation.username.as_ref())
+                    .flatten(),
                 |ui| {
                     text_field(ui, &mut ed.form.username, "");
                 },
@@ -594,7 +605,10 @@ fn connection_section(
                 .show_ui(ui, |ui| {
                     for mode in [SslMode::Disable, SslMode::Prefer, SslMode::Require] {
                         let selected = ed.form.ssl_mode == mode;
-                        if ui.selectable_label(selected, ssl_mode_label(&mode)).clicked() {
+                        if ui
+                            .selectable_label(selected, ssl_mode_label(&mode))
+                            .clicked()
+                        {
                             ed.form.ssl_mode = mode.clone();
                         }
                     }
@@ -633,7 +647,9 @@ fn ssh_section(
                     ui,
                     palette,
                     "SSH host",
-                    show_errors.then_some(validation.ssh_host.as_ref()).flatten(),
+                    show_errors
+                        .then_some(validation.ssh_host.as_ref())
+                        .flatten(),
                     |ui| {
                         text_field(ui, &mut ed.form.ssh_host, "bastion.example.com");
                     },
@@ -644,7 +660,9 @@ fn ssh_section(
                     ui,
                     palette,
                     "SSH port",
-                    show_errors.then_some(validation.ssh_port.as_ref()).flatten(),
+                    show_errors
+                        .then_some(validation.ssh_port.as_ref())
+                        .flatten(),
                     |ui| {
                         ui.add(
                             egui::TextEdit::singleline(&mut ed.form.ssh_port)
@@ -755,7 +773,11 @@ fn feedback_section(
     if let Some(result) = ed.test_result.clone() {
         let (colour, heading, detail) = match result {
             Ok(msg) => (palette.success, msg, None),
-            Err(detail) => (palette.destructive, "Connection failed".to_string(), Some(detail)),
+            Err(detail) => (
+                palette.destructive,
+                "Connection failed".to_string(),
+                Some(detail),
+            ),
         };
         egui::Frame::none()
             .fill(palette.card)
@@ -808,9 +830,12 @@ fn start_test(app: &mut DbHiveApp, ctx: &egui::Context) {
     let state = app.state.clone();
     let handle = app.rt.handle().clone();
 
-    app.screens.connection_editor.test_job.start(&handle, ctx, async move {
-        test_profile(state, profile, password, ssh_password).await
-    });
+    app.screens
+        .connection_editor
+        .test_job
+        .start(&handle, ctx, async move {
+            test_profile(state, profile, password, ssh_password).await
+        });
 }
 
 fn start_save(app: &mut DbHiveApp, ctx: &egui::Context) {
@@ -838,9 +863,12 @@ fn start_save(app: &mut DbHiveApp, ctx: &egui::Context) {
     let state = app.state.clone();
     let handle = app.rt.handle().clone();
 
-    app.screens.connection_editor.save_job.start(&handle, ctx, async move {
-        save_profile(state, profile, id, password, ssh_password).await
-    });
+    app.screens
+        .connection_editor
+        .save_job
+        .start(&handle, ctx, async move {
+            save_profile(state, profile, id, password, ssh_password).await
+        });
 }
 
 // ===========================================================================
@@ -874,7 +902,10 @@ mod tests {
         assert_eq!(editor.form.id.as_deref(), Some("abc"));
         assert_eq!(editor.form.name, "Staging");
         assert_eq!(editor.form.driver, DbDriver::MySql);
-        assert!(editor.password.is_empty(), "the keyring secret is not shown");
+        assert!(
+            editor.password.is_empty(),
+            "the keyring secret is not shown"
+        );
         assert!(editor.test_result.is_none());
         assert!(!editor.submitted);
     }

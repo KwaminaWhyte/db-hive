@@ -43,7 +43,6 @@ use svc::{
     SqlImportResult, TableColumnInfo,
 };
 
-
 pub use dbhive_ui_model::import_export::*;
 
 use crate::app::DbHiveApp;
@@ -407,8 +406,7 @@ fn export_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, connect
                     );
                     if ui
                         .add_enabled(
-                            !s.export_table.trim().is_empty()
-                                && !s.table_preview_job.is_running(),
+                            !s.export_table.trim().is_empty() && !s.table_preview_job.is_running(),
                             egui::Button::new("Preview"),
                         )
                         .on_hover_text("Read the first 100 rows")
@@ -458,8 +456,7 @@ fn export_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, connect
                 ui.horizontal(|ui| {
                     ui.label("Sheet name");
                     ui.add(
-                        egui::TextEdit::singleline(&mut s.export.sheet_name)
-                            .desired_width(200.0),
+                        egui::TextEdit::singleline(&mut s.export.sheet_name).desired_width(200.0),
                     );
                 });
                 ui.label(text::muted(
@@ -507,7 +504,14 @@ fn export_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, connect
                 }
             }
         };
-        path_row(ui, palette, "ie_export_path", &mut s.export.path, &stem, extension);
+        path_row(
+            ui,
+            palette,
+            "ie_export_path",
+            &mut s.export.path,
+            &stem,
+            extension,
+        );
 
         let ready = !s.export.path.trim().is_empty()
             && match s.export_source {
@@ -681,17 +685,17 @@ fn dump_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, connectio
             let ready = !s.dump_path.trim().is_empty()
                 && (s.dump.include_drop || s.dump.include_create || s.dump.include_data);
             if ui
-                .add_enabled(ready && !s.dump_job.is_running(), egui::Button::new("Export"))
+                .add_enabled(
+                    ready && !s.dump_job.is_running(),
+                    egui::Button::new("Export"),
+                )
                 .clicked()
             {
                 start = true;
             }
             if s.dump_job.is_running() {
                 ui.add(egui::Spinner::new().size(14.0));
-                ui.label(text::muted(
-                    palette,
-                    "Reading tables and writing the dump…",
-                ));
+                ui.label(text::muted(palette, "Reading tables and writing the dump…"));
             }
         });
     });
@@ -813,10 +817,8 @@ fn sql_import_tab(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, con
                     ui.label(text::muted(palette, "Full error log:"));
                     // No opener crate here, so the path is selectable text
                     // the user can copy rather than a button that opens it.
-                    ui.add(
-                        egui::Label::new(log.clone()).sense(egui::Sense::click()),
-                    )
-                    .on_hover_text("Click to copy the path");
+                    ui.add(egui::Label::new(log.clone()).sense(egui::Sense::click()))
+                        .on_hover_text("Click to copy the path");
                     if ui.small_button("Copy path").clicked() {
                         ui.output_mut(|o| o.copied_text = log.clone());
                     }
@@ -1090,10 +1092,7 @@ fn step_mapping(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
                 .width(240.0)
                 .show_ui(ui, |ui| {
                     for t in &tables {
-                        if ui
-                            .selectable_label(s.options.table_name == *t, t)
-                            .clicked()
-                        {
+                        if ui.selectable_label(s.options.table_name == *t, t).clicked() {
                             s.options.table_name = t.clone();
                             changed = true;
                         }
@@ -1121,7 +1120,10 @@ fn step_mapping(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
                 auto_map = true;
             }
             ui.checkbox(&mut s.show_target_columns, "Show the table's columns");
-            ui.label(text::muted(palette, mapping_summary(&s.options.column_mappings)));
+            ui.label(text::muted(
+                palette,
+                mapping_summary(&s.options.column_mappings),
+            ));
         });
     });
 
@@ -1140,10 +1142,7 @@ fn step_mapping(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
     card(ui, palette, "Column mapping", |ui| {
         let s = &mut app.screens.import_export;
         if s.options.column_mappings.is_empty() {
-            ui.label(text::muted(
-                palette,
-                "Preview a file to get its columns.",
-            ));
+            ui.label(text::muted(palette, "Preview a file to get its columns."));
             return;
         }
 
@@ -1227,7 +1226,13 @@ fn step_mapping(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
     ui.add_space(8.0);
     let can_continue = !svc::active_mappings(&app.screens.import_export.options.column_mappings)
         .is_empty()
-        && !app.screens.import_export.options.table_name.trim().is_empty();
+        && !app
+            .screens
+            .import_export
+            .options
+            .table_name
+            .trim()
+            .is_empty();
     ui.horizontal(|ui| {
         if ui.button("Back").clicked() {
             back = true;
@@ -1293,10 +1298,10 @@ fn step_options(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
             .on_hover_text("Deletes every existing row first")
             .changed();
         if s.options.truncate_before {
-            ui.label(egui::RichText::new(
-                "This deletes all existing rows in the target table.",
-            )
-            .color(palette.destructive));
+            ui.label(
+                egui::RichText::new("This deletes all existing rows in the target table.")
+                    .color(palette.destructive),
+            );
         }
 
         changed |= ui
@@ -1379,12 +1384,7 @@ fn step_options(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
     }
 }
 
-fn step_confirm(
-    app: &mut DbHiveApp,
-    ui: &mut egui::Ui,
-    palette: &Palette,
-    connection_id: &str,
-) {
+fn step_confirm(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette, connection_id: &str) {
     let mut back = false;
     let mut go = false;
 
@@ -1465,11 +1465,13 @@ fn step_confirm(
     card(ui, palette, "Confirm", |ui| {
         let s = &mut app.screens.import_export;
         if needs_typed {
-            ui.label(egui::RichText::new(format!(
-                "Type {} to confirm deleting its existing rows.",
-                table_name
-            ))
-            .color(palette.warning));
+            ui.label(
+                egui::RichText::new(format!(
+                    "Type {} to confirm deleting its existing rows.",
+                    table_name
+                ))
+                .color(palette.warning),
+            );
             ui.add(
                 egui::TextEdit::singleline(&mut s.confirm_input)
                     .hint_text(table_name.clone())
@@ -1510,7 +1512,11 @@ fn step_confirm(
 fn step_running(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
     let s = &app.screens.import_export;
     let rows = s.plan.as_ref().map(|p| p.row_count).unwrap_or(0);
-    let target = s.plan.as_ref().map(|p| p.target.clone()).unwrap_or_default();
+    let target = s
+        .plan
+        .as_ref()
+        .map(|p| p.target.clone())
+        .unwrap_or_default();
     let mut stop = false;
 
     card(ui, palette, "Importing", |ui| {
@@ -1571,10 +1577,7 @@ fn step_complete(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
             if result.rows_failed > result.errors.len() {
                 ui.label(text::muted(
                     palette,
-                    format!(
-                        "…and {} more",
-                        result.rows_failed - result.errors.len()
-                    ),
+                    format!("…and {} more", result.rows_failed - result.errors.len()),
                 ));
             }
         }
@@ -1697,8 +1700,7 @@ fn start_table_preview(app: &mut DbHiveApp, ctx: &egui::Context, connection_id: 
         .get_connection(connection_id)
         .cloned()
     else {
-        app.screens.import_export.last_error =
-            Some("Connection is no longer open".to_string());
+        app.screens.import_export.last_error = Some("Connection is no longer open".to_string());
         return;
     };
     let kind = svc::driver_kind(&app.state, connection_id).unwrap_or(DbDriver::Postgres);
@@ -1708,7 +1710,11 @@ fn start_table_preview(app: &mut DbHiveApp, ctx: &egui::Context, connection_id: 
     app.screens
         .import_export
         .table_preview_job
-        .start(&handle, ctx, async move { driver.execute_query(&sql).await });
+        .start(
+            &handle,
+            ctx,
+            async move { driver.execute_query(&sql).await },
+        );
 }
 
 fn start_export(
@@ -1774,7 +1780,10 @@ fn start_preview(app: &mut DbHiveApp, ctx: &egui::Context) {
             tokio::task::spawn_blocking(move || svc::preview_import_file(&path, &opts))
                 .await
                 .unwrap_or_else(|e| {
-                    Err(DbError::InternalError(format!("Preview task failed: {}", e)))
+                    Err(DbError::InternalError(format!(
+                        "Preview task failed: {}",
+                        e
+                    )))
                 })
         });
 }
@@ -1813,9 +1822,7 @@ fn start_prepare(app: &mut DbHiveApp, ctx: &egui::Context) {
                 Ok((source, plan))
             })
             .await
-            .unwrap_or_else(|e| {
-                Err(DbError::InternalError(format!("Read task failed: {}", e)))
-            })
+            .unwrap_or_else(|e| Err(DbError::InternalError(format!("Read task failed: {}", e))))
         });
 }
 
@@ -1941,8 +1948,10 @@ fn poll(app: &mut DbHiveApp) {
                 s.options.column_mappings =
                     svc::auto_map_columns(&preview.columns, &preview.detected_types, &targets);
                 if s.options.sheet_name.is_none() {
-                    s.options.sheet_name =
-                        preview.sheet_names.as_ref().and_then(|n| n.first().cloned());
+                    s.options.sheet_name = preview
+                        .sheet_names
+                        .as_ref()
+                        .and_then(|n| n.first().cloned());
                 }
                 s.preview = Some(preview);
                 s.last_error = None;
@@ -1951,7 +1960,8 @@ fn poll(app: &mut DbHiveApp) {
             Err(e) => {
                 let msg = e.to_string();
                 app.screens.import_export.last_error = Some(msg.clone());
-                app.toasts.error(format!("Could not read the file: {}", msg));
+                app.toasts
+                    .error(format!("Could not read the file: {}", msg));
             }
         }
     }

@@ -67,16 +67,23 @@ impl Drop for Scratch {
     fn drop(&mut self) {
         let (postgres, name) = (self.postgres, self.name.clone());
         let _ = std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap();
             rt.block_on(async {
                 if postgres {
                     if let Ok(a) = PostgresDriver::connect(pg_opts("postgres")).await {
                         let _ = a
-                            .execute_query(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"))
+                            .execute_query(&format!(
+                                "DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"
+                            ))
                             .await;
                     }
                 } else if let Ok(a) = MysqlDriver::connect(my_opts(None)).await {
-                    let _ = a.execute_query(&format!("DROP DATABASE IF EXISTS `{name}`")).await;
+                    let _ = a
+                        .execute_query(&format!("DROP DATABASE IF EXISTS `{name}`"))
+                        .await;
                 }
             });
         })
@@ -95,10 +102,16 @@ async fn roundtrip<D: DatabaseDriver>(
     create: &str,
     tag: &str,
 ) {
-    d.execute_query(create).await.unwrap_or_else(|e| panic!("create: {e}"));
+    d.execute_query(create)
+        .await
+        .unwrap_or_else(|e| panic!("create: {e}"));
     let note = d.escape_string_literal(NOTE);
     // PostgreSQL has a real boolean; MySQL takes 1 and 0.
-    let (yes, no) = if tag == "pg" { ("true", "false") } else { ("1", "0") };
+    let (yes, no) = if tag == "pg" {
+        ("true", "false")
+    } else {
+        ("1", "0")
+    };
     for sql in [
         format!(
             "INSERT INTO items (id, name, note, amount, flag, at, meta) VALUES \
@@ -110,9 +123,14 @@ async fn roundtrip<D: DatabaseDriver>(
         ),
         "INSERT INTO items (id, name) VALUES (3, '')".to_string(),
     ] {
-        d.execute_query(&sql).await.unwrap_or_else(|e| panic!("insert: {e}\n{sql}"));
+        d.execute_query(&sql)
+            .await
+            .unwrap_or_else(|e| panic!("insert: {e}\n{sql}"));
     }
-    let before = d.execute_query("SELECT * FROM items ORDER BY id").await.unwrap();
+    let before = d
+        .execute_query("SELECT * FROM items ORDER BY id")
+        .await
+        .unwrap();
     assert_eq!(before.rows.len(), 3);
 
     // Dump it.
@@ -134,28 +152,47 @@ async fn roundtrip<D: DatabaseDriver>(
     assert_eq!(n, 1, "one table should have been written");
     let dump = std::fs::read_to_string(&path).unwrap();
     assert!(
-        dump.contains("DROP TABLE") && dump.contains("CREATE TABLE") && dump.contains("INSERT INTO"),
+        dump.contains("DROP TABLE")
+            && dump.contains("CREATE TABLE")
+            && dump.contains("INSERT INTO"),
         "dump was:\n{dump}"
     );
 
     // Damage it: the replay must restore, not merely add.
-    d.execute_query("DELETE FROM items WHERE id = 2").await.unwrap();
-    d.execute_query("UPDATE items SET name = 'changed' WHERE id = 1").await.unwrap();
+    d.execute_query("DELETE FROM items WHERE id = 2")
+        .await
+        .unwrap();
+    d.execute_query("UPDATE items SET name = 'changed' WHERE id = 1")
+        .await
+        .unwrap();
 
     let result = import_from_sql(
         state,
         connection_id,
         path.to_str().unwrap(),
-        SqlImportOptions { continue_on_error: false, use_transaction: true },
+        SqlImportOptions {
+            continue_on_error: false,
+            use_transaction: true,
+        },
         Arc::new(AtomicBool::new(false)),
     )
     .await
     .unwrap_or_else(|e| panic!("import: {e}\ndump was:\n{dump}"));
-    assert_eq!(result.errors_count, 0, "replay errors: {:?}\ndump was:\n{dump}", result.first_error);
+    assert_eq!(
+        result.errors_count, 0,
+        "replay errors: {:?}\ndump was:\n{dump}",
+        result.first_error
+    );
 
-    let after = d.execute_query("SELECT * FROM items ORDER BY id").await.unwrap();
+    let after = d
+        .execute_query("SELECT * FROM items ORDER BY id")
+        .await
+        .unwrap();
     assert_eq!(after.columns, before.columns);
-    assert_eq!(after.rows, before.rows, "the table after the replay differs\ndump was:\n{dump}");
+    assert_eq!(
+        after.rows, before.rows,
+        "the table after the replay differs\ndump was:\n{dump}"
+    );
     let _ = std::fs::remove_file(path);
 }
 
@@ -179,12 +216,30 @@ async fn postgres_dump_replays_to_the_same_rows() {
     std::env::set_var(dbhive_core::storage::DATA_DIR_ENV, &dir);
 
     let name = format!("dbhive_dump_{}", std::process::id());
-    let admin = PostgresDriver::connect(pg_opts("postgres")).await.expect("connect to postgres");
-    admin.execute_query(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)")).await.unwrap();
-    admin.execute_query(&format!("CREATE DATABASE \"{name}\"")).await.unwrap();
-    let _guard = Scratch { postgres: true, name: name.clone() };
+    let admin = PostgresDriver::connect(pg_opts("postgres"))
+        .await
+        .expect("connect to postgres");
+    admin
+        .execute_query(&format!("DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)"))
+        .await
+        .unwrap();
+    admin
+        .execute_query(&format!("CREATE DATABASE \"{name}\""))
+        .await
+        .unwrap();
+    let _guard = Scratch {
+        postgres: true,
+        name: name.clone(),
+    };
 
-    let mut p = ConnectionProfile::new("pg".into(), "PG".into(), DbDriver::Postgres, "localhost".into(), 5432, user());
+    let mut p = ConnectionProfile::new(
+        "pg".into(),
+        "PG".into(),
+        DbDriver::Postgres,
+        "localhost".into(),
+        5432,
+        user(),
+    );
     p.database = Some(name.clone());
     let (state, id) = state_with(p).await;
     let d = PostgresDriver::connect(pg_opts(&name)).await.unwrap();
@@ -208,12 +263,30 @@ async fn mysql_dump_replays_to_the_same_rows() {
     std::env::set_var(dbhive_core::storage::DATA_DIR_ENV, &dir);
 
     let name = format!("dbhive_dump_{}", std::process::id());
-    let admin = MysqlDriver::connect(my_opts(None)).await.expect("connect to mysql");
-    admin.execute_query(&format!("DROP DATABASE IF EXISTS `{name}`")).await.unwrap();
-    admin.execute_query(&format!("CREATE DATABASE `{name}`")).await.unwrap();
-    let _guard = Scratch { postgres: false, name: name.clone() };
+    let admin = MysqlDriver::connect(my_opts(None))
+        .await
+        .expect("connect to mysql");
+    admin
+        .execute_query(&format!("DROP DATABASE IF EXISTS `{name}`"))
+        .await
+        .unwrap();
+    admin
+        .execute_query(&format!("CREATE DATABASE `{name}`"))
+        .await
+        .unwrap();
+    let _guard = Scratch {
+        postgres: false,
+        name: name.clone(),
+    };
 
-    let mut p = ConnectionProfile::new("my".into(), "MY".into(), DbDriver::MySql, "127.0.0.1".into(), 3306, "root".into());
+    let mut p = ConnectionProfile::new(
+        "my".into(),
+        "MY".into(),
+        DbDriver::MySql,
+        "127.0.0.1".into(),
+        3306,
+        "root".into(),
+    );
     p.database = Some(name.clone());
     let (state, id) = state_with(p).await;
     let d = MysqlDriver::connect(my_opts(Some(&name))).await.unwrap();

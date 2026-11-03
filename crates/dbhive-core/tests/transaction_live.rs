@@ -97,7 +97,10 @@ async fn postgres_transactions_commit_roll_back_and_leave_the_pool_usable() {
         .await
         .unwrap();
     assert_eq!(affected, vec![1, 1, 1]);
-    let r = d.execute_query("SELECT id, name FROM t ORDER BY id").await.unwrap();
+    let r = d
+        .execute_query("SELECT id, name FROM t ORDER BY id")
+        .await
+        .unwrap();
     assert_eq!(r.rows.len(), 2);
     assert_eq!(r.rows[0][1], serde_json::json!("z"));
 
@@ -111,7 +114,10 @@ async fn postgres_transactions_commit_roll_back_and_leave_the_pool_usable() {
         .await
         .unwrap_err();
     assert_eq!(err.index, 1);
-    let r = d.execute_query("SELECT name FROM t WHERE id = 1").await.unwrap();
+    let r = d
+        .execute_query("SELECT name FROM t WHERE id = 1")
+        .await
+        .unwrap();
     assert_eq!(r.rows[0][0], serde_json::json!("z"));
     assert_eq!(count(&d).await, 2);
 

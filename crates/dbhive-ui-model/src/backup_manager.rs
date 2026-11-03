@@ -99,7 +99,9 @@ impl Operation {
     /// "Running pg_dump… (2.3s)".
     pub fn line(&self) -> String {
         match self.elapsed {
-            Some(d) if !self.message.is_empty() => format!("{} ({})", self.message, format_duration(d)),
+            Some(d) if !self.message.is_empty() => {
+                format!("{} ({})", self.message, format_duration(d))
+            }
             Some(d) => format_duration(d),
             None => self.message.clone(),
         }
@@ -158,7 +160,9 @@ impl BackupManager {
                     || e.file_name.to_lowercase().contains(&q)
                     || e.connection_name.to_lowercase().contains(&q)
                     || e.driver.to_lowercase().contains(&q)
-                    || e.note.as_deref().is_some_and(|n| n.to_lowercase().contains(&q))
+                    || e.note
+                        .as_deref()
+                        .is_some_and(|n| n.to_lowercase().contains(&q))
             })
             .collect()
     }
@@ -258,7 +262,9 @@ pub fn restore_blocker(entry: &BackupEntry, target_driver: Option<&DbDriver>) ->
         return Some("Open a connection to restore into.".to_string());
     };
     if !svc::supports_restore(driver) {
-        return Some(format!("Restore is not supported for {driver:?} connections."));
+        return Some(format!(
+            "Restore is not supported for {driver:?} connections."
+        ));
     }
     if let BackupStatus::Failed(_) = entry.status {
         return Some("This backup failed and cannot be restored.".to_string());
@@ -421,8 +427,16 @@ mod tests {
     fn a_row_names_the_file_and_its_facts_and_carries_a_failure_reason() {
         let r = row_view(&entry("Shop_1.sqlite"));
         assert_eq!(r.title, "Shop_1.sqlite");
-        assert!(r.subtitle.starts_with("Shop  ·  Sqlite  ·  2.0 KB  ·  "), "{}", r.subtitle);
-        assert!(r.subtitle.ends_with("\"before migration\""), "{}", r.subtitle);
+        assert!(
+            r.subtitle.starts_with("Shop  ·  Sqlite  ·  2.0 KB  ·  "),
+            "{}",
+            r.subtitle
+        );
+        assert!(
+            r.subtitle.ends_with("\"before migration\""),
+            "{}",
+            r.subtitle
+        );
         assert!(r.ok);
         assert_eq!(r.status, "Completed");
         assert_eq!(r.note, "");
@@ -435,7 +449,11 @@ mod tests {
         let r = row_view(&bad);
         assert!(!r.ok);
         assert_eq!(r.note, "disk full");
-        assert!(r.subtitle.starts_with("0 B") || r.subtitle.starts_with("2.0 KB"), "{}", r.subtitle);
+        assert!(
+            r.subtitle.starts_with("0 B") || r.subtitle.starts_with("2.0 KB"),
+            "{}",
+            r.subtitle
+        );
     }
 
     #[test]
@@ -448,14 +466,22 @@ mod tests {
         e.file_path = file.to_string_lossy().to_string();
 
         assert_eq!(restore_blocker(&e, Some(&DbDriver::Sqlite)), None);
-        assert!(restore_blocker(&e, None).unwrap().contains("Open a connection"));
-        assert!(restore_blocker(&e, Some(&DbDriver::Redis)).unwrap().contains("not supported"));
+        assert!(restore_blocker(&e, None)
+            .unwrap()
+            .contains("Open a connection"));
+        assert!(restore_blocker(&e, Some(&DbDriver::Redis))
+            .unwrap()
+            .contains("not supported"));
         let mut failed = e.clone();
         failed.status = BackupStatus::Failed("x".into());
-        assert!(restore_blocker(&failed, Some(&DbDriver::Sqlite)).unwrap().contains("failed"));
+        assert!(restore_blocker(&failed, Some(&DbDriver::Sqlite))
+            .unwrap()
+            .contains("failed"));
         let mut gone = e.clone();
         gone.file_path = dir.join("gone.sqlite").to_string_lossy().to_string();
-        assert!(restore_blocker(&gone, Some(&DbDriver::Sqlite)).unwrap().contains("no longer exists"));
+        assert!(restore_blocker(&gone, Some(&DbDriver::Sqlite))
+            .unwrap()
+            .contains("no longer exists"));
     }
 
     #[test]
@@ -473,7 +499,10 @@ mod tests {
         // An unknown source driver gives nothing to compare.
         let mut unknown = e.clone();
         unknown.driver.clear();
-        assert_eq!(restore_warnings(&unknown, "Prod", "Postgres", "app", false).len(), 1);
+        assert_eq!(
+            restore_warnings(&unknown, "Prod", "Postgres", "app", false).len(),
+            1
+        );
     }
 
     #[test]
@@ -499,6 +528,8 @@ mod tests {
     #[test]
     fn the_delete_message_names_the_file_and_size() {
         let m = delete_message(&entry("Shop_1.sqlite"));
-        assert!(m.contains("Shop_1.sqlite") && m.contains("2.0 KB") && m.contains("cannot be undone"));
+        assert!(
+            m.contains("Shop_1.sqlite") && m.contains("2.0 KB") && m.contains("cannot be undone")
+        );
     }
 }

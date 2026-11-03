@@ -47,7 +47,10 @@ fn generate_theme() -> String {
     for ((name, d), (_, l)) in dark.iter().zip(light.iter()) {
         let per_mode = format!("root.dark ? {} : {}", d.hex(), l.hex());
         let expr = match *name {
-            "primary" => format!("root.accent-custom ? root.accent-custom-color : ({})", per_mode),
+            "primary" => format!(
+                "root.accent-custom ? root.accent-custom-color : ({})",
+                per_mode
+            ),
             "primary_foreground" => format!(
                 "root.accent-custom ? root.accent-custom-foreground : ({})",
                 per_mode
@@ -134,10 +137,11 @@ fn main() {
     std::fs::create_dir_all(&generated).unwrap();
     write_if_changed(&generated.join("theme.slint"), &generate_theme());
     let manifest_dir = std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
-    write_if_changed(&generated.join("icons.slint"), &generate_icons(&manifest_dir));
+    write_if_changed(
+        &generated.join("icons.slint"),
+        &generate_icons(&manifest_dir),
+    );
 
-    let config =
-        slint_build::CompilerConfiguration::new().with_include_paths(vec![generated]);
-    slint_build::compile_with_config("ui/app.slint", config)
-        .expect("Slint UI failed to compile");
+    let config = slint_build::CompilerConfiguration::new().with_include_paths(vec![generated]);
+    slint_build::compile_with_config("ui/app.slint", config).expect("Slint UI failed to compile");
 }

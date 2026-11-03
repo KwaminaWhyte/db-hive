@@ -335,18 +335,29 @@ mod tests {
         assert!(db.owner.is_none());
         assert!(db.size.is_none());
 
-        let db_with_details =
-            DatabaseInfo::with_details("test_db".to_string(), Some("admin".to_string()), Some(1024));
+        let db_with_details = DatabaseInfo::with_details(
+            "test_db".to_string(),
+            Some("admin".to_string()),
+            Some(1024),
+        );
         assert_eq!(db_with_details.owner, Some("admin".to_string()));
         assert_eq!(db_with_details.size, Some(1024));
     }
 
     #[test]
     fn test_table_info_is_view() {
-        let table = TableInfo::new("users".to_string(), "public".to_string(), "TABLE".to_string());
+        let table = TableInfo::new(
+            "users".to_string(),
+            "public".to_string(),
+            "TABLE".to_string(),
+        );
         assert!(!table.is_view());
 
-        let view = TableInfo::new("user_view".to_string(), "public".to_string(), "VIEW".to_string());
+        let view = TableInfo::new(
+            "user_view".to_string(),
+            "public".to_string(),
+            "VIEW".to_string(),
+        );
         assert!(view.is_view());
 
         let mat_view = TableInfo::new(
@@ -364,19 +375,18 @@ mod tests {
         assert!(!col.nullable);
         assert!(!col.is_primary_key);
 
-        let pk_col = ColumnInfo::with_details(
-            "id".to_string(),
-            "INTEGER".to_string(),
-            false,
-            None,
-            true,
-        );
+        let pk_col =
+            ColumnInfo::with_details("id".to_string(), "INTEGER".to_string(), false, None, true);
         assert!(pk_col.is_primary_key);
     }
 
     #[test]
     fn test_table_schema_primary_key() {
-        let table = TableInfo::new("users".to_string(), "public".to_string(), "TABLE".to_string());
+        let table = TableInfo::new(
+            "users".to_string(),
+            "public".to_string(),
+            "TABLE".to_string(),
+        );
 
         let columns = vec![
             ColumnInfo::with_details("id".to_string(), "INTEGER".to_string(), false, None, true),

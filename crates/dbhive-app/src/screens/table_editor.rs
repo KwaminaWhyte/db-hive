@@ -376,18 +376,13 @@ fn form_errors(ed: &TableEditor) -> Vec<String> {
 fn build_preview(ed: &TableEditor, driver: &DbDriver) -> Result<Vec<String>, DbError> {
     match ed.mode {
         Mode::CreateTable => preview_sql(driver, &ed.schema, &ed.table_name, &ed.plain_columns()),
-        Mode::AlterTable => preview_alter_sql(
-            driver,
-            &ed.schema,
-            &ed.table_name,
-            &ed.loaded,
-            &ed.columns,
-        ),
+        Mode::AlterTable => {
+            preview_alter_sql(driver, &ed.schema, &ed.table_name, &ed.loaded, &ed.columns)
+        }
         Mode::DropTable => preview_drop_sql(driver, &ed.schema, &ed.table_name, ed.drop_cascade),
         Mode::CreateDatabase => preview_create_database_sql(driver, &ed.database_name),
     }
 }
-
 
 fn create_table_form(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
     ui.horizontal(|ui| {
@@ -554,7 +549,10 @@ fn columns_editor(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
                         // rather than generating DDL the server will reject.
                         col.nullable = false;
                     }
-                    ui.add_enabled(!col.primary_key, egui::Checkbox::new(&mut col.nullable, "Null"));
+                    ui.add_enabled(
+                        !col.primary_key,
+                        egui::Checkbox::new(&mut col.nullable, "Null"),
+                    );
                     ui.add_enabled(
                         col.type_kind.can_auto_increment(),
                         egui::Checkbox::new(&mut col.auto_increment, "Auto"),
@@ -564,17 +562,18 @@ fn columns_editor(app: &mut DbHiveApp, ui: &mut egui::Ui, palette: &Palette) {
                             .hint_text("default")
                             .desired_width(100.0),
                     );
-                    if ui.small_button("✖").on_hover_text("Remove column").clicked() {
+                    if ui
+                        .small_button("✖")
+                        .on_hover_text("Remove column")
+                        .clicked()
+                    {
                         remove = Some(i);
                     }
                     // An existing column that has been renamed says so, since
                     // the SQL will carry a RENAME the user should expect.
                     if let Some(was) = origin_name.as_ref() {
                         if was != col.name.trim() && !col.name.trim().is_empty() {
-                            ui.label(crate::theme::text::muted(
-                                palette,
-                                format!("was {}", was),
-                            ));
+                            ui.label(crate::theme::text::muted(palette, format!("was {}", was)));
                         }
                     }
                 });
@@ -675,7 +674,6 @@ fn run(app: &mut DbHiveApp, ctx: &egui::Context) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
 
     // ── modes ────────────────────────────────────────────────────────────
 

@@ -185,8 +185,7 @@ pub fn support(id: CommandId) -> Support {
 
         NewWindow => Support::Unsupported("Multiple windows are not supported yet"),
 
-        GoQueryEditor | GoTableInspector | GoHistory
-        | ToggleSidebar | Connect
+        GoQueryEditor | GoTableInspector | GoHistory | ToggleSidebar | Connect
         | ConnectionsBack | WindowMinimize | WindowMaximizeToggle | WindowClose => Support::Hidden,
     }
 }
@@ -826,16 +825,30 @@ mod tests {
     fn the_diagram_and_designer_are_live_in_a_workspace_and_refused_elsewhere() {
         for id in [CommandId::GoErDiagram, CommandId::GoSchemaDesigner] {
             assert_eq!(status(id, &ws()), Status::Enabled, "{:?}", id);
-            assert_eq!(status(id, &conns()).reason(), "Open a connection first", "{:?}", id);
+            assert_eq!(
+                status(id, &conns()).reason(),
+                "Open a connection first",
+                "{:?}",
+                id
+            );
             let mut c = ws();
             c.dialog_open = true;
-            assert_eq!(status(id, &c).reason(), "Close the open dialog first", "{:?}", id);
+            assert_eq!(
+                status(id, &c).reason(),
+                "Close the open dialog first",
+                "{:?}",
+                id
+            );
         }
         // Offered in the workspace palette, not on the connection list.
         let mut p = PaletteState::default();
         p.open();
         let titles = |ctx: &CommandContext| -> Vec<String> {
-            p.view(ctx, false).rows.iter().map(|r| r.title.clone()).collect()
+            p.view(ctx, false)
+                .rows
+                .iter()
+                .map(|r| r.title.clone())
+                .collect()
         };
         assert!(titles(&ws()).contains(&"Go to ER Diagram".to_string()));
         assert!(titles(&ws()).contains(&"Go to Schema Designer".to_string()));
@@ -845,21 +858,30 @@ mod tests {
     #[test]
     fn the_plugin_manager_is_a_live_workspace_independent_command_in_the_palette() {
         assert_eq!(support(CommandId::GoPlugins), Support::Live);
-        assert_eq!(CommandId::from_slug("go-plugins"), Some(CommandId::GoPlugins));
+        assert_eq!(
+            CommandId::from_slug("go-plugins"),
+            Some(CommandId::GoPlugins)
+        );
         let mut p = PaletteState::default();
         p.open();
         for ctx in [conns(), ws()] {
-            let rows: Vec<String> = p.view(&ctx, false).rows.iter().map(|r| r.title.clone()).collect();
-            assert!(rows.contains(&"Go to Plugin Manager".to_string()), "{:?}", ctx.screen);
+            let rows: Vec<String> = p
+                .view(&ctx, false)
+                .rows
+                .iter()
+                .map(|r| r.title.clone())
+                .collect();
+            assert!(
+                rows.contains(&"Go to Plugin Manager".to_string()),
+                "{:?}",
+                ctx.screen
+            );
         }
     }
 
     #[test]
     fn unbuilt_screens_are_hidden_and_new_window_is_unsupported_with_a_reason() {
-        for id in [
-            CommandId::ToggleSidebar,
-            CommandId::WindowClose,
-        ] {
+        for id in [CommandId::ToggleSidebar, CommandId::WindowClose] {
             assert_eq!(status(id, &ws()), Status::Hidden, "{:?}", id);
         }
         assert_eq!(
@@ -880,15 +902,24 @@ mod tests {
         let mut p = PaletteState::default();
         p.open();
         let titles = |ctx: &CommandContext| -> Vec<String> {
-            p.view(ctx, false).rows.iter().map(|r| r.title.clone()).collect()
+            p.view(ctx, false)
+                .rows
+                .iter()
+                .map(|r| r.title.clone())
+                .collect()
         };
         assert!(titles(&ws()).contains(&"Go to AI Assistant".to_string()));
         assert!(!titles(&conns()).iter().any(|x| x.contains("AI Assistant")));
     }
 
     #[test]
-    fn the_activity_monitor_migrations_and_plugins_open_from_either_screen_but_not_under_a_dialog() {
-        for id in [CommandId::GoActivityMonitor, CommandId::GoMigrations, CommandId::GoPlugins] {
+    fn the_activity_monitor_migrations_and_plugins_open_from_either_screen_but_not_under_a_dialog()
+    {
+        for id in [
+            CommandId::GoActivityMonitor,
+            CommandId::GoMigrations,
+            CommandId::GoPlugins,
+        ] {
             assert_eq!(status(id, &conns()), Status::Enabled, "{:?}", id);
             assert_eq!(status(id, &ws()), Status::Enabled, "{:?}", id);
             let mut c = ws();
