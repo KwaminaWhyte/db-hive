@@ -1,7 +1,7 @@
 import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Divider, ListRow, Banner, EmptyState, TabBar, TabInfo } from "../kit/kit.slint";
 import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
-import { SqlEditor, HighlightLine, CompletionItem } from "../components/sql_editor.slint";
+import { SqlEditor, HighlightLine, CompletionItem, EditorPrefs } from "../components/sql_editor.slint";
 import { TableInspectorView } from "table_inspector.slint";
 import { BuilderState } from "query_builder.slint";
 import { TableDialogState } from "table_dialog.slint";
@@ -9,6 +9,7 @@ import { PluginsState, PluginToolbarHost } from "plugins_panel.slint";
 import { AiState, AiDock } from "ai_assistant.slint";
 import { ResultsState, ResultsModeBar, ResultsViewPane, ResultsErrorPanel } from "results_tools.slint";
 import { SchemaTreePanel } from "schema_tree.slint";
+import { QueryState } from "query_tabs.slint";
 
 export struct TableItem {
     name: string,
@@ -235,9 +236,12 @@ export component WorkspaceScreen inherits VerticalLayout {
             TabBar {
                 tabs: root.tabs;
                 active: root.active-tab;
+                focus-tick: QueryState.bar-focus-tick;
                 selected(i) => { root.tab-selected(i); }
                 closed(i) => { root.tab-closed(i); }
                 add => { root.new-query(); }
+                context(i, x, y) => { QueryState.tab-context(i, x, y); }
+                navigate(key) => { QueryState.tab-navigate(key); }
             }
 
             if root.tabs.length == 0: EmptyState {
@@ -288,7 +292,19 @@ export component WorkspaceScreen inherits VerticalLayout {
                                 }
                             }
                             if ((event.modifiers.control || event.modifiers.meta) && event.text == Key.Return) {
-                                root.run-query();
+                                if (!root.running) {
+                                    root.run-query();
+                                }
+                                return accept;
+                            }
+                            // Ctrl+Tab and Ctrl+Shift+Tab switch tabs; the text
+                            // box would otherwise take the Tab.
+                            if ((event.modifiers.control || event.modifiers.meta) && event.text == Key.Tab) {
+                                QueryState.tab-navigate(event.modifiers.shift ? "prev" : "next");
+                                return accept;
+                            }
+                            if ((event.modifiers.control || event.modifiers.meta) && event.text == Key.Backtab) {
+                                QueryState.tab-navigate("prev");
                                 return accept;
                             }
                             return reject;
@@ -299,6 +315,12 @@ export component WorkspaceScreen inherits VerticalLayout {
                             completions: root.completions;
                             completion-selected: root.completion-selected;
                             pending-cursor <=> root.editor-pending-cursor;
+                            // A running statement is not edited under it.
+                            read-only: root.running;
+                            wrap: EditorPrefs.word-wrap;
+                            minimap: EditorPrefs.minimap;
+                            wrap-columns-changed(n) => { EditorPrefs.wrap-columns-changed(n); }
+                            init => { EditorPrefs.wrap-columns-changed(self.wrap-columns); }
                             edited(t) => { root.editor-edited(t); }
                             cursor-moved(o) => { root.cursor-moved(o); }
                             completion-picked(i) => { root.completion-picked(i); }
@@ -308,23 +330,38 @@ export component WorkspaceScreen inherits VerticalLayout {
 
                 if root.active-is-query: HorizontalLayout {
                     spacing: 10px;
-                    Button {
-                        text: root.running ? "Running…" : "Run";
+                    if !root.running: Button {
+                        text: "Run";
                         variant: ButtonVariant.primary;
                         has-icon: true;
                         icon: Icons.play;
-                        enabled: !root.running && root.editor-text != "";
+                        enabled: root.editor-text != "";
                         clicked => { root.run-query(); }
+                    }
+                    // Stop replaces Run while the tab's query is in flight.
+                    if root.running: Button {
+                        text: "Stop";
+                        has-icon: true;
+                        icon: Icons.square;
+                        accessible-label: "Stop the running query";
+                        clicked => { QueryState.stop(); }
                     }
                     VerticalLayout {
                         alignment: center;
                         Text {
-                            text: "⌘/Ctrl + Enter";
-                            color: Theme.dim-foreground;
+                            text: root.running ? "Running…" : "⌘/Ctrl + Enter";
+                            color: root.running ? Theme.muted-foreground : Theme.dim-foreground;
                             font-size: Theme.size-small;
                         }
                     }
                     Rectangle { horizontal-stretch: 1; }
+                    Button {
+                        text: "Clear";
+                        variant: ButtonVariant.ghost;
+                        enabled: !root.running && root.editor-text != "";
+                        accessible-label: "Clear the editor";
+                        clicked => { QueryState.clear-editor(); }
+                    }
                 }
 
                 HorizontalLayout {
@@ -337,6 +374,12 @@ export component WorkspaceScreen inherits VerticalLayout {
                         vertical-alignment: center;
                         horizontal-stretch: 1;
                         overflow: elide;
+                    }
+                    if QueryState.cancelled && !root.running: Text {
+                        text: QueryState.cancelled-summary;
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        vertical-alignment: center;
                     }
                     if root.has-result && root.result-summary != "" && root.result-message == "": Text {
                         text: root.visible-row-count == root.row-count
@@ -360,7 +403,7 @@ export component WorkspaceScreen inherits VerticalLayout {
 
                 // A failed query: headline, the driver's message, the query
                 // behind a disclosure, Copy and Retry.
-                if root.rows-error != "": ScrollView {
+                if root.rows-error != "" && !QueryState.cancelled: ScrollView {
                     vertical-stretch: 1;
                     VerticalLayout {
                         alignment: start;
@@ -376,11 +419,28 @@ export component WorkspaceScreen inherits VerticalLayout {
                     vertical-alignment: center;
                 }
 
-                if !root.running && root.rows-error == "" && !root.has-result && root.active-is-query: EmptyState {
+                if !root.running && root.rows-error == "" && !root.has-result && root.active-is-query && !QueryState.cancelled: EmptyState {
                     vertical-stretch: 1;
                     icon: Icons.play;
                     title: "Run a query";
                     message: "Write SQL above and press Run to see results here.";
+                }
+
+                // Stopped by the user: not an error, so no red panel.
+                if !root.running && QueryState.cancelled: EmptyState {
+                    vertical-stretch: 1;
+                    icon: Icons.square;
+                    title: "Query cancelled";
+                    message: QueryState.server-stops
+                        ? "The statement was stopped on the database. Run it again to see results."
+                        : "DB Hive stopped waiting for it. The server may still finish the statement on its own.";
+                    Button {
+                        text: "Run again";
+                        has-icon: true;
+                        icon: Icons.play;
+                        enabled: root.editor-text != "";
+                        clicked => { root.run-query(); }
+                    }
                 }
 
                 if !root.running && root.result-message != "": Banner {
@@ -389,12 +449,57 @@ export component WorkspaceScreen inherits VerticalLayout {
                     dismissible: false;
                 }
 
+                // The selected cell and what can be copied from it.
+                if !root.running && root.rows-error == "" && root.has-result && root.result-message == "" && root.visible-row-count > 0 && ResultsState.mode == 0 && QueryState.selected-row >= 0: HorizontalLayout {
+                    spacing: 8px;
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: QueryState.selection-label;
+                            color: Theme.muted-foreground;
+                            font-size: Theme.size-small;
+                            overflow: elide;
+                        }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    Button {
+                        text: "Copy cell";
+                        has-icon: true;
+                        icon: Icons.copy;
+                        variant: ButtonVariant.ghost;
+                        clicked => { QueryState.copy-cell(); }
+                    }
+                    Button {
+                        text: "Copy row";
+                        variant: ButtonVariant.ghost;
+                        accessible-label: "Copy row as tab-separated values";
+                        clicked => { QueryState.copy-row(); }
+                    }
+                    Button {
+                        text: "Copy column";
+                        variant: ButtonVariant.ghost;
+                        clicked => { QueryState.copy-column(); }
+                    }
+                    Button {
+                        has-icon: true;
+                        icon: Icons.x;
+                        variant: ButtonVariant.ghost;
+                        accessible-label: "Clear selection";
+                        clicked => { QueryState.clear-selection(); }
+                    }
+                }
+
                 if !root.running && root.rows-error == "" && root.has-result && root.result-message == "" && root.visible-row-count > 0 && ResultsState.mode == 0: ResultsGrid {
                     vertical-stretch: 1;
                     columns: root.columns;
                     rows: root.rows;
                     total-width: root.grid-width;
+                    row-numbers: true;
+                    controlled: true;
+                    selected-row: QueryState.selected-row;
+                    selected-col: QueryState.selected-col;
                     header-clicked(i) => { root.header-clicked(i); }
+                    cell-clicked(r, c) => { QueryState.cell-clicked(r, c); }
                 }
 
                 // The same rows as pretty JSON or aligned text.

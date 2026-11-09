@@ -189,8 +189,12 @@ export struct TabInfo {
 component TabChip inherits Rectangle {
     in property <TabInfo> info;
     in property <bool> active;
+    // The bar has the keyboard and this is the tab it acts on.
+    in property <bool> ring: false;
     callback selected;
     callback closed;
+    // A right click, in window coordinates.
+    callback context(length, length);
 
     width: 168px;
     background: root.active ? Theme.background : touch.has-hover ? Theme.hover : transparent;
@@ -198,11 +202,21 @@ component TabChip inherits Rectangle {
 
     accessible-role: tab;
     accessible-label: root.info.title;
+    accessible-item-selected: root.active;
     accessible-action-default => { root.selected(); }
 
     touch := TouchArea {
         mouse-cursor: pointer;
         clicked => { root.selected(); }
+        pointer-event(e) => {
+            // A middle click closes, as in a browser.
+            if (e.button == PointerEventButton.middle && e.kind == PointerEventKind.up) {
+                root.closed();
+            }
+            if (e.button == PointerEventButton.right && e.kind == PointerEventKind.up) {
+                root.context(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            }
+        }
     }
 
     HorizontalLayout {
@@ -264,37 +278,100 @@ component TabChip inherits Rectangle {
         height: 2px;
         background: root.active ? Theme.primary : transparent;
     }
+    // Keyboard focus: an outline inside the chip, so it never overlaps a
+    // neighbour.
+    if root.ring: Rectangle {
+        x: 2px;
+        y: 4px;
+        width: parent.width - 4px;
+        height: parent.height - 8px;
+        border-radius: Theme.radius-control;
+        border-width: 2px;
+        border-color: Theme.primary;
+    }
 }
 
 // The row of open tabs, with a "+" at the end for a new one.
+//
+// It takes the keyboard like a tab list: Tab moves focus onto it, Left and
+// Right (and Home and End) pick the neighbouring tab, Delete closes the
+// focused one and the menu key or Shift+F10 opens its context menu. Keys it
+// does not use bubble up, so Ctrl+Tab still reaches the window's shortcuts.
 export component TabBar inherits Rectangle {
     in property <[TabInfo]> tabs;
     in property <int> active: -1;
+    // Bumped by the owner to hand the keyboard to the bar.
+    in property <int> focus-tick;
     callback selected(int);
     callback closed(int);
     callback add;
+    // Right click (or the menu key) on a tab, in window coordinates.
+    callback context(int, length, length);
+    // "left", "right", "home" or "end", with the bar focused. The owner
+    // decides which tab that selects.
+    callback navigate(string);
 
     height: 38px;
     background: Theme.sidebar;
+    changed focus-tick => { scope.focus(); }
 
-    HorizontalLayout {
-        alignment: start;
-        spacing: 0;
-        for t[i] in root.tabs: TabChip {
-            info: t;
-            active: i == root.active;
-            selected => { root.selected(i); }
-            closed => { root.closed(i); }
+    scope := FocusScope {
+        accessible-role: tab-list;
+        accessible-label: "Open tabs";
+        key-pressed(e) => {
+            if (e.modifiers.control || e.modifiers.meta || e.modifiers.alt) {
+                return reject;
+            }
+            if (e.text == Key.LeftArrow) {
+                root.navigate("left");
+                return accept;
+            }
+            if (e.text == Key.RightArrow) {
+                root.navigate("right");
+                return accept;
+            }
+            if (e.text == Key.Home) {
+                root.navigate("home");
+                return accept;
+            }
+            if (e.text == Key.End) {
+                root.navigate("end");
+                return accept;
+            }
+            if (root.active >= 0 && (e.text == Key.Delete || e.text == Key.Backspace)) {
+                root.closed(root.active);
+                return accept;
+            }
+            if (root.active >= 0 && (e.text == Key.Menu || (e.modifiers.shift && e.text == Key.F10))) {
+                root.context(root.active,
+                    root.absolute-position.x + root.active * 168px + 24px,
+                    root.absolute-position.y + root.height - 6px);
+                return accept;
+            }
+            return reject;
         }
-        VerticalLayout {
-            alignment: center;
-            padding-left: 6px;
-            Button {
-                has-icon: true;
-                icon: Icons.plus;
-                variant: ButtonVariant.ghost;
-                accessible-label: "New query";
-                clicked => { root.add(); }
+
+        HorizontalLayout {
+            alignment: start;
+            spacing: 0;
+            for t[i] in root.tabs: TabChip {
+                info: t;
+                active: i == root.active;
+                ring: scope.has-focus && i == root.active;
+                selected => { root.selected(i); }
+                closed => { root.closed(i); }
+                context(x, y) => { root.context(i, x, y); }
+            }
+            VerticalLayout {
+                alignment: center;
+                padding-left: 6px;
+                Button {
+                    has-icon: true;
+                    icon: Icons.plus;
+                    variant: ButtonVariant.ghost;
+                    accessible-label: "New query";
+                    clicked => { root.add(); }
+                }
             }
         }
     }
@@ -3069,6 +3146,7 @@ export component CtxMenu inherits Popover {
             : name == "trash-2" ? Icons.trash-2
             : name == "plus" ? Icons.plus
             : name == "database" ? Icons.database
+            : name == "x" ? Icons.x
             : Icons.circle;
     }
 
@@ -3152,5 +3230,54 @@ export component CtxMenu inherits Popover {
                 }
             }
         }
+    }
+}
+
+// A hint that appears after the pointer rests on something, showing text that
+// did not fit (an elided cell, an icon-only button's name). The host sets
+// `armed` while hovered and places the tooltip near the pointer; this waits
+// `delay` before showing, so sweeping the pointer across a grid does not
+// flash one per cell, and hides at once when `armed` drops.
+export component Tooltip inherits Rectangle {
+    in property <string> text;
+    in property <bool> armed: false;
+    in property <duration> delay: 600ms;
+    in property <length> max-text-width: 360px;
+    // Becomes true once the delay has passed while armed.
+    out property <bool> shown: false;
+
+    changed armed => {
+        if (!self.armed) {
+            self.shown = false;
+        }
+    }
+
+    Timer {
+        interval: root.delay;
+        running: root.armed && !root.shown;
+        triggered => { root.shown = true; }
+    }
+
+    visible: root.shown && root.text != "";
+    width: min(label.preferred-width, root.max-text-width) + 16px;
+    height: label.preferred-height + 8px;
+    background: Theme.popover;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border-strong;
+    drop-shadow-blur: 12px;
+    drop-shadow-offset-y: 4px;
+    drop-shadow-color: Theme.background.darker(8).transparentize(0.4);
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.text;
+
+    label := Text {
+        x: 8px;
+        y: 4px;
+        width: min(self.preferred-width, root.max-text-width);
+        text: root.text;
+        color: Theme.foreground;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
     }
 }

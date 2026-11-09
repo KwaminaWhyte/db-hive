@@ -112,6 +112,8 @@ impl Ctx {
         }
         theme.set_editor_font_size(a.editor_font_size as f32);
         theme.set_editor_line_numbers(a.editor_line_numbers);
+        // Font family, word wrap and minimap come from the same draft.
+        self.editor_prefs_apply();
         // Syntax colours are chosen per theme in Rust.
         self.refresh_workspace();
     }

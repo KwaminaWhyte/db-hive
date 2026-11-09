@@ -745,6 +745,15 @@ fn find_code(message: &str) -> String {
 }
 
 pub fn describe_error(raw: &str) -> ErrorView {
+    // A stopped query is not a failure. Callers show their own neutral state
+    // for it; this only makes sure the sentinel never reaches the user raw.
+    if crate::format::is_cancelled(raw) {
+        return ErrorView {
+            headline: "Cancelled".to_string(),
+            detail: "You stopped this query before it finished.".to_string(),
+            code: String::new(),
+        };
+    }
     let raw = raw.trim();
     let mut headline = "Query failed";
     let mut rest = raw;
@@ -1270,6 +1279,14 @@ mod tests {
         let t = describe_error("Operation timed out: Query timeout after 30s");
         assert_eq!(t.headline, "Query timed out");
         assert_eq!(t.detail, "Query timeout after 30s");
+    }
+
+    #[test]
+    fn a_cancelled_query_is_described_without_the_sentinel() {
+        let v = describe_error(crate::format::CANCELLED);
+        assert_eq!(v.headline, "Cancelled");
+        assert!(!v.detail.contains("dbhive:"), "{:?}", v.detail);
+        assert!(v.code.is_empty());
     }
 
     #[test]

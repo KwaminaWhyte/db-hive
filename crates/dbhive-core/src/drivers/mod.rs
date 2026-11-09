@@ -294,4 +294,17 @@ pub trait DatabaseDriver: Send + Sync {
     fn escape_string_literal(&self, value: &str) -> String {
         value.replace('\'', "''")
     }
+
+    /// Ask the server to stop the statement this connection is running, if
+    /// the driver can. Returns whether an interrupt was sent.
+    ///
+    /// The caller still abandons its wait on the query (drops the future);
+    /// this is what makes the database itself stop working on it. The
+    /// default cannot interrupt: a pooled driver does not know which pooled
+    /// connection a dropped future was using, so the statement there runs to
+    /// completion on the server. SQLite overrides this with
+    /// `sqlite3_interrupt` on its single connection.
+    fn cancel_running(&self) -> bool {
+        false
+    }
 }

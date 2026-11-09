@@ -23,12 +23,38 @@
 //
 // This relies on a monospace font and single-width characters. Wide glyphs
 // (CJK, most emoji) will misalign the colour layer; the text itself, which
-// the input draws, stays correct.
+// the input draws, stays correct. The configured font family is checked by
+// measuring "i" against "M": a proportional (or missing, hence substituted)
+// family falls back to the platform's monospace one.
+//
+// Word wrap keeps the same scheme. The input wraps by character at a width
+// that holds exactly `wrap-columns` glyphs, and the owner wraps the colour
+// layer at the same column count (one HighlightLine per display row, see
+// `dbhive_ui_model::editor_prefs::wrap_lines`). Same limit as above: a wide
+// glyph on a wrapped line shifts every later row of that line.
 
 import { Theme } from "../kit/kit.slint";
 
+// What Settings > Appearance sets for SQL editors beyond font size and line
+// numbers (those are on Theme). Rust fills it (`app/query_tools.rs`).
+export global EditorPrefs {
+    // The first family named in the setting, and a monospace family the
+    // platform ships. The editor uses the fallback when the first one
+    // measures as proportional, which is also how a missing font shows up.
+    in property <string> family: "Menlo";
+    in property <string> fallback: "Menlo";
+    // Only the workspace editor wraps and shows a minimap: it is the one
+    // whose colour layer Rust re-wraps to the reported column count.
+    in property <bool> word-wrap: false;
+    in property <bool> minimap: false;
+    // The workspace editor reports how many columns a wrapped row holds
+    // (0 when not wrapping), so Rust can wrap the colour layer to match.
+    callback wrap-columns-changed(int);
+}
+
 // One row of the completion popup. `kind` is "table", "column", "keyword",
-// "function" or "schema"; `detail` is a column's type or a table's schema.
+// "function", "schema" or "database"; `detail` is a column's type or a
+// table's schema.
 export struct CompletionItem {
     label: string,
     detail: string,
@@ -44,6 +70,9 @@ export struct HighlightRun {
 
 export struct HighlightLine {
     runs: [HighlightRun],
+    // 1-based number of the line this row starts; 0 for a row that
+    // continues a wrapped line (its gutter stays blank).
+    number: int,
 }
 
 export component SqlEditor inherits Rectangle {
@@ -55,14 +84,28 @@ export component SqlEditor inherits Rectangle {
     in property <color> caret-color: Theme.primary;
     in property <color> selection-color: Theme.primary.transparentize(0.73);
     in property <color> gutter-color: Theme.dim-foreground;
-    in property <string> mono-family: "Menlo";
+    in property <string> mono-family: EditorPrefs.family;
+    in property <string> fallback-family: EditorPrefs.fallback;
     // Settings > Appearance drives both of these through the Theme global.
     in property <length> mono-size: Theme.editor-font-size;
     in property <bool> show-line-numbers: Theme.editor-line-numbers;
 
     // A statement shown for reading and copying, not editing (the query
-    // builder's preview, the table dialogs' DDL).
+    // builder's preview, the table dialogs' DDL), or one that is running.
     in property <bool> read-only: false;
+
+    // Wrap long lines at the editor's width. The text wraps by character, and
+    // the owner must hand back `lines` wrapped at `wrap-columns` (one
+    // HighlightLine per display row) or the colours drift from the text.
+    in property <bool> wrap: false;
+    // A strip at the right that shows the whole statement in miniature, with
+    // the visible part marked. A click or drag there scrolls.
+    in property <bool> minimap: false;
+    out property <int> wrap-columns: root.wrap
+        ? max(8, floor((flick.width - root.gutter-width - 2 * root.pad) / root.advance))
+        : 0;
+    callback wrap-columns-changed(int);
+    changed wrap-columns => { root.wrap-columns-changed(self.wrap-columns); }
 
     callback edited(string);
     // The caret moved; the argument is its byte offset in `text`. Typing moves
@@ -93,17 +136,36 @@ export component SqlEditor inherits Rectangle {
     property <length> advance: measure.preferred-width / 100;
     property <length> caret-x;
     property <length> caret-y;
+    property <length> minimap-width: root.minimap && root.lines.length > 0 ? 72px : 0px;
+
+    // The family actually drawn: the requested one when its glyphs are all
+    // one width, else the fallback. The colour layer is placed by column, so
+    // a proportional font would scatter it.
+    property <string> family: abs(probe-narrow.preferred-width - probe-wide.preferred-width) < 1px
+        ? root.mono-family : root.fallback-family;
+    probe-narrow := Text {
+        visible: false;
+        text: "iiiiiiiiiiiiiiiiiiii";
+        font-family: root.mono-family;
+        font-size: root.mono-size;
+    }
+    probe-wide := Text {
+        visible: false;
+        text: "MMMMMMMMMMMMMMMMMMMM";
+        font-family: root.mono-family;
+        font-size: root.mono-size;
+    }
 
     // Measures the monospace advance. Never visible.
     measure := Text {
         visible: false;
         text: "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
-        font-family: root.mono-family;
+        font-family: root.family;
         font-size: root.mono-size;
     }
 
-    // The hidden 100-character measuring text above would otherwise give this
-    // component an implicit minimum width of ~800px and push its layout wide.
+    // The hidden measuring texts above would otherwise give this component
+    // an implicit minimum width of ~800px and push its layout wide.
     min-width: 0px;
     background: Theme.card;
     border-radius: Theme.radius-card;
@@ -112,21 +174,22 @@ export component SqlEditor inherits Rectangle {
     clip: true;
 
     flick := Flickable {
-        content-width: max(self.width, root.gutter-width + input.preferred-width + 2 * root.pad);
+        width: root.width - root.minimap-width;
+        content-width: root.wrap ? self.width : max(self.width, root.gutter-width + input.preferred-width + 2 * root.pad);
         content-height: max(self.height, input.preferred-height + 2 * root.pad);
 
-        // Line numbers.
+        // Line numbers. A wrapped line's continuation rows stay blank.
         for line[index] in root.lines: Text {
-            visible: root.show-line-numbers;
+            visible: root.show-line-numbers && line.number > 0;
             x: 0;
             y: root.pad + index * root.line-height;
             width: root.gutter-width - 10px;
             height: root.line-height;
             horizontal-alignment: right;
             vertical-alignment: center;
-            text: index + 1;
+            text: line.number;
             color: root.gutter-color;
-            font-family: root.mono-family;
+            font-family: root.family;
             font-size: root.mono-size;
         }
 
@@ -141,7 +204,7 @@ export component SqlEditor inherits Rectangle {
                 height: root.line-height;
                 text: run.text;
                 color: run.color;
-                font-family: root.mono-family;
+                font-family: root.family;
                 font-size: root.mono-size;
                 vertical-alignment: center;
             }
@@ -150,13 +213,17 @@ export component SqlEditor inherits Rectangle {
         input := TextInput {
             x: root.gutter-width + root.pad;
             y: root.pad;
-            width: max(self.preferred-width, flick.width - self.x - root.pad);
+            // Wrapping: exactly `wrap-columns` glyphs fit, plus half a glyph
+            // of slack so rounding never pushes the last one to the next row.
+            width: root.wrap
+                ? root.wrap-columns * root.advance + root.advance / 2
+                : max(self.preferred-width, flick.width - self.x - root.pad);
             height: max(self.preferred-height, flick.height - 2 * root.pad);
             text <=> root.text;
             single-line: false;
             read-only: root.read-only;
-            wrap: no-wrap;
-            font-family: root.mono-family;
+            wrap: root.wrap ? char-wrap : no-wrap;
+            font-family: root.family;
             font-size: root.mono-size;
             color: root.debug-alignment ? Theme.destructive.transparentize(0.4) : transparent;
             selection-background-color: root.selection-color;
@@ -178,6 +245,65 @@ export component SqlEditor inherits Rectangle {
             height: root.line-height;
             background: root.caret-color;
             visible: input.has-focus && !root.read-only;
+        }
+    }
+
+    // The minimap: every row as thin bars in its tokens' colours, scaled to
+    // fit the strip, with the visible rows marked.
+    if root.minimap-width > 0: Rectangle {
+        property <length> row-size: min(3px, (self.height - 8px) / max(1, root.lines.length));
+        property <float> first-row: -flick.content-y / root.line-height;
+        property <float> shown-rows: flick.height / root.line-height;
+        x: root.width - root.minimap-width;
+        width: root.minimap-width;
+        background: Theme.card;
+        clip: true;
+        accessible-role: AccessibleRole.slider;
+        accessible-label: "Minimap";
+
+        Rectangle {
+            x: 0;
+            width: 1px;
+            background: Theme.border;
+        }
+        // The visible rows.
+        Rectangle {
+            x: 1px;
+            y: 4px + parent.first-row * parent.row-size;
+            width: parent.width - 1px;
+            height: max(6px, parent.shown-rows * parent.row-size);
+            background: Theme.hover;
+        }
+        for line[index] in root.lines: Rectangle {
+            x: 8px;
+            y: 4px + index * parent.row-size;
+            height: max(1px, parent.row-size - 1px);
+            for run in line.runs: Rectangle {
+                x: run.col * 1px;
+                y: 0;
+                width: run.text.character-count * 1px;
+                height: parent.height;
+                background: run.color.transparentize(0.35);
+            }
+        }
+        map-touch := TouchArea {
+            mouse-cursor: pointer;
+            function scroll-to(y: length) {
+                // Centre the row under the pointer, within the scroll range.
+                let target = (y - 4px) / parent.row-size - parent.shown-rows / 2;
+                flick.content-y = -clamp(target * root.line-height, 0px,
+                    max(0px, flick.content-height - flick.height));
+            }
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.down) {
+                    self.scroll-to(self.mouse-y);
+                }
+            }
+            moved => {
+                if (self.pressed) {
+                    self.scroll-to(self.mouse-y);
+                }
+            }
         }
     }
 
@@ -219,8 +345,8 @@ export component SqlEditor inherits Rectangle {
                     spacing: 8px;
                     Text {
                         width: 14px;
-                        text: item.kind == "table" ? "T" : item.kind == "column" ? "C" : item.kind == "function" ? "f" : item.kind == "schema" ? "S" : "K";
-                        color: item.kind == "column" ? Theme.primary : item.kind == "table" || item.kind == "schema" ? Theme.success : Theme.dim-foreground;
+                        text: item.kind == "table" ? "T" : item.kind == "column" ? "C" : item.kind == "function" ? "f" : item.kind == "schema" ? "S" : item.kind == "database" ? "D" : "K";
+                        color: item.kind == "column" ? Theme.primary : item.kind == "table" || item.kind == "schema" || item.kind == "database" ? Theme.success : Theme.dim-foreground;
                         font-size: Theme.size-small;
                         font-weight: 700;
                         horizontal-alignment: center;
@@ -229,7 +355,7 @@ export component SqlEditor inherits Rectangle {
                     Text {
                         text: item.label;
                         color: Theme.foreground;
-                        font-family: root.mono-family;
+                        font-family: root.family;
                         font-size: Theme.size-label;
                         vertical-alignment: center;
                         horizontal-stretch: 1;

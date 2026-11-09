@@ -13,8 +13,9 @@
 use std::collections::HashSet;
 use std::rc::Rc;
 
+use dbhive_core::models::DbDriver;
 use dbhive_ui_model::sql_suggest::{apply, suggest, ColumnMeta, Metadata, Suggestions, TableMeta};
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ModelRc, VecModel};
 
 use super::{with_ctx, Ctx};
 use crate::{runtime, AppWindow, CompletionItem};
@@ -23,10 +24,13 @@ use crate::{runtime, AppWindow, CompletionItem};
 pub(super) struct CompletionSession {
     /// The connection's tables, with columns filled in as they are fetched.
     meta: Metadata,
-    /// Which connection and schema `meta` was built for.
+    /// Which connection, schema and table list `meta` was built for.
     meta_key: String,
-    /// Tables whose columns are being fetched right now.
-    fetching: HashSet<String>,
+    /// Tables whose columns are being fetched right now, by schema (`None`
+    /// is the current one).
+    fetching: HashSet<(Option<String>, String)>,
+    /// Schemas (or table-holding databases) whose tables are being fetched.
+    fetching_schemas: HashSet<String>,
     /// What the popup is showing, if anything.
     shown: Option<Suggestions>,
     selected: usize,
@@ -86,15 +90,17 @@ impl Ctx {
         let mut s = self.session.borrow_mut();
         let ws = &s.workspace;
         let key = format!(
-            "{}|{}|{}",
+            "{}|{}|{}|{}|{}",
             ws.connection_id,
             ws.schema.as_deref().unwrap_or(""),
-            ws.tables.len()
+            ws.tables.len(),
+            ws.databases.len(),
+            ws.schemas.len()
         );
         if s.completion.meta_key == key {
             return;
         }
-        let schema = ws.schema.clone();
+        let current_schema = ws.schema.clone();
         let tables: Vec<TableMeta> = ws
             .tables
             .iter()
@@ -104,12 +110,20 @@ impl Ctx {
                 columns: None,
             })
             .collect();
-        s.completion.meta = Metadata {
-            schemas: schema.into_iter().collect(),
+        let meta = Metadata {
+            schemas: ws.schemas.clone(),
             tables,
+            databases: ws.databases.clone(),
+            // MySQL names a table's database in front of it (`shop.orders`);
+            // the Postgres family qualifies by schema instead.
+            databases_hold_tables: matches!(ws.driver.as_ref(), Some(DbDriver::MySql)),
+            current_schema: current_schema.clone(),
+            loaded: current_schema.into_iter().collect(),
         };
+        s.completion.meta = meta;
         s.completion.meta_key = key;
         s.completion.fetching.clear();
+        s.completion.fetching_schemas.clear();
     }
 
     /// The caret moved to byte offset `cursor` (typing moves it too): work out
@@ -149,10 +163,15 @@ impl Ctx {
             }
         };
 
-        // Columns the statement needs that are not loaded yet.
-        let missing: Vec<String> = found
+        // Columns the statement needs that are not loaded yet, and schemas it
+        // names whose tables are not.
+        let missing = found
             .as_ref()
             .map(|f| f.missing_columns.clone())
+            .unwrap_or_default();
+        let missing_schemas = found
+            .as_ref()
+            .map(|f| f.missing_schemas.clone())
             .unwrap_or_default();
 
         {
@@ -172,32 +191,40 @@ impl Ctx {
         }
         self.project_completion();
 
-        for table in missing {
-            self.completion_fetch_columns(&table);
+        for (schema, table) in missing {
+            self.completion_fetch_columns(schema, table);
+        }
+        for schema in missing_schemas {
+            self.completion_fetch_schema(&schema);
         }
     }
 
-    /// Fetch one table's columns in the background, then recompute.
-    fn completion_fetch_columns(self: &Rc<Self>, table: &str) {
-        let (connection_id, schema_arg, key) = {
+    /// Fetch one table's columns in the background, then recompute. `schema`
+    /// is the qualifier the statement used; `None` is the current schema.
+    fn completion_fetch_columns(self: &Rc<Self>, schema: Option<String>, table: String) {
+        let key = (schema.clone(), table.clone());
+        let (connection_id, schema_arg, meta_key) = {
             let mut s = self.session.borrow_mut();
-            if !s.completion.fetching.insert(table.to_string()) {
+            if !s.completion.fetching.insert(key.clone()) {
                 return;
             }
             (
                 s.workspace.connection_id.clone(),
-                s.workspace.schema.clone().unwrap_or_default(),
+                schema
+                    .clone()
+                    .or_else(|| s.workspace.schema.clone())
+                    .unwrap_or_default(),
                 s.completion.meta_key.clone(),
             )
         };
         let Some(d) = self.open_driver(&connection_id) else {
+            self.session.borrow_mut().completion.fetching.remove(&key);
             return;
         };
-        let name = table.to_string();
-        let worker_name = name.clone();
+        let worker_table = table.clone();
         runtime::spawn(
             async move {
-                d.get_table_schema(&schema_arg, &worker_name)
+                d.get_table_schema(&schema_arg, &worker_table)
                     .await
                     .map(|schema| {
                         schema
@@ -217,15 +244,70 @@ impl Ctx {
                         let mut s = ctx.session.borrow_mut();
                         // The metadata was rebuilt meanwhile: this answer is for
                         // a connection or schema that is gone.
-                        if s.completion.meta_key != key {
+                        if s.completion.meta_key != meta_key {
                             return;
                         }
-                        s.completion.fetching.remove(&name);
+                        s.completion.fetching.remove(&key);
                         match result {
-                            Ok(cols) => s.completion.meta.set_columns(&name, cols),
+                            Ok(cols) => {
+                                s.completion
+                                    .meta
+                                    .set_columns_in(schema.as_deref(), &table, cols)
+                            }
                             // Leave the columns unknown. `fetching` no longer
-                            // holds the name, so a later keystroke may retry,
+                            // holds the table, so a later keystroke may retry,
                             // but a failure cannot loop on its own.
+                            Err(_) => return,
+                        }
+                        s.completion.last_cursor
+                    };
+                    ctx.completion_update(cursor);
+                })
+            },
+        );
+    }
+
+    /// Fetch a schema's (or table-holding database's) table list, then
+    /// recompute. A statement like `FROM audit.` can be completed once it
+    /// lands.
+    fn completion_fetch_schema(self: &Rc<Self>, schema: &str) {
+        let (connection_id, meta_key) = {
+            let mut s = self.session.borrow_mut();
+            if !s.completion.fetching_schemas.insert(schema.to_string()) {
+                return;
+            }
+            (
+                s.workspace.connection_id.clone(),
+                s.completion.meta_key.clone(),
+            )
+        };
+        let Some(d) = self.open_driver(&connection_id) else {
+            self.session
+                .borrow_mut()
+                .completion
+                .fetching_schemas
+                .remove(schema);
+            return;
+        };
+        let name = schema.to_string();
+        let worker = name.clone();
+        runtime::spawn(
+            async move {
+                d.get_tables(&worker)
+                    .await
+                    .map(|tables| tables.into_iter().map(|t| t.name).collect::<Vec<_>>())
+                    .map_err(|e| e.to_string())
+            },
+            move |result| {
+                with_ctx(|ctx| {
+                    let cursor = {
+                        let mut s = ctx.session.borrow_mut();
+                        if s.completion.meta_key != meta_key {
+                            return;
+                        }
+                        s.completion.fetching_schemas.remove(&name);
+                        match result {
+                            Ok(names) => s.completion.meta.add_schema_tables(&name, names),
                             Err(_) => return,
                         }
                         s.completion.last_cursor

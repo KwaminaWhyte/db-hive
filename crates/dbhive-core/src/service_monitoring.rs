@@ -933,6 +933,15 @@ pub fn record_query_complete(
         .log_query_complete(log_id, duration_ms, row_count)
 }
 
+/// Record that the user stopped a previously started query.
+pub fn record_query_cancel(state: &Mutex<AppState>, log_id: &str, duration_ms: u64) -> bool {
+    state
+        .lock()
+        .unwrap()
+        .activity_logger
+        .log_query_cancel(log_id, duration_ms)
+}
+
 /// Record a failure against a previously started log.
 pub fn record_query_error(
     state: &Mutex<AppState>,

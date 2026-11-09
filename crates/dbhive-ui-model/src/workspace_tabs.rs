@@ -220,6 +220,28 @@ impl Tabs {
         Some(t.run_seq)
     }
 
+    /// Stop waiting for a tab's run. The run's result, should it still land,
+    /// is refused like any stale one; the tab keeps no result and its error
+    /// is the [`crate::format::CANCELLED`] sentinel, which views show as a
+    /// neutral "Cancelled" rather than a failure. `false` if the tab is gone
+    /// or was not running.
+    pub fn cancel_run(&mut self, id: u64, elapsed_ms: u64) -> bool {
+        let Some(t) = self.get_mut(id) else {
+            return false;
+        };
+        if !t.running {
+            return false;
+        }
+        t.running = false;
+        t.run_seq += 1;
+        t.elapsed_ms = Some(elapsed_ms);
+        t.result = None;
+        t.capped_at = None;
+        t.grid = GridState::default();
+        t.error = Some(crate::format::CANCELLED.to_string());
+        true
+    }
+
     /// Land a result. `false` means it was stale or the tab is gone, and
     /// nothing changed. Rows past the drivers' hard cap (the one-row overflow
     /// sentinel a driver leaves) are dropped.
@@ -383,6 +405,28 @@ mod tests {
             t.get(id).unwrap().result.as_ref().unwrap().rows.len(),
             MAX_RESULT_ROWS
         );
+    }
+
+    #[test]
+    fn a_cancelled_run_is_not_an_error_and_its_late_result_is_refused() {
+        let mut t = Tabs::default();
+        let id = t.open_query("SELECT 1");
+        assert!(!t.cancel_run(id, 5), "nothing is running yet");
+        let seq = t.begin_run(id).unwrap();
+        assert!(t.cancel_run(id, 1200));
+        let tab = t.get(id).unwrap();
+        assert!(!tab.running);
+        assert!(tab.result.is_none());
+        assert_eq!(tab.elapsed_ms, Some(1200));
+        assert!(crate::format::is_cancelled(tab.error.as_deref().unwrap()));
+        // The abandoned run finishing anyway changes nothing.
+        assert!(!t.finish_run(id, seq, Ok(rows(3)), 2000));
+        assert!(t.get(id).unwrap().result.is_none());
+        // And the tab can run again, clearing the cancelled state.
+        let seq = t.begin_run(id).unwrap();
+        assert!(t.get(id).unwrap().error.is_none());
+        assert!(t.finish_run(id, seq, Ok(rows(2)), 4));
+        assert_eq!(t.get(id).unwrap().result.as_ref().unwrap().rows.len(), 2);
     }
 
     fn rows(n: usize) -> QueryResult {
