@@ -108,15 +108,31 @@ partial (core installs only bundled plugins); AI 4 done and generate/explain/opt
   reporting a failed restore as success. Not run against a server: the query builder and the ER
   diagram on a non-default schema, SQL Server, MongoDB, Redis and Turso. None of it has been clicked through in the real GPU window.
 - **Known defects and risks:**
-  - Settings stored but not consumed: language, startup, update checks, editor font family,
-    minimap, word wrap. Shortcut rebinding saves but is not dispatched. (Max rows now applies to
-    query results.)
+  - Settings stored but not consumed: language, startup, update checks. Shortcut rebinding saves
+    but is not dispatched. (Max rows now applies to query results; the editor font family, word
+    wrap and minimap are applied live.)
   - Table-inspector page loads are not written to history or the activity log.
   - MySQL commits implicitly before DDL, so a migration's rollback there covers only the
     statements since the last DDL statement (the server's rule, now noted in core).
   - The ER canvas node rendering was rewritten; its 120 fps figure has not been re-measured.
   - Foreign key targets in generated DDL are unqualified, so a non-default Postgres schema
     relies on the search path.
+  - Query tabs and the editor: Stop replaces Run while a statement is in flight. The wait is
+    abandoned and, on SQLite, `sqlite3_interrupt` stops the statement itself; a stopped tab shows
+    a neutral "Cancelled" state (not an error) and the activity log records a cancel. Clear
+    empties the editor. The query grid selects one cell, with Copy cell / row / column and a row
+    number column. The tab bar has a right-click menu (Close, Close Others, Close to the Right,
+    Close All, asking once when several tabs hold unsaved work), middle-click close, arrow /
+    Home / End / Delete / Menu keys, and Ctrl+Tab / Ctrl+Shift+Tab. Settings > Appearance now
+    drives the editor font family (with a monospace fallback), word wrap (the colour layer
+    re-wraps at the column count the editor reports) and the minimap. Autocomplete offers known
+    schemas and databases, loads a schema's tables and a qualified table's columns on demand,
+    and inserts `schema.table` for tables outside the current schema; the MySQL driver now
+    honours the database argument of `get_tables` / `get_table_schema`. Covered by
+    `dbhive-ui-model::{query_tabs, editor_prefs, sql_suggest}` unit tests,
+    `tests/query_tools_controller.rs` on a real SQLite file, and the `workspace-query-cancelled`,
+    `workspace-query-cancel-waiting`, `workspace-query-selection`, `workspace-query-tab-menu` and
+    `workspace-query-wrap` snapshots.
 - **Remaining work, in order:** multi-window; then the partial items (schema browser tree and
   context menus, results export and charts, update checks, connection folders, a Connection Lost
   screen), then clicking everything through in the real GPU
