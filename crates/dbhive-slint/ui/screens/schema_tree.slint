@@ -7,7 +7,7 @@
 // file draws the rows and reports intents through `TreeState`.
 
 import { ScrollView } from "std-widgets.slint";
-import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Divider, VDivider, Banner, EmptyState, Icon, Popover, CheckBox, CodeBlock, ListRow, SectionLabel, TreeNode, TreeRowView, TreeCodeView, CtxItem, CtxMenu } from "../kit/kit.slint";
+import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Divider, VDivider, Banner, EmptyState, Icon, Popover, CheckBox, CodeBlock, ListRow, SectionLabel, TreeNode, TreeRowKind, TreeRowView, TreeCodeView, CtxItem, CtxMenu } from "../kit/kit.slint";
 
 export enum TreeStatus { populated, empty, no-matches, loading, error }
 
@@ -19,6 +19,16 @@ export struct TreeRoutine {
     // "function" or "procedure"; empty on a heading.
     kind: string,
     selected: bool,
+}
+
+// One argument of the routine run form. `input` is false for an output
+// parameter, which shows `hint` in place of a box.
+export struct TreeRoutineArg {
+    label: string,
+    hint: string,
+    value: string,
+    error: string,
+    input: bool,
 }
 
 export global TreeState {
@@ -81,6 +91,28 @@ export global TreeState {
     in property <string> routine-definition;
     in property <bool> routine-def-loading;
     in property <string> routine-def-error;
+    // Running the picked routine: one box per argument, the statement that
+    // would run, and a confirmation before it does.
+    in property <[TreeRoutineArg]> run-args;
+    in property <string> run-sql;
+    in property <bool> run-can-run;
+    in property <bool> run-confirming;
+    in property <string> run-label: "Run";
+    in property <string> run-confirm-text;
+
+    // Dragging a table from the tree into the SQL editor. The row reports the
+    // pointer in window coordinates; `TreeDropZone` publishes where the editor
+    // is, and highlights itself while a drag is over it.
+    in-out property <bool> drag-active;
+    in-out property <string> drag-label;
+    in-out property <length> drag-x;
+    in-out property <length> drag-y;
+    in-out property <length> zone-x;
+    in-out property <length> zone-y;
+    in-out property <length> zone-width;
+    in-out property <length> zone-height;
+    // The editor's caret as a byte offset, -1 before it has been placed.
+    in-out property <int> editor-caret: -1;
 
     callback clicked(int);
     callback double-clicked(int);
@@ -112,6 +144,12 @@ export global TreeState {
     callback routine-pick(int);
     callback routine-copy;
     callback routine-to-editor;
+    callback run-arg-edited(int, string);
+    callback run-ask;
+    callback run-cancel;
+    callback run-confirm;
+    // A table row was released after a drag: the row and the window position.
+    callback drag-dropped(int, length, length);
 }
 
 export component SchemaTreePanel inherits Rectangle {
@@ -221,6 +259,23 @@ export component SchemaTreePanel inherits Rectangle {
                             context(x, y) => {
                                 scope.focus();
                                 TreeState.context(i, x, y);
+                            }
+                            // Only tables and views can be dragged into the editor.
+                            drag-moved(x, y) => {
+                                if (n.kind == TreeRowKind.table || n.kind == TreeRowKind.view) {
+                                    TreeState.drag-label = n.label;
+                                    TreeState.drag-x = x;
+                                    TreeState.drag-y = y;
+                                    TreeState.drag-active = true;
+                                }
+                            }
+                            drag-ended(x, y, dropped) => {
+                                if (TreeState.drag-active) {
+                                    TreeState.drag-active = false;
+                                    if (dropped) {
+                                        TreeState.drag-dropped(i, x, y);
+                                    }
+                                }
                             }
                         }
 
@@ -553,9 +608,124 @@ export component TreeCreateDbOverlay inherits Rectangle {
     }
 }
 
+// Running the picked routine: a box per argument, the statement those boxes
+// make (built in Rust from the driver's quoting, never pasted together here),
+// and a confirmation before anything runs. The result opens in a query tab.
+component TreeRunForm inherits VerticalLayout {
+    spacing: 8px;
+    vertical-stretch: 0;
+
+    SectionLabel {
+        text: TreeState.run-args.length == 0 ? "RUN" : "ARGUMENTS";
+    }
+    if TreeState.run-args.length == 0: Text {
+        text: "Takes no arguments.";
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+    }
+    if TreeState.run-args.length > 0: ScrollView {
+        // Up to three arguments show in full; more scroll.
+        height: min(TreeState.run-args.length, 3) * 54px;
+        VerticalLayout {
+            alignment: start;
+            spacing: 6px;
+            for a[i] in TreeState.run-args: HorizontalLayout {
+                spacing: 10px;
+                height: 48px;
+                VerticalLayout {
+                    width: 168px;
+                    alignment: start;
+                    padding-top: 8px;
+                    Text {
+                        text: a.label;
+                        color: a.input ? Theme.foreground : Theme.muted-foreground;
+                        font-family: "Menlo";
+                        font-size: Theme.size-small;
+                        overflow: elide;
+                    }
+                }
+                if a.input: VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: start;
+                    spacing: 2px;
+                    TextField {
+                        text: a.value;
+                        placeholder: "NULL";
+                        edited(t) => { TreeState.run-arg-edited(i, t); }
+                        accepted(t) => {
+                            if (TreeState.run-can-run) {
+                                TreeState.run-ask();
+                            }
+                        }
+                    }
+                    Text {
+                        text: a.error != "" ? a.error : a.hint;
+                        color: a.error != "" ? Theme.destructive : Theme.dim-foreground;
+                        font-size: Theme.size-small;
+                        overflow: elide;
+                    }
+                }
+                if !a.input: VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: start;
+                    padding-top: 8px;
+                    Text {
+                        text: a.hint;
+                        color: Theme.dim-foreground;
+                        font-size: Theme.size-small;
+                        overflow: elide;
+                    }
+                }
+            }
+        }
+    }
+
+    if TreeState.run-sql != "": CodeBlock {
+        text: TreeState.run-sql;
+        max-lines: 2;
+    }
+
+    if !TreeState.run-confirming: HorizontalLayout {
+        alignment: start;
+        Button {
+            text: TreeState.run-label;
+            has-icon: true;
+            icon: Icons.play;
+            variant: ButtonVariant.primary;
+            enabled: TreeState.run-can-run;
+            clicked => { TreeState.run-ask(); }
+        }
+    }
+
+    if TreeState.run-confirming: VerticalLayout {
+        spacing: 8px;
+        Banner {
+            tone: Tone.warning;
+            message: TreeState.run-confirm-text;
+            dismissible: false;
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            Button {
+                text: "Cancel";
+                clicked => { TreeState.run-cancel(); }
+            }
+            Button {
+                text: "Run now";
+                has-icon: true;
+                icon: Icons.play;
+                variant: ButtonVariant.primary;
+                clicked => { TreeState.run-confirm(); }
+            }
+        }
+    }
+
+    Divider { }
+}
+
 // "Procedures & Functions": every routine on the connection with a search
-// box, and the source of the one picked. Reading only: nothing here runs a
-// routine.
+// box, the source of the one picked, and a form to run it with arguments.
 export component TreeRoutinesOverlay inherits Rectangle {
     background: Theme.scrim;
 
@@ -701,7 +871,7 @@ export component TreeRoutinesOverlay inherits Rectangle {
                                 vertical-stretch: 1;
                                 icon: Icons.code;
                                 title: "Pick a routine";
-                                message: "Select a function or procedure to read its definition.";
+                                message: "Select a function or procedure to read its definition or run it.";
                             }
 
                             if TreeState.routine-picked: VerticalLayout {
@@ -754,6 +924,8 @@ export component TreeRoutinesOverlay inherits Rectangle {
                                     }
                                 }
 
+                                TreeRunForm { }
+
                                 if TreeState.routine-def-error != "": Banner {
                                     message: TreeState.routine-def-error;
                                     dismissible: false;
@@ -774,6 +946,73 @@ export component TreeRoutinesOverlay inherits Rectangle {
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+// Covers the SQL editor, invisibly, to tell the schema tree where a dragged
+// table may be dropped (in window coordinates) and to outline the editor
+// while one is over it. It takes no input, so the editor under it works as
+// before.
+export component TreeDropZone inherits Rectangle {
+    property <length> ax: self.absolute-position.x;
+    property <length> ay: self.absolute-position.y;
+    property <bool> hot: TreeState.drag-active
+        && TreeState.drag-x >= root.ax && TreeState.drag-x < root.ax + root.width
+        && TreeState.drag-y >= root.ay && TreeState.drag-y < root.ay + root.height;
+
+    function publish() {
+        TreeState.zone-x = root.ax;
+        TreeState.zone-y = root.ay;
+        TreeState.zone-width = root.width;
+        TreeState.zone-height = root.height;
+    }
+
+    init => { root.publish(); }
+    changed ax => { root.publish(); }
+    changed ay => { root.publish(); }
+    changed width => { root.publish(); }
+    changed height => { root.publish(); }
+
+    border-radius: Theme.radius-card;
+    border-width: root.hot ? 2px : 0px;
+    border-color: Theme.primary;
+}
+
+// The table being dragged, following the pointer. Spans the window and takes
+// no input, so the release still reaches the row that started the drag.
+export component TreeDragLayer inherits Rectangle {
+    chip := Rectangle {
+        x: TreeState.drag-x - root.absolute-position.x + 14px;
+        y: TreeState.drag-y - root.absolute-position.y + 10px;
+        width: row.preferred-width;
+        height: 28px;
+        background: Theme.popover;
+        border-radius: Theme.radius-control;
+        border-width: 1px;
+        border-color: Theme.border-strong;
+
+        row := HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 10px;
+            spacing: 6px;
+            VerticalLayout {
+                alignment: center;
+                Icon {
+                    source: Icons.table;
+                    tint: Theme.primary;
+                    width: 14px;
+                    height: 14px;
+                }
+            }
+            Text {
+                text: TreeState.drag-label;
+                color: Theme.foreground;
+                font-size: Theme.size-label;
+                vertical-alignment: center;
+                max-width: 280px;
+                overflow: elide;
             }
         }
     }

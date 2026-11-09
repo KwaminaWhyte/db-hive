@@ -184,6 +184,23 @@ impl Ctx {
         self.load_data_tables();
     }
 
+    /// The schema tree's "Import Data…": the import tab, aimed at `table`
+    /// when there is one. The caller has already made its schema current.
+    pub(super) fn open_import_into(self: &Rc<Self>, table: Option<&str>) {
+        self.open_import_export(Some(0));
+        let Some(name) = table else { return };
+        let load = {
+            let mut s = self.session.borrow_mut();
+            let w = &mut s.data.wizard;
+            w.set_target_table(name);
+            w.preview.is_some() && w.target_columns.is_empty()
+        };
+        self.refresh_data_panel();
+        if load {
+            self.load_target_columns();
+        }
+    }
+
     pub(super) fn hide_data_panel(&self) {
         if let Some(w) = self.window.upgrade() {
             w.global::<ImportExportState>().set_visible(false);

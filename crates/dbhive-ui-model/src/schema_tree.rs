@@ -165,6 +165,8 @@ pub enum MenuAction {
     CreateTable,
     SwitchDatabase,
     CreateDatabase,
+    /// Open the import wizard aimed at this table, or at this schema.
+    ImportData,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -192,7 +194,8 @@ impl Caps {
         Self {
             ddl: dbhive_core::ddl::get_ddl_generator(driver).is_ok(),
             switch_database: driver.is_postgres_compatible() || matches!(driver, DbDriver::MySql),
-            create_database: driver.is_postgres_compatible() || matches!(driver, DbDriver::MySql),
+            create_database: driver.is_postgres_compatible()
+                || matches!(driver, DbDriver::MySql | DbDriver::SqlServer),
         }
     }
 }
@@ -887,6 +890,7 @@ impl SchemaTree {
             }
             NodeId::Schema(_) | NodeId::Note(..) => vec![
                 entry(MenuAction::CreateTable, "Create Table…", "plus", caps.ddl),
+                entry(MenuAction::ImportData, "Import Data…", "upload", caps.ddl),
                 entry(MenuAction::Refresh, "Refresh", "refresh-cw", true),
             ],
             NodeId::Table { schema, name } => {
@@ -910,6 +914,12 @@ impl SchemaTree {
                     let mut edit = entry(MenuAction::EditTable, "Edit Table…", "pencil", caps.ddl);
                     edit.divider_above = true;
                     items.push(edit);
+                    items.push(entry(
+                        MenuAction::ImportData,
+                        "Import Data…",
+                        "upload",
+                        caps.ddl,
+                    ));
                 }
                 items.push(entry(MenuAction::Refresh, "Refresh", "refresh-cw", true));
                 if !view {
@@ -1075,6 +1085,70 @@ impl CreateDatabaseDialog {
             .and_then(|v| v.into_iter().next())
             .unwrap_or_default()
     }
+}
+
+// ---------------------------------------------------------------------------
+// Dragging a table into the editor
+// ---------------------------------------------------------------------------
+
+/// Where a drag from the tree may land, in window coordinates.
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
+pub struct DropZone {
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+}
+
+impl DropZone {
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        self.width > 0.0
+            && self.height > 0.0
+            && x >= self.x
+            && y >= self.y
+            && x < self.x + self.width
+            && y < self.y + self.height
+    }
+}
+
+/// Whether a name dropped after `c` needs a space between them. Not after
+/// whitespace, an opening parenthesis or a qualifying dot.
+fn space_after(c: char) -> bool {
+    !c.is_whitespace() && !matches!(c, '(' | '.')
+}
+
+/// Whether a name dropped before `c` needs a space between them. Not before
+/// whitespace or the punctuation that follows a name.
+fn space_before(c: char) -> bool {
+    !c.is_whitespace() && !matches!(c, ')' | ',' | ';' | '.')
+}
+
+/// Put a dropped (already quoted) name into `text` at byte offset `caret`,
+/// with a space on either side where it would otherwise run into the text
+/// around it.
+/// A caret that is unknown (negative) or past the end means the end; one
+/// inside a character moves back to its start. Returns the new text and the
+/// caret after the name.
+pub fn insert_dropped_name(text: &str, caret: i64, name: &str) -> (String, usize) {
+    let mut at = usize::try_from(caret).unwrap_or(text.len()).min(text.len());
+    while !text.is_char_boundary(at) {
+        at -= 1;
+    }
+    let (before, after) = text.split_at(at);
+    let lead = before.chars().next_back().is_some_and(space_after);
+    let trail = after.chars().next().is_some_and(space_before);
+    let mut out = String::with_capacity(text.len() + name.len() + 2);
+    out.push_str(before);
+    if lead {
+        out.push(' ');
+    }
+    out.push_str(name);
+    let caret = out.len();
+    if trail {
+        out.push(' ');
+    }
+    out.push_str(after);
+    (out, caret)
 }
 
 #[cfg(test)]
@@ -1554,6 +1628,7 @@ mod tests {
                 MenuAction::GenerateInsert,
                 MenuAction::CopyName,
                 MenuAction::EditTable,
+                MenuAction::ImportData,
                 MenuAction::Refresh,
                 MenuAction::DropTable,
             ]
@@ -1573,17 +1648,23 @@ mod tests {
         assert!(!a.contains(&MenuAction::EditTable));
         assert!(!a.contains(&MenuAction::DropTable));
         assert!(!a.contains(&MenuAction::GenerateInsert));
+        assert!(!a.contains(&MenuAction::ImportData), "a view takes no rows");
         assert!(a.contains(&MenuAction::GenerateSelect));
     }
 
     #[test]
-    fn a_schema_menu_is_create_table_and_refresh() {
+    fn a_schema_menu_is_create_table_import_and_refresh() {
         let t = pg_tree();
         let items = t.menu_for(&NodeId::Schema("public".into()), caps());
         assert_eq!(
             actions(&items),
-            vec![MenuAction::CreateTable, MenuAction::Refresh]
+            vec![
+                MenuAction::CreateTable,
+                MenuAction::ImportData,
+                MenuAction::Refresh
+            ]
         );
+        assert_eq!(items[1].label, "Import Data…");
     }
 
     #[test]
@@ -1598,10 +1679,12 @@ mod tests {
             name: "orders".into(),
         };
         let items = t.menu_for(&id, no_ddl);
-        for m in items
-            .iter()
-            .filter(|m| matches!(m.action, MenuAction::EditTable | MenuAction::DropTable))
-        {
+        for m in items.iter().filter(|m| {
+            matches!(
+                m.action,
+                MenuAction::EditTable | MenuAction::DropTable | MenuAction::ImportData
+            )
+        }) {
             assert!(!m.enabled, "{:?} should be disabled", m.action);
         }
         assert!(
@@ -1657,6 +1740,19 @@ mod tests {
         let mut m = CreateDatabaseDialog::new(&DbDriver::MySql);
         m.name = "my-db".into();
         assert_eq!(m.sql(), "CREATE DATABASE `my-db`");
+    }
+
+    #[test]
+    fn sql_server_can_create_a_database_in_brackets() {
+        assert!(Caps::for_driver(&DbDriver::SqlServer).create_database);
+        let mut d = CreateDatabaseDialog::new(&DbDriver::SqlServer);
+        d.name = "my-db".into();
+        assert!(d.can_create());
+        assert_eq!(d.sql(), "CREATE DATABASE [my-db]");
+        // Nothing that could close the bracket gets as far as a statement.
+        d.name = "x]; DROP DATABASE app; --".into();
+        assert!(!d.can_create());
+        assert_eq!(d.sql(), "");
     }
 
     #[test]
@@ -1770,5 +1866,61 @@ mod tests {
         let mut d = DropDialog::new("public", "public", "customers", true);
         d.dependents = Dependents::Ready(vec![dep("public", "orders")]);
         assert!(!d.cascade, "off until the user turns it on");
+    }
+
+    // -- Dragging into the editor -------------------------------------------------------------
+
+    #[test]
+    fn a_drop_zone_contains_its_inside_only() {
+        let z = DropZone {
+            x: 300.0,
+            y: 100.0,
+            width: 500.0,
+            height: 200.0,
+        };
+        assert!(z.contains(300.0, 100.0));
+        assert!(z.contains(799.0, 299.0));
+        assert!(!z.contains(800.0, 150.0));
+        assert!(!z.contains(299.0, 150.0));
+        assert!(
+            !DropZone::default().contains(0.0, 0.0),
+            "an unpublished zone takes nothing"
+        );
+    }
+
+    #[test]
+    fn a_dropped_name_goes_in_at_the_caret_with_spaces_where_needed() {
+        let (t, c) = insert_dropped_name("SELECT * FROM ", 14, "\"orders\"");
+        assert_eq!(t, "SELECT * FROM \"orders\"");
+        assert_eq!(c, t.len());
+
+        // Between two words both sides get a space.
+        let (t, c) = insert_dropped_name("SELECT aFROM", 8, "\"t\"");
+        assert_eq!(t, "SELECT a \"t\" FROM");
+        assert_eq!(&t[..c], "SELECT a \"t\"");
+
+        // After a statement's semicolon, and before a comma, as typed.
+        let (t, _) = insert_dropped_name("SELECT 1;", 9, "\"t\"");
+        assert_eq!(t, "SELECT 1; \"t\"");
+        let (t, _) = insert_dropped_name("SELECT a, FROM", 8, "b");
+        assert_eq!(t, "SELECT a b, FROM");
+        let (t, _) = insert_dropped_name("count()", 6, "x");
+        assert_eq!(t, "count(x)");
+
+        // An unknown caret appends.
+        let (t, _) = insert_dropped_name("SELECT 1", -1, "`t`");
+        assert_eq!(t, "SELECT 1 `t`");
+        let (t, _) = insert_dropped_name("", -1, "[t]");
+        assert_eq!(t, "[t]");
+    }
+
+    #[test]
+    fn a_caret_past_the_end_or_inside_a_character_is_made_safe() {
+        let (t, _) = insert_dropped_name("ab", 99, "x");
+        assert_eq!(t, "ab x");
+        // "é" is two bytes; offset 1 is inside it.
+        let (t, c) = insert_dropped_name("é", 1, "x");
+        assert_eq!(t, "x é");
+        assert_eq!(c, 1);
     }
 }

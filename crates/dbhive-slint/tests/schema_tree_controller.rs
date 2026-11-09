@@ -8,7 +8,12 @@
 //! a right click raises the right menu, that Generate SELECT and INSERT put
 //! quoted SQL in an editor and run nothing, that Drop Table warns about the
 //! tables that point at it and stays closed until the name is typed exactly,
-//! and that a refresh picks up a table created behind the app's back.
+//! that a refresh picks up a table created behind the app's back, that
+//! Import Data opens the import wizard aimed at the table, and that dragging a
+//! table with real pointer events drops its quoted name into the editor at the
+//! caret (and nowhere else). SQLite has no stored routines, so the
+//! Procedures & Functions entry is hidden here; running one is covered by
+//! `schema_tree_postgres.rs`.
 //!
 //! SQLite has one schema, so the multi-schema tree (a database holding
 //! several schemas) is covered by the unit tests and the snapshots only.
@@ -25,7 +30,9 @@ use std::time::{Duration, Instant};
 
 use dbhive_core::models::{ConnectionProfile, DbDriver};
 use dbhive_core::state::AppState;
-use dbhive_slint::{AppWindow, Screen, TableDialogState, TreeRowKind, TreeState, TreeStatus};
+use dbhive_slint::{
+    AppWindow, ImportExportState, Screen, TableDialogState, TreeRowKind, TreeState, TreeStatus,
+};
 use slint::platform::{Key, PointerEventButton, WindowEvent};
 use slint::{ComponentHandle, LogicalPosition, Model, SharedString, Timer, TimerMode};
 
@@ -291,6 +298,7 @@ async fn scenario(w: AppWindow, db: PathBuf, finished: Rc<Cell<bool>>) {
             "Generate INSERT",
             "Copy Name",
             "Edit Table…",
+            "Import Data…",
             "Refresh",
             "Drop Table…"
         ]
@@ -432,6 +440,122 @@ async fn scenario(w: AppWindow, db: PathBuf, finished: Rc<Cell<bool>>) {
                 .starts_with("SELECT *\nFROM \"orders\"")
     })
     .await;
+
+    // ---- Import Data: the import wizard, aimed at the table --------------------
+    right_click_row(&w, 1);
+    until("the customers menu", || t.get_menu_visible()).await;
+    choose(&w, "Import Data");
+    let ie = w.global::<ImportExportState>();
+    until("the import wizard on customers", || {
+        ie.get_visible() && !ie.get_tables_loading() && ie.get_table_value() == "customers"
+    })
+    .await;
+    assert_eq!(ie.get_tab(), 0, "the import tab, not export");
+    assert_eq!(ie.get_step(), 0, "it starts by asking for the file");
+    ie.invoke_close();
+    until("the import panel to close", || !ie.get_visible()).await;
+    assert!(
+        !t.get_routines_supported(),
+        "SQLite has no stored routines, so the entry is hidden"
+    );
+
+    // ---- drag a table into the editor ------------------------------------------
+    // The active tab is the SELECT generated above. Put the caret at the end
+    // through the editor itself, so the caret the drop uses is the real one.
+    assert!(w.get_workspace_active_is_query());
+    let before = w.get_workspace_editor_text().to_string();
+    w.set_workspace_editor_pending_cursor(before.len() as i32);
+    until("the editor to report its caret", || {
+        t.get_editor_caret() == before.len() as i32
+    })
+    .await;
+    let zone = (
+        t.get_zone_x(),
+        t.get_zone_y(),
+        t.get_zone_width(),
+        t.get_zone_height(),
+    );
+    assert!(
+        zone.2 > 100.0 && zone.3 > 100.0 && zone.0 > 200.0,
+        "the editor publishes where it is: {zone:?}"
+    );
+    let target = LogicalPosition::new(zone.0 + zone.2 / 2.0, zone.1 + zone.3 / 2.0);
+    let drag = |to: LogicalPosition, release: bool| {
+        let from = row_pos(1);
+        w.window()
+            .dispatch_event(WindowEvent::PointerMoved { position: from });
+        w.window().dispatch_event(WindowEvent::PointerPressed {
+            position: from,
+            button: PointerEventButton::Left,
+        });
+        for step in 1..=8 {
+            let f = step as f32 / 8.0;
+            w.window().dispatch_event(WindowEvent::PointerMoved {
+                position: LogicalPosition::new(
+                    from.x + (to.x - from.x) * f,
+                    from.y + (to.y - from.y) * f,
+                ),
+            });
+        }
+        if release {
+            w.window().dispatch_event(WindowEvent::PointerReleased {
+                position: to,
+                button: PointerEventButton::Left,
+            });
+        }
+    };
+    // Mid-drag: the chip follows the pointer.
+    drag(target, false);
+    assert!(
+        t.get_drag_active(),
+        "a move past the threshold starts a drag"
+    );
+    assert_eq!(t.get_drag_label(), "customers");
+    assert!((t.get_drag_x() - target.x).abs() < 1.0);
+    w.window().dispatch_event(WindowEvent::PointerReleased {
+        position: target,
+        button: PointerEventButton::Left,
+    });
+    until("the name in the editor", || {
+        w.get_workspace_editor_text() != before.as_str()
+    })
+    .await;
+    assert!(!t.get_drag_active(), "the drag ends on release");
+    assert_eq!(
+        w.get_workspace_editor_text(),
+        format!("{before} \"customers\""),
+        "the quoted name goes in at the caret"
+    );
+    settle().await;
+    assert!(
+        !w.get_workspace_has_result() && !w.get_workspace_running(),
+        "a dropped name runs nothing"
+    );
+    // A release anywhere else inserts nothing: here, over the tree itself.
+    let text = w.get_workspace_editor_text().to_string();
+    drag(row_pos(4), true);
+    settle().await;
+    assert!(!t.get_drag_active());
+    assert_eq!(
+        w.get_workspace_editor_text(),
+        text,
+        "a drop off the editor does nothing"
+    );
+    // A view can be dragged too; a database row cannot start a drag.
+    let from = row_pos(0);
+    w.window().dispatch_event(WindowEvent::PointerPressed {
+        position: from,
+        button: PointerEventButton::Left,
+    });
+    w.window()
+        .dispatch_event(WindowEvent::PointerMoved { position: target });
+    assert!(!t.get_drag_active(), "only tables and views are dragged");
+    w.window().dispatch_event(WindowEvent::PointerReleased {
+        position: target,
+        button: PointerEventButton::Left,
+    });
+    settle().await;
+    assert_eq!(w.get_workspace_editor_text(), text);
 
     // ---- Edit Table and the header's new-table button use the table dialog ----
     right_click_row(&w, 3);

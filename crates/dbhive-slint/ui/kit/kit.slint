@@ -2906,6 +2906,11 @@ export component TreeRowView inherits Rectangle {
     callback toggled;
     // A right click, in window coordinates.
     callback context(length, length);
+    // A left-button drag past a small threshold, in window coordinates. Ends
+    // with `true` on release, `false` if the drag was cancelled.
+    callback drag-moved(length, length);
+    callback drag-ended(length, length, bool);
+    property <bool> dragging;
 
     property <bool> is-note: root.node.kind == TreeRowKind.loading
         || root.node.kind == TreeRowKind.error || root.node.kind == TreeRowKind.empty;
@@ -2944,9 +2949,23 @@ export component TreeRowView inherits Rectangle {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
         double-clicked => { root.double-clicked(); }
+        moved => {
+            if (self.pressed && !root.dragging
+                && (abs(self.mouse-x - self.pressed-x) > 6px || abs(self.mouse-y - self.pressed-y) > 6px)) {
+                root.dragging = true;
+            }
+            if (root.dragging) {
+                root.drag-moved(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            }
+        }
         pointer-event(e) => {
             if (e.button == PointerEventButton.right && e.kind == PointerEventKind.up) {
                 root.context(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y);
+            }
+            if (root.dragging && (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel)) {
+                root.dragging = false;
+                root.drag-ended(self.absolute-position.x + self.mouse-x, self.absolute-position.y + self.mouse-y,
+                    e.kind == PointerEventKind.up);
             }
         }
     }
@@ -3069,6 +3088,7 @@ export component CtxMenu inherits Popover {
             : name == "trash-2" ? Icons.trash-2
             : name == "plus" ? Icons.plus
             : name == "database" ? Icons.database
+            : name == "upload" ? Icons.upload
             : Icons.circle;
     }
 

@@ -3138,7 +3138,7 @@ fn plugins_window(name: &str) -> Box<dyn std::any::Any> {
 
 // -- AI assistant -----------------------------------------------------------------
 //
-// Variants: ai-answers (a conversation: generate, fix, explain), ai-empty (ready, no
+// Variants: ai-chat and ai-chat-busy (free-form chat), ai-answers (a conversation: generate, fix, explain), ai-empty (ready, no
 // conversation yet), ai-no-sql (empty editor), ai-busy, ai-failed (a provider
 // error in the conversation), ai-context (the schema viewer open),
 // ai-context-off (the schema switched off), ai-context-error, ai-models-error,
@@ -3289,10 +3289,18 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
 
     let mut p = ai_ready_panel();
     let mut prompt: &'static str = "";
+    let mut chat_box: &'static str = "";
     let inputs = |prompt: &'static str| Inputs {
         current_sql: sql,
         last_error: error,
         prompt,
+        chat: "",
+    };
+    let ask = |question: &'static str| Inputs {
+        current_sql: sql,
+        last_error: error,
+        prompt: "",
+        chat: question,
     };
 
     match base {
@@ -3321,6 +3329,26 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
             prompt = "top customers by revenue";
         }
         "ai-empty" | "ai-no-sql" => {}
+        "ai-chat" | "ai-chat-busy" => {
+            p.start(Kind::Chat, ask("Which tables hold money?"));
+            p.finish(
+                OpenAI,
+                Kind::Chat,
+                Ok(ai_response("orders.total and order_items.unit_price are numeric amounts; products.price is the list price.", 1730)),
+            );
+            p.start(
+                Kind::Chat,
+                ask("How do I find customers who never ordered?"),
+            );
+            if base == "ai-chat" {
+                p.finish(
+                    OpenAI,
+                    Kind::Chat,
+                    Ok(ai_response("Use an anti-join:\n```sql\nSELECT c.id, c.name\n  FROM customers c\n LEFT JOIN orders o ON o.customer_id = c.id\n WHERE o.id IS NULL;\n```\nNothing has been run; send it to the editor if you want it.", 2050)),
+                );
+                chat_box = "And only for the last 90 days?";
+            }
+        }
         "ai-busy" => {
             p.start(Kind::Fix, inputs(""));
         }
@@ -3403,7 +3431,11 @@ fn ai_window(name: &str) -> Box<dyn std::any::Any> {
     let s = c.global::<AiState>();
     s.set_visible(true);
     s.set_prompt(prompt.into());
-    let view = p.view(inputs(prompt));
+    s.set_chat(chat_box.into());
+    let view = p.view(Inputs {
+        chat: chat_box,
+        ..inputs(prompt)
+    });
     dbhive_slint::ai_view::apply(
         &c,
         &view,
@@ -4088,7 +4120,12 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
         } else {
             ""
         };
-        let picked_routine = all[1].clone();
+        // "_run" variants pick a routine with two arguments and show its form.
+        let picked_routine = if name.contains("_run") {
+            all[2].clone()
+        } else {
+            all[1].clone()
+        };
         let selected = name.contains("picked").then_some(&picked_routine);
         let (list_rows, _) = rows(&all, query, selected);
         let (loading, error, shown): (bool, &str, &[ProcedureInfo]) = match name {
@@ -4102,7 +4139,11 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
         } else {
             (list_rows, &all[..])
         };
-        let definition = "CREATE OR REPLACE FUNCTION billing.invoice_total(invoice_id bigint)\n RETURNS numeric\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  RETURN (SELECT COALESCE(SUM(quantity * unit_price), 0)\n            FROM billing.invoice_lines\n           WHERE invoice_lines.invoice_id = invoice_total.invoice_id);\nEND;\n$function$\n";
+        let definition = if name.contains("_run") {
+            "CREATE OR REPLACE FUNCTION public.add_numbers(a integer, b integer)\n RETURNS integer\n LANGUAGE sql\nAS $function$\n  SELECT a + b;\n$function$\n"
+        } else {
+            "CREATE OR REPLACE FUNCTION billing.invoice_total(invoice_id bigint)\n RETURNS numeric\n LANGUAGE plpgsql\nAS $function$\nBEGIN\n  RETURN (SELECT COALESCE(SUM(quantity * unit_price), 0)\n            FROM billing.invoice_lines\n           WHERE invoice_lines.invoice_id = invoice_total.invoice_id);\nEND;\n$function$\n"
+        };
         let view = RoutinesView {
             status: status(loading, error, false, items_for_status, query),
             rows: list_rows,
@@ -4110,8 +4151,8 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
             error: error.to_string(),
             message: "This database has no stored procedures or functions.".to_string(),
             picked: name.contains("picked").then(|| PickedRoutine {
-                title: "billing.invoice_total".into(),
-                signature: "(invoice_id bigint) returns numeric".into(),
+                title: picked_routine.qualified(),
+                signature: dbhive_ui_model::routine_list::signature_line(&picked_routine),
                 meta: "function · plpgsql".into(),
                 definition: if name.contains("defloading") {
                     String::new()
@@ -4128,6 +4169,25 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
             },
         };
         apply_routines(&c, &view);
+        if name.contains("picked") {
+            use dbhive_ui_model::routine_run::RunForm;
+            let pg = dbhive_core::models::DbDriver::Postgres;
+            let quote = dbhive_ui_model::table_editor::quoter(&pg);
+            let escape = |s: &str| s.replace('\'', "''");
+            let mut form = RunForm::new(&pg, &picked_routine);
+            if name.contains("_runbad") {
+                form.set_value(0, "forty two");
+                form.set_value(1, "2");
+            } else if name.contains("_run") {
+                form.set_value(0, "40");
+                form.set_value(1, "2");
+            }
+            if name.contains("_runconfirm") {
+                form.ask(&quote, &escape);
+            }
+            let run = form.view("Production Postgres", &quote, &escape);
+            dbhive_slint::schema_tree_view::apply_run_form(&c, Some(&run), true);
+        }
         c.global::<TreeState>().set_routines_filter(query.into());
         c.global::<TreeState>().set_routines_visible(true);
     }

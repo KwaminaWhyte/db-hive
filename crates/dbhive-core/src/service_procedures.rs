@@ -190,13 +190,28 @@ pub fn list_routines_sql(
         }
         DbDriver::SqlServer => {
             // 'P' procedure, 'FN' scalar function, 'IF'/'TF' table-valued.
+            // A scalar function's return type is its parameter 0; a
+            // table-valued one returns TABLE, which is what tells a caller to
+            // select from it. The parameters are concatenated with FOR XML
+            // PATH rather than STRING_AGG so this runs on SQL Server 2016.
             let mut sql = String::from(
                 r#"SELECT SCHEMA_NAME(o.schema_id) AS schema_name,
                           o.name,
                           CASE WHEN o.type = 'P' THEN 'procedure' ELSE 'function' END,
                           NULL,
-                          NULL,
-                          NULL
+                          CASE WHEN o.type IN ('IF','TF') THEN 'TABLE'
+                               WHEN o.type = 'FN' THEN (
+                                   SELECT TYPE_NAME(r.user_type_id) FROM sys.parameters r
+                                   WHERE r.object_id = o.object_id AND r.parameter_id = 0)
+                               ELSE NULL END,
+                          STUFF((
+                              SELECT ', ' + p.name + ' ' + TYPE_NAME(p.user_type_id)
+                                     + CASE WHEN p.is_output = 1 THEN ' OUTPUT' ELSE '' END
+                              FROM sys.parameters p
+                              WHERE p.object_id = o.object_id AND p.parameter_id > 0
+                              ORDER BY p.parameter_id
+                              FOR XML PATH(''), TYPE
+                          ).value('.', 'nvarchar(max)'), 1, 2, '')
                    FROM sys.objects o
                    WHERE o.type IN ('P','FN','IF','TF')"#,
             );
@@ -571,6 +586,11 @@ mod tests {
 
         let ms = list_routines_sql(&DbDriver::SqlServer, None, &esc).unwrap();
         assert!(ms.contains("sys.objects"), "{}", ms);
+        // SQL Server reports each routine's parameters and return type, so a
+        // run form can offer one box per argument.
+        assert!(ms.contains("sys.parameters p"), "{}", ms);
+        assert!(ms.contains("' OUTPUT'"), "{}", ms);
+        assert!(ms.contains("THEN 'TABLE'"), "{}", ms);
 
         assert_ne!(pg, my, "two dialects produced identical SQL");
     }

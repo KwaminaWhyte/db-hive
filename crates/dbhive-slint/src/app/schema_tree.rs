@@ -25,9 +25,10 @@ use dbhive_core::service_procedures::{self, qualify};
 use dbhive_core::service_schema::{self, Overview};
 use dbhive_ui_model::procedures::ProceduresModel;
 use dbhive_ui_model::routine_list;
+use dbhive_ui_model::routine_run::RunForm;
 use dbhive_ui_model::schema_tree::{
-    Action, Caps, CreateDatabaseDialog, Dependents, DropDialog, Load, MenuAction, MenuEntry,
-    NavKey, NodeId, SchemaTree,
+    insert_dropped_name, Action, Caps, CreateDatabaseDialog, Dependents, DropDialog, DropZone,
+    Load, MenuAction, MenuEntry, NavKey, NodeId, SchemaTree,
 };
 use dbhive_ui_model::table_view::sql_qualifier;
 use dbhive_ui_model::workspace_tabs::TabKind;
@@ -70,6 +71,11 @@ struct RoutinesSession {
     def_error: String,
     list_latest: runtime::Latest,
     def_latest: runtime::Latest,
+    /// The run form for the picked routine.
+    run: Option<RunForm>,
+    /// The form is for a different routine than the window shows: its boxes
+    /// must be rebuilt rather than updated in place.
+    run_fresh: bool,
 }
 
 fn schema_of(id: &NodeId) -> Option<&str> {
@@ -578,6 +584,18 @@ impl Ctx {
                 }
             }
             (MenuAction::CreateDatabase, _) => self.tree_create_database_open(),
+            (MenuAction::ImportData, table) => {
+                // The wizard imports into the current schema, so this one
+                // becomes current first, as Create Table does.
+                let s2 = schema.clone();
+                self.tree_with_schema(
+                    &schema,
+                    Box::new(move |ctx| {
+                        ctx.tree_activate_schema(&s2);
+                        ctx.open_import_into(table.as_deref());
+                    }),
+                );
+            }
             _ => {}
         }
     }
@@ -1152,6 +1170,9 @@ impl Ctx {
             let mut s = self.session.borrow_mut();
             s.tree.routines.model.close();
             s.tree.routines.def_latest.begin();
+            if let Some(form) = s.tree.routines.run.as_mut() {
+                form.cancel();
+            }
         }
         if let Some(w) = self.window.upgrade() {
             w.global::<TreeState>().set_routines_visible(false);
@@ -1195,6 +1216,7 @@ impl Ctx {
                                 if r.model.selected.as_ref().is_some_and(|p| !list.contains(p)) {
                                     r.model.selected = None;
                                     r.model.definition.clear();
+                                    r.run = None;
                                 }
                                 r.model.procedures = list;
                             }
@@ -1230,8 +1252,15 @@ impl Ctx {
         let (connection_id, ticket, generation, need_load) = {
             let mut s = self.session.borrow_mut();
             let generation = s.tree.generation;
+            let driver = s.tree.driver.clone();
             let r = &mut s.tree.routines;
             let changed = r.model.select(p.clone());
+            if changed || r.run.is_none() {
+                if let Some(driver) = driver.as_ref() {
+                    r.run = Some(RunForm::new(driver, &p));
+                    r.run_fresh = true;
+                }
+            }
             // Picking the same routine again retries a definition that failed.
             let need_load = changed || r.model.definition.is_empty();
             if need_load {
@@ -1329,6 +1358,162 @@ impl Ctx {
             }
         };
         schema_tree_view::apply_routines(&w, &view);
+        self.tree_run_project();
+    }
+
+    // -- Running a routine ---------------------------------------------------------------------------
+
+    /// Project the run form. Its statement is built with the live driver's
+    /// quoting; with the connection gone it cannot be built, so nothing can run.
+    fn tree_run_project(&self) {
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
+        let (connection_id, connection_name) = {
+            let s = self.session.borrow();
+            (
+                s.workspace.connection_id.clone(),
+                s.workspace.connection_name.clone(),
+            )
+        };
+        let d = self.open_driver(&connection_id);
+        let (view, fresh) = {
+            let mut s = self.session.borrow_mut();
+            let r = &mut s.tree.routines;
+            let fresh = std::mem::take(&mut r.run_fresh);
+            let view = match (r.run.as_ref(), d.as_ref()) {
+                (Some(form), Some(d)) => Some(form.view(
+                    &connection_name,
+                    &|x: &str| d.quote_identifier(x),
+                    &|x: &str| d.escape_string_literal(x),
+                )),
+                (Some(form), None) => {
+                    let mut v =
+                        form.view(&connection_name, &|x: &str| x.to_string(), &|x: &str| {
+                            x.to_string()
+                        });
+                    v.sql.clear();
+                    v.can_run = false;
+                    v.confirming = false;
+                    Some(v)
+                }
+                (None, _) => None,
+            };
+            (view, fresh)
+        };
+        schema_tree_view::apply_run_form(&w, view.as_ref(), fresh);
+    }
+
+    fn tree_run_arg_edited(&self, index: i32, text: &str) {
+        if let (Ok(i), Some(form)) = (
+            usize::try_from(index),
+            self.session.borrow_mut().tree.routines.run.as_mut(),
+        ) {
+            form.set_value(i, text);
+        }
+        self.tree_run_project();
+    }
+
+    fn tree_run_ask(&self) {
+        let connection_id = self.session.borrow().workspace.connection_id.clone();
+        let Some(d) = self.open_driver(&connection_id) else {
+            self.tree_run_project();
+            return;
+        };
+        if let Some(form) = self.session.borrow_mut().tree.routines.run.as_mut() {
+            form.ask(&|x: &str| d.quote_identifier(x), &|x: &str| {
+                d.escape_string_literal(x)
+            });
+        }
+        self.tree_run_project();
+    }
+
+    fn tree_run_cancel(&self) {
+        if let Some(form) = self.session.borrow_mut().tree.routines.run.as_mut() {
+            form.cancel();
+        }
+        self.tree_run_project();
+    }
+
+    /// Run the confirmed statement in a new query tab, through the normal run
+    /// path, so it lands in history and the activity log and its result gets
+    /// the full grid.
+    fn tree_run_confirm(self: &Rc<Self>) {
+        let connection_id = self.session.borrow().workspace.connection_id.clone();
+        let Some(d) = self.open_driver(&connection_id) else {
+            self.toast("This connection is no longer open.", Tone::Danger);
+            return;
+        };
+        let (sql, name) = {
+            let mut s = self.session.borrow_mut();
+            let Some(form) = s.tree.routines.run.as_mut() else {
+                return;
+            };
+            let sql = form.take_confirmed(&|x: &str| d.quote_identifier(x), &|x: &str| {
+                d.escape_string_literal(x)
+            });
+            (sql, form.routine.name.clone())
+        };
+        let Some(sql) = sql else {
+            self.tree_run_project();
+            return;
+        };
+        self.tree_routines_close();
+        self.tree_run_project();
+        self.completion_clear();
+        let id = self.open_query_tab_with(&sql);
+        // Already confirmed in the form; the run path's own guard is for
+        // statements typed by hand.
+        self.run_tab(id, false);
+        self.toast(format!("Running {name} in a new query tab"), Tone::Neutral);
+    }
+
+    // -- Dragging a table into the editor ----------------------------------------------------------------
+
+    /// A table row was released after a drag. If it landed on the SQL editor,
+    /// its quoted name goes in at the caret. Nothing runs.
+    fn tree_drag_dropped(self: &Rc<Self>, row: i32, x: f32, y: f32) {
+        let Some(NodeId::Table { schema, name }) = self.tree_id_at(row) else {
+            return;
+        };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
+        let st = w.global::<TreeState>();
+        let zone = DropZone {
+            x: st.get_zone_x(),
+            y: st.get_zone_y(),
+            width: st.get_zone_width(),
+            height: st.get_zone_height(),
+        };
+        let on_editor = self
+            .session
+            .borrow()
+            .workspace
+            .tabs
+            .active()
+            .is_some_and(|t| t.is_query());
+        if !on_editor || !zone.contains(x, y) {
+            return;
+        }
+        let Some((d, _, qualifier)) = self.tree_sql_target(&schema) else {
+            self.toast("This connection is no longer open.", Tone::Danger);
+            return;
+        };
+        let quoted = qualify(&|s: &str| d.quote_identifier(s), &qualifier, &name);
+        let text = self
+            .session
+            .borrow()
+            .workspace
+            .tabs
+            .active()
+            .map(|t| t.sql.clone())
+            .unwrap_or_default();
+        let (text, caret) = insert_dropped_name(&text, i64::from(st.get_editor_caret()), &quoted);
+        self.completion_clear();
+        self.edit_active_sql(text);
+        st.set_editor_caret(caret as i32);
+        w.set_workspace_editor_pending_cursor(caret as i32);
     }
 
     fn tree_routine_copy(self: &Rc<Self>) {
@@ -1392,4 +1577,11 @@ pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
     on!(on_routine_pick, |ctx, i| ctx.tree_routine_pick(i));
     on!(on_routine_copy, |ctx| ctx.tree_routine_copy());
     on!(on_routine_to_editor, |ctx| ctx.tree_routine_to_editor());
+    on!(on_run_arg_edited, |ctx, i, t| ctx
+        .tree_run_arg_edited(i, &t));
+    on!(on_run_ask, |ctx| ctx.tree_run_ask());
+    on!(on_run_cancel, |ctx| ctx.tree_run_cancel());
+    on!(on_run_confirm, |ctx| ctx.tree_run_confirm());
+    on!(on_drag_dropped, |ctx, i, x, y| ctx
+        .tree_drag_dropped(i, x, y));
 }
