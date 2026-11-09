@@ -264,6 +264,87 @@ pub fn paged_select_sql(
     paged_select_sql_sorted(quote, escape, rules, q, None)
 }
 
+/// Which way a keyset page moves from the one on screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageDirection {
+    /// Towards later rows (the next page, or the first page when no cursor).
+    Forward,
+    /// Towards earlier rows. The caller reverses the returned rows.
+    Backward,
+}
+
+/// One value as a SQL literal, for a keyset cursor.
+///
+/// Cursor values come from the previous page's own rows, not from typing, but
+/// strings still go through the driver's escaper: a primary key may contain a
+/// quote.
+pub fn sql_literal(value: &serde_json::Value, escape: &impl Fn(&str) -> String) -> String {
+    match value {
+        serde_json::Value::Null => "NULL".to_string(),
+        serde_json::Value::Bool(b) => if *b { "TRUE" } else { "FALSE" }.to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::String(s) => format!("'{}'", escape(s)),
+        other => format!("'{}'", escape(&other.to_string())),
+    }
+}
+
+/// `SELECT * FROM t [WHERE filters] AND pk > cursor ORDER BY pk LIMIT n`.
+///
+/// The cursor is the primary key at the edge of the page on screen: the last
+/// row going forward, the first going back. `None` with [`PageDirection::Forward`]
+/// means the first page. Only valid when the table has a single-column primary
+/// key and no other sort is in play, which the caller checks.
+pub struct KeysetSpec<'a> {
+    pub primary_key: &'a str,
+    pub sort_descending: bool,
+    /// The edge value, or `None` for the first page.
+    pub cursor: Option<&'a serde_json::Value>,
+    pub direction: PageDirection,
+}
+
+pub fn keyset_select_sql(
+    quote: &impl Fn(&str) -> String,
+    escape: &impl Fn(&str) -> String,
+    rules: DialectRules,
+    q: &DataQuery<'_>,
+    spec: KeysetSpec<'_>,
+) -> String {
+    let mut sql = format!("SELECT * FROM {}", qualified_name(quote, q.schema, q.table));
+    let where_sql = where_clause(quote, escape, rules, q.filters);
+    let pk = quote(spec.primary_key);
+
+    if let Some(value) = spec.cursor {
+        let literal = sql_literal(value, escape);
+        // Forward follows the sort direction; backward walks against it.
+        let op = match (spec.direction, spec.sort_descending) {
+            (PageDirection::Forward, false) => ">",
+            (PageDirection::Forward, true) => "<",
+            (PageDirection::Backward, false) => "<",
+            (PageDirection::Backward, true) => ">",
+        };
+        let condition = format!("{pk} {op} {literal}");
+        if where_sql.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&condition);
+        } else {
+            sql.push(' ');
+            sql.push_str(&where_sql);
+            sql.push_str(" AND ");
+            sql.push_str(&condition);
+        }
+    } else if !where_sql.is_empty() {
+        sql.push(' ');
+        sql.push_str(&where_sql);
+    }
+
+    let order = match (spec.direction, spec.sort_descending) {
+        (PageDirection::Forward, false) | (PageDirection::Backward, true) => "ASC",
+        (PageDirection::Forward, true) | (PageDirection::Backward, false) => "DESC",
+    };
+    sql.push_str(&format!(" ORDER BY {pk} {order} LIMIT {}", q.page_size));
+    sql
+}
+
 /// As [`paged_select_sql`], with an optional user sort in front of the stable
 /// key. The primary key columns stay in the ORDER BY after the user's column,
 /// so rows that tie on the sorted value still page without repeats or gaps.
@@ -556,6 +637,110 @@ pub struct Target {
 pub struct TableMeta {
     pub schema: TableSchema,
     pub foreign_keys: Vec<ForeignKeyInfo>,
+}
+
+#[cfg(test)]
+mod keyset_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn q(ident: &str) -> String {
+        format!("\"{}\"", ident.replace('"', "\"\""))
+    }
+    fn esc(v: &str) -> String {
+        v.replace('\'', "''")
+    }
+    fn pg() -> DialectRules {
+        rules_for(&DbDriver::Postgres)
+    }
+
+    #[test]
+    fn a_string_cursor_is_escaped_like_any_other_literal() {
+        assert_eq!(sql_literal(&json!("it's"), &esc), "'it''s'");
+        assert_eq!(sql_literal(&json!(42), &esc), "42");
+        assert_eq!(sql_literal(&json!(1.5), &esc), "1.5");
+        assert_eq!(sql_literal(&json!(null), &esc), "NULL");
+        assert_eq!(sql_literal(&json!(true), &esc), "TRUE");
+    }
+
+    #[test]
+    fn filters_and_the_cursor_combine_with_and() {
+        let filters = vec![Filter {
+            column: "note".into(),
+            op: FilterOp::Contains,
+            value: "x".into(),
+        }];
+        let query = DataQuery {
+            schema: "public",
+            table: "orders",
+            filters: &filters,
+            order_by: &[],
+            page: 1,
+            page_size: 25,
+        };
+        let sql = keyset_select_sql(
+            &q,
+            &esc,
+            pg(),
+            &query,
+            KeysetSpec {
+                primary_key: "id",
+                sort_descending: false,
+                cursor: Some(&json!("it's")),
+                direction: PageDirection::Forward,
+            },
+        );
+        assert!(
+            sql.starts_with("SELECT * FROM \"public\".\"orders\" WHERE "),
+            "{sql}"
+        );
+        assert!(sql.contains(" AND \"id\" > 'it''s'"), "{sql}");
+        assert!(sql.ends_with("ORDER BY \"id\" ASC LIMIT 25"), "{sql}");
+    }
+
+    #[test]
+    fn the_first_page_has_no_cursor_and_backward_orders_the_other_way() {
+        let query = DataQuery {
+            schema: "",
+            table: "orders",
+            filters: &[],
+            order_by: &[],
+            page: 1,
+            page_size: 10,
+        };
+        let first = keyset_select_sql(
+            &q,
+            &esc,
+            pg(),
+            &query,
+            KeysetSpec {
+                primary_key: "id",
+                sort_descending: false,
+                cursor: None,
+                direction: PageDirection::Forward,
+            },
+        );
+        assert_eq!(
+            first,
+            "SELECT * FROM \"orders\" ORDER BY \"id\" ASC LIMIT 10"
+        );
+        let back = keyset_select_sql(
+            &q,
+            &esc,
+            pg(),
+            &query,
+            KeysetSpec {
+                primary_key: "id",
+                sort_descending: false,
+                cursor: Some(&json!(7)),
+                direction: PageDirection::Backward,
+            },
+        );
+        assert_eq!(
+            back,
+            "SELECT * FROM \"orders\" WHERE \"id\" < 7 ORDER BY \"id\" DESC LIMIT 10"
+        );
+    }
 }
 
 #[cfg(test)]

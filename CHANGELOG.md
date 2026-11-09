@@ -6,16 +6,19 @@ DB Hive is a native Rust desktop app on Slint. One binary, one window server
 connection, no WebView and no bundler.
 
 - PostgreSQL, MySQL, SQLite, MongoDB, Redis, SQL Server and Turso drivers
-  over one shared core.
+  over one shared core, with a Redis key browser (pattern scan, type filter,
+  per-type value readers, logical database switch).
 - Saved connections in folders, SSH tunnels, OS keyring for every secret,
   password prompt when none is cached, and a Connection Lost screen that can
   reconnect without losing open tabs.
 - SQL editor with syntax highlighting, autocomplete across schemas, Stop and
   Clear, query tabs with a right-click menu and a remembered pane layout.
 - Results grid with filters, sort, inline edits reviewed before commit, copy
-  cell/row/column, CSV and JSON export, text and JSON views, and a chart.
+  cell/row/column, CSV and JSON export, text and JSON views, a query plan
+  view, and Bar, Line, Area or Scatter charts.
 - Schema tree with schemas, tables, views, routines, context menus, Create
-  Database and Drop Table behind a typed confirmation.
+  Database and Drop Table behind a typed confirmation. Tables page by
+  primary key, so deep pages do not slow down.
 - Visual query builder, table create/edit dialogs, ER diagram and schema
   designer.
 - Import CSV, TSV, TXT, XLSX and XLS, run a `.sql` file, export a SQL dump,

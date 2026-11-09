@@ -38,6 +38,7 @@ export { DiagramSpike } from "spikes/diagram_spike.slint";
 export { KitGallery } from "spikes/kit_gallery.slint";
 export { HistoryState, PanelRow, RunParam, FormParam, PanelMode } from "screens/history_panel.slint";
 export { ImportExportState, MappingRow } from "screens/import_export_panel.slint";
+export { PlanRowItem } from "screens/results_tools.slint";
 // The AI assistant is docked inside the workspace screen, so the window needs
 // only the types the controller fills.
 export { AiState, AiTurnRow, AiDisclosure } from "screens/ai_assistant.slint";
@@ -79,6 +80,8 @@ export { TreeNode, TreeRowKind, CtxItem } from "kit/kit.slint";
 import { QueryState, TabContextOverlay } from "screens/query_tabs.slint";
 export { QueryState } from "screens/query_tabs.slint";
 export { EditorPrefs } from "components/sql_editor.slint";
+import { RedisState, RedisOverlay } from "screens/redis_panel.slint";
+export { RedisState, RedisKeyItem, KeyValueRow } from "screens/redis_panel.slint";
 // Connection side: password prompt, connection lost, folders, file pickers.
 import { PasswordPromptState, PasswordPromptOverlay } from "dialogs/password_prompt.slint";
 import { ConnectionLostState, ConnectionLostOverlay } from "screens/connection_lost.slint";
@@ -157,6 +160,8 @@ export component AppWindow inherits Window {
     in-out property <Screen> screen: Screen.connections;
 
     // Workspace pane sizes (see ui-model `layout`); Rust clamps and saves.
+    in property <bool> redis-enabled;
+    callback open-redis;
     in-out property <length> sidebar-width: 264px;
     in-out property <length> editor-height: 220px;
     callback sidebar-resize(length);
@@ -645,6 +650,8 @@ export component AppWindow inherits Window {
 
         if root.screen == Screen.workspace: WorkspaceScreen {
             vertical-stretch: 1;
+            redis-enabled: root.redis-enabled;
+            open-redis => { root.open-redis(); }
             sidebar-width <=> root.sidebar-width;
             editor-height <=> root.editor-height;
             sidebar-resize(w) => { root.sidebar-resize(w); }
@@ -711,7 +718,8 @@ export component AppWindow inherits Window {
         || DesignerState.visible || PluginsState.visible || ResultsState.export-visible
         || TreeState.menu-visible || TreeState.drop-visible
         || TreeState.create-db-visible || TreeState.routines-visible
-        || QueryState.menu-visible || PasswordPromptState.visible || ConnectionLostState.visible;
+        || QueryState.menu-visible || PasswordPromptState.visible || ConnectionLostState.visible
+        || RedisState.visible;
     init => { fs.focus(); }
     changed any-overlay => {
         if (!root.any-overlay) {
@@ -768,6 +776,7 @@ export component AppWindow inherits Window {
 
     // A dead connection over the workspace, and the password prompt.
     if ConnectionLostState.visible: ConnectionLostOverlay { }
+    if RedisState.visible: RedisOverlay { }
     if PasswordPromptState.visible: PasswordPromptOverlay { }
 
     if root.show-about || root.show-confirm || root.show-connection-editor || root.show-settings || root.any-palette-overlay: Rectangle {

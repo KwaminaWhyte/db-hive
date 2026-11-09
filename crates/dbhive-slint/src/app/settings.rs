@@ -170,6 +170,16 @@ impl Ctx {
         if w.get_show_connection_editor() {
             return;
         }
+        // Another window may have saved since this one opened. Pick that up
+        // before showing the dialog, unless this window has unsaved edits.
+        let dirty = self.session.borrow().settings.editor.is_dirty();
+        if !dirty {
+            if let Ok(settings) = core_settings::load() {
+                self.session.borrow_mut().settings.editor.adopt(settings);
+                self.rebuild_keymap();
+                self.apply_appearance();
+            }
+        }
         {
             let mut s = self.session.borrow_mut();
             s.settings.view.banner = None;

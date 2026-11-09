@@ -1,3 +1,4 @@
+import { ListView } from "std-widgets.slint";
 import { FileBrowse, BrowseTarget } from "../components/file_browse.slint";
 import { Theme, Icons, Tone, ButtonVariant, Button, Segmented, Banner, Dropdown, EmptyState, ChartPlot, ResultViewLine, ResultViewText, ResultViewError, ExportDialog } from "../kit/kit.slint";
 
@@ -5,6 +6,16 @@ import { Theme, Icons, Tone, ButtonVariant, Button, Segmented, Banner, Dropdown,
 // the JSON and Text views, a structured query error, and the export dialog.
 // Rust owns every value here (`app/results.rs`); this file draws it and
 // reports intents.
+
+// One line of the query plan.
+export struct PlanRowItem {
+    depth: int,
+    title: string,
+    detail: string,
+    cost: string,
+    rows: string,
+    warn: bool,
+}
 
 export global ResultsState {
     // The active query tab's view: 0 Table, 1 JSON, 2 Text.
@@ -34,6 +45,13 @@ export global ResultsState {
     in property <string> chart-notice;
     // Set instead of a plot when there is nothing to draw.
     in property <string> chart-message;
+
+    // Plan mode (mode 4): the statement's plan, a summary, and its states.
+    in property <[PlanRowItem]> plan-rows;
+    in property <string> plan-summary;
+    in property <string> plan-error;
+    in property <bool> plan-loading;
+    callback plan-reload;
 
     // The failed query, split into a headline and the driver's message.
     in property <string> error-headline;
@@ -78,7 +96,7 @@ export component ResultsModeBar inherits HorizontalLayout {
     VerticalLayout {
         alignment: center;
         Segmented {
-            options: ["Table", "JSON", "Text", "Chart"];
+            options: ["Table", "JSON", "Text", "Chart", "Plan"];
             selected: ResultsState.mode;
             picked(i) => { ResultsState.mode-picked(i); }
         }
@@ -126,7 +144,7 @@ component ResultsChartPane inherits VerticalLayout {
         VerticalLayout {
             alignment: center;
             Segmented {
-                options: ["Bar", "Line"];
+                options: ["Bar", "Line", "Area", "Scatter"];
                 selected: ResultsState.chart-kind;
                 picked(i) => { ResultsState.chart-kind-picked(i); }
             }
@@ -198,6 +216,139 @@ component ResultsChartPane inherits VerticalLayout {
     }
 }
 
+// The query plan: one indented line per step, with the steps worth noticing
+// marked. EXPLAIN never runs the statement.
+export component ResultsPlanPane inherits VerticalLayout {
+    spacing: 8px;
+
+    if ResultsState.plan-loading: VerticalLayout {
+        vertical-stretch: 1;
+        alignment: center;
+        Text {
+            text: "Asking the server for a plan…";
+            color: Theme.muted-foreground;
+            font-size: Theme.size-body;
+            horizontal-alignment: center;
+        }
+    }
+
+    if !ResultsState.plan-loading && ResultsState.plan-error != "": EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.triangle-alert;
+        title: "No plan";
+        message: ResultsState.plan-error;
+        Button {
+            text: "Try again";
+            variant: ButtonVariant.secondary;
+            clicked => { ResultsState.plan-reload(); }
+        }
+    }
+
+    if !ResultsState.plan-loading && ResultsState.plan-error == "" && ResultsState.plan-rows.length == 0: EmptyState {
+        vertical-stretch: 1;
+        icon: Icons.workflow;
+        title: "No plan yet";
+        message: "Ask the server how it would run this statement.";
+        Button {
+            text: "Explain";
+            variant: ButtonVariant.primary;
+            clicked => { ResultsState.plan-reload(); }
+        }
+    }
+
+    if !ResultsState.plan-loading && ResultsState.plan-error == "" && ResultsState.plan-rows.length > 0: VerticalLayout {
+        spacing: 6px;
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: ResultsState.plan-summary;
+                color: Theme.muted-foreground;
+                font-size: Theme.size-small;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+            Button {
+                text: "Refresh plan";
+                variant: ButtonVariant.ghost;
+                clicked => { ResultsState.plan-reload(); }
+            }
+        }
+        Rectangle {
+            vertical-stretch: 1;
+            background: Theme.card;
+            border-radius: Theme.radius-card;
+            clip: true;
+            ListView {
+                for row in ResultsState.plan-rows: Rectangle {
+                    width: 100%;
+                    height: 30px;
+                    background: row-touch.has-hover ? Theme.hover : transparent;
+                    row-touch := TouchArea { }
+
+                    // Absolute positions: a ListView delegate sizes to its
+                    // content, so a layout would centre the row instead of
+                    // filling it.
+                    property <length> indent: 16px + row.depth * 20px;
+                    if row.warn: Rectangle {
+                        x: indent - 10px;
+                        y: (parent.height - 6px) / 2;
+                        width: 6px;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: Theme.warning;
+                    }
+                    Text {
+                        x: indent;
+                        y: 0;
+                        width: parent.width * 0.40;
+                        height: parent.height;
+                        text: row.title;
+                        color: Theme.foreground;
+                        font-size: Theme.size-label;
+                        vertical-alignment: center;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+                    Text {
+                        x: indent + parent.width * 0.40;
+                        y: 0;
+                        width: parent.width * 0.32;
+                        height: parent.height;
+                        text: row.detail;
+                        color: Theme.dim-foreground;
+                        font-size: Theme.size-small;
+                        vertical-alignment: center;
+                        horizontal-alignment: left;
+                        overflow: elide;
+                    }
+                    Text {
+                        x: parent.width - 210px;
+                        y: 0;
+                        width: 95px;
+                        height: parent.height;
+                        text: row.rows == "" ? "" : row.rows + " rows";
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
+                    }
+                    Text {
+                        x: parent.width - 110px;
+                        y: 0;
+                        width: 95px;
+                        height: parent.height;
+                        text: row.cost == "" ? "" : "cost " + row.cost;
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-small;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
+                    }
+                }
+            }
+        }
+    }
+}
+
 // The JSON, Text or Chart view of a result. JSON and Text show a truncation
 // notice underneath; their Copy button lives in the mode bar, to keep the
 // pane's height.
@@ -206,13 +357,16 @@ export component ResultsViewPane inherits VerticalLayout {
     if ResultsState.mode == 3: ResultsChartPane {
         vertical-stretch: 1;
     }
-    if ResultsState.mode != 3: ResultViewText {
+    if ResultsState.mode == 4: ResultsPlanPane {
+        vertical-stretch: 1;
+    }
+    if ResultsState.mode != 3 && ResultsState.mode != 4: ResultViewText {
         vertical-stretch: 1;
         lines: ResultsState.view-lines;
         max-columns: ResultsState.view-max-columns;
         label: ResultsState.mode == 1 ? "Results as JSON" : "Results as text";
     }
-    if ResultsState.mode != 3 && ResultsState.view-notice != "": Banner {
+    if ResultsState.mode != 3 && ResultsState.mode != 4 && ResultsState.view-notice != "": Banner {
         message: ResultsState.view-notice;
         tone: Tone.warning;
         dismissible: false;

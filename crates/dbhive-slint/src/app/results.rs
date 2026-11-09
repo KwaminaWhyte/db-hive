@@ -12,6 +12,7 @@ use std::rc::Rc;
 
 use dbhive_core::drivers::QueryResult;
 use dbhive_ui_model::data_forms::expand_home;
+use dbhive_ui_model::query_plan::{self, QueryPlan};
 use dbhive_ui_model::result_chart::{
     aggregate, build as chart_build, default_spec, numeric_columns, ChartKind, ChartSpec,
 };
@@ -72,6 +73,15 @@ impl Default for ExportDialog {
     }
 }
 
+#[derive(Default, Clone)]
+struct PlanState {
+    /// The run this plan belongs to; a newer run makes it stale.
+    for_run: Option<u64>,
+    loading: bool,
+    plan: Option<QueryPlan>,
+    error: String,
+}
+
 #[derive(Default)]
 pub(super) struct ResultsSession {
     /// The view each query tab was left in.
@@ -84,6 +94,8 @@ pub(super) struct ResultsSession {
     /// with the query folded away again.
     error_for: Option<(u64, u64)>,
     error_query_open: bool,
+    /// Each query tab's last plan, for Plan mode.
+    plan: HashMap<u64, PlanState>,
     export: ExportDialog,
 }
 
@@ -197,6 +209,46 @@ impl Ctx {
             ViewMode::Table
         };
         g.set_mode(mode.index());
+
+        if mode == ViewMode::Plan {
+            let state = s
+                .results
+                .plan
+                .get(&tab.id)
+                .filter(|p| p.for_run == Some(tab.run_seq))
+                .cloned()
+                .unwrap_or_default();
+            g.set_plan_loading(state.loading);
+            g.set_plan_error(state.error.as_str().into());
+            let plan = state.plan;
+            g.set_plan_summary(
+                plan.as_ref()
+                    .map(|p| p.summary.clone())
+                    .unwrap_or_default()
+                    .into(),
+            );
+            let rows: Vec<crate::PlanRowItem> = plan
+                .map(|p| {
+                    p.rows
+                        .into_iter()
+                        .map(|r| crate::PlanRowItem {
+                            depth: r.depth,
+                            title: r.title.into(),
+                            detail: r.detail.into(),
+                            cost: r.cost.into(),
+                            rows: r.rows.into(),
+                            warn: r.warn,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            g.set_plan_rows(ModelRc::new(VecModel::from(rows)));
+            if s.results.built.take().is_some() {
+                g.set_view_lines(no_lines());
+                g.set_view_notice("".into());
+            }
+            return;
+        }
 
         if mode == ViewMode::Table {
             if s.results.built.take().is_some() {
@@ -351,7 +403,8 @@ impl Ctx {
 
     // -- View modes ---------------------------------------------------------------
 
-    fn results_mode_picked(&self, index: i32) {
+    fn results_mode_picked(self: &Rc<Self>, index: i32) {
+        let mode = ViewMode::at(index);
         {
             let mut s = self.session.borrow_mut();
             let Some(tab) = s.workspace.tabs.active() else {
@@ -361,9 +414,147 @@ impl Ctx {
                 return;
             }
             let id = tab.id;
-            s.results.modes.insert(id, ViewMode::at(index));
+            s.results.modes.insert(id, mode);
         }
         self.results_refresh();
+        if mode == ViewMode::Plan {
+            self.results_plan_load();
+        }
+    }
+
+    /// Ask the server for the active query tab's plan. EXPLAIN only: the
+    /// statement itself is never run by this.
+    pub(super) fn results_plan_load(self: &Rc<Self>) {
+        let prep = {
+            let s = self.session.borrow();
+            let Some(tab) = s.workspace.tabs.active() else {
+                return;
+            };
+            if !tab.is_query() || tab.error.is_some() {
+                return;
+            }
+            let Some(kind) = s.workspace.driver.clone() else {
+                return;
+            };
+            (
+                tab.id,
+                tab.run_seq,
+                tab.sql.clone(),
+                kind,
+                s.workspace.connection_id.clone(),
+            )
+        };
+        let (tab_id, run_seq, sql, kind, connection_id) = prep;
+        let statement = match query_plan::explain_sql(kind.clone(), &sql) {
+            Ok(s) => s,
+            Err(e) => {
+                self.results_plan_failed(tab_id, run_seq, e);
+                return;
+            }
+        };
+        let Some(driver) = self.open_driver(&connection_id) else {
+            self.results_plan_failed(tab_id, run_seq, "The connection is closed".to_string());
+            return;
+        };
+        {
+            let mut s = self.session.borrow_mut();
+            s.results.plan.insert(
+                tab_id,
+                PlanState {
+                    for_run: Some(run_seq),
+                    loading: true,
+                    plan: None,
+                    error: String::new(),
+                },
+            );
+        }
+        self.results_refresh();
+        runtime::spawn(
+            self.ui_id,
+            async move {
+                driver
+                    .execute_query(&statement)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            move |result| with_ctx(|ctx| ctx.results_plan_loaded(tab_id, run_seq, kind, result)),
+        );
+    }
+
+    fn results_plan_failed(&self, tab_id: u64, run_seq: u64, error: String) {
+        {
+            let mut s = self.session.borrow_mut();
+            s.results.plan.insert(
+                tab_id,
+                PlanState {
+                    for_run: Some(run_seq),
+                    loading: false,
+                    plan: None,
+                    error,
+                },
+            );
+        }
+        self.results_refresh();
+    }
+
+    fn results_plan_loaded(
+        &self,
+        tab_id: u64,
+        run_seq: u64,
+        kind: dbhive_core::models::DbDriver,
+        result: Result<QueryResult, String>,
+    ) {
+        // A newer run makes this plan worthless.
+        let current = self
+            .session
+            .borrow()
+            .workspace
+            .tabs
+            .get(tab_id)
+            .map(|t| t.run_seq)
+            .unwrap_or_default();
+        if current != run_seq {
+            return;
+        }
+        let parsed = result.and_then(|q| {
+            let rows: Vec<Vec<String>> = q
+                .rows
+                .iter()
+                .map(|r| r.iter().map(value_text).collect())
+                .collect();
+            query_plan::parse(kind, &q.columns, &rows)
+        });
+        let state = match parsed {
+            Ok(plan) => PlanState {
+                for_run: Some(run_seq),
+                loading: false,
+                plan: Some(plan),
+                error: String::new(),
+            },
+            Err(e) => PlanState {
+                for_run: Some(run_seq),
+                loading: false,
+                plan: None,
+                error: e,
+            },
+        };
+        self.session.borrow_mut().results.plan.insert(tab_id, state);
+        self.results_refresh();
+    }
+
+    /// Reload the plan if the active tab is showing one (called after a run).
+    pub(super) fn results_plan_after_run(self: &Rc<Self>) {
+        let showing = {
+            let s = self.session.borrow();
+            s.workspace
+                .tabs
+                .active()
+                .map(|t| s.results.modes.get(&t.id).copied() == Some(ViewMode::Plan))
+                .unwrap_or(false)
+        };
+        if showing {
+            self.results_plan_load();
+        }
     }
 
     /// Copy what the JSON or Text view shows (JSON text, or real TSV).
@@ -382,7 +573,7 @@ impl Ctx {
             match mode {
                 ViewMode::Json => Some((json_view(&columns, &rows, VIEW_ROW_CAP).joined(), "JSON")),
                 ViewMode::Text => Some((text_tsv(&columns, &rows, VIEW_ROW_CAP), "text")),
-                ViewMode::Table | ViewMode::Chart => None,
+                ViewMode::Table | ViewMode::Chart | ViewMode::Plan => None,
             }
         };
         if let Some((text, what)) = copied {
@@ -668,6 +859,7 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     }
 
     on!(on_mode_picked, |c, i| c.results_mode_picked(i));
+    on!(on_plan_reload, |c| c.results_plan_load());
     on!(on_view_copy, |c| c.results_view_copy());
     on!(on_chart_kind_picked, |c, i| c
         .results_chart_edit(|s, _| s.kind = ChartKind::at(i)));
@@ -698,4 +890,13 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     on!(on_export_suggest, |c| c.results_export_suggest());
     on!(on_export_run, |c| c.results_export_run());
     on!(on_export_reveal, |c| c.results_export_reveal());
+}
+
+/// A result cell as text, for the plan parsers.
+fn value_text(v: &Value) -> String {
+    match v {
+        Value::String(s) => s.clone(),
+        Value::Null => "NULL".to_string(),
+        other => other.to_string(),
+    }
 }

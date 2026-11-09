@@ -30,7 +30,7 @@ crates/dbhive-slint     the app: ui/kit (the only parts a screen uses),
 cargo fmt --all --check
 cargo check --workspace
 cargo clippy --workspace                      # 171 warnings today; add none
-cargo test --workspace -- --skip credentials::tests   # 1783 pass
+cargo test --workspace -- --skip credentials::tests   # 1803 pass
 scripts/check-ui-tokens.sh                    # ratchet, 5 known literals
 ```
 
@@ -39,7 +39,10 @@ scripts/check-ui-tokens.sh                    # ratchet, 5 known literals
   PostgreSQL and MySQL tests are `#[ignore]` and use scratch databases.
 - Snapshots come from `examples/snapshot.rs` (dark and light, 1280x800 and
   1000x640) and are looked at, per the guidelines.
-- `scripts/window-shot.sh` captures only the real GPU window.
+- `scripts/window-shot.sh` and `scripts/window-bounds.sh` capture and locate
+  the real GPU window. The Redis browser, the button fix and the plan pane
+  were walked through in that window on 2026-11-09 against the local Redis
+  server and a local PostgreSQL server.
   `cargo run -p dbhive-slint --example smoke -- "Local Post"` runs the core
   paths end to end without a UI.
 
@@ -49,16 +52,21 @@ Connections (folders, favourites, SSH tunnels, colour tags, password prompt,
 keychain, connection-lost recovery), multi-window, command palette with live
 rebindable shortcuts, SQL editor with autocomplete and Stop, query tabs with
 context menu and remembered layout, results grid with filter and sort, cell
-selection and copy, CSV and JSON export, text and JSON views, charts, inline
-row editing with a reviewed atomic commit, table inspector with structure,
+selection and copy, CSV and JSON export, text and JSON views, Bar, Line, Area
+and Scatter charts, an EXPLAIN plan tree, inline
+row editing with a reviewed atomic commit, table inspector with structure and
+keyset paging (offset only when a filter or a non-key sort is in play),
 schema tree with schemas, views, routines, context menus, Import Data, Create
 Database and Drop Table behind a typed confirmation, routine execution with
 arguments, query builder, table create/edit dialogs, ER diagram, schema
 designer, import wizard (CSV/TSV/TXT/XLSX/XLS and `.sql` files), SQL dump
 export, backup and restore, migrations, activity monitor, settings, history,
 snippets with folders, query templates, plugins with a schema-driven UI, AI
-assistant with free-form chat, About with the Slint credit, update checks.
-Light, dark and system themes.
+assistant with free-form chat, About with the Slint credit, update checks, and
+a Redis key browser (scan by pattern, filter by type, per-type value readers,
+logical database switching, copy). Connections support folders, colour tags,
+an SSH local port and an encrypted key's passphrase. Light, dark and system
+themes.
 
 ## Live database coverage
 
@@ -68,26 +76,27 @@ rejected commits, SQL dump round trips, import, activity monitor, cross-schema
 foreign keys and drops, database switching and creation, routine execution.
 On MySQL: transactions, DDL, the same inspector and row-edit scenario, dump
 round trips and import. Backup and restore ran on both with the real
-`pg_dump`, `mysqldump`, `psql` and `mysql`. Not run against a server: SQL
-Server, MongoDB, Redis and Turso; the query builder and ER diagram on a
-non-default schema.
+`pg_dump`, `mysqldump`, `psql` and `mysql`. On Redis: the key browser's scan,
+type filter, per-type detail readers and expiry against a local server. Not
+run against a server: SQL Server, MongoDB and Turso; the query builder and ER
+diagram on a non-default schema.
 
 ## Known limits and open work
 
-- No Redis key browser and detail view; no EXPLAIN plan tree; no keyset
-  pagination past the 100,000-offset guard.
 - Update checks report a newer release and link to it; they do not download
   or install.
 - Foreign keys in the schema designer are set with dropdowns, not by dragging
   between handles.
-- Charts: one series, Bar or Line, no PNG export.
+- Charts: one series, no Pie, no multi-series Y, no PNG export.
 - MySQL commits implicitly before DDL, so a migration's rollback there covers
   only the statements after its last DDL statement (the server's rule).
 - Foreign key targets in generated DDL are written unqualified, so a
   non-default PostgreSQL schema relies on the search path.
-- Two windows editing Settings at once are last-writer-wins on the file.
-- The native menu bar and focus rings are verified headlessly; a real-window
-  click-through should be repeated after any menu change.
+- Two windows editing Settings at once: opening Settings reloads the file
+  unless the draft is dirty, but a window that never opens it keeps its
+  startup copy for behavior such as the query timeout.
+- Menus and keyboard focus were not clicked through in the real window; the
+  button and Redis paths were. Repeat that walkthrough after a menu change.
 
 ## Development aids
 

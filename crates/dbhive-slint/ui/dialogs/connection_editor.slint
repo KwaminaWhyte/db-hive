@@ -397,6 +397,16 @@ export component ConnectionEditorDialog inherits Rectangle {
                         clicked => { FileBrowse.browse(BrowseTarget.ssh-key); }
                     }
                 }
+                if root.form.show-ssh && root.form.ssh-enabled && root.form.ssh-show-key: SectionLabel { text: "Key passphrase (optional)"; }
+                if root.form.show-ssh && root.form.ssh-enabled && root.form.ssh-show-key: TextField {
+                    text: root.form.ssh-password;
+                    placeholder: "Leave blank for an unencrypted key";
+                    password: !root.form.show-ssh-password-text;
+                    has-trailing-icon: true;
+                    trailing-icon: root.form.show-ssh-password-text ? Icons.eye-off : Icons.eye;
+                    trailing-clicked => { root.toggle-ssh-password-visibility(); }
+                    edited(t) => { root.ssh-password-changed(t); }
+                }
                 if root.form.show-ssh && root.form.ssh-enabled && !root.form.ssh-show-key: SectionLabel { text: "SSH password"; }
                 if root.form.show-ssh && root.form.ssh-enabled && !root.form.ssh-show-key: TextField {
                     text: root.form.ssh-password;

@@ -221,11 +221,14 @@ impl SshTunnelManager {
                     DbError::ConnectionError(format!("Failed to read private key: {}", e))
                 })?;
 
+                // The SSH secret doubles as the passphrase for an encrypted
+                // key; empty or absent means the key is not encrypted.
+                let passphrase = ssh_password.as_deref().filter(|p| !p.is_empty());
                 let key = russh_keys::decode_secret_key(
                     std::str::from_utf8(&key_data).map_err(|e| {
                         DbError::AuthError(format!("Invalid UTF-8 in key file: {}", e))
                     })?,
-                    None,
+                    passphrase,
                 )
                 .map_err(|e| DbError::AuthError(format!("Failed to parse private key: {}", e)))?;
 

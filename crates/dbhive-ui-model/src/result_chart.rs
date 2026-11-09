@@ -27,15 +27,26 @@ const SPACE: f64 = 1000.0;
 pub enum ChartKind {
     Bar,
     Line,
+    /// A line with the area under it filled.
+    Area,
+    /// One mark per group, no connecting line.
+    Scatter,
 }
 
 impl ChartKind {
-    pub const ALL: [ChartKind; 2] = [ChartKind::Bar, ChartKind::Line];
+    pub const ALL: [ChartKind; 4] = [
+        ChartKind::Bar,
+        ChartKind::Line,
+        ChartKind::Area,
+        ChartKind::Scatter,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             ChartKind::Bar => "Bar",
             ChartKind::Line => "Line",
+            ChartKind::Area => "Area",
+            ChartKind::Scatter => "Scatter",
         }
     }
 
@@ -281,7 +292,7 @@ pub fn build(columns: &[String], data: &ChartData, spec: ChartSpec) -> Option<Ch
                 ));
             }
         }
-        ChartKind::Line => {
+        ChartKind::Line | ChartKind::Area => {
             let xs: Vec<f64> = if n == 1 {
                 vec![500.0]
             } else {
@@ -316,6 +327,30 @@ pub fn build(columns: &[String], data: &ChartData, spec: ChartSpec) -> Option<Ch
                     f(xs[0]),
                     f(SPACE)
                 );
+            }
+        }
+        ChartKind::Scatter => {
+            let xs: Vec<f64> = if n == 1 {
+                vec![500.0]
+            } else {
+                (0..n).map(|i| i as f64 / (n - 1) as f64 * SPACE).collect()
+            };
+            // A mark per point. The plot maps a 1000 by 1000 box onto a
+            // wider-than-tall area, so the vertical half-extent is larger to
+            // draw a mark that looks square on screen.
+            for (p, x) in data.points.iter().zip(&xs) {
+                let y = y_at(p.value);
+                commands.push_str(&format!(
+                    "M {} {} L {} {} L {} {} L {} {} Z ",
+                    f(x - 7.0),
+                    f(y - 18.0),
+                    f(x + 7.0),
+                    f(y - 18.0),
+                    f(x + 7.0),
+                    f(y + 18.0),
+                    f(x - 7.0),
+                    f(y + 18.0)
+                ));
             }
         }
     }
@@ -605,6 +640,78 @@ mod tests {
         // A line spans its own values, not zero to max.
         assert_eq!((v.y_top.as_str(), v.y_bottom.as_str()), ("200", "100"));
         assert_eq!((v.x_start.as_str(), v.x_end.as_str()), ("a", "c"));
+    }
+
+    #[test]
+    fn area_fills_under_the_same_line() {
+        let points = vec![
+            Point {
+                label: "a".into(),
+                value: 1.0,
+            },
+            Point {
+                label: "b".into(),
+                value: 4.0,
+            },
+            Point {
+                label: "c".into(),
+                value: 2.0,
+            },
+        ];
+        let data = ChartData {
+            points: points.clone(),
+            groups: 3,
+            skipped: 0,
+        };
+        let line = build(
+            &[],
+            &data,
+            ChartSpec {
+                kind: ChartKind::Line,
+                x: 0,
+                y: 1,
+            },
+        )
+        .unwrap();
+        let area = build(
+            &[],
+            &data,
+            ChartSpec {
+                kind: ChartKind::Area,
+                x: 0,
+                y: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(line.commands, area.commands);
+        assert!(area.area.ends_with('Z'));
+        assert_eq!(line.area, area.area);
+    }
+
+    #[test]
+    fn scatter_draws_one_mark_per_group_and_no_area() {
+        let data = ChartData {
+            points: (0..4)
+                .map(|i| Point {
+                    label: format!("g{i}"),
+                    value: i as f64,
+                })
+                .collect(),
+            groups: 4,
+            skipped: 0,
+        };
+        let view = build(
+            &[],
+            &data,
+            ChartSpec {
+                kind: ChartKind::Scatter,
+                x: 0,
+                y: 1,
+            },
+        )
+        .unwrap();
+        assert_eq!(view.commands.matches('Z').count(), 4);
+        assert!(view.area.is_empty());
     }
 
     #[test]

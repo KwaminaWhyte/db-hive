@@ -102,6 +102,7 @@ pub fn run() -> Result<(), slint::PlatformError> {
     let (window, ctx) = build_window(state, WindowOptions::main(), load_error)?;
     let window = Rc::new(window);
     attach(&window, &ctx, MAIN_LABEL);
+    window.show()?;
 
     let result = slint::run_event_loop();
     for (label, window) in open_windows() {

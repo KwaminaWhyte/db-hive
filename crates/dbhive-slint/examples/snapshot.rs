@@ -219,6 +219,65 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                         q.set_menu_y(150.0);
                         q.set_menu_visible(true);
                     }
+                    "workspace-query-redis" => {
+                        c.set_redis_enabled(true);
+                        let g = c.global::<RedisState>();
+                        g.set_visible(true);
+                        g.set_databases(slint::ModelRc::new(slint::VecModel::from(
+                            (0..16)
+                                .map(|i| format!("db{i}").into())
+                                .collect::<Vec<slint::SharedString>>(),
+                        )));
+                        g.set_database_index(0);
+                        g.set_database_label("db0".into());
+                        g.set_type_options(slint::ModelRc::new(slint::VecModel::from(
+                            dbhive_ui_model::redis_browser::type_options()
+                                .into_iter()
+                                .map(slint::SharedString::from)
+                                .collect::<Vec<_>>(),
+                        )));
+                        g.set_type_index(0);
+                        g.set_type_label("All types".into());
+                        g.set_pattern("*".into());
+                        let keys = vec![
+                            ("user:1042", "hash", "2h 05m"),
+                            ("user:1043", "hash", "no expiry"),
+                            ("session:9f8e", "string", "12m"),
+                            ("queue:jobs", "list", "no expiry"),
+                            ("tags:featured", "set", "1d"),
+                            ("leaderboard", "zset", "no expiry"),
+                            ("events", "stream", "3d"),
+                        ];
+                        g.set_keys(slint::ModelRc::new(slint::VecModel::from(
+                            keys.iter()
+                                .map(|(k, kind, ttl)| RedisKeyItem {
+                                    key: (*k).into(),
+                                    kind: (*kind).into(),
+                                    ttl: (*ttl).into(),
+                                })
+                                .collect::<Vec<_>>(),
+                        )));
+                        g.set_list_note("200 keys, more available".into());
+                        g.set_has_more(true);
+                        g.set_selected("user:1042".into());
+                        g.set_detail_summary("hash · 3 entries · 2h 05m".into());
+                        g.set_detail_note("".into());
+                        g.set_detail_two_columns(true);
+                        g.set_detail_rows(slint::ModelRc::new(slint::VecModel::from(vec![
+                            KeyValueRow {
+                                a: "name".into(),
+                                b: "Ada Lovelace".into(),
+                            },
+                            KeyValueRow {
+                                a: "email".into(),
+                                b: "ada@example.com".into(),
+                            },
+                            KeyValueRow {
+                                a: "plan".into(),
+                                b: "pro".into(),
+                            },
+                        ])));
+                    }
                     _ => {}
                 }
                 if name == "workspace-query-confirm" {
@@ -313,6 +372,11 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                 host: host.into(),
                 initials: ini.into(),
                 tint: slint::Color::from_rgb_u8(rgb.0, rgb.1, rgb.2),
+                color: if fav {
+                    slint::Color::from_rgb_u8(0x3b, 0x82, 0xf6)
+                } else {
+                    slint::Color::default()
+                },
                 env_label: env.into(),
                 env_tone: tone,
                 favorite: fav,
@@ -3679,10 +3743,59 @@ fn results_window(name: &str) -> Box<dyn std::any::Any> {
             g.set_can_export(true);
         }
         "results_running" => c.set_workspace_running(true),
+        "results_plan" => {
+            results_fill(
+                &c,
+                &["id".to_string(), "name".to_string()],
+                &[
+                    vec![serde_json::json!(1), serde_json::json!("Ada")],
+                    vec![serde_json::json!(2), serde_json::json!("Grace")],
+                ],
+            );
+            g.set_can_export(true);
+            g.set_mode(4);
+            g.set_plan_summary("4 steps · ~120 rows · cost 24.5".into());
+            g.set_plan_rows(slint::ModelRc::new(slint::VecModel::from(vec![
+                PlanRowItem {
+                    depth: 0,
+                    title: "Hash Join".into(),
+                    detail: "join: Inner".into(),
+                    cost: "24.5".into(),
+                    rows: "120".into(),
+                    warn: false,
+                },
+                PlanRowItem {
+                    depth: 1,
+                    title: "Seq Scan on customers".into(),
+                    detail: "filter: plan = 'pro'".into(),
+                    cost: "12.0".into(),
+                    rows: "120".into(),
+                    warn: true,
+                },
+                PlanRowItem {
+                    depth: 1,
+                    title: "Hash".into(),
+                    detail: "".into(),
+                    cost: "8.4".into(),
+                    rows: "40".into(),
+                    warn: false,
+                },
+                PlanRowItem {
+                    depth: 2,
+                    title: "Index Scan on orders".into(),
+                    detail: "index: idx_orders_customer".into(),
+                    cost: "6.1".into(),
+                    rows: "40".into(),
+                    warn: false,
+                },
+            ])));
+        }
         // results_chart_bar, results_chart_line, results_chart_empty,
         // results_chart_many (100 groups, capped).
         "results_chart_bar"
         | "results_chart_line"
+        | "results_chart_area"
+        | "results_chart_scatter"
         | "results_chart_empty"
         | "results_chart_many" => {
             use dbhive_ui_model::result_chart as ch;
@@ -3749,6 +3862,10 @@ fn results_window(name: &str) -> Box<dyn std::any::Any> {
                 Some(mut spec) => {
                     if base == "results_chart_line" || base == "results_chart_many" {
                         spec.kind = ch::ChartKind::Line;
+                    } else if base == "results_chart_area" {
+                        spec.kind = ch::ChartKind::Area;
+                    } else if base == "results_chart_scatter" {
+                        spec.kind = ch::ChartKind::Scatter;
                     }
                     let agg = ch::aggregate(&refs, spec);
                     let v = ch::build(&cols, &agg, spec).unwrap();
@@ -4317,6 +4434,7 @@ fn connflow_window(name: &str) -> Box<dyn std::any::Any> {
             host: host.into(),
             initials: ini.into(),
             tint: slint::Color::from_rgb_u8(rgb.0, rgb.1, rgb.2),
+            color: slint::Color::default(),
             env_label: "".into(),
             env_tone: Tone::Neutral,
             favorite: false,
@@ -4334,6 +4452,7 @@ fn connflow_window(name: &str) -> Box<dyn std::any::Any> {
         host: "".into(),
         initials: "".into(),
         tint: slint::Color::default(),
+        color: slint::Color::default(),
         env_label: "".into(),
         env_tone: Tone::Neutral,
         favorite: false,

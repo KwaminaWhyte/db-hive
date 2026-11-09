@@ -366,14 +366,17 @@ pub enum ViewMode {
     Text,
     /// A bar or line chart (`result_chart`).
     Chart,
+    /// The statement's query plan (`query_plan`).
+    Plan,
 }
 
 impl ViewMode {
-    pub const ALL: [ViewMode; 4] = [
+    pub const ALL: [ViewMode; 5] = [
         ViewMode::Table,
         ViewMode::Json,
         ViewMode::Text,
         ViewMode::Chart,
+        ViewMode::Plan,
     ];
 
     pub fn label(self) -> &'static str {
@@ -382,6 +385,7 @@ impl ViewMode {
             ViewMode::Json => "JSON",
             ViewMode::Text => "Text",
             ViewMode::Chart => "Chart",
+            ViewMode::Plan => "Plan",
         }
     }
 

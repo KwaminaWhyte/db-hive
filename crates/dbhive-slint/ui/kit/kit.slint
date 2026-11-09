@@ -69,12 +69,6 @@ export component Button inherits Rectangle {
         }
     }
 
-    touch := TouchArea {
-        enabled: root.enabled;
-        mouse-cursor: pointer;
-        clicked => { root.clicked(); }
-    }
-
     // Keyboard: Tab reaches every button, Enter or Space presses it, and a
     // focused button shows a ring. Pointer use never shows the ring.
     focusable := FocusScope {
@@ -113,6 +107,13 @@ export component Button inherits Rectangle {
             vertical-alignment: center;
         }
     }
+    }
+    // Pointer input goes on top of the focus scope; otherwise the scope takes
+    // the press and the button only focuses.
+    touch := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
     }
 }
 
@@ -2349,7 +2350,7 @@ export component ChartPlot inherits Rectangle {
                 Rectangle { y: (parent.height - 1px) / 2; height: 1px; background: Theme.border; }
                 Rectangle { y: parent.height - 1px; height: 1px; background: Theme.border-strong; }
 
-                if root.kind == 1: Path {
+                if root.kind == 1 || root.kind == 2: Path {
                     width: plot.width;
                     height: plot.height;
                     viewbox-x: 0;
@@ -2371,9 +2372,9 @@ export component ChartPlot inherits Rectangle {
                     viewbox-height: 1000;
                     fit: fill;
                     commands: root.commands;
-                    fill: root.kind == 0 ? Theme.primary : transparent;
-                    stroke: root.kind == 0 ? transparent : Theme.primary;
-                    stroke-width: root.kind == 0 ? 0px : 2px;
+                    fill: root.kind == 0 || root.kind == 3 ? Theme.primary : transparent;
+                    stroke: root.kind == 1 || root.kind == 2 ? Theme.primary : transparent;
+                    stroke-width: root.kind == 1 || root.kind == 2 ? 2px : 0px;
                     stroke-line-join: round;
                     stroke-line-cap: round;
                 }

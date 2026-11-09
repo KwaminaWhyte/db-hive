@@ -83,6 +83,37 @@ pub struct QueryResult {
     pub rows_affected: Option<u64>,
 }
 
+/// One key in a key-value store, as the browser lists it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeyEntry {
+    pub key: String,
+    /// Lowercase Redis type: string, hash, list, set, zset, stream, none.
+    pub kind: String,
+    /// Seconds to live, or None when the key has no expiry.
+    pub ttl: Option<i64>,
+}
+
+/// One page of a cursor scan.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KeyPage {
+    /// Pass back to continue; 0 means the scan is complete.
+    pub cursor: u64,
+    pub entries: Vec<KeyEntry>,
+}
+
+/// One key's value, in rows of two text columns.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct KeyDetail {
+    pub key: String,
+    pub kind: String,
+    pub ttl: Option<i64>,
+    /// Column labels for [`rows`](Self::rows), e.g. "field" and "value".
+    pub columns: (String, String),
+    pub rows: Vec<(String, String)>,
+    /// "Showing the first 500 of ..." or another honest limit note.
+    pub note: String,
+}
+
 impl QueryResult {
     /// Create a new empty QueryResult
     pub fn empty() -> Self {
@@ -293,6 +324,28 @@ pub trait DatabaseDriver: Send + Sync {
     /// values into generated SQL (e.g. data import).
     fn escape_string_literal(&self, value: &str) -> String {
         value.replace('\'', "''")
+    }
+
+    /// Scan keys with a pattern, returning one page. Key-value stores only.
+    ///
+    /// `cursor` is opaque; pass 0 to start and the returned cursor to
+    /// continue. `pattern` is the store's own glob syntax; empty means all.
+    async fn scan_keys(
+        &self,
+        _pattern: &str,
+        _cursor: u64,
+        _count: usize,
+    ) -> Result<KeyPage, DbError> {
+        Err(DbError::InvalidInput(
+            "This connection is not a key-value store".to_string(),
+        ))
+    }
+
+    /// Read one key's type, expiry and value. Key-value stores only.
+    async fn key_detail(&self, _key: &str) -> Result<KeyDetail, DbError> {
+        Err(DbError::InvalidInput(
+            "This connection is not a key-value store".to_string(),
+        ))
     }
 
     /// Ask the server to stop the statement this connection is running, if

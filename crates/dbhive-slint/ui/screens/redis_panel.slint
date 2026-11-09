@@ -1,0 +1,291 @@
+// The Redis key browser: scan keys by pattern, narrow by type, and read one
+// key's value. Redis has no tables, so this replaces the grid for that driver.
+// Rust owns every value and does the scanning (`app/redis_glue.rs`).
+
+import { ListView } from "std-widgets.slint";
+import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Dropdown, Banner, EmptyState } from "../kit/kit.slint";
+
+export struct RedisKeyItem {
+    key: string,
+    kind: string,
+    ttl: string,
+}
+
+export struct KeyValueRow {
+    a: string,
+    b: string,
+}
+
+export global RedisState {
+    in property <bool> visible;
+    in property <[string]> databases;
+    in property <int> database-index;
+    in property <string> database-label;
+    in property <string> pattern: "*";
+    in property <[string]> type-options;
+    in property <int> type-index;
+    in property <string> type-label;
+    in property <[RedisKeyItem]> keys;
+    in property <bool> has-more;
+    in property <string> list-note;
+    in property <bool> loading;
+    in property <string> error;
+    in property <string> selected;
+    in property <bool> detail-loading;
+    in property <string> detail-error;
+    in property <string> detail-summary;
+    in property <string> detail-note;
+    in property <bool> detail-two-columns;
+    in property <[KeyValueRow]> detail-rows;
+
+    callback close;
+    callback scan;
+    callback load-more;
+    callback database-picked(int);
+    callback type-picked(int);
+    callback pattern-changed(string);
+    callback key-picked(string);
+    callback detail-copy;
+}
+
+export component RedisOverlay inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: Theme.scrim;
+
+    TouchArea {
+        clicked => { RedisState.close(); }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: min(1040px, root.width - 32px);
+                height: min(640px, root.height - 32px);
+                background: Theme.background;
+                border-radius: Theme.radius-card;
+                border-width: 1px;
+                border-color: Theme.border;
+
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 12px;
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        Text {
+                            text: "Redis keys";
+                            color: Theme.foreground;
+                            font-size: Theme.size-heading;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                        }
+                        Rectangle { horizontal-stretch: 1; }
+                        Dropdown {
+                            width: 110px;
+                            value: RedisState.database-label;
+                            options: RedisState.databases;
+                            selected(i) => { RedisState.database-picked(i); }
+                        }
+                        Button {
+                            has-icon: true;
+                            icon: Icons.x;
+                            variant: ButtonVariant.ghost;
+                            accessible-label: "Close the key browser";
+                            clicked => { RedisState.close(); }
+                        }
+                    }
+
+                    if RedisState.error != "": Banner {
+                        message: RedisState.error;
+                        tone: Tone.danger;
+                        dismissible: false;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 12px;
+
+                        // Keys.
+                        VerticalLayout {
+                            width: 360px;
+                            spacing: 8px;
+                            HorizontalLayout {
+                                spacing: 8px;
+                                TextField {
+                                    horizontal-stretch: 1;
+                                    text: RedisState.pattern;
+                                    placeholder: "Pattern, e.g. user:*";
+                                    edited(t) => { RedisState.pattern-changed(t); }
+                                    accepted(t) => { RedisState.scan(); }
+                                }
+                                Button {
+                                    text: "Scan";
+                                    variant: ButtonVariant.primary;
+                                    clicked => { RedisState.scan(); }
+                                }
+                            }
+                            Dropdown {
+                                value: RedisState.type-label;
+                                options: RedisState.type-options;
+                                selected(i) => { RedisState.type-picked(i); }
+                            }
+                            Rectangle {
+                                vertical-stretch: 1;
+                                background: Theme.card;
+                                border-radius: Theme.radius-card;
+                                clip: true;
+                                ListView {
+                                    for item in RedisState.keys: Rectangle {
+                                        width: 100%;
+                                        height: 44px;
+                                        background: key-touch.has-hover ? Theme.hover : transparent;
+                                        key-touch := TouchArea {
+                                            mouse-cursor: pointer;
+                                            clicked => { RedisState.key-picked(item.key); }
+                                        }
+                                        HorizontalLayout {
+                                            width: 100%;
+                                            padding-left: 10px;
+                                            padding-right: 10px;
+                                            spacing: 8px;
+                                            alignment: start;
+                                            VerticalLayout {
+                                                horizontal-stretch: 1;
+                                                spacing: 1px;
+                                                alignment: center;
+                                                Text {
+                                                    horizontal-alignment: left;
+                                                    text: item.key;
+                                                    color: Theme.foreground;
+                                                    font-size: Theme.size-label;
+                                                    overflow: elide;
+                                                }
+                                                Text {
+                                                    horizontal-alignment: left;
+                                                    text: item.kind + " · " + item.ttl;
+                                                    color: Theme.dim-foreground;
+                                                    font-size: Theme.size-small;
+                                                    overflow: elide;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            HorizontalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: RedisState.loading ? "Scanning…" : RedisState.list-note;
+                                    color: Theme.muted-foreground;
+                                    font-size: Theme.size-small;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 1;
+                                }
+                                Button {
+                                    text: "Load more";
+                                    variant: ButtonVariant.ghost;
+                                    enabled: !RedisState.loading && RedisState.has-more;
+                                    clicked => { RedisState.load-more(); }
+                                }
+                            }
+                        }
+
+                        // The selected key.
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            spacing: 8px;
+                            if RedisState.selected == "": EmptyState {
+                                vertical-stretch: 1;
+                                icon: Icons.key-round;
+                                title: "Pick a key";
+                                message: "Its type, expiry and value appear here.";
+                            }
+                            if RedisState.selected != "": VerticalLayout {
+                                vertical-stretch: 1;
+                                spacing: 6px;
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: RedisState.selected;
+                                        color: Theme.foreground;
+                                        font-size: Theme.size-subheading;
+                                        font-weight: 700;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                        vertical-alignment: center;
+                                    }
+                                    Button {
+                                        text: "Copy";
+                                        variant: ButtonVariant.ghost;
+                                        enabled: !RedisState.detail-loading && RedisState.detail-error == "";
+                                        clicked => { RedisState.detail-copy(); }
+                                    }
+                                }
+                                Text {
+                                    text: RedisState.detail-summary;
+                                    color: Theme.muted-foreground;
+                                    font-size: Theme.size-small;
+                                }
+                                if RedisState.detail-loading: Text {
+                                    text: "Reading the value…";
+                                    color: Theme.muted-foreground;
+                                    font-size: Theme.size-body;
+                                }
+                                if RedisState.detail-error != "": Banner {
+                                    message: RedisState.detail-error;
+                                    tone: Tone.danger;
+                                    dismissible: false;
+                                }
+                                if RedisState.detail-note != "": Banner {
+                                    message: RedisState.detail-note;
+                                    tone: Tone.warning;
+                                    dismissible: false;
+                                }
+                                Rectangle {
+                                    vertical-stretch: 1;
+                                    background: Theme.card;
+                                    border-radius: Theme.radius-card;
+                                    clip: true;
+                                    ListView {
+                                        for row in RedisState.detail-rows: Rectangle {
+                                            width: 100%;
+                                            height: 30px;
+                                            background: row-touch.has-hover ? Theme.hover : transparent;
+                                            row-touch := TouchArea { }
+                                            HorizontalLayout {
+                                                width: 100%;
+                                                padding-left: 10px;
+                                                padding-right: 10px;
+                                                spacing: 12px;
+                                                alignment: start;
+                                                Text {
+                                                    horizontal-alignment: left;
+                                                    width: RedisState.detail-two-columns ? 180px : 0px;
+                                                    horizontal-stretch: RedisState.detail-two-columns ? 0 : 1;
+                                                    text: row.a;
+                                                    color: Theme.foreground;
+                                                    font-size: Theme.size-label;
+                                                    overflow: elide;
+                                                }
+                                                if RedisState.detail-two-columns: Text {
+                                                    horizontal-stretch: 1;
+                                                    horizontal-alignment: left;
+                                                    text: row.b;
+                                                    color: Theme.muted-foreground;
+                                                    font-size: Theme.size-label;
+                                                    overflow: elide;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

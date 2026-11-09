@@ -142,6 +142,28 @@ impl Ctx {
         );
     }
 
+    /// A page landed: a backwards keyset page is stored reversed, then the
+    /// page's edge key values are recorded for the next Next or Previous.
+    fn inspector_page_landed(&self, id: u64) {
+        let mut s = self.session.borrow_mut();
+        let Some(tab) = s.workspace.tabs.get_mut(id) else {
+            return;
+        };
+        let backward = tab
+            .inspector
+            .as_mut()
+            .map(|v| v.take_backward())
+            .unwrap_or(false);
+        if backward {
+            if let Some(result) = tab.result.as_mut() {
+                result.rows.reverse();
+            }
+        }
+        if let (Some(view), Some(result)) = (tab.inspector.as_mut(), tab.result.as_ref()) {
+            view.record_page(result);
+        }
+    }
+
     /// Fetch the current page (and, with `recount`, the row count for the
     /// applied filters). A newer fetch supersedes one still in flight.
     fn inspector_fetch(self: &Rc<Self>, id: u64, recount: bool) {
@@ -200,6 +222,7 @@ impl Ctx {
                         .tabs
                         .finish_run(id, seq, out, elapsed);
                     if landed {
+                        ctx.inspector_page_landed(id);
                         ctx.refresh_workspace();
                     }
                 })

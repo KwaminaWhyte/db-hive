@@ -321,6 +321,7 @@ impl Ctx {
                     host: "".into(),
                     initials: "".into(),
                     tint: slint::Color::default(),
+                    color: slint::Color::default(),
                     env_label: "".into(),
                     env_tone: Tone::Neutral,
                     favorite: false,
@@ -345,6 +346,11 @@ impl Ctx {
                         host: connection_list::subtitle(p).into(),
                         initials: initials.into(),
                         tint: slint::Color::from_rgb_u8(r, g, b),
+                        color: dbhive_ui_model::connection_editor::parse_hex_color(
+                            p.color.as_deref().unwrap_or(""),
+                        )
+                        .map(|(r, g, b)| slint::Color::from_rgb_u8(r, g, b))
+                        .unwrap_or_default(),
                         env_label: env_label.into(),
                         env_tone,
                         favorite: p.is_favorite,

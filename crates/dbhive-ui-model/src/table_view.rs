@@ -19,9 +19,9 @@ use dbhive_core::models::{DbDriver, ForeignKeyInfo, TableSchema};
 
 use crate::results_grid::cell_text;
 use crate::table_inspector::{
-    count_sql, default_label, index_kind_label, max_safe_page, offset_for_page,
+    count_sql, default_label, index_kind_label, keyset_select_sql, max_safe_page, offset_for_page,
     paged_select_sql_sorted, primary_key_columns, thousands, total_pages, DataQuery, DialectRules,
-    Filter, FilterOp, SortSpec, TableMeta, MAX_SAFE_OFFSET, PAGE_SIZES,
+    Filter, FilterOp, PageDirection, SortSpec, TableMeta, MAX_SAFE_OFFSET, PAGE_SIZES,
 };
 
 /// Default rows per page, same as the table inspector.
@@ -72,6 +72,14 @@ pub struct TableView {
     pub filters_open: bool,
     /// Row editing: pending changes, the cell being typed in, the review page.
     pub edit: crate::row_edits::EditUi,
+    /// The page whose rows are on screen, and its edge primary-key values.
+    /// `keyset_used` says the last fetch was a keyset page; `backward` says
+    /// its rows arrived reversed and must be flipped before display.
+    loaded_page: usize,
+    first_key: Option<serde_json::Value>,
+    last_key: Option<serde_json::Value>,
+    pub keyset_used: bool,
+    backward: bool,
     meta_seq: u64,
     count_seq: u64,
 }
@@ -94,6 +102,11 @@ impl Default for TableView {
             panel_open: false,
             filters_open: false,
             edit: crate::row_edits::EditUi::default(),
+            loaded_page: 0,
+            first_key: None,
+            last_key: None,
+            keyset_used: false,
+            backward: false,
             meta_seq: 0,
             count_seq: 0,
         }
@@ -194,6 +207,11 @@ impl TableView {
     }
 
     pub fn first(&mut self) -> bool {
+        // First is a fresh start; a cursor from the old page would make a
+        // backwards walk instead.
+        self.loaded_page = 0;
+        self.first_key = None;
+        self.last_key = None;
         self.goto(1)
     }
 
@@ -222,6 +240,9 @@ impl TableView {
         }
         self.page_size = size;
         self.page = 1;
+        self.loaded_page = 0;
+        self.first_key = None;
+        self.last_key = None;
         self.selection = None;
         self.checked.clear();
         true
@@ -286,6 +307,9 @@ impl TableView {
         }
         self.applied = next;
         self.page = 1;
+        self.loaded_page = 0;
+        self.first_key = None;
+        self.last_key = None;
         self.total = None;
         self.selection = None;
         self.checked.clear();
@@ -328,6 +352,9 @@ impl TableView {
             }),
         };
         self.page = 1;
+        self.loaded_page = 0;
+        self.first_key = None;
+        self.last_key = None;
         self.selection = None;
         self.checked.clear();
     }
@@ -342,6 +369,60 @@ impl TableView {
 
     /// The query for the page about to be fetched. Identifiers go through
     /// `quote` and filter values through `escape`, both from the driver.
+    /// The single-column primary key, when keyset paging is possible: one
+    /// primary-key column, no active filters (they would need to be part of
+    /// the cursor), and no sort except on that key.
+    fn keyset_primary_key(&self) -> Option<String> {
+        if self.applied.iter().any(|f| f.is_active()) {
+            return None;
+        }
+        let Meta::Ready(meta) = &self.meta else {
+            return None;
+        };
+        let primary: Vec<&str> = meta
+            .schema
+            .columns
+            .iter()
+            .filter(|c| c.is_primary_key)
+            .map(|c| c.name.as_str())
+            .collect();
+        if primary.len() != 1 {
+            return None;
+        }
+        let key = primary[0];
+        if let Some(sort) = &self.sort {
+            if sort.column != key {
+                return None;
+            }
+        }
+        Some(key.to_string())
+    }
+
+    /// Remember where the loaded page sits, so Next and Previous can build a
+    /// cursor. Call after a successful page fetch.
+    pub fn record_page(&mut self, result: &dbhive_core::drivers::QueryResult) {
+        self.loaded_page = self.page;
+        self.first_key = None;
+        self.last_key = None;
+        if !self.keyset_used {
+            return;
+        }
+        let Some(primary_key) = self.keyset_primary_key() else {
+            return;
+        };
+        let Some(index) = result.columns.iter().position(|c| c == &primary_key) else {
+            return;
+        };
+        self.first_key = result.rows.first().and_then(|r| r.get(index)).cloned();
+        self.last_key = result.rows.last().and_then(|r| r.get(index)).cloned();
+    }
+
+    /// Whether the rows that just landed were fetched backwards and need
+    /// reversing. Clears the flag.
+    pub fn take_backward(&mut self) -> bool {
+        std::mem::take(&mut self.backward) && self.keyset_used
+    }
+
     pub fn data_sql(
         &mut self,
         quote: &impl Fn(&str) -> String,
@@ -350,6 +431,45 @@ impl TableView {
         qualifier: &str,
         table: &str,
     ) -> String {
+        // Reloading the page already on screen after an edit or a commit:
+        // a cursor would fetch the following page, so fall back to offset.
+        let same_page = self.loaded_page == self.page && self.loaded_page != 0;
+        if !same_page {
+            if let Some(primary_key) = self.keyset_primary_key() {
+                self.keyset_used = true;
+                self.backward = self.page < self.loaded_page;
+                let direction = if self.backward {
+                    PageDirection::Backward
+                } else {
+                    PageDirection::Forward
+                };
+                let cursor = match direction {
+                    PageDirection::Forward => self.last_key.as_ref(),
+                    PageDirection::Backward => self.first_key.as_ref(),
+                };
+                let descending = self.sort.as_ref().map(|s| s.descending).unwrap_or(false);
+                return keyset_select_sql(
+                    quote,
+                    escape,
+                    rules,
+                    &DataQuery {
+                        schema: qualifier,
+                        table,
+                        filters: &self.applied,
+                        order_by: &[],
+                        page: self.page,
+                        page_size: self.page_size,
+                    },
+                    crate::table_inspector::KeysetSpec {
+                        primary_key: &primary_key,
+                        sort_descending: descending,
+                        cursor,
+                        direction,
+                    },
+                );
+            }
+        }
+        self.keyset_used = false;
         let page = self.prepare_page();
         let order_by = self.order_by();
         paged_select_sql_sorted(
@@ -972,6 +1092,97 @@ mod tests {
         assert_eq!(v.order_by(), vec!["id".to_string()]);
     }
 
+    // -- keyset paging -----------------------------------------------------
+
+    fn page_result(ids: &[i64]) -> dbhive_core::drivers::QueryResult {
+        dbhive_core::drivers::QueryResult {
+            columns: vec!["id".to_string(), "customer_id".to_string()],
+            rows: ids
+                .iter()
+                .map(|i| vec![serde_json::json!(i), serde_json::json!(i * 10)])
+                .collect(),
+            rows_affected: None,
+        }
+    }
+
+    #[test]
+    fn the_first_page_of_a_keyed_table_uses_no_cursor() {
+        let mut v = TableView::default();
+        ready(&mut v);
+        v.page_size = 25;
+        let sql = v.data_sql(&q, &esc, pg(), "public", "orders");
+        assert_eq!(
+            sql,
+            "SELECT * FROM \"public\".\"orders\" ORDER BY \"id\" ASC LIMIT 25"
+        );
+        assert!(v.keyset_used);
+    }
+
+    #[test]
+    fn next_and_previous_carry_the_edge_primary_key() {
+        let mut v = TableView::default();
+        ready(&mut v);
+        v.page_size = 3;
+        let first = v.data_sql(&q, &esc, pg(), "public", "orders");
+        assert!(first.ends_with("LIMIT 3"));
+        v.record_page(&page_result(&[1, 2, 3]));
+
+        assert!(v.next(3));
+        let second = v.data_sql(&q, &esc, pg(), "public", "orders");
+        assert_eq!(
+            second,
+            "SELECT * FROM \"public\".\"orders\" WHERE \"id\" > 3 ORDER BY \"id\" ASC LIMIT 3"
+        );
+        v.record_page(&page_result(&[4, 5, 6]));
+
+        assert!(v.prev());
+        let back = v.data_sql(&q, &esc, pg(), "public", "orders");
+        assert_eq!(
+            back,
+            "SELECT * FROM \"public\".\"orders\" WHERE \"id\" < 4 ORDER BY \"id\" DESC LIMIT 3"
+        );
+        assert!(v.take_backward(), "the caller must reverse these rows");
+        assert!(!v.take_backward(), "the flag is cleared when taken");
+    }
+
+    #[test]
+    fn a_descending_sort_walks_the_other_way() {
+        let mut v = TableView::default();
+        ready(&mut v);
+        v.toggle_sort("id");
+        v.toggle_sort("id"); // descending
+        v.page_size = 2;
+        v.data_sql(&q, &esc, pg(), "public", "orders");
+        v.record_page(&page_result(&[9, 8]));
+        assert!(v.next(2));
+        let sql = v.data_sql(&q, &esc, pg(), "public", "orders");
+        assert_eq!(
+            sql,
+            "SELECT * FROM \"public\".\"orders\" WHERE \"id\" < 8 ORDER BY \"id\" DESC LIMIT 2"
+        );
+    }
+
+    #[test]
+    fn filters_and_other_sorts_keep_offset_paging() {
+        let mut v = TableView::default();
+        ready(&mut v);
+        v.add_filter("customer_id");
+        v.set_filter_value(0, "10");
+        v.apply_filters();
+        v.page = 2;
+        let filtered = v.data_sql(&q, &esc, pg(), "public", "orders");
+        assert!(filtered.contains("OFFSET 50"), "{filtered}");
+        assert!(!v.keyset_used);
+
+        let mut s = TableView::default();
+        ready(&mut s);
+        s.toggle_sort("customer_id");
+        s.page = 2;
+        let sorted = s.data_sql(&q, &esc, pg(), "public", "orders");
+        assert!(sorted.contains("OFFSET 50"), "{sorted}");
+        assert!(!s.keyset_used);
+    }
+
     // -- filters -----------------------------------------------------------
 
     #[test]
@@ -1110,10 +1321,8 @@ mod tests {
         ready(&mut v);
         v.toggle_sort("id");
         let sql = v.data_sql(&q, &esc, pg(), "", "orders");
-        assert_eq!(
-            sql,
-            "SELECT * FROM \"orders\" ORDER BY \"id\" ASC LIMIT 50 OFFSET 0"
-        );
+        assert_eq!(sql, "SELECT * FROM \"orders\" ORDER BY \"id\" ASC LIMIT 50");
+        assert!(v.keyset_used, "a sort on the single key pages by key");
     }
 
     #[test]

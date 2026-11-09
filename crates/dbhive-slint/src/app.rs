@@ -38,6 +38,7 @@ mod erd;
 mod inspector;
 mod layout;
 mod query_tools;
+mod redis_glue;
 mod results;
 mod row_edit;
 mod schema_tree;
@@ -208,6 +209,7 @@ struct Session {
     query_tools: query_tools::QuerySession,
     flow: connect_flow::FlowSession,
     layout: layout::LayoutSession,
+    redis: redis_glue::RedisSession,
 }
 
 struct Ctx {
@@ -681,6 +683,7 @@ impl Ctx {
         let s = self.session.borrow();
         let ws = &s.workspace;
 
+        w.set_redis_enabled(matches!(ws.driver, Some(DbDriver::Redis)));
         w.set_workspace_connection_name(ws.connection_name.as_str().into());
         let location = match (&ws.database, &ws.schema) {
             (Some(db), Some(schema)) if schema != db => format!("{} · {}", db, schema),
@@ -1174,6 +1177,7 @@ impl Ctx {
                             .finish_run_capped(id, seq, outcome, elapsed, max_rows);
                     }
                     ctx.refresh_workspace();
+                    ctx.results_plan_after_run();
                 })
             },
         );
@@ -1739,6 +1743,10 @@ pub(crate) fn build_window(
     }
     {
         let ctx = ctx.clone();
+        window.on_open_redis(move || ctx.redis_open());
+    }
+    {
+        let ctx = ctx.clone();
         window.on_disconnect(move |id| ctx.disconnect(id.to_string()));
     }
     {
@@ -1988,6 +1996,7 @@ pub(crate) fn build_window(
     query_tools::wire(&window, &ctx);
     connect_flow::wire(&window, &ctx);
     layout::wire(&window, &ctx);
+    redis_glue::wire(&window, &ctx);
     windows::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------

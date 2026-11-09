@@ -17,7 +17,7 @@ use redis::AsyncCommands;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use super::{ConnectionOptions, DatabaseDriver, QueryResult};
+use super::{ConnectionOptions, DatabaseDriver, KeyDetail, KeyEntry, KeyPage, QueryResult};
 use crate::models::{
     ColumnInfo, DatabaseInfo, DbError, ForeignKeyInfo, IndexInfo, SchemaInfo, TableInfo,
     TableSchema,
@@ -122,6 +122,215 @@ impl DatabaseDriver for RedisDriver {
             .map_err(|e| DbError::QueryError(format!("Redis command failed: {}", e)))?;
 
         Ok(redis_value_to_query_result(value))
+    }
+
+    /// One page of keys, with each key's type and expiry.
+    async fn scan_keys(
+        &self,
+        pattern: &str,
+        cursor: u64,
+        count: usize,
+    ) -> Result<KeyPage, DbError> {
+        let count = count.clamp(1, 1000);
+        let mut command = redis::cmd("SCAN");
+        command.arg(cursor);
+        if !pattern.is_empty() {
+            command.arg("MATCH").arg(pattern);
+        }
+        command.arg("COUNT").arg(count);
+        let (next, keys): (u64, Vec<String>) = command
+            .query_async(&mut *self.conn.lock().await)
+            .await
+            .map_err(|e| DbError::QueryError(format!("Redis SCAN failed: {}", e)))?;
+
+        let mut entries = Vec::with_capacity(keys.len());
+        if !keys.is_empty() {
+            // One round trip for every TYPE and TTL.
+            let mut pipe = redis::pipe();
+            for key in &keys {
+                pipe.cmd("TYPE").arg(key);
+                pipe.cmd("TTL").arg(key);
+            }
+            let values: Vec<redis::Value> = pipe
+                .query_async(&mut *self.conn.lock().await)
+                .await
+                .map_err(|e| DbError::QueryError(format!("Redis TYPE failed: {}", e)))?;
+            for (i, key) in keys.into_iter().enumerate() {
+                let kind = values
+                    .get(i * 2)
+                    .and_then(|v| redis::from_redis_value::<String>(v).ok())
+                    .unwrap_or_default();
+                let ttl = values
+                    .get(i * 2 + 1)
+                    .and_then(|v| redis::from_redis_value::<i64>(v).ok())
+                    .filter(|t| *t >= 0);
+                entries.push(KeyEntry { key, kind, ttl });
+            }
+        }
+        Ok(KeyPage {
+            cursor: next,
+            entries,
+        })
+    }
+
+    /// A key's type, expiry and value, capped at 500 rows.
+    async fn key_detail(&self, key: &str) -> Result<KeyDetail, DbError> {
+        const CAP: isize = 500;
+        const CAP_I64: i64 = CAP as i64;
+        let kind: String = redis::cmd("TYPE")
+            .arg(key)
+            .query_async(&mut *self.conn.lock().await)
+            .await
+            .map_err(|e| DbError::QueryError(format!("Redis TYPE failed: {}", e)))?;
+        let ttl: i64 = redis::cmd("TTL")
+            .arg(key)
+            .query_async(&mut *self.conn.lock().await)
+            .await
+            .map_err(|e| DbError::QueryError(format!("Redis TTL failed: {}", e)))?;
+        let ttl = (ttl >= 0).then_some(ttl);
+
+        let mut detail = KeyDetail {
+            key: key.to_string(),
+            kind: kind.clone(),
+            ttl,
+            columns: ("field".to_string(), "value".to_string()),
+            rows: Vec::new(),
+            note: String::new(),
+        };
+        let mut conn = self.conn.lock().await;
+        match kind.as_str() {
+            "string" => {
+                let value: String = redis::cmd("GET")
+                    .arg(key)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| DbError::QueryError(format!("Redis GET failed: {}", e)))?;
+                detail.columns = ("value".to_string(), String::new());
+                if value.chars().count() > 10_000 {
+                    detail.note =
+                        "Showing the first 10,000 characters of a longer string.".to_string();
+                    detail.rows.push((
+                        value.chars().take(10_000).collect::<String>(),
+                        String::new(),
+                    ));
+                } else {
+                    detail.rows.push((value, String::new()));
+                }
+            }
+            "hash" => {
+                detail.columns = ("field".to_string(), "value".to_string());
+                let pairs: Vec<(String, String)> = redis::cmd("HGETALL")
+                    .arg(key)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| DbError::QueryError(format!("Redis HGETALL failed: {}", e)))?;
+                let total = pairs.len();
+                detail.rows = pairs.into_iter().take(CAP as usize).collect();
+                if total > CAP as usize {
+                    detail.note = format!("Showing the first {} of {} fields.", CAP, total);
+                }
+            }
+            "list" => {
+                detail.columns = ("index".to_string(), "value".to_string());
+                let values: Vec<String> = redis::cmd("LRANGE")
+                    .arg(key)
+                    .arg(0)
+                    .arg(CAP - 1)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| DbError::QueryError(format!("Redis LRANGE failed: {}", e)))?;
+                let len: i64 = redis::cmd("LLEN")
+                    .arg(key)
+                    .query_async(&mut *conn)
+                    .await
+                    .unwrap_or(values.len() as i64);
+                detail.rows = values
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, v)| (i.to_string(), v))
+                    .collect();
+                if len > CAP_I64 {
+                    detail.note = format!("Showing the first {} of {} items.", CAP, len);
+                }
+            }
+            "set" => {
+                detail.columns = ("member".to_string(), String::new());
+                let (_, members): (u64, Vec<String>) = redis::cmd("SSCAN")
+                    .arg(key)
+                    .arg(0)
+                    .arg("COUNT")
+                    .arg(CAP)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| DbError::QueryError(format!("Redis SSCAN failed: {}", e)))?;
+                let size: i64 = redis::cmd("SCARD")
+                    .arg(key)
+                    .query_async(&mut *conn)
+                    .await
+                    .unwrap_or(members.len() as i64);
+                detail.rows = members.into_iter().map(|m| (m, String::new())).collect();
+                if size > detail.rows.len() as i64 {
+                    detail.note = format!(
+                        "Showing {} of {} members; scan again to see others.",
+                        detail.rows.len(),
+                        size
+                    );
+                }
+            }
+            "zset" => {
+                detail.columns = ("member".to_string(), "score".to_string());
+                let pairs: Vec<(String, f64)> = redis::cmd("ZRANGE")
+                    .arg(key)
+                    .arg(0)
+                    .arg(CAP - 1)
+                    .arg("WITHSCORES")
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| DbError::QueryError(format!("Redis ZRANGE failed: {}", e)))?;
+                let size: i64 = redis::cmd("ZCARD")
+                    .arg(key)
+                    .query_async(&mut *conn)
+                    .await
+                    .unwrap_or(pairs.len() as i64);
+                detail.rows = pairs
+                    .into_iter()
+                    .map(|(m, s)| {
+                        (
+                            m,
+                            if s.fract() == 0.0 {
+                                format!("{}", s as i64)
+                            } else {
+                                s.to_string()
+                            },
+                        )
+                    })
+                    .collect();
+                if size > CAP_I64 {
+                    detail.note = format!("Showing the first {} of {} members.", CAP, size);
+                }
+            }
+            "stream" => {
+                detail.columns = ("id".to_string(), "entry".to_string());
+                let entries: Vec<(String, Vec<String>)> = redis::cmd("XRANGE")
+                    .arg(key)
+                    .arg("-")
+                    .arg("+")
+                    .arg("COUNT")
+                    .arg(CAP)
+                    .query_async(&mut *conn)
+                    .await
+                    .map_err(|e| DbError::QueryError(format!("Redis XRANGE failed: {}", e)))?;
+                detail.rows = entries
+                    .into_iter()
+                    .map(|(id, fields)| (id, fields.join("  ")))
+                    .collect();
+            }
+            "none" => return Err(DbError::NotFound(format!("Key '{}' no longer exists", key))),
+            other => {
+                detail.note = format!("No viewer for Redis type '{}'.", other);
+            }
+        }
+        Ok(detail)
     }
 
     /// Return the 16 standard Redis logical databases (db0 … db15)

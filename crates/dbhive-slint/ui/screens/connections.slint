@@ -20,6 +20,8 @@ export struct ConnectionItem {
     // Two letters and a tint for the driver chip.
     initials: string,
     tint: color,
+    // The profile's colour tag, transparent when none is set.
+    color: color,
     env-label: string,
     env-tone: Tone,
     favorite: bool,
@@ -73,6 +75,16 @@ component ConnectionRow inherits Rectangle {
     height: 64px;
     border-radius: Theme.radius-card;
     background: touch.has-hover ? Theme.hover : transparent;
+
+    // The profile's colour tag, a slim bar at the leading edge.
+    if root.item.color != transparent: Rectangle {
+        x: 4px;
+        y: 12px;
+        width: 3px;
+        height: parent.height - 24px;
+        border-radius: 2px;
+        background: root.item.color;
+    }
     animate background { duration: 90ms; }
 
     accessible-role: button;
