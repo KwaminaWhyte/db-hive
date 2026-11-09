@@ -32,6 +32,9 @@ pub struct SqliteDriver {
 
     /// Path to the database file
     db_path: String,
+
+    /// Stops the statement running on `conn` from another thread.
+    interrupt: Arc<rusqlite::InterruptHandle>,
 }
 
 impl SqliteDriver {
@@ -113,9 +116,13 @@ impl DatabaseDriver for SqliteDriver {
             DbError::ConnectionError(format!("Failed to enable foreign keys: {}", e))
         })?;
 
+        // Taken before the connection goes behind its mutex: interrupting must
+        // not wait for the lock the running statement holds.
+        let interrupt = Arc::new(conn.get_interrupt_handle());
         Ok(Self {
             conn: Arc::new(StdMutex::new(conn)),
             db_path,
+            interrupt,
         })
     }
 
@@ -541,11 +548,63 @@ impl DatabaseDriver for SqliteDriver {
         // Connection will be automatically closed when dropped
         Ok(())
     }
+
+    /// `sqlite3_interrupt`: the running statement fails with "interrupted"
+    /// at its next step, which releases the connection for the next query.
+    /// Safe to call when nothing is running (SQLite then ignores it).
+    fn cancel_running(&self) -> bool {
+        self.interrupt.interrupt();
+        true
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn cancel_running_stops_a_long_statement_and_frees_the_connection() {
+        let db_path = std::env::temp_dir().join(format!(
+            "dbhive-sqlite-cancel-{}.sqlite",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_file(&db_path);
+        let driver = Arc::new(
+            SqliteDriver::connect(ConnectionOptions {
+                host: String::new(),
+                port: 0,
+                username: String::new(),
+                password: None,
+                database: Some(db_path.to_string_lossy().to_string()),
+                timeout: None,
+                require_tls: false,
+            })
+            .await
+            .unwrap(),
+        );
+        // Counts to a billion: many seconds of work unless interrupted.
+        let slow = "WITH RECURSIVE c(x) AS (SELECT 1 UNION ALL SELECT x + 1 FROM c WHERE x < 1000000000) SELECT count(*) FROM c";
+        let running = {
+            let d = driver.clone();
+            tokio::spawn(async move { d.execute_query(slow).await })
+        };
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        let started = std::time::Instant::now();
+        assert!(driver.cancel_running());
+        let out = tokio::time::timeout(std::time::Duration::from_secs(5), running)
+            .await
+            .expect("the interrupted statement must end promptly")
+            .unwrap();
+        assert!(out.is_err(), "an interrupted statement reports an error");
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+        // The connection is usable straight away.
+        let next = driver.execute_query("SELECT 41 + 1").await.unwrap();
+        assert_eq!(next.rows[0][0], serde_json::json!(42));
+        // Interrupting while idle does not break the next statement.
+        assert!(driver.cancel_running());
+        assert!(driver.execute_query("SELECT 1").await.is_ok());
+        let _ = std::fs::remove_file(&db_path);
+    }
 
     #[tokio::test]
     async fn test_sqlite_connect_and_query() {
