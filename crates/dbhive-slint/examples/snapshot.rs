@@ -308,8 +308,11 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
             c.show().unwrap();
             Box::new(c)
         }
-        "about" => {
+        "about" | "about-light" => {
             let c = AppWindow::new().expect("AppWindow");
+            if name.ends_with("-light") {
+                c.global::<Theme>().set_dark(false);
+            }
             c.set_app_version("0.21.0".into());
             c.set_show_about(true);
             c.show().unwrap();
@@ -608,7 +611,7 @@ fn history_panel_window(name: &str) -> Box<dyn std::any::Any> {
         if name == "snippets-empty" {
             "Snippets".into()
         } else {
-            "Snippets (4)".into()
+            "Snippets (7)".into()
         },
         if name == "templates-empty" {
             "Templates".into()
@@ -655,23 +658,40 @@ fn history_panel_window(name: &str) -> Box<dyn std::any::Any> {
         );
     }
 
-    // Snippets.
+    // Snippets, filed in folders: Reports/Monthly plus loose ones.
+    let mut mk_snippet = |name: &str, sql: &str, desc: Option<&str>, folder: Option<&str>| {
+        let mut s = QuerySnippet::new(name.into(), sql.into(), desc.map(Into::into), None);
+        s.folder = folder.map(Into::into);
+        s
+    };
     let snippets = vec![
-        QuerySnippet::new("Active users this week".into(), "SELECT id, email FROM users WHERE last_seen > now() - interval '7 days'".into(), Some("Users seen in the last seven days".into()), Some(vec!["reports".into(), "weekly".into()])),
-        QuerySnippet::new("Table sizes".into(), "SELECT relname, pg_size_pretty(pg_total_relation_size(relid)) FROM pg_catalog.pg_statio_user_tables ORDER BY 2 DESC".into(), None, Some(vec!["maintenance".into()])),
-        QuerySnippet::new("Blocked queries".into(), "SELECT pid, query FROM pg_stat_activity WHERE wait_event_type = 'Lock'".into(), Some("Who is waiting on a lock".into()), Some(vec!["maintenance".into()])),
-        QuerySnippet::new("Top customers by revenue".into(), "SELECT c.name, SUM(o.total) FROM customers c JOIN orders o ON o.customer_id = c.id GROUP BY 1 ORDER BY 2 DESC LIMIT 10".into(), None, None),
+        mk_snippet("Active users this week", "SELECT id, email FROM users WHERE last_seen > now() - interval '7 days'", Some("Users seen in the last seven days"), Some("Reports")),
+        mk_snippet("Users per plan", "SELECT plan, COUNT(*) FROM users GROUP BY plan", None, Some("Reports/Monthly")),
+        mk_snippet("Revenue by month", "SELECT date_trunc('month', created_at) AS m, SUM(total) FROM orders GROUP BY 1 ORDER BY 1", Some("Monthly revenue trend"), Some("Reports/Monthly")),
+        mk_snippet("Table sizes", "SELECT relname, pg_size_pretty(pg_total_relation_size(relid)) FROM pg_catalog.pg_statio_user_tables ORDER BY 2 DESC", None, Some("Maintenance")),
+        mk_snippet("Blocked queries", "SELECT pid, query FROM pg_stat_activity WHERE wait_event_type = 'Lock'", Some("Who is waiting on a lock"), Some("Maintenance")),
+        mk_snippet("Top customers by revenue", "SELECT c.name, SUM(o.total) FROM customers c JOIN orders o ON o.customer_id = c.id GROUP BY 1 ORDER BY 2 DESC LIMIT 10", None, None),
+        mk_snippet("Quick count", "SELECT COUNT(*) FROM customers", None, Some("Ops")),
     ];
     let tags = dbhive_ui_model::history::snippet_tags(&snippets);
     if name != "snippets-empty" {
-        let picked = (name == "snippets").then_some("reports");
-        let rows = hp::snippet_rows(&snippets, "", picked);
-        h.set_snippet_summary(format!("{} of 4 snippets", rows.len()).into());
-        h.set_snippets(rows_model(rows));
-        h.set_snippet_tags(strings_model(&tags));
-        if picked.is_some() {
-            h.set_snippet_tag(1);
+        let folders = hp::snippet_folders(&snippets);
+        let mut collapsed = std::collections::BTreeSet::new();
+        if name == "snippets-folders" {
+            collapsed.insert("Maintenance".to_string());
         }
+        let rows = hp::snippet_tree(&snippets, "", None, &collapsed);
+        h.set_snippet_summary(
+            format!(
+                "{} of {} snippets in {} folders",
+                hp::snippet_rows(&snippets, "", None).len(),
+                snippets.len(),
+                folders.len()
+            )
+            .into(),
+        );
+        h.set_snippets(dbhive_slint::history_view::snippet_rows_model(rows));
+        h.set_snippet_tags(strings_model(&tags));
     }
     if name == "snippets-loading" {
         h.set_loading(true);
@@ -1187,7 +1207,13 @@ fn command_overlay(name: &str) -> Box<dyn std::any::Any> {
             "shortcuts-empty" => s.set_query("zzzz"),
             _ => {}
         }
-        dbhive_slint::palette_view::apply_shortcuts(&c, true, s.query(), &s.view(IS_MAC));
+        let keymap = dbhive_ui_model::keymap::Keymap::default();
+        dbhive_slint::palette_view::apply_shortcuts(
+            &c,
+            true,
+            s.query(),
+            &s.view(IS_MAC, &keymap, ctx.screen),
+        );
         return Box::new(c);
     }
 

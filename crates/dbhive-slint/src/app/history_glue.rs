@@ -11,17 +11,22 @@ use std::rc::Rc;
 use dbhive_core::state::AppState;
 use dbhive_ui_model::history::{
     export_templates_now, import_templates_now, load_templates, merge_imported, save_templates,
-    sync_parameters, template_categories, QueryTemplate, TemplateParameter, HISTORY_LIMITS,
+    sync_parameters, template_categories, ParamType, QueryTemplate, TemplateParameter,
+    HISTORY_LIMITS,
 };
 use dbhive_ui_model::history_panel::{
-    append_sql, build_snippet, build_template, duplicate_template, history_rows, rerun_plan,
-    scoped_history, set_param_default, snippet_rows, template_rows, toggle_param_required,
-    PanelTab, RerunPlan, SnippetDraft, TemplateDraft, TemplateRun,
+    append_sql, build_snippet, build_template, duplicate_template, folder_choice_at,
+    folder_choice_index, folder_choice_labels, history_rows, move_snippet, normalize_folder,
+    rerun_plan, scoped_history, set_param_default, set_param_label, set_param_type_in_sql,
+    snippet_folders, snippet_rows, snippet_tree, template_rows, toggle_param_required, PanelTab,
+    RerunPlan, SnippetDraft, TemplateDraft, TemplateRun,
 };
 use slint::ComponentHandle;
 
 use super::{with_ctx, Ctx, PendingAction};
-use crate::history_view::{count_label, form_params, rows_model, run_params, strings_model};
+use crate::history_view::{
+    count_label, form_params, rows_model, run_params, snippet_rows_model, strings_model,
+};
 use crate::{runtime, sql_highlight};
 use crate::{HistoryState, PanelMode, Screen, Theme, Tone};
 
@@ -63,6 +68,10 @@ pub(super) struct PanelSession {
     editing_template: Option<String>,
     draft_params: Vec<TemplateParameter>,
     run: Option<TemplateRun>,
+    /// Snippet folders the user closed. Search opens them all.
+    collapsed_folders: std::collections::BTreeSet<String>,
+    /// The snippet the move form is for.
+    moving_snippet: Option<String>,
 }
 
 impl Default for PanelSession {
@@ -85,6 +94,8 @@ impl Default for PanelSession {
             editing_template: None,
             draft_params: Vec::new(),
             run: None,
+            collapsed_folders: std::collections::BTreeSet::new(),
+            moving_snippet: None,
         }
     }
 }
@@ -167,18 +178,32 @@ impl Ctx {
                 .collect::<Vec<_>>(),
         ));
 
-        // Snippets.
+        // Snippets: folders and records in one tree.
         let snippet_search = h.get_snippet_search().to_string();
-        let rows = snippet_rows(&all_snippets, &snippet_search, p.snippet_tag.as_deref());
-        let snippet_shown = rows.len();
-        h.set_snippets(rows_model(rows));
+        let rows = snippet_tree(
+            &all_snippets,
+            &snippet_search,
+            p.snippet_tag.as_deref(),
+            &p.collapsed_folders,
+        );
+        let snippets_filed =
+            snippet_rows(&all_snippets, &snippet_search, p.snippet_tag.as_deref()).len();
+        let folders = snippet_folders(&all_snippets);
+        let move_options = folder_choice_labels(&folders);
+        if p.moving_snippet.is_some() {
+            h.set_move_options(strings_model(&move_options));
+            let choice = h.get_move_choice().max(0) as usize;
+            h.set_move_choice(choice.min(move_options.len() - 1) as i32);
+        }
+        h.set_snippets(snippet_rows_model(rows));
         h.set_snippet_tags(strings_model(&snippet_tags));
         h.set_snippet_tag(index_of(&snippet_tags, &p.snippet_tag));
         h.set_snippet_summary(
             format!(
-                "{} of {}",
-                snippet_shown,
-                count_label(all_snippets.len(), "snippet", "snippets")
+                "{} of {} in {}",
+                snippets_filed,
+                count_label(all_snippets.len(), "snippet", "snippets"),
+                count_label(folders.len(), "folder", "folders")
             )
             .into(),
         );
@@ -490,7 +515,9 @@ impl Ctx {
         }
         self.load_form("", "", "", "", "");
         if let Some(w) = self.window.upgrade() {
-            w.global::<HistoryState>().set_form_is_new(true);
+            let h = w.global::<HistoryState>();
+            h.set_form_is_new(true);
+            h.set_form_folder("".into());
         }
         self.set_panel_mode(PanelMode::SnippetForm);
         self.refresh_history_panel();
@@ -507,7 +534,9 @@ impl Ctx {
         }
         self.load_form(&d.name, &d.description, "", &d.tags, &d.query);
         if let Some(w) = self.window.upgrade() {
-            w.global::<HistoryState>().set_form_is_new(false);
+            let h = w.global::<HistoryState>();
+            h.set_form_is_new(false);
+            h.set_form_folder(d.folder.as_str().into());
         }
         self.set_panel_mode(PanelMode::SnippetForm);
         self.refresh_history_panel();
@@ -523,6 +552,7 @@ impl Ctx {
             description: h.get_form_description().to_string(),
             query: h.get_form_sql().to_string(),
             tags: h.get_form_tags().to_string(),
+            folder: h.get_form_folder().to_string(),
         };
         let editing = self.session.borrow().history.editing_snippet.clone();
         let existing = editing
@@ -565,6 +595,102 @@ impl Ctx {
             self.refresh_history_panel();
             self.persist_snippets();
             self.toast("Snippet deleted", Tone::Neutral);
+        } else {
+            self.toast("That snippet no longer exists", Tone::Danger);
+        }
+    }
+
+    fn snippet_folder_toggled(&self, path: &str) {
+        {
+            let mut s = self.session.borrow_mut();
+            if !s.history.collapsed_folders.remove(path) {
+                s.history.collapsed_folders.insert(path.to_string());
+            }
+        }
+        self.refresh_history_panel();
+    }
+
+    fn snippet_move_open(&self, id: &str) {
+        let Some(snippet) = self.state.lock().unwrap().get_snippet(id).cloned() else {
+            return;
+        };
+        {
+            let mut s = self.session.borrow_mut();
+            s.history.moving_snippet = Some(id.to_string());
+        }
+        let folders = snippet_folders(&self.state.lock().unwrap().get_all_snippets());
+        let options = folder_choice_labels(&folders);
+        let choice = folder_choice_index(&folders, snippet.folder.as_deref());
+        if let Some(w) = self.window.upgrade() {
+            let h = w.global::<HistoryState>();
+            h.set_move_title(
+                format!(
+                    "\"{}\" is in {}.",
+                    snippet.name,
+                    match &snippet.folder {
+                        Some(f) => f.as_str(),
+                        None => "no folder",
+                    }
+                )
+                .into(),
+            );
+            h.set_move_options(strings_model(&options));
+            h.set_move_choice(choice as i32);
+            h.set_move_new_folder("".into());
+        }
+        self.set_panel_mode(PanelMode::SnippetMove);
+        self.refresh_history_panel();
+    }
+
+    /// The Move form's button: a typed new folder wins over the picker.
+    fn snippet_move_confirm(self: &Rc<Self>) {
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
+        let h = w.global::<HistoryState>();
+        let Some(id) = self.session.borrow_mut().history.moving_snippet.clone() else {
+            return;
+        };
+        let folders = snippet_folders(&self.state.lock().unwrap().get_all_snippets());
+        let typed = h.get_move_new_folder().to_string();
+        let target = match normalize_folder(&typed) {
+            Some(f) => Some(f),
+            None => folder_choice_at(&folders, h.get_move_choice().max(0) as usize),
+        };
+        let moved = {
+            let mut g = self.state.lock().unwrap();
+            let updated = g
+                .get_snippet(&id)
+                .map(|s| move_snippet(s, target.as_deref()));
+            match updated {
+                Some(s) => {
+                    g.add_snippet(s);
+                    true
+                }
+                None => false,
+            }
+        };
+        if moved {
+            // A folder created by the move opens, so the snippet is visible.
+            if let Some(f) = &target {
+                self.session
+                    .borrow_mut()
+                    .history
+                    .collapsed_folders
+                    .remove(f);
+            }
+            self.session.borrow_mut().history.moving_snippet = None;
+            self.session.borrow_mut().history.tab = PanelTab::Snippets;
+            self.set_panel_mode(PanelMode::Lists);
+            self.refresh_history_panel();
+            self.persist_snippets();
+            self.toast(
+                match &target {
+                    Some(f) => format!("Moved to {f}"),
+                    None => "Moved to the top level".to_string(),
+                },
+                Tone::Success,
+            );
         } else {
             self.toast("That snippet no longer exists", Tone::Danger);
         }
@@ -681,6 +807,31 @@ impl Ctx {
         }
         self.set_panel_mode(PanelMode::TemplateForm);
         self.refresh_history_panel();
+    }
+
+    /// The type picker on a parameter row. The type lives in the SQL, so it
+    /// is rewritten there; the parameter list follows.
+    fn form_param_type(&self, index: usize, choice: usize) {
+        let Some(ty) = ParamType::ALL.get(choice).copied() else {
+            return;
+        };
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
+        let h = w.global::<HistoryState>();
+        let Some(name) = self
+            .session
+            .borrow()
+            .history
+            .draft_params
+            .get(index)
+            .map(|p| p.name.clone())
+        else {
+            return;
+        };
+        let sql = set_param_type_in_sql(&h.get_form_sql(), &name, ty);
+        h.set_form_sql(sql.as_str().into());
+        self.form_sql_edited(&sql);
     }
 
     /// The SQL box changed: the parameter list follows the placeholders in it
@@ -847,6 +998,13 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
             .map(|n| n.to_string())
             .collect::<Vec<_>>(),
     ));
+    // The parameter type picker, from the one list of types.
+    h.set_param_type_options(strings_model(
+        &dbhive_ui_model::history_panel::param_type_labels()
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<Vec<_>>(),
+    ));
 
     macro_rules! on {
         ($setter:ident, |$c:ident $(, $a:ident)*| $body:expr) => {{
@@ -892,6 +1050,15 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
     on!(on_snippet_new, |c| c.snippet_new());
     on!(on_snippet_edit, |c, id| c.snippet_edit(&id));
     on!(on_snippet_delete, |c, id| c.snippet_delete_asked(&id));
+    on!(on_snippet_folder_toggled, |c, path| c
+        .snippet_folder_toggled(&path));
+    on!(on_snippet_move_open, |c, id| c.snippet_move_open(&id));
+    on!(on_move_choice_picked, |c, i| {
+        if let Some(w) = c.window.upgrade() {
+            w.global::<HistoryState>().set_move_choice(i.max(0));
+        }
+    });
+    on!(on_move_confirm, |c| c.snippet_move_confirm());
 
     on!(on_template_search_edited, |c, _t| c.refresh_history_panel());
     on!(on_template_category_picked, |c, i| {
@@ -939,6 +1106,17 @@ pub(super) fn wire(window: &crate::AppWindow, ctx: &Rc<Ctx>) {
             i.max(0) as usize,
             &t,
         );
+    });
+    on!(on_form_param_label, |c, i, t| {
+        // No refresh, for the same focus reason.
+        set_param_label(
+            &mut c.session.borrow_mut().history.draft_params,
+            i.max(0) as usize,
+            &t,
+        );
+    });
+    on!(on_form_param_type, |c, i, choice| {
+        c.form_param_type(i.max(0) as usize, choice.max(0) as usize);
     });
 
     on!(on_run_edited, |c, i, t| c

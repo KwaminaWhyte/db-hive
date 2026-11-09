@@ -292,6 +292,58 @@ fn run_a_query_find_it_in_history_and_rerun_it_into_a_new_tab() {
                 }
                 h.invoke_snippet_tag_picked(-1);
 
+                // Folders: move it into a new nested folder. A nested folder
+                // shows its parent too, so the list is Reports, Monthly, the
+                // snippet, indented by level. Collapsing hides the contents
+                // but keeps the folder and its count.
+                h.invoke_snippet_move_open(s.id.clone());
+                if h.get_mode() != PanelMode::SnippetMove {
+                    return bail("Move should open the move form".into());
+                }
+                h.set_move_new_folder("Reports / Monthly".into());
+                h.invoke_move_confirm();
+                if h.get_mode() != PanelMode::Lists {
+                    return bail("Move should return to the list".into());
+                }
+                let rows = h.get_snippets();
+                if rows.row_count() != 3 {
+                    return bail(format!(
+                        "expected 2 folders and the snippet, got {} rows",
+                        rows.row_count()
+                    ));
+                }
+                let folder = rows.row_data(0).unwrap();
+                if folder.kind != 1 || folder.title != "Reports" || folder.depth != 0 {
+                    return bail(format!("first row: {:?}", folder.title));
+                }
+                let nested = rows.row_data(1).unwrap();
+                if nested.kind != 1 || nested.title != "Monthly" || nested.depth != 1 {
+                    return bail(format!("nested row: {:?}", nested.title));
+                }
+                let filed = rows.row_data(2).unwrap();
+                if filed.kind != 0 || filed.depth != 2 || filed.title != "Widget names" {
+                    return bail(format!("snippet row: {:?} at {}", filed.title, filed.depth));
+                }
+                h.invoke_snippet_folder_toggled("Reports".into());
+                if h.get_snippets().row_count() != 1 {
+                    return bail("collapsing the folder should leave only its row".into());
+                }
+                h.invoke_snippet_folder_toggled("Reports".into());
+                if h.get_snippets().row_count() != 3 {
+                    return bail("expanding should bring the rows back".into());
+                }
+                // Search opens closed folders so a match is never hidden.
+                h.invoke_snippet_folder_toggled("Reports".into());
+                h.invoke_snippet_search_edited("Widget names".into());
+                h.set_snippet_search("Widget names".into());
+                h.invoke_snippet_search_edited("Widget names".into());
+                if h.get_snippets().row_count() != 3 {
+                    return bail("a search should show the folder it matched in".into());
+                }
+                h.set_snippet_search("".into());
+                h.invoke_snippet_search_edited("".into());
+                h.invoke_snippet_folder_toggled("Reports".into());
+
                 // Insert into the active query tab: a fresh, blank sixth one.
                 w.invoke_workspace_new_query();
                 h.invoke_snippet_insert(s.id.clone());
@@ -338,6 +390,22 @@ fn run_a_query_find_it_in_history_and_rerun_it_into_a_new_tab() {
                 if p1.name != "min_id" || p1.type_label != "integer" {
                     return bail(format!("second parameter was {} {}", p1.name, p1.type_label));
                 }
+                // The label and the type are editable. The type is written
+                // into the SQL placeholder; the label stays with the parameter.
+                h.invoke_form_param_label(1, "Minimum id".into());
+                h.invoke_form_param_type(0, 1); // name -> integer
+                if !h.get_form_sql().contains("{{name:integer}}")
+                    || !h.get_form_sql().contains("{{min_id:integer}}")
+                {
+                    return bail(format!(
+                        "type change did not rewrite the SQL: {:?}",
+                        h.get_form_sql()
+                    ));
+                }
+                let p0 = h.get_form_params().row_data(0).unwrap();
+                if p0.type_label != "integer" || p0.type_index != 1 {
+                    return bail(format!("name type is now {}", p0.type_label));
+                }
                 h.invoke_form_param_default(1, "0".into());
                 h.invoke_form_save();
                 if h.get_mode() != PanelMode::Lists || h.get_templates().row_count() != 1 {
@@ -355,6 +423,12 @@ fn run_a_query_find_it_in_history_and_rerun_it_into_a_new_tab() {
                 }
                 if h.get_run_params().row_data(1).unwrap().initial != "0" {
                     return bail("the default value should prefill".into());
+                }
+                if h.get_run_params().row_data(1).unwrap().label != "Minimum id" {
+                    return bail(format!(
+                        "the edited label was lost: {:?}",
+                        h.get_run_params().row_data(1).unwrap().label
+                    ));
                 }
                 h.invoke_run_edited(1, "abc".into());
                 if h.get_run_errors().row_data(1).unwrap().is_empty() {
