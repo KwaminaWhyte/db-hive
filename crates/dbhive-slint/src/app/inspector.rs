@@ -178,6 +178,7 @@ impl Ctx {
         self.refresh_workspace();
 
         let page_driver = d.clone();
+        let lost_id = t.connection_id.clone();
         runtime::spawn(
             async move {
                 let started = std::time::Instant::now();
@@ -186,12 +187,16 @@ impl Ctx {
             },
             move |(out, elapsed)| {
                 with_ctx(|ctx| {
-                    let landed = ctx.session.borrow_mut().workspace.tabs.finish_run(
-                        id,
-                        seq,
-                        out.map_err(|e| e.to_string()),
-                        elapsed,
-                    );
+                    let out = out.map_err(|e| e.to_string());
+                    if let Err(e) = &out {
+                        ctx.connection_lost_check(&lost_id, e);
+                    }
+                    let landed = ctx
+                        .session
+                        .borrow_mut()
+                        .workspace
+                        .tabs
+                        .finish_run(id, seq, out, elapsed);
                     if landed {
                         ctx.refresh_workspace();
                     }

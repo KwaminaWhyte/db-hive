@@ -157,7 +157,21 @@ pub fn form_data(form: &ConnectionForm) -> ConnectionFormData {
         ssh_password: "".into(),
         color_options: slint::ModelRc::new(slint::VecModel::from(color_options())),
         color_index: color_preset_index(&form.color).map_or(-1, |i| i as i32),
+        folder: form.folder.as_str().into(),
+        // Existing folders and whether a password is stored need the saved
+        // profiles and the keychain; the controller fills them in.
+        folder_options: slint::ModelRc::new(slint::VecModel::from(
+            Vec::<slint::SharedString>::new(),
+        )),
+        ssh_local_port: form.ssh_local_port.as_str().into(),
+        password_stored: false,
     }
+}
+
+/// Folder suggestion chips: existing folders, at most `max`, so a long list
+/// never pushes the form down a screen.
+pub fn folder_options(names: &[String], max: usize) -> Vec<slint::SharedString> {
+    names.iter().take(max).map(|n| n.as_str().into()).collect()
 }
 
 #[cfg(test)]
@@ -248,6 +262,24 @@ mod tests {
         assert!(data.show_password);
         assert!(!data.show_file_path);
         assert!(!data.show_url);
+    }
+
+    #[test]
+    fn folder_and_local_port_come_from_the_form() {
+        let mut form = ConnectionForm::new_for(DbDriver::Postgres);
+        form.folder = "Work".into();
+        form.ssh_local_port = "15432".into();
+        let data = form_data(&form);
+        assert_eq!(data.folder, "Work");
+        assert_eq!(data.ssh_local_port, "15432");
+        assert!(!data.password_stored);
+    }
+
+    #[test]
+    fn folder_options_are_capped() {
+        let names: Vec<String> = (0..10).map(|i| format!("f{i}")).collect();
+        assert_eq!(folder_options(&names, 6).len(), 6);
+        assert_eq!(folder_options(&names[..2], 6).len(), 2);
     }
 
     #[test]

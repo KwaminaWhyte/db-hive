@@ -69,6 +69,14 @@ import { TreeState, TreeContextOverlay, TreeDropOverlay, TreeCreateDbOverlay, Tr
 export { TreeState, TreeStatus, TreeRoutine } from "screens/schema_tree.slint";
 export { TreeNode, TreeRowKind, CtxItem } from "kit/kit.slint";
 
+// Connection side: password prompt, connection lost, folders, file pickers.
+import { PasswordPromptState, PasswordPromptOverlay } from "dialogs/password_prompt.slint";
+import { ConnectionLostState, ConnectionLostOverlay } from "screens/connection_lost.slint";
+export { PasswordPromptState, ConnectionLostState }
+export { ConnectionsState } from "screens/connections.slint";
+export { ConnectionEditorState } from "dialogs/connection_editor.slint";
+export { FileBrowse, BrowseTarget } from "components/file_browse.slint";
+
 export enum Screen { connections, workspace }
 
 export struct ToastItem {
@@ -606,7 +614,8 @@ export component AppWindow inherits Window {
         || BuilderState.visible || TableDialogState.visible || ErdState.visible
         || DesignerState.visible || PluginsState.visible || ResultsState.export-visible
         || TreeState.menu-visible || TreeState.drop-visible
-        || TreeState.create-db-visible || TreeState.routines-visible;
+        || TreeState.create-db-visible || TreeState.routines-visible
+        || PasswordPromptState.visible || ConnectionLostState.visible;
     init => { fs.focus(); }
     changed any-overlay => {
         if (!root.any-overlay) {
@@ -657,6 +666,10 @@ export component AppWindow inherits Window {
 
     // Export results, over the workspace and below the dialogs.
     if ResultsState.export-visible: ResultsExportOverlay { }
+
+    // A dead connection over the workspace, and the password prompt.
+    if ConnectionLostState.visible: ConnectionLostOverlay { }
+    if PasswordPromptState.visible: PasswordPromptOverlay { }
 
     if root.show-about || root.show-confirm || root.show-connection-editor || root.show-settings || root.any-palette-overlay: Rectangle {
         width: 100%;
