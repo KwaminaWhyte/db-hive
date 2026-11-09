@@ -8,8 +8,8 @@ import { TableDialogState } from "table_dialog.slint";
 import { PluginsState, PluginToolbarHost } from "plugins_panel.slint";
 import { AiState, AiDock } from "ai_assistant.slint";
 import { ResultsState, ResultsModeBar, ResultsViewPane, ResultsErrorPanel } from "results_tools.slint";
-import { SchemaTreePanel } from "schema_tree.slint";
 import { QueryState } from "query_tabs.slint";
+import { SchemaTreePanel, TreeState, TreeDropZone } from "schema_tree.slint";
 
 export struct TableItem {
     name: string,
@@ -322,10 +322,15 @@ export component WorkspaceScreen inherits VerticalLayout {
                             wrap-columns-changed(n) => { EditorPrefs.wrap-columns-changed(n); }
                             init => { EditorPrefs.wrap-columns-changed(self.wrap-columns); }
                             edited(t) => { root.editor-edited(t); }
-                            cursor-moved(o) => { root.cursor-moved(o); }
+                            cursor-moved(o) => {
+                                TreeState.editor-caret = o;
+                                root.cursor-moved(o);
+                            }
                             completion-picked(i) => { root.completion-picked(i); }
                         }
                     }
+                    // Where a table dragged from the schema tree lands.
+                    TreeDropZone { }
                 }
 
                 if root.active-is-query: HorizontalLayout {

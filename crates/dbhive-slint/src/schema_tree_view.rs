@@ -5,12 +5,15 @@
 //! the app does, with no controller behind it.
 
 use dbhive_ui_model::routine_list::{RoutineRow, RoutineStatus};
+use dbhive_ui_model::routine_run::RunView;
 use dbhive_ui_model::schema_tree::{
     CreateDatabaseDialog, DropDialog, MenuEntry, PanelStatus, RowKind, TreeRow, TreeView,
 };
 use slint::{ComponentHandle, Model, ModelRc, VecModel};
 
-use crate::{AppWindow, CtxItem, TreeNode, TreeRoutine, TreeRowKind, TreeState, TreeStatus};
+use crate::{
+    AppWindow, CtxItem, TreeNode, TreeRoutine, TreeRoutineArg, TreeRowKind, TreeState, TreeStatus,
+};
 
 fn kind(k: RowKind) -> TreeRowKind {
     match k {
@@ -218,4 +221,45 @@ pub fn apply_routines(w: &AppWindow, v: &RoutinesView) {
     s.set_routine_definition(p.map_or("", |p| p.definition.as_str()).into());
     s.set_routine_def_loading(v.def_loading);
     s.set_routine_def_error(v.def_error.as_str().into());
+}
+
+/// Draw the routine run form, or clear it when no routine is picked.
+///
+/// The boxes hold what the user typed, so while the same routine is on show
+/// the rows are updated in place (a new model would rebuild every box under
+/// the user's fingers). `fresh` says the form belongs to a newly picked
+/// routine: then the model is replaced, so no box keeps the last routine's
+/// text.
+pub fn apply_run_form(w: &AppWindow, view: Option<&RunView>, fresh: bool) {
+    let s = w.global::<TreeState>();
+    let rows: Vec<TreeRoutineArg> = view
+        .map(|v| {
+            v.fields
+                .iter()
+                .map(|f| TreeRoutineArg {
+                    label: f.label.as_str().into(),
+                    hint: f.hint.as_str().into(),
+                    value: f.value.as_str().into(),
+                    error: f.error.as_str().into(),
+                    input: f.input,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let current = s.get_run_args();
+    match current.as_any().downcast_ref::<VecModel<TreeRoutineArg>>() {
+        Some(model) if !fresh && model.row_count() == rows.len() => {
+            for (i, r) in rows.into_iter().enumerate() {
+                if model.row_data(i).as_ref() != Some(&r) {
+                    model.set_row_data(i, r);
+                }
+            }
+        }
+        _ => s.set_run_args(ModelRc::new(VecModel::from(rows))),
+    }
+    s.set_run_sql(view.map_or("", |v| v.sql.as_str()).into());
+    s.set_run_can_run(view.is_some_and(|v| v.can_run));
+    s.set_run_confirming(view.is_some_and(|v| v.confirming));
+    s.set_run_label(view.map_or("Run", |v| v.run_label.as_str()).into());
+    s.set_run_confirm_text(view.map_or("", |v| v.confirm_text.as_str()).into());
 }

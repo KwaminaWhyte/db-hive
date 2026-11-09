@@ -258,6 +258,22 @@ fn routine_labels(w: &AppWindow) -> Vec<String> {
         .collect()
 }
 
+fn run_labels(w: &AppWindow) -> Vec<String> {
+    w.global::<TreeState>()
+        .get_run_args()
+        .iter()
+        .map(|a| a.label.to_string())
+        .collect()
+}
+
+fn run_errors(w: &AppWindow) -> Vec<String> {
+    w.global::<TreeState>()
+        .get_run_args()
+        .iter()
+        .map(|a| a.error.to_string())
+        .collect()
+}
+
 /// Row `i`'s centre (see `schema_tree_controller.rs` for the arithmetic).
 fn row_pos(row: usize) -> LogicalPosition {
     LogicalPosition::new(120.0, 233.0 + 30.0 * row as f32)
@@ -409,7 +425,10 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
     // ---- Create Table on a schema makes it the current one ------------------------
     right_click_row(&w, row_of(&w, "billing"));
     until("the schema menu", || t.get_menu_visible()).await;
-    assert_eq!(menu_labels(&w), ["Create Table…", "Refresh"]);
+    assert_eq!(
+        menu_labels(&w),
+        ["Create Table…", "Import Data…", "Refresh"]
+    );
     choose(&w, "Create Table");
     let d = w.global::<TableDialogState>();
     until("the create wizard", || d.get_visible() && d.get_mode() == 0).await;
@@ -526,6 +545,116 @@ async fn scenario(w: AppWindow, pg: Rc<Cluster>, finished: Rc<Cell<bool>>) {
         "(a integer, b integer) returns integer"
     );
     assert_eq!(t.get_routine_meta(), "function · sql");
+    // ---- run the function with arguments --------------------------------------------
+    // Picking a routine with arguments builds its form: one box per argument,
+    // the statement the boxes make, and nothing run until it is confirmed.
+    assert_eq!(t.get_run_args().row_count(), 2);
+    assert_eq!(run_labels(&w), ["a integer", "b integer"]);
+    assert!(t.get_run_can_run(), "two NULLs are a valid call");
+    assert!(!t.get_run_confirming());
+    assert_eq!(
+        t.get_run_sql(),
+        "SELECT \"public\".\"add_numbers\"(NULL, NULL)"
+    );
+    assert_eq!(t.get_run_label(), "Run function");
+    // A box that is not a number is refused, in place, with the statement
+    // withdrawn, and asking to run does nothing.
+    t.invoke_run_arg_edited(0, "1) OR (1=1".into());
+    assert!(!t.get_run_can_run());
+    assert_eq!(t.get_run_sql(), "");
+    assert_eq!(run_errors(&w), ["Expects a number", ""]);
+    let tabs_before_run = w.get_workspace_tabs().row_count();
+    t.invoke_run_ask();
+    assert!(!t.get_run_confirming(), "a wrong box cannot be confirmed");
+    settle().await;
+    assert_eq!(w.get_workspace_tabs().row_count(), tabs_before_run);
+
+    // Valid arguments: the statement is built from the live driver's quoting.
+    t.invoke_run_arg_edited(0, "3".into());
+    t.invoke_run_arg_edited(1, "4".into());
+    assert!(t.get_run_can_run());
+    assert_eq!(t.get_run_sql(), "SELECT \"public\".\"add_numbers\"(3, 4)");
+    t.invoke_run_ask();
+    assert!(t.get_run_confirming());
+    assert!(
+        t.get_run_confirm_text().contains("Local Postgres"),
+        "the confirmation names the connection it runs on"
+    );
+    // Cancel withdraws the question and runs nothing.
+    t.invoke_run_cancel();
+    assert!(!t.get_run_confirming());
+    settle().await;
+    assert_eq!(w.get_workspace_tabs().row_count(), tabs_before_run);
+
+    // Confirm: the panel closes, the call opens in a new tab and runs there,
+    // so its value lands in the normal grid.
+    t.invoke_run_ask();
+    t.invoke_run_confirm();
+    until("the call's tab", || {
+        w.get_workspace_tabs().row_count() == tabs_before_run + 1
+            && w.get_workspace_editor_text() == "SELECT \"public\".\"add_numbers\"(3, 4)"
+    })
+    .await;
+    until("the call's result", || {
+        !w.get_workspace_running() && w.get_workspace_has_result()
+    })
+    .await;
+    let rows = w.get_workspace_rows();
+    assert_eq!(rows.row_count(), 1);
+    let value = rows
+        .row_data(0)
+        .and_then(|r| r.cells.row_data(0))
+        .map(|c| c.text.to_string())
+        .unwrap_or_default();
+    assert_eq!(value, "7", "3 + 4 came back from the server");
+    assert!(
+        !t.get_routines_visible(),
+        "the panel closes so the result shows"
+    );
+
+    // A procedure is called, not selected, and its date argument goes in as a
+    // quoted literal.
+    t.invoke_routines_open();
+    until("the routines list again", || {
+        t.get_routines_visible() && t.get_routines_status() == TreeStatus::Populated
+    })
+    .await;
+    let close = routine_labels(&w)
+        .iter()
+        .position(|l| l == "close_month")
+        .unwrap();
+    t.invoke_routine_pick(close as i32);
+    until("the procedure's form", || t.get_run_args().row_count() == 1).await;
+    assert_eq!(t.get_run_label(), "Run procedure");
+    t.invoke_run_arg_edited(0, "2026-01-01".into());
+    assert_eq!(
+        t.get_run_sql(),
+        "CALL \"billing\".\"close_month\"('2026-01-01')"
+    );
+    t.invoke_run_ask();
+    t.invoke_run_confirm();
+    until("the procedure to run", || {
+        !w.get_workspace_running()
+            && w.get_workspace_editor_text() == "CALL \"billing\".\"close_month\"('2026-01-01')"
+    })
+    .await;
+
+    // Back to the function for the rest of the scenario.
+    t.invoke_routines_open();
+    until("the routines list once more", || {
+        t.get_routines_visible() && t.get_routines_status() == TreeStatus::Populated
+    })
+    .await;
+    let add = routine_labels(&w)
+        .iter()
+        .position(|l| l == "add_numbers")
+        .unwrap();
+    t.invoke_routine_pick(add as i32);
+    until("the function's form again", || {
+        t.get_run_args().row_count() == 2
+    })
+    .await;
+
     // A heading is not a routine.
     t.invoke_routine_pick(0);
     settle().await;

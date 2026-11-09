@@ -65,8 +65,8 @@ export { DesignerState, DesignerColumnRow, DesignerResultRow } from "screens/sch
 
 // Schema browser: a state global plus the overlays for its right-click menu
 // and its drop-table confirmation, like the panels above.
-import { TreeState, TreeContextOverlay, TreeDropOverlay, TreeCreateDbOverlay, TreeRoutinesOverlay } from "screens/schema_tree.slint";
-export { TreeState, TreeStatus, TreeRoutine } from "screens/schema_tree.slint";
+import { TreeState, TreeContextOverlay, TreeDropOverlay, TreeCreateDbOverlay, TreeRoutinesOverlay, TreeDragLayer } from "screens/schema_tree.slint";
+export { TreeState, TreeStatus, TreeRoutine, TreeRoutineArg } from "screens/schema_tree.slint";
 export { TreeNode, TreeRowKind, CtxItem } from "kit/kit.slint";
 
 // Query tabs: Stop / Clear, the query grid's selection, the tab bar's menu,
@@ -654,6 +654,7 @@ export component AppWindow inherits Window {
     if TreeState.routines-visible: TreeRoutinesOverlay { }
     // The tab bar's right-click menu.
     if QueryState.menu-visible: TabContextOverlay { }
+    if TreeState.drag-active: TreeDragLayer { }
 
     // The query builder and the table dialogs, on the same layer.
     if BuilderState.visible: BuilderOverlay { }

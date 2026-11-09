@@ -40,6 +40,7 @@ pub mod result_chart;
 pub mod result_export;
 pub mod results_grid;
 pub mod routine_list;
+pub mod routine_run;
 pub mod row_edits;
 pub mod saved_tabs;
 pub mod schema_designer;

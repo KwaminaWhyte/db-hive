@@ -118,6 +118,7 @@ impl Ctx {
         }
         let (sql, error) = self.ai_editor();
         let prompt = w.global::<AiState>().get_prompt().to_string();
+        let chat = w.global::<AiState>().get_chat().to_string();
         let sync = {
             let mut s = self.session.borrow_mut();
             s.ai.last_editor = (sql.clone(), error.clone());
@@ -128,6 +129,7 @@ impl Ctx {
             current_sql: &sql,
             last_error: error.as_deref(),
             prompt: &prompt,
+            chat: &chat,
         });
         ai_view::apply(
             &w,
@@ -511,6 +513,7 @@ impl Ctx {
             return;
         };
         let prompt = w.global::<AiState>().get_prompt().to_string();
+        let chat = w.global::<AiState>().get_chat().to_string();
         let (sql, error) = self.ai_editor();
         let dispatch = {
             let mut s = self.session.borrow_mut();
@@ -520,6 +523,7 @@ impl Ctx {
                     current_sql: &sql,
                     last_error: error.as_deref(),
                     prompt: &prompt,
+                    chat: &chat,
                 },
             )
         };
@@ -527,6 +531,10 @@ impl Ctx {
             self.ai_refresh();
             return;
         };
+        if kind == Kind::Chat {
+            // The question is in the conversation now; the box is for the next.
+            w.global::<AiState>().set_chat("".into());
+        }
         let (ticket, store) = {
             let s = self.session.borrow();
             (s.ai.request.begin(), s.ai.store.clone())
@@ -634,6 +642,7 @@ impl Ctx {
                 current_sql: &sql,
                 last_error: error.as_deref(),
                 prompt: "",
+                chat: "",
             });
             view.empty.map(|e| e.kind)
         };
@@ -688,6 +697,8 @@ pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
     on!(on_explain, |c| c.ai_ask(Kind::Explain));
     on!(on_optimize, |c| c.ai_ask(Kind::Optimize));
     on!(on_fix, |c| c.ai_ask(Kind::Fix));
+    on!(on_chat_edited, |c, _text| c.ai_refresh());
+    on!(on_send_chat, |c| c.ai_ask(Kind::Chat));
     on!(on_toggle_schema, |c| {
         {
             let mut s = c.session.borrow_mut();
