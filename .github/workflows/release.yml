@@ -66,7 +66,7 @@ jobs:
         run: cargo test --workspace -- --skip credentials::tests
 
       - name: Build
-        run: cargo build --release -p dbhive-app --target ${{ matrix.target }}
+        run: cargo build --release -p dbhive-slint --target ${{ matrix.target }}
 
       - name: Package (macOS)
         if: startsWith(matrix.platform, 'macos')

@@ -1,3 +1,6 @@
+<!-- HISTORICAL: this is the egui migration plan, completed and superseded by
+the Slint cutover (docs/slint-migration/plan.md). The app is
+crates/dbhive-slint; the egui shell is gone. -->
 # Migration plan and status
 
 Target: replace the Tauri + React shell with a standalone cross-platform

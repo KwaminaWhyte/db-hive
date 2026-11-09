@@ -5,7 +5,7 @@ description = "DB Hive desktop shell (Slint)"
 edition = "2021"
 
 [[bin]]
-name = "dbhive-slint"
+name = "dbhive"
 path = "src/main.rs"
 
 [dependencies]

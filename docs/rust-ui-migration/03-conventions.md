@@ -1,3 +1,6 @@
+<!-- HISTORICAL: this describes the egui shell, removed at the Slint cutover.
+Kept as the record of what was done and why. Current UI rules are in
+docs/ui-guidelines.md, and the app is crates/dbhive-slint. -->
 # Native shell conventions
 
 Read this before adding a screen to `crates/dbhive-app`. These are not

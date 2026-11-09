@@ -1,7 +1,46 @@
 # Slint migration
 
-Replace the egui shell (`crates/dbhive-app`) with Slint (`crates/dbhive-slint`).
-`dbhive-core` is untouched. Branch: `slint-ui`, off `native-rust-migration`.
+Replace the egui shell with Slint. Done: the app is `crates/dbhive-slint`,
+the egui crate is deleted, and the binary it builds is still `dbhive`.
+Branch: `slint-ui`, off `native-rust-migration`.
+
+## Cutover (2026-11-09)
+
+- **The app is one crate.** `crates/dbhive-slint` builds `target/release/dbhive`;
+  `crates/dbhive-app` is gone. CI, `packaging/build-macos-app.sh`, the README,
+  CLAUDE.md and the agent briefs point at the new crate; the `smoke` example
+  moved with it (`cargo run -p dbhive-slint --example smoke -- "Local Post"`).
+- **Multi-window.** Every window is its own controller over one shared
+  `AppState` and Tokio runtime; Slint 1.18 keeps globals per component
+  instance, so screens, tabs and toasts are per window. File > New Window /
+  Close Window, the palette command and a connection row action open
+  windows; a window opened for a connection connects it. Async completions
+  carry the window id back (`runtime::spawn`), timers tick their own window,
+  and geometry is saved per label (`main`, `window-2`, ...) in
+  `window-state.json`. Covered by `tests/multi_window_controller.rs`.
+- **Resizable panes.** The schema sidebar and editor heights drag with
+  splitter bars, clamp in `dbhive_ui_model::layout`, and save to
+  `layout.json` when the pointer is released.
+  `tests/layout_controller.rs` drives the callbacks and the restore.
+- **Keyboard focus.** Kit buttons are reachable with Tab and press on Enter
+  or Space, with a honey focus ring; the palette, shortcuts help, snippets
+  with folders, menus with live shortcut hints, About credits, the Settings
+  that were stored but unread, crash reporting and the Connection Lost
+  overlay all landed in the same pass.
+- **Verification.** `cargo fmt --check`, `cargo check --workspace`,
+  `cargo clippy --workspace` (no new warnings) and
+  `cargo test --workspace -- --skip credentials::tests` (1845 passed,
+  0 failed) on the merged tree. Real-window walkthrough recorded below.
+- **What is still open, in order:** Redis key browsing and its detail view;
+  the EXPLAIN plan tree; keyset pagination past the 100,000-offset guard;
+  update auto-download and install (the app checks and links, it does not
+  install); dragging between handles to connect foreign keys in the schema
+  designer; more chart types (Area, Pie, Scatter, multi-series, PNG); the
+  native menu shortcut hints and focus rings verified in the GPU window;
+  server runs for SQL Server, MongoDB and Turso. Nothing else from the
+  167-item inventory is missing; the 44 partial and 16 missing items in the
+  table below were worked through in waves one and two, and the counts were
+  not independently re-measured afterwards.
 
 ## Decisions
 
@@ -133,10 +172,9 @@ partial (core installs only bundled plugins); AI 4 done and generate/explain/opt
     `tests/query_tools_controller.rs` on a real SQLite file, and the `workspace-query-cancelled`,
     `workspace-query-cancel-waiting`, `workspace-query-selection`, `workspace-query-tab-menu` and
     `workspace-query-wrap` snapshots.
-- **Remaining work, in order:** multi-window; then the partial items (schema browser tree and
-  context menus, results export and charts, update checks, connection folders, a Connection Lost
-  screen), then clicking everything through in the real GPU
-  window, which has never been done.
+- **Remaining work, in order:** see the Cutover section at the top. Multi-window, connection
+  folders, the Connection Lost screen, results export and charts, and the rest of the partial
+  items shipped; the GPU walkthrough is recorded there.
 
 ## Status
 
@@ -155,3 +193,10 @@ partial (core installs only bundled plugins); AI 4 done and generate/explain/opt
   - AI assistant (phase 5): a panel docked at the right of the workspace (header "AI" button, View menu, and the `go-ai-assistant` palette command, now live and workspace-scoped); state is `AiState` plus `ai_assistant.slint`, session logic is `dbhive_ui_model::ai_panel` (unit tested), controller is `app/ai_glue.rs`. Provider picker (Ollama, OpenAI, Claude, Gemini, OpenRouter), live status badge, API key saved straight to the OS keyring (never in `ai.json`, a view, a toast or a log; the key field is cleared the moment it is taken), base URL, model picker from the fetched list (the pick is remembered), guided states for a missing key, Ollama not running, an unreachable endpoint, and a failed model list. Generate, Explain, Optimize and Fix error run through `service_ai`; an answer's statement goes into the editor on request (Replace, Add below, New tab) and is never run for you. Schema context is built from the open connection, shows what each button sends, can be switched off, and is viewable as sent; SQLite sends the file name, never the path, and no request carries row data. `service_ai` gained an `ApiKeyStore` trait (keyring or in-memory) with `*_with` variants so tests never touch the keychain. `tests/ai_controller.rs` drives the whole flow against a stub provider on a local socket, including a free-form chat: a question box in the conversation area, the schema and the earlier turns sent with it, the answer's statement offered to the editor on request and never run. The Claude (Anthropic Messages) and Ollama wire formats have their own stub-server tests in `dbhive_core::service_ai::wire_tests`. Not done: streaming, the Gemini and OpenRouter wire formats were not run end to end (they use the same `service_ai` path), nothing was clicked in the real GPU window. Parity table above not re-measured.
   - Results export, view modes, error state and charts (phase 4): `ui/screens/results_tools.slint` is a state global (`ResultsState`) plus the pieces the query tab's results area uses, built from new kit parts (`ResultViewText`, `ResultViewError`, `ExportDialog`, `ChartPlot`); logic is `dbhive_ui_model::{result_export, result_chart}` (unit tested, including nasty CSV and JSON values), controller is `app/results.rs`. Export writes CSV or JSON from a typed, date-stamped Downloads path, writes through a temp file, flags an existing file before replacing it, offers Reveal in folder afterwards, and says which rows it covers (a query tab: every row the grid shows after its filter, up to the driver's 50,000 cap; a table tab: the current page only). The query tab gets Table / JSON / Text / Chart: JSON is highlighted and Text is aligned columns (Copy gives real TSV), both capped at 2,000 rows with a notice; Chart is one Bar or Line series, X and Y pickers, sums per group, 100 group cap, no PNG. A failed query shows a headline, the driver message, a code when there is one, Copy and Retry, and the query behind a disclosure; a zero-row result and a filter that hides every row have their own states. `tests/results_controller.rs` drives all of it against a real SQLite file. Not done: view modes and the structured error on table tabs (that grid area is being changed elsewhere), Area, Pie and Scatter charts, multi-series Y, chart PNG export, a native save dialog, opening the revealed folder was not run (the command is unit tested, not spawned), only verified on SQLite, nothing clicked in the real GPU window. Parity table above not re-measured.
   - Schema browser (phase 4): the flat table list is a tree. `ui/screens/schema_tree.slint` (state `TreeState`, panel, right-click menu, drop and create-database dialogs, routines panel), logic in `dbhive_ui_model::{schema_tree, routine_list}` (unit tested: rows, filter, keyboard rules, menus, the typed-name drop confirmation), SQL generation, the dependency check and drop in `dbhive_core::service_schema`, controller in `app/schema_tree.rs`. Databases are rows (the connected one is marked, double click or Enter on another switches by reconnecting and closes open table tabs), a Postgres database's schemas are nodes that load their tables on first open (a search loads the ones it has not seen), tables and views have different icons and row counts, a click highlights and a double click or Enter opens. A table in a schema other than the current one opens in its own tab pinned to that schema (`Tab::schema`); acting on a schema (Create Table, Edit Table) makes it the current one. Right click: schema (Create Table, Refresh), table (View Data, Generate SELECT and INSERT into a new editor tab and never run, Copy Name, Edit Table, Refresh, Drop Table), database (Switch, Refresh, Create Database). Drop Table asks for the exact name, lists the tables with foreign keys to it (found across schemas) and offers CASCADE only on Postgres and only after that list. Keyboard: arrows, Home/End, Left/Right, Enter, Space, menu key, with a focus ring. Also built: Create Database (Postgres and MySQL) and a Procedures & Functions panel (list, search, definition, copy, open in editor; no execute). `tests/schema_tree_controller.rs` drives it on a real SQLite file with real pointer and key events; `tests/schema_tree_postgres.rs` starts its own throwaway Postgres cluster and covers schemas, cross-schema pinning and drops, CASCADE, database switching and creation, and routines, including running a function and a procedure with arguments (it skips when no `initdb` is found). That run found two core defects, both fixed: the Postgres `get_foreign_keys` missed every foreign key between two schemas, and `execute_query` reported any server refusal as just "db error". The context menus carry Import Data (the import wizard prefilled with the table); Create Database covers SQL Server too; dragging a table row into the SQL editor inserts its quoted name at the caret (pointer-tracked inside the window: Slint 1.18's DragArea/DropArea carry opaque host data, so the tree reports the pointer and the drop lands at the editor's last caret, not at the pixel); and the Procedures & Functions panel runs a routine with one typed box per argument, a confirmation, and the result in a new query tab. Not done: Redis key browsing, MySQL and SQL Server were not run (their statements are unit tested), nothing was clicked in the real GPU window. Parity table above not re-measured.
+
+- [x] Phases 3 to 6: the screens listed above, extended in waves one and two (folders, password
+  prompt, native file pickers, connection-lost, stop/cancel, tab menus, grid selection, routine
+  execution, AI chat, snippet folders, rebindable shortcuts, menus, About)
+- [x] Phase 7: cutover done. `crates/dbhive-app` deleted, `dbhive-slint` builds the `dbhive`
+  binary, CI and packaging updated, smoke example ported, docs rewritten. See the Cutover
+  section at the top for what remains open.

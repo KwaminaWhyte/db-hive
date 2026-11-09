@@ -27,7 +27,7 @@ DB Hive is a professional database client designed to compete with tools like Be
   - SSH tunnelling with password and private key (OpenSSH/PEM) authentication
 
 - **SQL Editor**
-  - Monaco Editor with SQL syntax highlighting and autocomplete
+  - SQL editor with syntax highlighting and autocomplete
   - Execute single or multiple SQL statements (Ctrl+Enter)
   - Multi-statement support with result tabs per statement
   - Query history with automatic saving and search
@@ -99,13 +99,10 @@ DB Hive is a professional database client designed to compete with tools like Be
 
 ### Frontend
 
-- egui / eframe for the native UI
-- wgpu for rendering, AccessKit for screen readers
-- Monaco Editor for SQL editing
-- TanStack Table v8 for virtualised data grids
-- shadcn/ui + TailwindCSS for styling
-- Zustand for state management
-- Sonner for toast notifications
+- Slint 1.18 with the FemtoVG GPU renderer
+- A custom honey-themed component kit (`crates/dbhive-slint/ui/kit`)
+- A hand-built virtualised results grid over Slint `ListView`
+- A syntax-highlighting SQL editor drawn under a `TextInput`
 
 ### Backend
 
@@ -132,14 +129,14 @@ No Node, no npm, no bundler. The UI is Rust.
 git clone https://github.com/KwaminaWhyte/db-hive.git
 cd db-hive
 
-cargo run -p dbhive-app          # debug
-cargo run --release -p dbhive-app
+cargo run -p dbhive-slint          # debug
+cargo run --release -p dbhive-slint
 ```
 
 ### Building for Production
 
 ```bash
-cargo build --release -p dbhive-app     # target/release/dbhive
+cargo build --release -p dbhive-slint   # target/release/dbhive
 
 # macOS: assemble and sign DB Hive.app
 ./packaging/build-macos-app.sh
@@ -168,7 +165,7 @@ See [Code Signing Guide](docs/code-signing.md) for signing binaries on all platf
 ### Writing and Executing Queries
 
 1. Click a saved connection to open it
-2. Write SQL in the Monaco editor
+2. Write SQL in the editor
 3. Press **Ctrl+Enter** (or **Cmd+Enter**) to execute
 4. View results in Grid / JSON / Raw tabs
 
@@ -198,27 +195,23 @@ See [Code Signing Guide](docs/code-signing.md) for signing binaries on all platf
 
 ```
 db-hive/
-├── crates/dbhive-app/    # native egui shell
-│   ├── components/       # UI components
-│   ├── widgets/          # shared widgets (grid, editor, graph layout)
-│   ├── store/            # Zustand stores
-│   └── types/            # TypeScript type definitions
-├── src-tauri/            # Rust backend
-│   ├── src/
-│   │   ├── service*.rs   # shell-agnostic operations
-│   │   ├── drivers/      # Database drivers
-│   │   ├── models/       # Data models
-│   │   └── state/        # Application state
-│   └── tauri.conf.json
-└── docs/                 # Architecture and planning docs
+├── crates/dbhive-core/      # drivers, DDL, services, state, storage (no UI)
+├── crates/dbhive-ui-model/  # screen logic and its unit tests (no UI types)
+├── crates/dbhive-slint/     # the app: ui/*.slint and the controllers
+│   ├── ui/kit/              # the only components a screen may use
+│   ├── ui/screens/          # one file per screen or panel
+│   ├── src/                 # controllers, one per window
+│   └── tests/               # controller tests against real SQLite files
+├── packaging/               # macOS .app assembly and signing
+└── docs/                    # UI rules, plans and the migration record
 ```
 
 ## Development
 
 ```bash
-cargo run -p dbhive-app     # run it
+cargo run -p dbhive-slint   # run it
 cargo check --workspace
-cargo test --workspace
+cargo test --workspace -- --skip credentials::tests
 cargo fmt
 ```
 
@@ -228,12 +221,8 @@ the real OS keyring, which the system denies to an unsigned test binary.
 Development aids, all unset in normal use:
 
 ```bash
-DBHIVE_AUTOCONNECT="Local MySQL"   # open a profile at startup
-DBHIVE_AUTODB=mydb                 # switch database once connected
-DBHIVE_AUTOQUERY="SELECT 1;"       # run a statement
-DBHIVE_AUTOSCREEN=er               # open a screen
-DBHIVE_AUTOWINDOWS=1               # open extra windows
-DBHIVE_DEV_WINDOW="0,0,1300,820"   # pin window geometry
+DBHIVE_PLUGIN_SOURCES=/path/to/plugins   # extra folders searched for bundled plugins
+DBHIVE_DATA_DIR=/tmp/dbhive-profile      # use a scratch profile instead of your own
 ```
 
 ## Architecture
@@ -241,9 +230,12 @@ DBHIVE_DEV_WINDOW="0,0,1300,820"   # pin window geometry
 ### Single process
 
 ```
-crates/dbhive-core   drivers, DDL, SSH, credentials, migrations, AI,
-                     AppState, storage, and the service layer. No UI.
-crates/dbhive-app    the egui shell. screens/, widgets/, task, theme.
+crates/dbhive-core    drivers, DDL, SSH, credentials, migrations, AI,
+                      AppState, storage, and the service layer. No UI.
+crates/dbhive-ui-model  SQL builders, validation, layout and panel state
+                      machines. No Slint types; unit tested.
+crates/dbhive-slint   the Slint app. Screens are built from ui/kit; a
+                      controller per window drives them over one AppState.
 ```
 
 One process and one window server connection, rather than an app process
@@ -251,9 +243,10 @@ plus WebView, GPU and networking helpers. Idle memory is 111-130 MB against
 roughly 400-650 MB for the previous Tauri build; see
 `docs/rust-ui-migration/00-baseline-measurements.md` for the measurements.
 
-The UI never blocks: database work is spawned on a Tokio runtime and polled
-from the frame loop (`dbhive-app/src/task.rs`). See
-`docs/rust-ui-migration/03-conventions.md` before adding a screen.
+The UI never blocks: database work is spawned on a shared Tokio runtime and
+the result is pushed back to the window that asked. Windows share the core
+and its connection pool but keep their own screen, tabs and toasts. See
+`docs/slint-migration/plan.md` for the architecture and what remains open.
 
 ### Security Model
 
@@ -273,7 +266,7 @@ from the frame loop (`dbhive-app/src/task.rs`). See
 
 **"Could not open log file"**: check that the source SQL file's directory is writable.
 
-**App won't start**: check `rustc --version` (1.75+ needed) and run `cargo build -p dbhive-app` to see the real error.
+**App won't start**: check `rustc --version` (1.75+ needed) and run `cargo build -p dbhive-slint` to see the real error.
 
 ## Contributing
 
@@ -296,7 +289,8 @@ MIT License, see [LICENSE](LICENSE)
 
 Inspired by [Beekeeper Studio](https://www.beekeeperstudio.io/), [DbGate](https://dbgate.org/), and [DBeaver](https://dbeaver.io/).
 
-Built with [egui](https://github.com/emilk/egui), [eframe](https://github.com/emilk/egui/tree/master/crates/eframe), [Tokio](https://tokio.rs/), and [syntect](https://github.com/trishume/syntect).
+Built with [Slint](https://slint.dev/), [Tokio](https://tokio.rs/), and
+[sqlx](https://github.com/launchbadge/sqlx).
 
 For issues and feature requests: [GitHub Issues](https://github.com/KwaminaWhyte/db-hive/issues)
 

@@ -3,7 +3,7 @@
 //! Exercises the paths the screens depend on, so a regression in the shared
 //! core is caught without needing to click through the app.
 //!
-//!     cargo run -p dbhive-app --example smoke -- "Local MySQL"
+//!     cargo run -p dbhive-slint --example smoke -- "Local MySQL"
 
 use std::sync::{Arc, Mutex};
 

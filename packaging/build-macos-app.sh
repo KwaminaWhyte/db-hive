@@ -19,7 +19,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="DB Hive"
 BUNDLE_ID="com.kwamina.db-hive"
-VERSION="$(grep -m1 '^version' "$ROOT/crates/dbhive-app/Cargo.toml" | cut -d'"' -f2)"
+VERSION="$(grep -m1 '^version' "$ROOT/crates/dbhive-slint/Cargo.toml" | cut -d'"' -f2)"
 
 SIGN_IDENTITY="-"   # ad-hoc by default; stable enough for the keychain locally
 TARGET=""
@@ -37,10 +37,10 @@ echo "==> building release binary"
 TARGET_DIR=$(cargo metadata --format-version 1 --no-deps --manifest-path "$ROOT/Cargo.toml" \
   | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
 if [[ -n "$TARGET" ]]; then
-  cargo build --release -p dbhive-app --target "$TARGET" --manifest-path "$ROOT/Cargo.toml"
+  cargo build --release -p dbhive-slint --target "$TARGET" --manifest-path "$ROOT/Cargo.toml"
   BIN="$TARGET_DIR/$TARGET/release/dbhive"
 else
-  cargo build --release -p dbhive-app --manifest-path "$ROOT/Cargo.toml"
+  cargo build --release -p dbhive-slint --manifest-path "$ROOT/Cargo.toml"
   BIN="$TARGET_DIR/release/dbhive"
 fi
 [[ -x "$BIN" ]] || { echo "binary not found at $BIN" >&2; exit 1; }

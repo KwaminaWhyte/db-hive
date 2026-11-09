@@ -1,6 +1,6 @@
 //! Pure decisions for the workspace screen: which database and schema a
 //! freshly opened connection lands on, and how a `QueryResult` becomes grid
-//! rows. Lifted from the same decisions `dbhive-app`'s `workspace.rs` makes,
+//! rows. Lifted from the same decisions the old egui shell's workspace made,
 //! kept here rather than in `dbhive-ui-model` because they are this shell's
 //! own async-flow shape, not logic the two shells share verbatim.
 

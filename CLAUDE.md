@@ -2,20 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## READ FIRST: which UI is current
+## READ FIRST: the shell
 
-The UI stack has changed twice (Tauri+React, then egui, then Slint). The
-**egui shell** (`crates/dbhive-app`) is the feature-complete app until the
-Slint cutover. The **Slint shell** (`crates/dbhive-slint`, branch `slint-ui`)
-is the target; status per phase is in `docs/slint-migration/plan.md`.
+The app is `crates/dbhive-slint`. The Tauri+React and egui shells are gone
+(kept only in git history and `docs/rust-ui-migration/`). The cutover record
+and what remains open are in `docs/slint-migration/plan.md`.
 
-- **Do not change UI toolkit again.** The toolkit was never the cause of the
+- **Do not change UI toolkit.** The toolkit was never the cause of the
   "looks bad" problem. Read `docs/ui-guidelines.md` section 1 before proposing it.
-- **All UI work (any toolkit) follows `docs/ui-guidelines.md` and `AGENTS.md`.**
+- **All UI work follows `docs/ui-guidelines.md` and `AGENTS.md`.**
   The loop is: change, render a screenshot, LOOK at it, fix, repeat.
-- New screens go in `crates/dbhive-slint`, built only from `ui/kit/kit.slint`,
-  with logic in `crates/dbhive-ui-model` (no UI types) and `dbhive-core`.
-  Do not add screens to `dbhive-app` unless fixing a bug there.
+- New screens go in `crates/dbhive-slint/ui/screens/`, built only from
+  `ui/kit/kit.slint`, with logic in `crates/dbhive-ui-model` (no UI types)
+  and `dbhive-core`.
 
 ## Verify
 
@@ -25,7 +24,7 @@ Run before saying a change is done:
 cargo fmt --all --check                             # ~1s; tree is clean, keep it that way
 cargo check --workspace                             # <1s warm
 cargo clippy --workspace                            # ~100s warm, ~220 warnings today; do not add new ones
-cargo test --workspace -- --skip credentials::tests # ~4.5min warm, 1696 pass; same filter as CI
+cargo test --workspace -- --skip credentials::tests # ~4.5min warm, 1845 pass; same filter as CI
 ```
 
 Hooks in `.claude/settings.json`: `rustfmt --edition 2021` on every edited
@@ -41,12 +40,11 @@ from 400-650 MB to 111-130 MB (`docs/rust-ui-migration/`).
 ## Commands
 
 ```bash
-cargo run -p dbhive-slint            # run the Slint shell (target)
-cargo run -p dbhive-app              # run the egui shell
-cargo build --release -p dbhive-app  # release binary at target/release/dbhive
-./packaging/build-macos-app.sh       # assemble and sign DB Hive.app
+cargo run -p dbhive-slint                  # run the app (binary: dbhive)
+cargo build --release -p dbhive-slint      # release binary at target/release/dbhive
+./packaging/build-macos-app.sh             # assemble and sign DB Hive.app
 
-cargo run -p dbhive-app --example smoke -- "Local MySQL"   # end-to-end check
+cargo run -p dbhive-slint --example smoke -- "Local Post"  # end-to-end check
 ```
 
 There is no Node, npm or bundler. Do not add one.
@@ -55,10 +53,10 @@ Three `credentials::tests::*` failures are expected on macOS: they exercise
 the real OS keyring, which the system denies to an unsigned test binary. Do
 not "fix" them by weakening the tests; skip them as in Verify.
 
-Development aids, all unset in normal use: `DBHIVE_AUTOCONNECT`,
-`DBHIVE_AUTODB`, `DBHIVE_AUTOQUERY`, `DBHIVE_AUTOSCREEN`,
-`DBHIVE_AUTOWINDOWS`, `DBHIVE_DEV_WINDOW`, `DBHIVE_LOG_VIEWPORTS`,
-`DBHIVE_PLUGIN_SOURCES`.
+Development aids, all unset in normal use: `DBHIVE_PLUGIN_SOURCES` (extra
+folders searched for bundled plugins) and `DBHIVE_DATA_DIR` (points every
+store at another folder; tests already set it, never set it by hand unless
+you mean to run against a scratch profile).
 
 ## Architecture
 
@@ -66,27 +64,26 @@ Development aids, all unset in normal use: `DBHIVE_AUTOCONNECT`,
 crates/dbhive-core      UI-agnostic. drivers, DDL, SSH, credentials,
                         migrations, AI, plugins, AppState, storage, and the
                         service_* layer. No UI types.
-crates/dbhive-ui-model  UI-independent view logic shared by both shells:
-                        SQL builders, validation, layout, formatting, panel
-                        state machines. Depends on dbhive-core only. Unit
-                        tested; no Slint or egui types.
-crates/dbhive-slint     the Slint shell (target). ui/ holds .slint files
-                        (kit/, screens/, dialogs/, icons/); src/ holds the
-                        controllers. build.rs generates theme.slint from
-                        dbhive-ui-model/src/tokens.rs and icons.slint from
-                        ui/icons/*.svg. tests/*_controller.rs drive real
-                        windows against real SQLite files.
-crates/dbhive-app       the egui shell (maintenance only).
+crates/dbhive-ui-model  UI-independent view logic: SQL builders, validation,
+                        layout, formatting, panel state machines. Depends on
+                        dbhive-core only. Unit tested; no Slint types.
+crates/dbhive-slint     the app. ui/ holds .slint files (kit/, screens/,
+                        dialogs/, icons/); src/ holds the controllers, one
+                        per window, over one shared AppState. build.rs
+                        generates theme.slint from dbhive-ui-model/src/tokens.rs
+                        and icons.slint from ui/icons/*.svg. tests/*_controller.rs
+                        drive real windows against real SQLite files.
 ```
 
 Business logic belongs in `dbhive-core` or `dbhive-ui-model`, never in a
-screen or controller. Operations both shells need live in
-`dbhive_core::service*`.
+screen or controller. Operations the app needs live in `dbhive_core::service*`.
 
-Never block the UI thread: database work spawns on the shared Tokio runtime.
-Never hold the `AppState` lock across an await or a redraw: clone the
-`Arc<dyn DatabaseDriver>` out and drop the guard. For the egui shell, read
-`docs/rust-ui-migration/03-conventions.md` before touching a screen.
+Never block the UI thread: database work spawns on the shared Tokio runtime
+and completes through `runtime::spawn`, which routes the result back to the
+window that asked. Never hold the `AppState` lock across an await or a
+redraw: clone the `Arc<dyn DatabaseDriver>` out and drop the guard. Slint
+globals are per window; per-window state lives in `Session`, shared state in
+`AppState`.
 
 ### Persistence
 
@@ -133,7 +130,9 @@ agents report the wiring they need and apply it yourself.
    only, plus its controller in `src/`.
 3. **Verify against a real database.** `cargo test` does not prove a driver
    works; the controller tests and the smoke example do. Screenshot the
-   screen and look at it.
+   screen and look at it. `scripts/window-shot.sh <out.png>` captures the
+   real GPU window (never the whole screen); `scripts/check-ui-tokens.sh`
+   guards the token ratchet.
 
 ## Important Configuration
 
@@ -144,8 +143,8 @@ agents report the wiring they need and apply it yourself.
 
 ## Documentation References
 
-- `docs/slint-migration/plan.md`: Slint cutover plan and status
+- `docs/slint-migration/plan.md`: what is done, what is open, and why
 - `docs/ui-guidelines.md`: UI rules, read before any UI work
-- `docs/rust-ui-migration/`: Tauri to native record (measurements, parity
-  inventory, egui conventions)
+- `docs/rust-ui-migration/`: historical record (measurements, parity
+  inventory, egui conventions); do not follow its egui instructions
 - `docs/plugin-development.md`, `docs/user-guide.md`
