@@ -1,10 +1,5 @@
 //! Visual query builder model: compose a SELECT without writing SQL.
 //!
-//! Lifted from the egui `query_builder` screen so any shell can reuse it.
-//! Parity target: the React `QueryBuilder.tsx` route and the pure generator
-//! in `src/lib/sqlGenerator.ts` (see 2.8 in
-//! docs/rust-ui-migration/01-frontend-inventory.md).
-//!
 //! * **Everything that reaches SQL is quoted or escaped by the driver.**
 //!   Identifiers go through `quote_identifier`, values through
 //!   `escape_string_literal`. The only text that ever lands unquoted is a
@@ -20,7 +15,7 @@ use dbhive_core::models::{DbDriver, ForeignKeyInfo};
 
 /// What the builder wants the host screen to do after this frame.
 ///
-/// The screen cannot reach the workspace's tab list itself, and the React
+/// The screen cannot reach the workspace's tab list itself, and the UI
 /// original likewise handed its SQL off rather than running it in a tab, so
 /// the generated statement travels back to the caller.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,7 +26,7 @@ pub enum BuilderAction {
     UseSql(String),
 }
 
-/// How deep AND/OR groups may nest. Matches the React builder's limit; past
+/// How deep AND/OR groups may nest. Matches the UI builder's limit; past
 /// three levels the UI is unreadable and the SQL unmaintainable.
 pub const MAX_GROUP_DEPTH: usize = 3;
 
@@ -171,7 +166,7 @@ impl CompareOp {
     ];
 
     /// HAVING compares an aggregate against one scalar, so the list operators
-    /// and null checks are left out, as they were in the React panel.
+    /// and null checks are left out, as they were in the UI panel.
     pub const FOR_HAVING: [CompareOp; 6] = [
         CompareOp::Eq,
         CompareOp::Ne,
@@ -1220,7 +1215,7 @@ pub fn validate(state: &BuilderState, rules: DialectRules) -> Vec<String> {
 
 // ---------------------------------------------------------------------------
 
-/// Which sections are expanded. All open initially, as in the React builder.
+/// Which sections are expanded. All open initially, as in the UI builder.
 #[derive(Debug, Clone, Copy)]
 pub struct Sections {
     pub tables: bool,

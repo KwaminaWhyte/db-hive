@@ -1,14 +1,13 @@
 //! The Settings screen's editing state, shell-agnostic.
 //!
 //! [`crate::settings`] holds the pure pieces (sections, shortcut table,
-//! keystroke formatting). This module is the stateful part both shells need
-//! and the egui screen kept inline: a draft copy of [`AppSettings`] next to
-//! the last saved copy, numeric fields that hold half-typed text without
-//! corrupting the draft, the accent colour buffer, shortcut recording, and
-//! the derived facts a shell applies live (dark or light, accent, editor
-//! font size).
+//! keystroke formatting). This module is the stateful part: a draft copy of
+//! [`AppSettings`] next to the last saved copy, numeric fields that hold
+//! half-typed text without corrupting the draft, the accent colour buffer,
+//! shortcut recording, and the derived facts a shell applies live (dark or
+//! light, accent, editor font size).
 //!
-//! Save semantics follow the web shell and the egui screen:
+//! Save semantics:
 //!
 //! * General, Appearance and Query edits sit in the draft until "Save".
 //! * A shortcut binding is persisted the moment it is recorded, but only the
@@ -219,7 +218,7 @@ pub struct ShortcutRow {
     pub conflict: bool,
 }
 
-/// What recording a keystroke did, for the shell to react to.
+/// What recording a keystroke did, for the shell to the UI to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecordOutcome {
     /// No recording in progress.

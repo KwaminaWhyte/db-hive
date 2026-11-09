@@ -2,13 +2,10 @@
 //!
 //! # Why this exists
 //!
-//! In the web shell a plugin extended the interface by having the host emit
-//! `plugin-register-ui`, and React rendered whatever descriptor came back.
-//! A native shell has no React, and "render arbitrary markup" is not
-//! something egui can or should do. The replacement is a **schema-driven UI**:
-//! a plugin returns *data* describing panels, labels, form fields and
-//! buttons, and the host draws them with its own widgets, its own palette and
-//! its own event handling.
+//! A plugin cannot draw arbitrary markup. It returns **data** describing
+//! panels, labels, form fields and buttons, and the host draws them with its
+//! own widgets, its own palette and its own event handling. That is the
+//! **schema-driven UI**:
 //!
 //! # The security properties this buys
 //!
@@ -50,7 +47,7 @@
 //! }
 //! ```
 
-#![allow(dead_code)] // shared by both shells; neither uses every accessor.
+#![allow(dead_code)] // part of the plugin engine; not every accessor is used.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -376,7 +373,7 @@ impl Icon {
 }
 
 impl Icon {
-    /// A short text glyph. egui ships no icon set, and loading one on a
+    /// A short text glyph. No icon set is bundled, and loading one on a
     /// plugin's behalf would be exactly the capability this design removes.
     pub fn glyph(self) -> &'static str {
         match self {
@@ -560,7 +557,7 @@ pub fn is_safe_handler_name(name: &str) -> bool {
     chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '$')
 }
 
-/// Is this a usable control id? Ids key form state and egui widget ids, so
+/// Is this a usable control id? Ids key form state and widget ids, so
 /// keep them boring.
 pub fn is_valid_control_id(id: &str) -> bool {
     !id.is_empty()
@@ -962,7 +959,7 @@ fn clamp_text(s: &mut String, max_chars: usize) {
 /// Turn a plugin's JSON-schema-like `configSchema` into a panel of the same
 /// vocabulary the plugin itself would emit.
 ///
-/// The React shell had a second, separate renderer for this. Reusing the one
+/// The UI had a second, separate renderer for this. Reusing the one
 /// descriptor type means the settings form and a plugin's own UI cannot drift,
 /// and it works with no JavaScript executed at all: this is pure data.
 ///

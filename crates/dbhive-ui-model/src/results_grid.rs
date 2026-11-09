@@ -1,6 +1,6 @@
 //! Result grid logic: cell formatting, filtering and sorting.
 //!
-//! Lifted from the egui `widgets::results_grid`. Values arrive as
+//! `widgets::results_grid`. Values arrive as
 //! `serde_json::Value` because that is what every driver normalises to.
 //! Rendering is deliberately explicit about NULL: a database NULL and the
 //! string "NULL" are different things and must not look alike.
@@ -65,7 +65,7 @@ pub fn visible_rows(result: &QueryResult, state: &GridState) -> Vec<usize> {
 /// Compare two cells for sorting.
 ///
 /// Numbers compare numerically rather than lexically, so 10 sorts after 9.
-/// NULL sorts before everything, matching the grid the web shell had.
+/// NULL sorts before everything, matching the driver order.
 pub fn compare(a: Option<&serde_json::Value>, b: Option<&serde_json::Value>) -> std::cmp::Ordering {
     use serde_json::Value;
     use std::cmp::Ordering;

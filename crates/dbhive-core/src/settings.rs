@@ -1,12 +1,11 @@
 //! Loading, validating and persisting `AppSettings`.
 //!
 //! The model itself lives in [`crate::models::settings`]; this module is the
-//! shell-agnostic persistence and validation layer both shells call.
+//! shell-agnostic persistence and validation layer the app calls.
 //!
 //! On disk this is `settings.json` in the application data directory, with a
-//! single `"settings"` key: byte-for-byte the shape `tauri_plugin_store`
-//! wrote from `src-tauri/src/commands/settings.rs`, so an existing
-//! installation keeps its preferences when it moves to the native shell.
+//! single `"settings"` key. The shape is unchanged from earlier releases, so
+//! an existing installation keeps its preferences.
 //!
 //! Two behaviours are deliberate:
 //!
@@ -14,7 +13,7 @@
 //!   by an older version, or hand-edited) is merged onto the defaults rather
 //!   than rejected. Strict deserialisation would turn "we added a field" into
 //!   "the user's settings file no longer loads".
-//! * **Sanitise on load and on save.** The React UI enforced its ranges with
+//! * **Sanitise on load and on save.** The UI enforced its ranges with
 //!   HTML `min`/`max` attributes, which are advisory: a hand-edited file could
 //!   carry `maxRows: 0` and quietly break every query. Clamping happens here so
 //!   no shell has to remember to do it.
@@ -27,13 +26,13 @@ use crate::models::settings::{
 use crate::models::DbError;
 use crate::storage::JsonStore;
 
-/// Store file name. Matches what the Tauri shell used.
+/// Store file name. Unchanged for existing installs.
 pub const STORE_NAME: &str = "settings.json";
 
 /// Key inside the store holding the whole settings object.
 pub const STORE_KEY: &str = "settings";
 
-// Accepted ranges, mirroring the bounds the React settings form advertised.
+// Accepted ranges, mirroring the bounds the UI settings form advertised.
 pub const UPDATE_INTERVAL_HOURS: (u32, u32) = (1, 168);
 pub const EDITOR_FONT_SIZE: (u32, u32) = (10, 24);
 pub const QUERY_TIMEOUT_SECONDS: (u32, u32) = (0, 300);
@@ -41,7 +40,7 @@ pub const MAX_ROWS: (u32, u32) = (100, 100_000);
 pub const MAX_HISTORY_ENTRIES: (u32, u32) = (50, 2000);
 
 /// Languages the picker offers. There is no i18n behind these yet; the value
-/// is stored and nothing else, exactly as in the web shell.
+/// is stored and nothing else.
 pub const LANGUAGES: &[(&str, &str)] = &[
     ("en", "English"),
     ("es", "Español"),
@@ -114,7 +113,7 @@ fn sanitize_general(g: &mut GeneralSettings) {
         g.language = "en".to_string();
     }
     g.update_check_interval_hours = clamp(g.update_check_interval_hours, UPDATE_INTERVAL_HOURS);
-    // Installing implies downloading; the React form nested the control so
+    // Installing implies downloading; the UI form nested the control so
     // the impossible combination was unreachable there.
     if !g.auto_download_updates {
         g.auto_install_updates = false;
@@ -177,7 +176,7 @@ pub fn hex_string((r, g, b): (u8, u8, u8)) -> String {
     format!("#{:02x}{:02x}{:02x}", r, g, b)
 }
 
-/// Human label for a theme mode, shared by both shells' pickers.
+/// Human label for a theme mode, shared by the settings pickers.
 pub fn theme_mode_label(mode: ThemeMode) -> &'static str {
     match mode {
         ThemeMode::Light => "Light",
@@ -268,9 +267,9 @@ mod tests {
     }
 
     #[test]
-    fn on_disk_shape_matches_the_tauri_store() {
-        // The native shell must read and write the file the Tauri shell
-        // wrote: one "settings" key, camelCase field names.
+    fn on_disk_shape_matches_the_shipped_store() {
+        // The file keeps its established shape: one "settings" key, camelCase
+        // field names.
         let p = temp_path("shape");
         let _ = std::fs::remove_file(&p);
 

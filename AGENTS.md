@@ -5,8 +5,8 @@ disagree, this file wins.
 
 ## UI rules
 
-1. **Never switch UI toolkit.** The stack is Slint (egui shell stays until cutover). If you think a
-   change is needed, stop and ask the owner. See `docs/ui-guidelines.md` section 1.
+1. **Never switch UI toolkit.** The stack is Slint. If you think a change is needed, stop and ask
+   the owner. See `docs/ui-guidelines.md` section 1.
 2. **Read `docs/ui-guidelines.md` before touching any `.slint` or UI Rust code.**
 3. **Build screens only from `ui/kit/kit.slint`.** Add missing components to the kit first.
 4. **No literal colours or px font sizes** outside the generated theme. `scripts/check-ui-tokens.sh`
@@ -34,5 +34,5 @@ disagree, this file wins.
 - Do not add `Co-Authored-By` trailers or Claude footers to commits or PRs in this repo.
 - Report measured results and guesses separately. Say "I looked at the screenshot and saw X", not
   "should look fine".
-- Progress claims need two numbers: feature coverage and "ready for real work". Do not mark a
-  migration phase done because its screen exists.
+- A screen is done when it has been driven against a real database and its snapshots were looked
+  at, not when it compiles.

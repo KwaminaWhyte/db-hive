@@ -1,7 +1,7 @@
 //! Errors raised by the plugin subsystem.
 //!
 //! Deliberately dependency-free (std only, no `thiserror`): this type is
-//! shared by every consumer of the plugin engine, including the native shell
+//! shared by every consumer of the plugin engine,
 //! during the migration, and none of them should have to take a derive crate
 //! to name an error.
 //!

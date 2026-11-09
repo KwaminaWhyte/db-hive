@@ -3,7 +3,7 @@
 //! This module provides centralized state management for DB Hive, including
 //! active database connections, saved connection profiles, and query history.
 //! All state is managed through a thread-safe `Mutex<AppState>` that is shared
-//! across the Tauri application.
+//! across the application.
 
 pub use crate::activity_logger::ActivityLogger;
 
@@ -75,9 +75,9 @@ impl MetadataCache {
 
 /// Application state
 ///
-/// Central state container for the entire application. This is wrapped in a `Mutex`
-/// and managed by Tauri's state management system to provide thread-safe access
-/// across all commands.
+/// Central state container for the entire application. The controller holds it
+/// in an `Arc<Mutex<AppState>>` and clones the guard into services; it is
+/// never held across an await.
 ///
 /// # State Components
 ///
@@ -88,14 +88,11 @@ impl MetadataCache {
 /// # Usage
 ///
 /// ```rust,ignore
-/// use tauri::State;
-/// use std::sync::Mutex;
+/// use std::sync::{Arc, Mutex};
 ///
-/// #[tauri::command]
-/// fn my_command(state: State<'_, Mutex<AppState>>) -> Result<(), String> {
+/// fn save_profile(state: &Arc<Mutex<AppState>>, profile: ConnectionProfile) {
 ///     let mut state = state.lock().unwrap();
 ///     state.add_profile(profile);
-///     Ok(())
 /// }
 /// ```
 pub struct AppState {

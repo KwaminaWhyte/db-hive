@@ -1,7 +1,6 @@
 //! Resource limits and the checks that go with them.
 //!
-//! Ported from the Tauri shell unchanged in intent: a permission set, a
-//! budget, and the two validators that matter (a path may not leave the
+//! A permission set, a budget, and the two validators that matter (a path may not leave the
 //! plugin's own directory, and a URL may not point back inside the machine).
 //!
 //! The SSRF check here is the conservative prefix test the sandbox always

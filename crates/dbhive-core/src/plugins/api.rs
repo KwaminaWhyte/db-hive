@@ -1,10 +1,9 @@
 //! The host API surface plugins may reach, and its types.
 //!
-//! This is the Tauri shell's `plugins::api` with the event emitter removed.
-//! Where it used to `app_handle.emit(...)` it now returns a value, because a
-//! core crate has no window to emit into.
+//! Nothing here emits events: every call returns a value, because a core crate
+//! has no window to emit into.
 //!
-//! Two of the old methods are gone rather than ported:
+//! Two methods are deliberately absent:
 //!
 //! * `execute_query` and `get_metadata` returned **mock rows**. A plugin that
 //!   declares `executeQuery` today gets an explicit

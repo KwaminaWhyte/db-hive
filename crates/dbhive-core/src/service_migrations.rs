@@ -1,8 +1,7 @@
 //! Shell-agnostic schema-migration operations.
 //!
-//! Lifted verbatim from the bodies of the `#[tauri::command]` handlers in
-//! `src-tauri/src/commands/migrations.rs`, with `State<'_, Mutex<AppState>>`
-//! replaced by a plain `&Mutex<AppState>` so both shells run the same code.
+//! Every operation takes a plain `&Mutex<AppState>` instead of any framework
+//! type.
 //!
 //! Three operations, matching the three-step wizard the UI drives:
 //!
@@ -139,7 +138,7 @@ pub async fn compute_schema_diff(
 
 /// Render a diff as statements in the target's dialect.
 ///
-/// Synchronous: unlike the Tauri command it was lifted from, nothing here
+/// Synchronous: nothing here
 /// does IO, so there is nothing to await.
 pub fn generate_migration(
     state: &Mutex<AppState>,

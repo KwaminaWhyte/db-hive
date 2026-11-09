@@ -1,12 +1,11 @@
 //! UI-independent view logic.
 //!
 //! Everything a screen needs that is not drawing: SQL generation, validation,
-//! filtering and sorting, formatting, layout, the command registry. It was
-//! written inside the egui screens and lifted here so the Slint shell reuses
-//! it, tests and all, instead of porting it a second time.
+//! filtering and sorting, formatting, layout, the command registry. It is
+//! unit tested here, so the screens stay thin.
 //!
 //! The rule for this crate: no UI toolkit types, ever. If a function needs
-//! `egui::` or `slint::` it belongs in a shell, not here.
+//! `slint::` it belongs in a shell, not here.
 
 pub mod activity_monitor;
 pub mod activity_panel;

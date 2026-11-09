@@ -1,4 +1,4 @@
-//! Table inspector view logic, lifted from the egui `table_inspector` screen.
+//! Table inspector view logic.
 //! See lib.rs.
 //!
 //! Every identifier that reaches SQL goes through the caller-supplied
@@ -17,7 +17,7 @@ use dbhive_core::models::{DbDriver, ForeignKeyInfo, TableSchema};
 /// OFFSET paging makes the database scan and discard every preceding row, so
 /// paging far into a large table degrades badly. Past this offset the pager
 /// stops and offers a jump back to the deepest page that is still cheap.
-/// Same value and same reasoning as the React shell.
+/// Same value and same reasoning as the UI.
 pub const MAX_SAFE_OFFSET: usize = 100_000;
 
 /// Page sizes offered by the pager.

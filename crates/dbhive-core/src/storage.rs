@@ -1,17 +1,14 @@
 //! JSON-backed key/value stores.
 //!
-//! Replaces `tauri_plugin_store`, which was the only reason `AppState`
-//! needed an `AppHandle`. The on-disk format and location are deliberately
-//! identical to what the plugin wrote, so an existing installation keeps its
-//! saved connections, history and snippets when it moves to the native
-//! shell:
+//! The on-disk format and location are unchanged from earlier releases, so an
+//! existing installation keeps its saved connections, history and snippets:
 //!
 //!   macOS    ~/Library/Application Support/com.kwamina.db-hive/<name>
 //!   Linux    ~/.local/share/com.kwamina.db-hive/<name>
 //!   Windows  %APPDATA%\com.kwamina.db-hive\<name>
 //!
 //! Each file is a flat JSON object. `profiles.json` holds a single
-//! `"profiles"` key, and so on; the plugin's own format, unchanged.
+//! `"profiles"` key, and so on.
 
 use std::collections::HashMap;
 use std::fs;
@@ -21,9 +18,8 @@ use serde_json::Value;
 
 use crate::models::DbError;
 
-/// Application identifier, matching `tauri.conf.json`. Changing this orphans
-/// every existing user's data, so it is deliberately hard-coded rather than
-/// derived.
+/// Application identifier. Changing this orphans every existing user's data,
+/// so it is deliberately hard-coded rather than derived.
 pub const APP_IDENTIFIER: &str = "com.kwamina.db-hive";
 
 /// Environment variable that points every store at another directory. Unset

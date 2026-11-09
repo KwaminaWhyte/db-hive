@@ -1,6 +1,6 @@
 //! Connecting to a saved profile and noticing when the connection dies.
 //!
-//! Two decisions both shells need, kept out of any screen:
+//! Two decisions the app needs, kept out of any screen:
 //!
 //! * **Ask for a password, or not.** A saved profile with no secret in the
 //!   keyring (and none cached this session) should get a password prompt

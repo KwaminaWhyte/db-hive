@@ -1,8 +1,8 @@
 //! Plugin lifecycle: what is installed, what is enabled, what is loaded.
 //!
-//! The Tauri version of this file held an `AppHandle`, resolved its own
-//! directories from it, and announced every state change with
-//! `app_handle.emit("plugin-event", ..)`. Here:
+//! The manager has no framework handle. Directories arrive as a
+//! [`PluginStore`], and state changes go out on a broadcast channel. In
+//! detail:
 //!
 //! * directories arrive as a [`PluginStore`], so a caller decides where
 //!   plugins live (and a test can point it at a temporary directory);
@@ -70,8 +70,8 @@ impl PluginManager {
         self
     }
 
-    /// Subscribe to lifecycle events. Replaces the Tauri `plugin-event`
-    /// emission; a shell that does not care simply never subscribes.
+    /// Subscribe to lifecycle events. A caller that does not care simply never
+    /// subscribes.
     pub fn subscribe(&self) -> broadcast::Receiver<PluginEvent> {
         self.events.subscribe()
     }
@@ -144,8 +144,8 @@ impl PluginManager {
     /// Install from a marketplace entry.
     ///
     /// Only plugins bundled with the application can be installed: there is
-    /// no marketplace server, and the Tauri shell's fallback wrote a fake
-    /// "placeholder" plugin that looked installed but did nothing. An honest
+    /// no marketplace server, and installing a fake placeholder that looks
+    /// installed but does nothing is worse than an error. An honest
     /// error is better than a plugin that silently is not the plugin the user
     /// asked for. When a real download exists it goes here, and its bytes
     /// must pass [`verify_artifact_hash`] before they reach disk.
@@ -201,7 +201,7 @@ impl PluginManager {
 
     /// Enable or disable.
     ///
-    /// Disabling unloads first, which is the order the React shell used and
+    /// Disabling unloads first, which is the order the UI used and
     /// the only safe one: a disabled plugin must not still be running.
     pub async fn set_enabled(&self, plugin_id: &str, enabled: bool) -> PluginResult<Plugin> {
         let mut plugin = self.require(plugin_id).await?;
@@ -426,7 +426,7 @@ impl PluginManager {
 
 /// Where a bundled plugin might be, in order.
 ///
-/// The Tauri version also searched a developer's hard-coded home directory.
+/// The implementation also searched a developer's hard-coded home directory.
 /// That is gone.
 pub fn default_bundled_roots() -> Vec<PathBuf> {
     let mut roots = vec![PathBuf::from("plugins"), PathBuf::from("../plugins")];

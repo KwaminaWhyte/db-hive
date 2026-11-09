@@ -1,19 +1,14 @@
 //! Shell-agnostic AI assistant operations.
 //!
-//! The bodies of `src-tauri/src/commands/ai.rs` live here, taking a plain
-//! `&Mutex<AppState>` instead of Tauri's `State`/`AppHandle`, so the Tauri
-//! shell and the native egui shell run the same code.
+//! Operations take a plain `&Mutex<AppState>`, so the app calls one
+//! implementation.
 //!
-//! Two things differ from the Tauri original, deliberately:
+//! Two design choices are deliberate:
 //!
-//! * **API keys are not part of the config.** `AiState` in the Tauri shell
-//!   held every provider's key in memory inside `AiConfig`, and `AiConfig`
-//!   was handed to the frontend wholesale by `get_ai_config`. Here the keys
-//!   live in the OS keyring ([`CredentialManager`]) under `ai-<provider>`,
-//!   and [`AiSettings`] is structurally incapable of holding one: it has no
+//! * **API keys are not part of the config.** Keys live in the OS keyring
+//!   ([`CredentialManager`]) under `ai-<provider>`, and [`AiSettings`] has no
 //!   key field, so nothing can serialise a key into `ai.json` by accident.
-//! * **The settings persist.** The Tauri `AiState` was in-memory only, so
-//!   the chosen provider and model were lost on restart. They are written to
+//! * **The settings persist.** The chosen provider and model are written to
 //!   `ai.json` in the application data directory, next to `profiles.json`.
 //!
 //! Nothing here executes SQL. `generate_sql` and `fix_query` return text;
@@ -40,7 +35,7 @@ use crate::storage::JsonStore;
 const SETTINGS_STORE: &str = "ai.json";
 const SETTINGS_KEY: &str = "settings";
 
-/// Schemas never worth spending context tokens on. Same list the web shell's
+/// Schemas never worth spending context tokens on. Same list the established
 /// `useSchemaContext` filtered with.
 pub const SYSTEM_SCHEMAS: [&str; 5] = [
     "information_schema",
@@ -77,7 +72,7 @@ impl ProviderInfo {
     }
 }
 
-/// Every provider, in the order the web shell listed them.
+/// Every provider, in a fixed order.
 pub const PROVIDERS: [ProviderInfo; 5] = [
     ProviderInfo {
         provider: AiProviderType::Ollama,
@@ -919,7 +914,7 @@ pub struct SchemaColumn {
 /// Render the schema context string sent to the model.
 ///
 /// Byte-for-byte the shape `useSchemaContext.buildSchemaContext` produced,
-/// so a prompt tuned against the web shell behaves the same here:
+/// so a prompt tuned for one client behaves the same here:
 ///
 /// ```text
 /// Database: shop

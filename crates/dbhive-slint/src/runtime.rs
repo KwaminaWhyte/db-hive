@@ -1,6 +1,6 @@
 //! The bridge between async database work and Slint's UI thread.
 //!
-//! egui polled every in-flight job once per frame. Slint is retained mode,
+//! the app polled every in-flight job once per frame. Slint is retained mode,
 //! so there is no frame loop to poll from, and nothing should be: work runs
 //! on Tokio and pushes its result back with `slint::invoke_from_event_loop`,
 //! which runs the completion on the UI thread. The UI does nothing while it

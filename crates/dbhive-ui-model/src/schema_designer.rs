@@ -1,4 +1,4 @@
-//! Lifted from the egui `schema_designer` screen. See lib.rs.
+//! The schema designer's model, validation and DDL. See lib.rs.
 //!
 //! The pure half of the visual schema designer: the design model,
 //! relationship validity, type families, cycle detection and creation order,
@@ -649,7 +649,7 @@ pub fn new_table(id: u64) -> DesignTable {
 }
 
 /// Where the `n`th new table lands (0-based count of tables before it), at a
-/// cascading position as the web shell did, so two new tables never land
+/// cascading position, so two new tables never land
 /// exactly on top of each other.
 pub fn cascade_position(n: usize) -> Point {
     let n = n as f32;

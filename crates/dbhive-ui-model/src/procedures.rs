@@ -1,8 +1,8 @@
 //! Stored procedures and functions: the UI-independent part.
 //!
-//! Lifted from the egui `procedures` screen so the Slint shell reuses it,
-//! tests and all. Parity target: the React `StoredProceduresPanel.tsx`.
-//!
+//! What the panel needs: one input box per argument (`parse_signature`),
+//! reading a box into a value (`parse_arg`), search, grouping, and the
+//! plain-data screen state.
 //! The catalogue SQL, identifier quoting and CALL/SELECT/EXEC syntax live in
 //! `dbhive_core::service_procedures`. What is here is what a screen needs on
 //! top of that: one input box per argument (`parse_signature`), reading a box

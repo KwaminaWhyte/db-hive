@@ -1,5 +1,4 @@
-//! Activity Monitor view logic, lifted from the egui `activity_monitor`
-//! screen. See lib.rs.
+//! Activity Monitor view logic. See lib.rs.
 //!
 //! Formatting, the grid projections of query logs and server sessions, the
 //! filter panel's raw inputs and the query they build, the sort mapping, the
@@ -21,11 +20,11 @@ use dbhive_core::service_monitoring as mon;
 // Options
 // ===========================================================================
 
-/// Auto-refresh choices, in seconds. `0` is "off", matching the web shell's
+/// Auto-refresh choices, in seconds. `0` is "off", matching the
 /// Select which kept the interval visible while paused.
 pub const REFRESH_SECONDS: [u64; 5] = [0, 5, 10, 30, 60];
 
-/// Page sizes offered by the log pager. 50 is what the React page hard-coded.
+/// Page sizes offered by the log pager. 50 is what the UI page hard-coded.
 pub const PAGE_SIZES: [usize; 4] = [25, 50, 100, 250];
 
 /// How much of the metric series the chart shows, in seconds. `None` is all.
@@ -47,7 +46,7 @@ pub const SQL_CELL_CHARS: usize = 160;
 // Formatting
 // ===========================================================================
 
-/// Human-readable duration, matching the web shell's `formatDuration`.
+/// Human-readable duration, matching the `formatDuration` behaviour.
 pub fn format_duration(ms: Option<u64>) -> String {
     match ms {
         None => "-".to_string(),
@@ -67,7 +66,7 @@ pub fn format_duration_i64(ms: Option<i64>) -> String {
     }
 }
 
-/// Compact count, matching the web shell's `formatNumber`.
+/// Compact count, matching the `formatNumber` behaviour.
 pub fn format_count(n: u64) -> String {
     const B: f64 = 1_000_000_000.0;
     const M: f64 = 1_000_000.0;
@@ -109,7 +108,7 @@ pub fn format_timestamp(t: DateTime<Utc>) -> String {
 
 /// Milliseconds since the epoch as a local `HH:MM:SS` axis label.
 ///
-/// egui_plot hands the formatter whatever the axis range works out to, which
+/// the plotting library hands the formatter whatever the axis range works out to, which
 /// on an empty or degenerate plot can be NaN or infinite. `as i64` saturates
 /// those to a real timestamp, so they are rejected before the cast rather
 /// than labelled "01:00:00".
@@ -615,7 +614,7 @@ mod tests {
 
     #[test]
     fn every_ticked_type_and_status_reaches_the_query() {
-        // The React panel dropped all but the first of each.
+        // The UI panel dropped all but the first of each.
         let f = FilterState {
             types: vec![QueryType::Insert, QueryType::Delete],
             statuses: vec![QueryStatus::Failed, QueryStatus::Cancelled],

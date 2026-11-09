@@ -1,6 +1,4 @@
-//! Number and text formatting shared by every shell.
-//!
-//! Lifted from the egui `widgets::ui_kit`.
+//! Number and text formatting shared by every screen.
 
 /// Group digits so a count is readable at a glance.
 ///

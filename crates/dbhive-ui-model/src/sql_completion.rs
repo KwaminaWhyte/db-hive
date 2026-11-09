@@ -1,7 +1,7 @@
 //! SQL completion logic: the schema index, keyword list, the word under the
 //! cursor, candidate ranking, and find-and-replace.
 //!
-//! Lifted from the egui `widgets::sql_editor`, which keeps the drawing.
+//! `widgets::sql_editor`, which keeps the drawing.
 
 use std::collections::BTreeSet;
 

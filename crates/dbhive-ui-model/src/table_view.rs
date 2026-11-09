@@ -1,6 +1,6 @@
 //! The table inspector as a view of one workspace table tab.
 //!
-//! `table_inspector` holds the SQL and paging arithmetic lifted from the egui
+//! `table_inspector` holds the SQL and paging arithmetic
 //! screen. This module is the state machine around it for a shell that keeps
 //! one tab per table: which view is showing (Data or Structure), where the
 //! pager is, the filters being edited versus the filters the page was
@@ -24,7 +24,7 @@ use crate::table_inspector::{
     Filter, FilterOp, SortSpec, TableMeta, MAX_SAFE_OFFSET, PAGE_SIZES,
 };
 
-/// Default rows per page, same as the egui inspector.
+/// Default rows per page, same as the table inspector.
 pub const DEFAULT_PAGE_SIZE: usize = 50;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

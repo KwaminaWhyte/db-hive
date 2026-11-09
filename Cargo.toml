@@ -1,11 +1,8 @@
 # Workspace root.
 #
-# `dbhive-core` holds everything that is not tied to a UI shell;
+# `dbhive-core` holds everything that is not tied to a UI;
 # `dbhive-ui-model` is the screens' logic with no UI types; `dbhive-slint`
 # is the app itself.
-#
-# The Tauri + React shell that used to live in `src-tauri` and `src` was
-# removed once this reached parity; see docs/rust-ui-migration/.
 [workspace]
 resolver = "2"
 members = [

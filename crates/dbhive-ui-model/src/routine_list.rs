@@ -58,7 +58,7 @@ pub fn status(
     }
 }
 
-/// `(a integer, b integer) returns integer`. The egui shell's own summary uses
+/// `(a integer, b integer) returns integer`. The routine summary uses
 /// an arrow glyph the Slint font does not carry, so this spells it out.
 pub fn signature_line(p: &ProcedureInfo) -> String {
     match &p.return_type {

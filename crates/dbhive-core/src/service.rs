@@ -1,12 +1,9 @@
 //! Shell-agnostic operations.
 //!
-//! The Tauri command handlers were almost entirely portable already: their
-//! bodies talk to `AppState` and the drivers, and only their signatures were
-//! tied to Tauri (`State<'_, Mutex<AppState>>`, an often-unused `AppHandle`).
-//!
-//! This module holds those bodies, taking a plain `&Mutex<AppState>`. Both
-//! shells call in here, so connecting from the native UI and connecting from
-//! the Tauri UI cannot drift apart.
+//! Every operation takes a plain `&Mutex<AppState>` and talks to the state
+//! and the drivers. The UI calls in here rather than reimplementing a
+//! connection, a query or a save, so the screens cannot drift apart from each
+//! other or from the tests.
 
 use std::sync::{Arc, Mutex};
 

@@ -1,6 +1,6 @@
 //! Shell-agnostic monitoring operations.
 //!
-//! Two things that the React shell treated as unrelated live here together,
+//! Two things that the UI treated as unrelated live here together,
 //! because the Activity Monitor screen shows them side by side:
 //!
 //! * the **query log**, an in-process record of statements this application
@@ -8,10 +8,8 @@
 //! * **server-side activity**, read out of the database's own system views
 //!   (`pg_stat_activity`, `information_schema.PROCESSLIST`, ...).
 //!
-//! These are the bodies of the `#[tauri::command]` handlers in
-//! `src-tauri/src/commands/monitoring.rs` and `.../activity.rs`, taking a
-//! plain `&Mutex<AppState>` instead of Tauri's `State`, so both shells run
-//! the same code. See docs/rust-ui-migration/03-conventions.md.
+//! Everything here takes a plain `&Mutex<AppState>` and returns values the
+//! screen can draw.
 //!
 //! Everything that can be a pure function is one: the per-driver SQL, the
 //! row mapping, the filter predicate, the sort/paginate step, the statistics
@@ -58,7 +56,7 @@ pub struct ServerStats {
     /// NOTE: despite the name this is the server's *cumulative* transaction
     /// counter, not a rate. A rate only exists relative to a previous
     /// sample, which is what [`MetricSeries::push`] computes. The name is
-    /// kept because it is what the wire format and the Tauri shell use.
+    /// kept because it is what the wire format and the UI use.
     pub transactions_per_sec: Option<f64>,
     pub deadlocks: Option<i64>,
 }
@@ -344,7 +342,7 @@ pub struct MetricsSample {
 
 /// A rolling window of server-metric samples.
 ///
-/// The React chart kept the last 60 samples in component state and did the
+/// The chart keeps the last 60 samples and does the
 /// counter-diffing inline. Both belong here: they are arithmetic, not
 /// drawing, and the native chart needs exactly the same numbers.
 #[derive(Debug, Clone)]
@@ -452,7 +450,7 @@ impl MetricSeries {
 
 /// Reduce a series to at most `max_points`, keeping the first and last.
 ///
-/// A plot cannot show more points than it has pixels, and handing egui_plot
+/// A plot cannot show more points than it has pixels, and handing the plotting library
 /// thousands of vertices per frame costs real time. Stride sampling is used
 /// rather than averaging so a spike stays a spike instead of being smoothed
 /// into the baseline, which for a monitoring chart is the whole point.
@@ -541,10 +539,10 @@ impl TimeRange {
 /// A query-log selection: the single-valued core filter plus the multi-select
 /// dimensions it cannot express.
 ///
-/// [`QueryLogFilter`] carries one `query_type` and one `status`. The React
+/// [`QueryLogFilter`] carries one `query_type` and one `status`. The UI
 /// filter panel offered checkboxes for both and then sent only the first
 /// ticked value of each, silently ignoring the rest (recorded as a bug in
-/// docs/rust-ui-migration/01-frontend-inventory.md §2.12). Rather than
+/// Rather than
 /// reproduce the bug or cripple the UI to one choice, the sets are carried
 /// alongside and applied here.
 #[derive(Debug, Clone, Default)]
@@ -782,7 +780,7 @@ pub fn connection_choices(state: &Mutex<AppState>) -> Vec<(String, String)> {
 
 /// Database names that actually appear in the log, for the database filter.
 ///
-/// The React panel asked the server for its database list, which needs a
+/// The UI panel asked the server for its database list, which needs a
 /// live connection and offers databases no logged query ever touched.
 /// Deriving the list from the log needs neither, and every entry it offers
 /// selects at least one row.
@@ -912,8 +910,8 @@ pub async fn export_query_logs(
 
 /// Record that a statement has started running.
 ///
-/// The Tauri shell calls the equivalent inline in its `execute_query`
-/// command. Exposed here so the native shell's workspace can record into the
+/// The app calls the equivalent inline in its `execute_query`
+/// command. Exposed here so the app's workspace can record into the
 /// same log rather than leaving the Activity Monitor permanently empty.
 pub fn record_query_start(state: &Mutex<AppState>, log: QueryLog) {
     state.lock().unwrap().activity_logger.log_query_start(log);
@@ -1364,7 +1362,7 @@ mod tests {
 
     #[test]
     fn multiple_query_types_all_match() {
-        // The React panel sent only the first ticked type; every ticked type
+        // The UI panel sent only the first ticked type; every ticked type
         // must count here.
         let q = LogQuery {
             types: vec![QueryType::Insert, QueryType::Delete],

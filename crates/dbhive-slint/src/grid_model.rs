@@ -2,7 +2,7 @@
 //!
 //! Slint asks a model for rows by index. Building every row up front would
 //! allocate one Slint struct (and a nested cell model) per row, which for a
-//! 50,000 row result is exactly the retained-memory problem the web shell
+//! 50,000 row result is exactly the retained-memory problem to avoid
 //! had. This model holds the raw strings once and builds a row only when the
 //! ListView asks for it, which it does only for rows on screen.
 

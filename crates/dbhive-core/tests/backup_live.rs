@@ -168,7 +168,7 @@ async fn scenario<D: DatabaseDriver>(
     .await
     .unwrap_or_else(|e| panic!("restore with drop_existing while connected: {e}"));
 
-    // The app's connection must still work afterwards (or reconnect), and hold the original rows.
+    // The app's connection must still work afterwards (or reconnect), and hold its rows.
     let mut after = None;
     for _ in 0..3 {
         let d = state.lock().unwrap().get_connection(id).cloned().unwrap();

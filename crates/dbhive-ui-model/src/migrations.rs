@@ -1,4 +1,4 @@
-//! Schema migrations view logic, lifted from the egui `migrations` screen.
+//! Schema migrations view logic.
 //! See lib.rs.
 //!
 //! The wizard's plain-data state ([`Wizard`], [`Step`], [`DiffView`]), diff
@@ -56,7 +56,7 @@ impl Step {
 
 /// How the diff is presented.
 ///
-/// `Tree` is the web shell's nested, expandable view. `Grid` flattens every
+/// `Tree` is the nested, expandable view. `Grid` flattens every
 /// change into one row and hands it to the results grid, which brings
 /// filtering and sorting for free; a hundred-table diff is unreadable as a
 /// tree and this is the cheap way to search it.
@@ -105,7 +105,7 @@ impl Default for Wizard {
             step: Step::Select,
             source_id: None,
             target_id: None,
-            // The web shell prefilled "public"; anything else is a first
+            // The schema box prefills "public" on Postgres; anything else is a first
             // keystroke every single time for the Postgres majority.
             schema: "public".to_string(),
             diff: None,
@@ -204,7 +204,7 @@ pub fn offline_selection(
     out
 }
 
-/// Render statements for the editor, the way the web shell did: one blank
+/// Render statements for the editor: one blank
 /// line between statements and an explicit terminator on each.
 pub fn statements_to_text(statements: &[String]) -> String {
     if statements.is_empty() {

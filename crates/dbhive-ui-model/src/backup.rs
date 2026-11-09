@@ -1,8 +1,7 @@
 //! Backup manager: the UI-independent part.
 //!
-//! Lifted from the egui `backup` screen so the Slint shell reuses it, tests
-//! and all. Parity target: the React `BackupManagerDialog.tsx` (2.10 in
-//! docs/rust-ui-migration/01-frontend-inventory.md).
+//! Formatting, the create form, matching listed files back to a profile, and
+//! the projection of the list into the results grid.
 //!
 //! The work itself (dump, restore, list, delete, validation) lives in
 //! `dbhive_core::service_backup`. What is here is formatting, the create
@@ -20,7 +19,7 @@ use dbhive_core::service_backup as svc;
 // Formatting
 // ---------------------------------------------------------------------------
 
-/// Human-readable byte count, matching the web shell's `formatBytes`:
+/// Human-readable byte count, matching the `formatBytes` behaviour:
 /// whole bytes below 1 KB, one decimal above.
 pub fn format_bytes(bytes: u64) -> String {
     const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
@@ -196,7 +195,7 @@ pub fn annotate_entries(entries: &mut [BackupEntry], profiles: &[(String, String
 ///
 /// The grid is the only table in the app, so the list goes through it
 /// rather than growing a second one; it also brings sorting and filtering
-/// for free, which the web shell's table had.
+/// for free, with the shared cell formatting.
 pub fn entries_to_result(entries: &[BackupEntry]) -> QueryResult {
     let columns = vec![
         "File".to_string(),

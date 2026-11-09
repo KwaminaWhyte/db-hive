@@ -1,10 +1,6 @@
-//! Command palette and the keyboard shortcut registry, lifted from the egui
-//! `command_palette` screen. See lib.rs.
+//! Command palette and the keyboard shortcut registry. See lib.rs.
 //!
-//! Parity target: the React `CommandPalette` (2.16) plus `shortcutRegistry` /
-//! `KeyboardShortcutsModal` (2.17).
-//!
-//! The React shell kept three separate lists: the palette's 16 commands, the
+//! The UI kept three separate lists: the palette's 16 commands, the
 //! 11-entry shortcut registry, and the `useKeyboardShortcuts` call sites that
 //! actually bound the keys. They drifted, which is how the registry ended up
 //! documenting bindings that no longer existed. Here there is exactly one
@@ -82,7 +78,7 @@ pub enum PaletteAction {
 }
 
 /// Palette section header, and the help modal's category. One enum for both:
-/// two would drift the same way the React lists did.
+/// two would drift the same way the UI lists did.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Group {
     Navigation,
@@ -119,7 +115,7 @@ pub const GROUP_ORDER: [Group; 6] = [
 /// Where a shortcut is live.
 ///
 /// `Ctrl+Enter` must not run a query from the connection list, and `Escape`
-/// must only mean "back" on the connection list. The React shell got this by
+/// must only mean "back" on the connection list. The UI got this by
 /// binding keys inside the route component; here the scope is data.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
@@ -134,8 +130,8 @@ pub enum Scope {
 /// A key, independent of any UI toolkit.
 ///
 /// Covers the keys the registry binds (plus the few named keys that have a
-/// dedicated label). Each shell converts its own key type to and from this;
-/// the egui shell's conversion lives in `screens::command_palette`.
+/// dedicated label). The controller converts Slint key events to and from
+/// this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum KeyCode {
     A,
@@ -214,16 +210,14 @@ impl KeyCode {
     ];
 }
 
-/// The macOS Command symbol. Must match the egui shell's
-/// `theme::glyph::COMMAND`; a test there pins it.
+/// The macOS Command symbol.
 pub const COMMAND_GLYPH: &str = "\u{2318}";
 
 /// A key chord.
 ///
-/// `command` means Cmd on macOS, Ctrl everywhere else (egui's
-/// `Modifiers::COMMAND`). That is the same "a bare Ctrl binding means Cmd on
-/// a Mac" rule the React `parseShortcut` hand-rolled; the shell resolves it
-/// at the input layer so it cannot disagree with what the OS delivered.
+/// `command` means Cmd on macOS, Ctrl everywhere else. A bare Ctrl binding
+/// means Cmd on a Mac; the shell resolves that at the input layer so it
+/// cannot disagree with what the OS delivered.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Chord {
     pub command: bool,
@@ -262,8 +256,8 @@ impl Chord {
 
     /// How specific this chord is, used to order dispatch.
     ///
-    /// egui's `matches_logically` deliberately ignores *extra* Shift and Alt,
-    /// so `Cmd+N` also matches a `Cmd+Shift+N` press. The more-modified chord
+    /// Chord matching deliberately ignores *extra* Shift and Alt, so `Cmd+N`
+    /// also matches a `Cmd+Shift+N` press. The more-modified chord
     /// therefore has to be tested first or "New Window" would never fire.
     fn specificity(&self) -> u8 {
         self.command as u8 + self.shift as u8 + self.alt as u8
@@ -273,8 +267,7 @@ impl Chord {
     ///
     /// Only the Command symbol is used. The bundled fonts carry no Shift,
     /// Option or Control symbols, and a missing glyph renders as an empty box
-    /// rather than failing, so those modifiers are written as words. See the
-    /// egui shell's `theme::glyph`.
+    /// rather than failing, so those modifiers are written as words.
     ///
     /// `mac` is a parameter rather than a `cfg!` so the formatting is
     /// testable for both platforms from either.
@@ -316,13 +309,12 @@ impl Chord {
     }
 }
 
-/// True when built for macOS. The React shell sniffed the user agent; a
+/// True when built for macOS. The UI sniffed the user agent; a
 /// native binary knows at compile time.
 pub const IS_MAC: bool = cfg!(target_os = "macos");
 
-/// Human label for a key, matching the React `KEY_DISPLAY_NAMES` map where
-/// one existed. Letters are the bare uppercase letter, and punctuation is
-/// its symbol, exactly as egui's `Key::symbol_or_name` spelled them.
+/// Human label for a key. Letters are the bare uppercase letter, and
+/// punctuation is its symbol, matching Slint's key names.
 pub fn key_label(key: KeyCode) -> &'static str {
     match key {
         KeyCode::Escape => "Esc",
@@ -745,7 +737,7 @@ pub fn dispatch_order(screen: Scope) -> Vec<&'static Command> {
 /// Score a command against a search needle. Higher is better; `None` means
 /// no match.
 ///
-/// The React palette used a plain case-insensitive `includes`, which put
+/// The UI palette used a plain case-insensitive `includes`, which put
 /// "Schema Migrations" above "Open Settings" for the query "settings" purely
 /// by array order. Ranking fixes that: exact title beats prefix beats word
 /// prefix beats substring beats description beats a fuzzy subsequence.
@@ -1097,7 +1089,7 @@ mod tests {
 
     #[test]
     fn more_specific_chords_dispatch_first() {
-        // egui's `matches_logically` ignores an extra Shift, so Cmd+Shift+N
+        // Chord matching ignores an extra Shift, so Cmd+Shift+N
         // must be tested before Cmd+N or "New Window" is unreachable.
         let order = dispatch_order(Scope::Connections);
         let shift_n = order

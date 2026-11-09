@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Assemble DB Hive.app from the release binary.
 #
-# Tauri produced the bundle for us before; a plain cargo binary needs the
+# the app produced the bundle for us before; a plain cargo binary needs the
 # .app laid out by hand. This is deliberately a script rather than a build
 # dependency: it is a packaging step, not part of `cargo build`.
 #

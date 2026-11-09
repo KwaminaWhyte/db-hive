@@ -1,11 +1,11 @@
 //! The plugin manager panel as headless state, for the Slint shell (and any
 //! later shell).
 //!
-//! [`crate::plugins`] holds the few small helpers the egui screen already
+//! [`crate::plugins`] holds the few small helpers that were already
 //! shared (the tab set, carrying field edits across a re-render, install
 //! dates). The plugin engine, the marketplace catalogue and the plugin store
 //! stay in `dbhive_core::plugins`. This module is what a retained-mode shell
-//! needs on top of them and the egui shell kept inline in its draw code:
+//! needed on top of them:
 //!
 //! - [`PluginsPanel`], the state: what is installed, what is busy, the
 //!   marketplace filters, the interface each plugin last described, the
@@ -1247,7 +1247,7 @@ pub struct Absorbed {
 ///
 /// `SetUi` wins over the call's own return value: a plugin that asks for a
 /// specific interface should get it. `OpenTab` and `Message` have no route in
-/// this shell and are dropped, as the egui shell dropped them.
+/// this shell and are dropped.
 pub fn absorb(plugin_name: &str, returned: Option<PluginUi>, outbox: Vec<HostCall>) -> Absorbed {
     let mut out = Absorbed {
         descriptor: returned,

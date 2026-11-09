@@ -103,13 +103,14 @@ Click the **"Disconnect"** button at the top of the Schema Explorer to close the
 
 ### Writing Queries
 
-The SQL Editor uses Monaco Editor (the same editor as VS Code) with full SQL syntax highlighting.
+The SQL editor highlights SQL syntax and suggests table, column, schema and database names
+from the open connection.
 
 **Features:**
 - Syntax highlighting for SQL
 - Auto-indentation
-- Bracket matching
-- Multi-cursor editing (Alt+Click)
+- Autocomplete, with Ctrl+Space
+- Clear and Stop while a statement runs
 - Find and replace (Ctrl+F)
 
 ### Executing Queries
@@ -405,13 +406,12 @@ ORDER BY count DESC;
 | Select All | Ctrl+A |
 | Undo | Ctrl+Z |
 | Redo | Ctrl+Y or Ctrl+Shift+Z |
-| Multi-cursor | Alt+Click |
+| Stop a running query | the Stop button |
 
-**Monaco Editor Tips:**
-- Select text and press Ctrl+D to select next occurrence
-- Alt+↑/↓ to move line up/down
-- Ctrl+Shift+K to delete line
-- Ctrl+L to select current line
+**Editor tips:**
+- Right-click a query tab to close it, the others, or everything to the right
+- Drag the bar under the editor to resize it; the size is remembered
+- Select a result cell to copy it, its row, or its column
 
 ### Theme Switching
 

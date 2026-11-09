@@ -2,7 +2,7 @@
 //!
 //! This module defines the custom error types used throughout the application.
 //! The `DbError` enum represents all possible errors that can occur during
-//! database operations and is serializable for transmission over Tauri's IPC.
+//! database operations and is serializable for transmission over serialization.
 
 use serde::Serializer;
 use thiserror::Error;
@@ -11,7 +11,7 @@ use thiserror::Error;
 ///
 /// This enum covers all possible error scenarios in DB Hive, from connection
 /// failures to query execution errors. It implements `Serialize` to enable
-/// transmission to the frontend via Tauri's IPC mechanism.
+/// transmission to the frontend via serialization.
 #[derive(Debug, Error)]
 pub enum DbError {
     /// Error occurred while establishing or maintaining a database connection
@@ -56,7 +56,7 @@ pub enum DbError {
 }
 
 impl serde::Serialize for DbError {
-    /// Serialize the error for transmission over Tauri's IPC
+    /// Serialize the error for transmission over serialization
     ///
     /// Converts the error into a JSON object with `kind` and `message` fields:
     /// ```json

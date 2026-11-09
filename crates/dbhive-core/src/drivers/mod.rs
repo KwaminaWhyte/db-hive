@@ -19,12 +19,12 @@ pub mod turso;
 
 /// Hard cap on the number of rows materialized from a single `execute_query`
 /// call. Raw user SQL (e.g. `SELECT * FROM huge_table`) has no inherent bound;
-/// without this cap a driver would collect every row into a `Vec`, serialize
-/// the whole set across IPC, and the WebView would re-allocate it again: /// enough to OOM the app on large tables.
+/// without this cap a driver would collect every row into a `Vec` and the UI
+/// model would copy it again: enough to exhaust memory on large tables.
 ///
 /// Each driver enforces this cap inside its row-collection loop, fetching at
 /// most `MAX_RESULT_ROWS + 1` rows so that
-/// `QueryExecutionResult::from_query_result` (commands/query.rs) can detect
+/// `QueryExecutionResult::from_query_result` can detect
 /// the overflow sentinel row, truncate to `MAX_RESULT_ROWS`, and set the
 /// `truncated` flag for the UI ("add a LIMIT clause" hint).
 pub const MAX_RESULT_ROWS: usize = 50_000;

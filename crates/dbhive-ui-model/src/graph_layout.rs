@@ -2,8 +2,8 @@
 //!
 //! The ER diagram and the visual schema designer both need to place boxes
 //! (tables) joined by edges (foreign keys) so the result is readable without
-//! the user dragging anything. dagre did this in the web shell; there is no
-//! equivalent Rust crate, so this is a compact Sugiyama-style layout:
+//! the user dragging anything. There is no dagre-equivalent Rust crate, so
+//! this is a compact Sugiyama-style layout:
 //!
 //!   1. break cycles, so the rest can assume a DAG
 //!   2. assign each node a layer (longest path from a root)
@@ -17,7 +17,7 @@
 //! dagre does, and it is good enough that a schema of a few dozen tables
 //! reads cleanly.
 //!
-//! Everything here is pure. No egui types, so it can be tested directly.
+//! Everything here is pure. No toolkit types, so it can be tested directly.
 
 use std::collections::{HashMap, HashSet, VecDeque};
 

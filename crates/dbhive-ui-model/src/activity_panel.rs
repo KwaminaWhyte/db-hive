@@ -1,8 +1,7 @@
 //! What the Slint Activity Monitor shows, as plain values.
 //!
 //! `activity_monitor` holds the formatting, the filter inputs and the poll
-//! arithmetic that both shells share. This module is the layer the Slint panel
-//! needs on top of it and the egui screen never had to separate: the grid
+//! arithmetic. This module is the layer the panel needs on top of it: the grid
 //! projections with readable cells, the header-click to sort mapping, the
 //! stat tiles and breakdown bars, the detail pane's facts, the chart paths,
 //! and the gate that keeps polling from overlapping itself or running while

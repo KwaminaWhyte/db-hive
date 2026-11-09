@@ -1,13 +1,9 @@
 //! Update checking.
 //!
-//! Replaces `tauri-plugin-updater`, which fetched a `latest.json` manifest,
-//! verified it against a minisign public key, then downloaded and swapped
-//! the app in place.
+//! DB Hive checks for a newer release and reports it. It does not download
+//! or install one. That is a deliberate limit, not an oversight:
 //!
-//! This implementation checks and reports; it does not install. That is a
-//! deliberate limit, not an oversight:
-//!
-//!   - The signing story is not in place. The Tauri config carries a public
+//!   - The signing story is not in place. The release config carries a public
 //!     key, but the release build fails with "A public key has been found,
 //!     but no private key", so nothing is currently signed. An updater that
 //!     downloads and executes an unverified binary is a remote code
@@ -22,12 +18,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::models::DbError;
 
-/// Where the Tauri shell looked, kept so both agree on what "latest" means.
+/// Where the update manifest lives.
 pub const MANIFEST_URL: &str =
     "https://github.com/KwaminaWhyte/db-hive/releases/latest/download/latest.json";
 pub const RELEASES_URL: &str = "https://github.com/KwaminaWhyte/db-hive/releases/latest";
 
-/// The subset of the Tauri updater manifest that matters here.
+/// The subset of the update manifest that matters here.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UpdateManifest {
     pub version: String,

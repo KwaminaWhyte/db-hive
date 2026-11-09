@@ -1,7 +1,7 @@
 //! What the Slint migrations panel shows, as plain values.
 //!
 //! `migrations` holds the wizard's state, statement splitting and diff
-//! projection that both shells share. This module adds the parts the Slint
+//! projection. This module adds the parts the Slint
 //! panel needs on top: the connection choices, the schema a connection
 //! implies, why a step cannot proceed, the diff as an expandable tree, how
 //! dangerous the SQL is, what the apply confirmation says, and how the result

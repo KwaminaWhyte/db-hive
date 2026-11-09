@@ -1,21 +1,20 @@
 //! Plugin manifests, permissions and installed-plugin state.
 //!
-//! The on-disk format is exactly the `manifest.json` the Tauri shell read,
-//! so an existing plugin directory keeps working. What changed is that
-//! parsing now *validates* instead of trusting:
+//! The on-disk format is `manifest.json` in the plugin directory. Parsing
+//! *validates* rather than trusting:
 //!
 //! * `id` must be a plain identifier. It becomes a directory name and a
 //!   storage key, so `../` in it was a path-traversal primitive.
 //! * `main` must be a relative path with no `..`. It is joined to the plugin
-//!   directory and read; the previous code would happily read
-//!   `../../../../etc/passwd` as "plugin source".
-//! * version compatibility compares versions numerically. The previous code
-//!   compared them as strings, which makes "0.9.0" newer than "0.13.0".
+//!   directory and read; without that check, `../../../../etc/passwd` would
+//!   be read as "plugin source".
+//! * version compatibility compares versions numerically, so "0.9.0" is older
+//!   than "0.13.0" (string comparison would order them the other way).
 //!
 //! A manifest that fails any of these is rejected outright. Failing closed on
 //! a plugin is cheap; loading a hostile one is not.
 
-#![allow(dead_code)] // shared by both shells; neither uses every accessor.
+#![allow(dead_code)] // part of the plugin engine; not every accessor is used.
 
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -121,7 +120,7 @@ impl PluginCategory {
         }
     }
 
-    /// Marketplace tab label, matching the React `categoryLabels`.
+    /// Marketplace tab label, matching the UI `categoryLabels`.
     pub fn label(self) -> &'static str {
         match self {
             PluginCategory::Driver => "Database Drivers",
@@ -169,7 +168,7 @@ pub enum PluginPermission {
     ReadMetadata,
     CreateTab,
     /// Spelled `modifyUI` on the wire, not `modifyUi`: that is what every
-    /// shipped `manifest.json` and the web shell's permission table say, and
+    /// shipped `manifest.json` and the established permission table say, and
     /// renaming it would make existing plugins fail to load.
     #[serde(rename = "modifyUI")]
     ModifyUi,
@@ -214,7 +213,7 @@ impl PluginPermission {
         }
     }
 
-    /// The 12 human-readable labels the React shell showed.
+    /// The 12 human-readable labels the UI showed.
     pub fn label(self) -> &'static str {
         match self {
             PluginPermission::ReadFiles => "Read Files",
@@ -282,7 +281,7 @@ impl PluginPermission {
     }
 }
 
-/// Comma-separated labels, matching the React `formatPermissions`.
+/// Comma-separated labels, matching the UI `formatPermissions`.
 pub fn permission_summary(permissions: &[PluginPermission]) -> String {
     if permissions.is_empty() {
         return "No special permissions required".to_string();
@@ -316,7 +315,7 @@ impl Plugin {
 
     /// Enable or disable.
     ///
-    /// Disabling also clears `loaded`: the React shell unloaded the runtime
+    /// Disabling also clears `loaded`: the UI unloaded the runtime
     /// before disabling, and a plugin that is disabled but still marked
     /// loaded would keep its registered UI on screen.
     pub fn set_enabled(&mut self, enabled: bool) {
@@ -527,7 +526,7 @@ impl PluginManifest {
 
 /// Compare two dotted version strings numerically.
 ///
-/// The Tauri implementation compared them as strings, which ordered "0.9.0"
+/// The implementation compared them as strings, which ordered "0.9.0"
 /// after "0.13.0" and refused compatible plugins. Missing components count as
 /// zero, so "1.0" == "1.0.0". Non-numeric components (pre-release tags)
 /// compare as zero and then lexically, which is not full semver but is

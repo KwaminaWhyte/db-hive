@@ -1,5 +1,4 @@
-//! AI assistant view logic, lifted from the egui `ai_assistant` screen.
-//! See lib.rs.
+//! AI assistant view logic. See lib.rs.
 //!
 //! The plain-data transcript (`Kind`, `Who`, `Turn`), the returned
 //! `AiAction`, the enable/disable rules (`Readiness`), the guided empty
@@ -110,7 +109,7 @@ impl Turn {
 // Pure logic
 // ===========================================================================
 
-/// Format a request duration the way the web shell did: milliseconds below a
+/// Format a request duration: milliseconds below a
 /// second, then one decimal of seconds.
 pub fn format_duration(ms: u64) -> String {
     if ms < 1000 {

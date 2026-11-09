@@ -8,7 +8,7 @@
 //! `MigrationsState` global in the window.
 //!
 //! There is no migration history to list or roll back: the backend keeps none
-//! (docs/rust-ui-migration/04-plan.md). The transaction toggle is the only
+//! The transaction toggle is the only
 //! undo, and it covers the run in progress.
 
 use std::collections::HashSet;

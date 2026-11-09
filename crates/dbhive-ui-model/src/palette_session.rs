@@ -3,7 +3,7 @@
 //!
 //! [`command_palette`](crate::command_palette) owns the registry: which
 //! commands exist, their chords, ranking and grouping. This module adds what
-//! a shell needs on top of it and the egui shell kept inline in its draw code:
+//! a shell needs on top of it:
 //!
 //! - a stable text id per command ([`CommandId::slug`]) so a menu, the palette
 //!   and a test can all name a command as a string;
@@ -247,7 +247,7 @@ pub fn status(id: CommandId, ctx: &CommandContext) -> Status {
         CommandId::GoConnections if ctx.screen == Scope::Connections => {
             Status::Disabled("Already on the connections screen")
         }
-        // The registry lists History as global (the egui shell had a
+        // The registry lists History as global (the older layout had a
         // history screen of its own); here it is a panel over a workspace.
         CommandId::GoHistory if ctx.screen != Scope::Workspace => {
             Status::Disabled("Open a connection first")
@@ -276,7 +276,7 @@ pub fn status(id: CommandId, ctx: &CommandContext) -> Status {
 /// `text` is the event's text as the toolkit reports it. `command` is Ctrl or
 /// Meta: Slint reports Cmd and Ctrl differently per platform, so either one
 /// is the registry's "command" modifier (a bare Ctrl binding means Cmd on a
-/// Mac, the same rule the React shell had).
+/// Mac, the same rule the UI had).
 ///
 /// `?` is produced with Shift on most layouts, so its Shift is implied by the
 /// character and ignored; letters keep Shift because `Cmd+Shift+N` and

@@ -1,6 +1,6 @@
 //! The visual schema designer's editing state for the Slint shell.
 //!
-//! `schema_designer` (lifted from egui) holds the design model, validation,
+//! `schema_designer` holds the design model, validation,
 //! DDL generation and relationship resolution. This adds what an editing
 //! session needs on top: ids, selection, positions with snap, every edit the
 //! properties panel can make (with references kept consistent when a table or

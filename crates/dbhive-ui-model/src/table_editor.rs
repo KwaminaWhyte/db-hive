@@ -1,7 +1,6 @@
 //! Pure logic for the table editor: create, alter and drop tables, and
 //! create databases.
 //!
-//! Lifted from the egui `table_editor` screen so any shell can reuse it. The
 //! SQL is produced by `dbhive_core::ddl`, which already knows each dialect,
 //! so nothing here writes DDL by hand.
 //!

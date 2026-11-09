@@ -1,8 +1,8 @@
 //! Design tokens: colours, radii and the type scale.
 //!
-//! The single source of truth for how DB Hive looks. The egui theme builds
+//! The single source of truth for how DB Hive looks. The theme builds
 //! its visuals from these, and the Slint shell generates its `Theme` global
-//! from them at build time, so both shells, and the contrast tests below,
+//! from them at build time, so the app and the contrast tests below,
 //! always see the same values.
 
 /// An sRGB colour.

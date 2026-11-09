@@ -1,9 +1,8 @@
 //! Plugins: manifests, lifecycle, the JavaScript runtime, and the
 //! declarative interface a plugin may describe.
 //!
-//! Ported out of `src-tauri/src/plugins` so both shells share one
-//! implementation. Nothing here knows about a window, an `AppHandle` or an
-//! event emitter; state changes are published on a broadcast channel and
+//! The plugin engine, shared by the app and its tests. Nothing here knows
+//! about a window, a framework handle or an event emitter; state changes are published on a broadcast channel and
 //! anything a plugin asks the host to do is returned to the caller.
 //!
 //! # What a plugin is
@@ -64,7 +63,7 @@ use serde::{Deserialize, Serialize};
 
 /// A lifecycle change, published on [`PluginManager::subscribe`].
 ///
-/// This is the payload the Tauri shell emitted as `plugin-event`; it is kept
+/// This is the payload the app emitted as `plugin-event`; it is kept
 /// identical so the two shells report the same things.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]

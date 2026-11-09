@@ -1,11 +1,7 @@
 //! Shell-agnostic backup and restore operations.
 //!
-//! Lifted from the `#[tauri::command]` handlers in
-//! `src-tauri/src/commands/backup.rs`, which were already portable: their
-//! bodies only touch `AppState`, the filesystem and the native dump tools.
-//! Only the signatures were Tauri-shaped (`State<'_, Mutex<AppState>>`).
-//! Everything here takes a plain `&Mutex<AppState>` so both shells run the
-//! same code.
+//! Backup and restore take a plain `&Mutex<AppState>`; their bodies only
+//! touch the state, the filesystem and the native dump tools.
 //!
 //! Backups go through the database's own CLI tools (`pg_dump`, `mysqldump`,
 //! `mongodump`, and a plain file copy for SQLite) rather than being
@@ -14,9 +10,9 @@
 //!
 //! ## Progress
 //!
-//! The Tauri shell had no progress reporting at all: a dump either finished
-//! or it did not. The native shell needs something to show during a
-//! multi-minute `pg_dump`, so the long operations take a [`ProgressSink`].
+//! A dump either finishes or it does not, and the app needs something to show
+//! during a multi-minute `pg_dump`, so the long operations take a
+//! [`ProgressSink`].
 //!
 //! It is an **unbounded** `tokio::sync::mpsc` sender rather than a
 //! `Arc<Mutex<Progress>>` for two reasons: sending must never block (these
@@ -202,7 +198,7 @@ pub fn backup_filename(connection_name: &str, ts: i64, driver: &DbDriver) -> Str
 /// [`backup_filename`].
 ///
 /// The trailing `_{digits}` is only stripped when it really is a timestamp.
-/// The Tauri version stripped any trailing `_segment`, which turned an
+/// The implementation stripped any trailing `_segment`, which turned an
 /// unrelated file called `nightly_dump.sql` into the connection "nightly".
 pub fn connection_name_from_stem(stem: &str) -> String {
     match stem.rsplit_once('_') {
@@ -236,7 +232,7 @@ pub fn supports_backup(driver: &DbDriver) -> bool {
 /// Whether a dump can be restored for this driver.
 ///
 /// Narrower than [`supports_backup`]: there is no `mongorestore` path here,
-/// matching the Tauri implementation.
+/// matching the implementation.
 pub fn supports_restore(driver: &DbDriver) -> bool {
     matches!(
         driver,
@@ -370,8 +366,8 @@ pub fn mysql_drop_recreate_sql(database: &str) -> Result<String, DbError> {
     ))
 }
 
-/// The database a dump of this profile targets, with the same defaults the
-/// Tauri handler applied.
+/// The database a dump of this profile targets, with the usual per-driver
+/// defaults.
 pub fn target_database(profile: &ConnectionProfile) -> String {
     match profile.driver {
         DbDriver::Postgres | DbDriver::Supabase | DbDriver::Neon => profile
@@ -745,8 +741,8 @@ fn run_dump(
 
         DbDriver::MongoDb => {
             // NOTE: mongodump writes a directory tree under --out, not the
-            // single `.bak` file named in the entry. Carried over from the
-            // Tauri implementation; the entry's size therefore reads 0 and
+            // single `.bak` file named in the entry, so the entry's size
+            // therefore reads 0 and
             // the dump does not appear in the list. Fixing it means changing
             // the on-disk layout, which is out of scope for the port.
             let out_dir_str = out_dir.to_string_lossy().to_string();
@@ -819,8 +815,8 @@ fn run_dump(
 /// Load a backup file back into a connection's database. Destructive.
 ///
 /// With `drop_existing` the target database is dropped and recreated first.
-/// The Tauri handler accepted that flag and silently ignored it; here it is
-/// honoured, because a destructive toggle that does nothing is the worse
+/// The flag is honoured rather than ignored, because a destructive toggle that
+/// does nothing is the worse
 /// failure mode: the user believes the target was cleared when it was not,
 /// and the restore then fails halfway on duplicate objects.
 pub async fn restore_backup(
@@ -1140,7 +1136,7 @@ mod tests {
 
     #[test]
     fn stem_without_a_numeric_suffix_is_kept_whole() {
-        // The Tauri version turned this into "nightly", inventing a
+        // The implementation turned this into "nightly", inventing a
         // connection that does not exist.
         assert_eq!(connection_name_from_stem("nightly_dump"), "nightly_dump");
         assert_eq!(connection_name_from_stem("plain"), "plain");
@@ -1156,7 +1152,7 @@ mod tests {
         assert!(is_backup_file(Path::new("/b/x.gz")));
         assert!(!is_backup_file(Path::new("/b/notes.txt")));
         assert!(!is_backup_file(Path::new("/b/noextension")));
-        // Case matters, matching the Tauri implementation.
+        // Case matters, matching the implementation.
         assert!(!is_backup_file(Path::new("/b/x.SQL")));
     }
 

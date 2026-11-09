@@ -4,9 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## READ FIRST: the shell
 
-The app is `crates/dbhive-slint`. The Tauri+React and egui shells are gone
-(kept only in git history and `docs/rust-ui-migration/`). The cutover record
-and what remains open are in `docs/slint-migration/plan.md`.
+The app is `crates/dbhive-slint`: one shell, one binary, no WebView. What
+exists and what remains open are in `docs/slint-migration/plan.md`.
 
 - **Do not change UI toolkit.** The toolkit was never the cause of the
   "looks bad" problem. Read `docs/ui-guidelines.md` section 1 before proposing it.
@@ -34,8 +33,7 @@ Hooks in `.claude/settings.json`: `rustfmt --edition 2021` on every edited
 
 DB Hive is a cross-platform database client: a **native Rust desktop app**
 supporting PostgreSQL, MySQL, SQLite, MongoDB, Redis, SQL Server and Turso.
-It was Tauri 2.0 + React 19 and moved to one native binary to cut idle memory
-from 400-650 MB to 111-130 MB (`docs/rust-ui-migration/`).
+One native binary; idle memory is 111-130 MB.
 
 ## Commands
 
@@ -88,7 +86,7 @@ globals are per window; per-window state lives in `Session`, shared state in
 ### Persistence
 
 `dbhive_core::storage::JsonStore` reproduces the exact on-disk format and
-location `tauri_plugin_store` used
+location the stored format used
 (`~/Library/Application Support/com.kwamina.db-hive/*.json` and the platform
 equivalents), so an existing installation keeps its connections, history and
 snippets. Do not change `APP_IDENTIFIER`; it orphans every user's data.
@@ -145,6 +143,4 @@ agents report the wiring they need and apply it yourself.
 
 - `docs/slint-migration/plan.md`: what is done, what is open, and why
 - `docs/ui-guidelines.md`: UI rules, read before any UI work
-- `docs/rust-ui-migration/`: historical record (measurements, parity
-  inventory, egui conventions); do not follow its egui instructions
 - `docs/plugin-development.md`, `docs/user-guide.md`

@@ -1,9 +1,7 @@
 //! Shell-agnostic stored procedure and function operations.
 //!
-//! These are the bodies of the `#[tauri::command]` handlers in
-//! `src-tauri/src/commands/procedures.rs`, taking a plain `&Mutex<AppState>`
-//! instead of Tauri's `State`, so both shells run the same code. See
-//! docs/rust-ui-migration/03-conventions.md.
+//! Every operation takes a plain `&Mutex<AppState>` and returns values the
+//! panel can draw.
 //!
 //! Everything that can be a pure function is one: the per-driver catalogue
 //! SQL, the row mapping, the argument rendering and the CALL/SELECT/EXEC

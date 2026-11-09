@@ -1,7 +1,7 @@
 //! Plugin manager view logic: the tab set, carrying field edits across a
 //! re-render, bundled plugin lookup, and date display.
 //!
-//! Lifted from the egui `screens::plugins`, which keeps the drawing, the
+//! `screens::plugins`, which keeps the drawing, the
 //! jobs and the engine calls. The plugin engine itself stays in
 //! `dbhive_core::plugins`.
 
@@ -65,7 +65,7 @@ pub fn merge_fields(next: &PluginUi, previous: &descriptor::Fields) -> descripto
     fields
 }
 
-/// "2026-01-05T10:00:00Z" -> "2026-01-05". The React shell used date-fns;
+/// "2026-01-05T10:00:00Z" -> "2026-01-05". The UI used date-fns;
 /// the date part of an RFC 3339 stamp needs no library, and anything that is
 /// not one is shown as it arrived rather than as "Invalid Date".
 pub fn short_date(raw: &str) -> String {

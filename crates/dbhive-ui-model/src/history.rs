@@ -1,14 +1,10 @@
 //! Query history, saved snippets and query templates: the UI-independent part.
 //!
-//! Lifted from the egui `history` screen so the Slint shell reuses it, tests
-//! and all. Parity target: the React `HistoryPanel`, `SnippetSidebar` and
-//! `TemplatesPanel`.
+//! Rows, filters and parameter handling, tested here.
 //!
 //! History and snippets live in `AppState` (`history.json`, `snippets.json`).
-//! Templates had no backend at all in the web shell: `useQueryTemplates`
-//! kept them in `localStorage`, which does not exist here, so they are
-//! persisted to `templates.json` in the same application data directory
-//! through `dbhive_core::storage::JsonStore`.
+//! Templates are persisted to `templates.json` in the same application data
+//! directory through `dbhive_core::storage::JsonStore`.
 
 use std::collections::{BTreeSet, HashMap};
 
@@ -19,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 /// Row-count choices offered by the history limit selector.
 ///
-/// Same four values the web shell's `<Select>` had; changing them changes
+/// Same four values the `<Select>` behaviour had; changing them changes
 /// what an existing user sees, so they are a constant rather than a range.
 pub const HISTORY_LIMITS: [usize; 4] = [25, 50, 100, 500];
 
@@ -33,8 +29,8 @@ pub const TEMPLATE_KEY: &str = "templates";
 
 /// A template parameter's type.
 ///
-/// Serialised as the lowercase strings the web shell wrote, so a
-/// `query-templates-*.json` exported from the React build imports here
+/// Serialised as lowercase strings, so a
+/// `query-templates-*.json` exported from the UI build imports here
 /// unchanged. Unknown values decode to `String` instead of failing: a
 /// template file that mentions a type we do not know is still a template the
 /// user wants to keep.
@@ -166,7 +162,7 @@ impl QueryTemplate {
 // Pure logic
 // ===========================================================================
 
-/// Entries to show, mirroring what the web shell ended up with.
+/// Entries to show.
 ///
 /// The backend command filtered by connection, sorted newest first and
 /// truncated to `limit`; the panel then dropped anything from another
@@ -186,7 +182,7 @@ pub fn filter_history(
         .collect();
 
     // ISO 8601 with a fixed offset sorts correctly as text, which is what
-    // the Tauri command relied on too.
+    // the original command relied on too.
     rows.sort_by(|a, b| b.executed_at.cmp(&a.executed_at));
     rows.truncate(limit);
 
@@ -227,8 +223,8 @@ pub fn format_relative(iso: &str, now: DateTime<Utc>) -> String {
 
 /// `1234` -> `1.23s`, `12` -> `12ms`, missing or zero -> `N/A`.
 ///
-/// Zero counting as "unknown" is deliberate: the web shell's `if (!ms)`
-/// treated 0 as absent, and a driver that reports 0 means "not measured".
+/// Zero counting as "unknown" is deliberate: a driver that reports 0 means
+/// "not measured".
 pub fn format_execution_time(ms: Option<u64>) -> String {
     match ms {
         None | Some(0) => "N/A".to_string(),
@@ -292,8 +288,7 @@ pub fn snippet_tags(snippets: &[QuerySnippet]) -> Vec<String> {
 
 /// Templates matching the category pill and the search box.
 ///
-/// The web shell's panel searched name, description and tags but not the SQL
-/// body (its `searchTemplates` helper did, and was never called). Same here.
+/// Search covers name, description and tags, not the SQL body.
 pub fn filter_templates<'a>(
     templates: &'a [QueryTemplate],
     search: &str,
@@ -344,9 +339,8 @@ pub struct Placeholder {
 /// Find every placeholder, in order.
 ///
 /// Hand-written rather than a regex because the shell crate has no `regex`
-/// dependency, and this has to accept exactly what the web shell's
-/// `/\{\{([a-zA-Z_][a-zA-Z0-9_]*)(?::([a-zA-Z]+))?\}\}/g` accepted:
-/// an identifier-shaped name and, optionally, an all-alphabetic type. A
+/// dependency, and this accepts the `{{name:type}}` form: an
+/// identifier-shaped name and, optionally, an all-alphabetic type. A
 /// `{{...}}` that does not fit is left alone, not treated as a parameter.
 pub fn scan_placeholders(sql: &str) -> Vec<Placeholder> {
     let bytes = sql.as_bytes();
@@ -441,7 +435,7 @@ pub fn substitute(sql: &str, render: impl Fn(&Placeholder) -> Option<String>) ->
 ///
 /// Templates are inlined text, not bound parameters, so quoting is the only
 /// thing standing between a value and an injection. Single quotes are
-/// doubled, as the web shell did.
+/// doubled.
 pub fn format_parameter_for_sql(value: &str, ty: ParamType) -> String {
     match ty {
         ParamType::Integer | ParamType::Decimal => value.to_string(),
@@ -493,7 +487,7 @@ fn is_integer(v: &str) -> bool {
 }
 
 /// `-?\d+\.?\d*`: at least one leading digit, an optional point, then
-/// optional digits. `1.` is valid, `.5` is not, matching the web shell.
+/// optional digits. `1.` is valid, `.5` is not.
 fn is_decimal(v: &str) -> bool {
     let body = v.strip_prefix('-').unwrap_or(v);
     let mut chars = body.chars().peekable();
@@ -599,7 +593,7 @@ pub fn validate_template_values(
 /// Rebuild a parameter list from the SQL, keeping the settings the user
 /// already configured for parameters that survived the edit.
 ///
-/// This is the web shell's two-way live sync: type comes from the SQL (it is
+/// This is a two-way live sync: type comes from the SQL (it is
 /// written there), everything else comes from the existing definition.
 pub fn sync_parameters(sql: &str, existing: &[TemplateParameter]) -> Vec<TemplateParameter> {
     extract_parameter_definitions(sql)
@@ -623,7 +617,7 @@ pub fn sync_parameters(sql: &str, existing: &[TemplateParameter]) -> Vec<Templat
         .collect()
 }
 
-/// `user_id` -> `User Id`, as the web shell's label default did.
+/// `user_id` -> `User Id`.
 fn humanize(name: &str) -> String {
     name.split('_')
         .filter(|w| !w.is_empty())
@@ -710,9 +704,8 @@ pub fn save_templates(templates: &[QueryTemplate]) -> Result<(), String> {
 
 /// Where an export lands.
 ///
-/// The web shell handed a Blob to the browser's download machinery; there is
-/// no such thing here and the shell has no file-dialog dependency, so the
-/// file goes next to the other stores and the path is reported in a toast.
+/// The shell has no download machinery of its own, so the file goes next to
+/// the other stores and the path is reported in a toast.
 pub fn export_path() -> Result<std::path::PathBuf, String> {
     let dir = dbhive_core::storage::app_data_dir().map_err(|e| e.to_string())?;
     let stamp = Local::now().format("%Y-%m-%d");
@@ -954,7 +947,7 @@ mod tests {
     #[test]
     fn ignores_malformed_placeholders() {
         // A leading digit, an empty type and an unclosed brace are all
-        // rejected by the web shell's regex, so they are rejected here.
+        // rejected by the placeholder scanner, so they are rejected here.
         assert!(scan_placeholders("{{1bad}}").is_empty());
         assert!(scan_placeholders("{{bad:}}").is_empty());
         assert!(scan_placeholders("{{bad}").is_empty());

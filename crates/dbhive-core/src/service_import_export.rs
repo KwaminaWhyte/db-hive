@@ -1,9 +1,7 @@
 //! Shell-agnostic import and export operations.
 //!
-//! Lifted from the Tauri handlers in `src-tauri/src/commands/export.rs` and
-//! `src-tauri/src/commands/data_import.rs` so both shells run one
-//! implementation. Everything here takes a plain `&Mutex<AppState>` and knows
-//! nothing about windows, dialogs or IPC.
+//! Every operation takes a plain `&Mutex<AppState>` and knows nothing about
+//! windows, dialogs or IPC.
 //!
 //! The file is split into pure builders and the async operations that use
 //! them. That split is deliberate: every string that ends up in a file or in
@@ -37,10 +35,10 @@ use crate::models::metadata::ColumnInfo;
 use crate::models::{DbDriver, DbError};
 use crate::state::AppState;
 
-/// How many rows a file preview reads. Matches the React wizard.
+/// How many rows a file preview reads.
 pub const MAX_PREVIEW_ROWS: usize = 100;
 
-/// Types offered in the column-mapping dropdown, same list the React wizard had.
+/// Types offered in the column-mapping dropdown.
 pub const DATA_TYPES: [&str; 14] = [
     "TEXT",
     "INTEGER",
@@ -144,8 +142,8 @@ pub fn dump_support(driver: &DbDriver) -> DumpSupport {
             create: true,
             data: true,
         },
-        // T-SQL can be dropped and its rows read, but the CREATE TABLE the
-        // original produced was Postgres-shaped and would not run.
+        // T-SQL can be dropped and its rows read, but its CREATE TABLE needs
+        // the SQL Server dialect, so dump creation is off.
         DbDriver::SqlServer => DumpSupport {
             drop: true,
             create: false,
@@ -231,7 +229,7 @@ pub struct CsvOptions {
     pub include_headers: bool,
     pub quoting: CsvQuoting,
     /// Text written for a database NULL. Empty by default so a NULL and an
-    /// empty string look the same, matching the Tauri exporter; set it to
+    /// empty string look the same, matching the exporter; set it to
     /// something like `\N` to tell them apart.
     pub null_text: String,
     /// CRLF line endings, which Excel on Windows is happier with.
@@ -1519,9 +1517,8 @@ fn date_patterns() -> &'static [regex::Regex] {
 /// Guess a column's type from up to 50 non-empty samples.
 ///
 /// Boolean is checked first and accepts 1/0, so a column of only ones and
-/// zeroes is reported BOOLEAN rather than INTEGER. That is the Tauri shell's
-/// behaviour and it is kept, because the guess is only a default the user
-/// overrides in the mapping step.
+/// zeroes is reported BOOLEAN rather than INTEGER. The guess is only a
+/// default the user overrides in the mapping step.
 pub fn detect_column_type(samples: &[String]) -> String {
     if samples.is_empty() {
         return "TEXT".to_string();
@@ -1645,7 +1642,7 @@ pub struct ImportResult {
 
 /// Suggest a mapping for each source column.
 ///
-/// Matching is case-insensitive on the name, which is what the React wizard
+/// Matching is case-insensitive on the name, which is what the UI wizard
 /// did; unmatched columns come back with an empty target so the user has to
 /// choose one or skip it.
 pub fn auto_map_columns(
@@ -1686,7 +1683,7 @@ pub fn active_mappings(mappings: &[ColumnMapping]) -> Vec<&ColumnMapping> {
 ///
 /// `None` means SQL NULL. An empty cell falls back to the mapping's default
 /// value when it has one, which is what "Default value if source is empty"
-/// promised in the React wizard but the Tauri handler only applied when the
+/// promised in the UI wizard but the handler only applied when the
 /// source column was missing entirely.
 pub fn map_row(
     source_columns: &[String],
@@ -1771,7 +1768,7 @@ pub fn insert_statement(
 
 /// `CREATE TABLE IF NOT EXISTS` from the mapping's target types.
 ///
-/// The React wizard exposed a "create table" option that was never wired to
+/// The UI wizard exposed a "create table" option that was never wired to
 /// anything; this is what it should have generated.
 pub fn create_table_from_mappings(
     driver: &DbDriver,

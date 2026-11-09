@@ -1,15 +1,14 @@
 //! The JavaScript runtime plugins execute in (Boa).
 //!
-//! Ported from the Tauri shell. What changed:
+//! The JavaScript runtime. What it does:
 //!
-//! * No `AppHandle`. The runtime is constructed with the plugin's data
-//!   directory and nothing else, so it can run under any shell.
-//! * Where the old runtime emitted a Tauri event (notifications, UI
-//!   registration), it now records a [`HostCall`] that the caller collects
-//!   with [`PluginRuntimeSync::take_outbox`]. Events were the only reason
-//!   this file knew about a window.
+//! * No framework handle. The runtime is constructed with the plugin's data
+//!   directory and nothing else, so it can run anywhere.
+//! * Host events (notifications, UI registration) are recorded as a
+//!   [`HostCall`] that the caller collects with
+//!   [`PluginRuntimeSync::take_outbox`], rather than emitted from here.
 //! * A plugin describes its interface as data (`super::ui::PluginUi`) rather
-//!   than returning something a React renderer would interpret. `setUi` and
+//!   than returning markup a renderer would interpret. `setUi` and
 //!   `renderUi` parse and validate that descriptor here, at the boundary, so
 //!   nothing downstream has to.
 //! * Function names are validated before they are used to build a call

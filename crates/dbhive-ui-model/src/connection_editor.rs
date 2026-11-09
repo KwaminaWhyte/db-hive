@@ -1,5 +1,4 @@
-//! Connection profile form logic, lifted from the egui `connection_editor`
-//! screen. See lib.rs.
+//! Connection profile form logic. See lib.rs.
 //!
 //! Everything that decides *what* the form means: which fields a driver
 //! wants, whether the form is valid, what profile it produces, how a pasted
@@ -188,7 +187,7 @@ pub fn form_from_profile(profile: &ConnectionProfile) -> ConnectionForm {
 /// Which inputs a driver actually wants.
 ///
 /// SQLite is a file, Turso is a URL, and the rest are host/port servers; the
-/// React form branched on the driver in six separate places for this, which
+/// the UI form branched on the driver in six separate places for this, which
 /// is exactly the sort of thing that drifts. It is one function here.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DriverFields {
@@ -261,8 +260,8 @@ pub fn driver_fields(driver: &DbDriver) -> DriverFields {
     }
 }
 
-/// Default port for a driver. Delegates to the core model so the native shell
-/// and the web shell cannot disagree about what "default" means.
+/// Default port for a driver. Delegates to the core model so the form and the
+/// connection cannot disagree about what "default" means.
 pub fn default_port(driver: &DbDriver) -> u16 {
     ConnectionProfile::default_port_for_driver(driver)
 }
@@ -701,7 +700,7 @@ pub type SaveOutcome = Result<(String, Option<String>), DbError>;
 
 /// Dial the profile without registering it as a live connection.
 ///
-/// Mirrors the Tauri `test_connection_command`: bring up a throwaway tunnel if
+/// Mirrors the original `test_connection_command`: bring up a throwaway tunnel if
 /// one is configured, connect, ping, then tear the tunnel down again whatever
 /// the outcome.
 pub async fn test_profile(

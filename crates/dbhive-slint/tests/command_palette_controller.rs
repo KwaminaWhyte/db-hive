@@ -61,7 +61,7 @@ async fn until(what: &str, cond: impl Fn() -> bool) {
     }
 }
 
-/// Give the window a few turns of the event loop to react, for asserting that
+/// Give the window a few turns of the event loop to the UI, for asserting that
 /// something did NOT happen.
 async fn settle() {
     for _ in 0..5 {

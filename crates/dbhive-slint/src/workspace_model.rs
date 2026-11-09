@@ -1,6 +1,6 @@
 //! Pure decisions for the workspace screen: which database and schema a
 //! freshly opened connection lands on, and how a `QueryResult` becomes grid
-//! rows. Lifted from the same decisions the old egui shell's workspace made,
+//! rows. Lifted from the same decisions the old the app's workspace made,
 //! kept here rather than in `dbhive-ui-model` because they are this shell's
 //! own async-flow shape, not logic the two shells share verbatim.
 
@@ -56,7 +56,7 @@ pub fn tables_schema_arg(
 
 /// Turn query rows into what `LazyRows` wants: `None` for a database NULL,
 /// `Some` text otherwise, with numbers and booleans formatted the same way
-/// the egui grid does (`dbhive_ui_model::results_grid::cell_text`).
+/// the app grid does (`dbhive_ui_model::results_grid::cell_text`).
 pub fn to_grid_rows(result: &QueryResult) -> Vec<Vec<Option<String>>> {
     result
         .rows

@@ -383,7 +383,7 @@ pub struct BuilderView {
 impl BuilderEditor {
     pub fn new() -> Self {
         let mut open = [true; 7];
-        // Same defaults as the React builder: the first four open.
+        // Same defaults as the UI builder: the first four open.
         for (i, s) in Section::ALL.iter().enumerate() {
             open[i] = matches!(
                 s,

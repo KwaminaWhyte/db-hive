@@ -1,4 +1,4 @@
-//! Lifted from the egui `er_diagram` screen. See lib.rs.
+//! The ER diagram's sizing, layout and hit testing. See lib.rs.
 //!
 //! The pure half of the entity-relationship diagram: table sizing, the
 //! layout call, pinned-position lookup and hit testing, all in plain world
@@ -26,12 +26,12 @@ impl Point {
     }
 
     pub fn distance(self, other: Point) -> f32 {
-        // Same formula as `egui::Pos2::distance`, so boundaries do not move.
+        // Same distance formula as the canvas uses, so boundaries do not move.
         (self.x - other.x).hypot(self.y - other.y)
     }
 
     /// Whether the point lies inside the box at `min` of size `(w, h)`,
-    /// edges inclusive (matching `egui::Rect::contains`).
+    /// edges inclusive (matching the canvas rectangle test).
     pub fn in_box(self, min: Point, size: (f32, f32)) -> bool {
         min.x <= self.x && self.x <= min.x + size.0 && min.y <= self.y && self.y <= min.y + size.1
     }

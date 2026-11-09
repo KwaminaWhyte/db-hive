@@ -85,7 +85,7 @@ pub struct RestoreOptions {
     pub drop_existing: bool,
 }
 
-/// Progress event sent over a Tauri channel during a long backup/restore
+/// Progress event sent over the job's channel during a long backup/restore
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BackupProgress {

@@ -35,7 +35,7 @@ pub use crate::builder_editor::Change;
 // Type presets
 // ---------------------------------------------------------------------------
 
-/// The nine types the wizard offers, as the React dialog did. Anything more
+/// The nine types the wizard offers, as the UI dialog did. Anything more
 /// exotic is a job for the SQL editor.
 pub const PRESETS: [TypeKind; 9] = [
     TypeKind::Integer,

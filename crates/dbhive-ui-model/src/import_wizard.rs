@@ -1,6 +1,6 @@
 //! The data-import wizard as a state machine, with no toolkit in sight.
 //!
-//! The egui screen kept this state inline with its drawing. Here it is a
+//! The state lives here rather than inline with the drawing. It is a
 //! plain struct: the shell feeds it what the jobs return (a preview, the
 //! target table's columns, a built plan, a result) and reads back what to
 //! draw. Every rule that decides which step is reachable, when a mapping is

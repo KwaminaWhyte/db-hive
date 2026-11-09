@@ -5,7 +5,7 @@ description = "UI-independent view logic for DB Hive: SQL builders, validation, 
 edition = "2021"
 
 # No UI toolkit may be a dependency of this crate, ever. Everything here must
-# be usable, and testable, from egui, Slint or no UI at all.
+# be usable, and testable, from Slint or from no UI at all.
 [dependencies]
 dbhive-core = { path = "../dbhive-core" }
 serde = { version = "1", features = ["derive"] }

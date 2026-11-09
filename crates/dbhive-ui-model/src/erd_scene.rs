@@ -2,9 +2,8 @@
 //! it sits, how relationships are routed and styled, zoom and pan maths, the
 //! minimap, manual-layout persistence and SVG export.
 //!
-//! `er_diagram` (lifted from egui) owns table sizing for the egui canvas and
-//! pinned-position lookup; this module builds on its `DiagramTable` and
-//! `Point` and adds what the web diagram had and the egui one never did:
+//! `er_diagram` owns table sizing and pinned-position lookup; this module
+//! builds on its `DiagramTable` and `Point` and adds:
 //! a column cap with "+N more", junction tables, 1:N versus M:N styling,
 //! edge labels, snap-to-grid dragging, a per-schema saved arrangement in the
 //! `erd-layouts.json` format, a minimap and vector export.

@@ -1,7 +1,6 @@
 //! The plugin directory on disk.
 //!
-//! One directory per plugin, exactly the layout the Tauri shell used, so an
-//! existing installation is picked up unchanged:
+//! One directory per plugin, so a plugin is self-contained:
 //!
 //! ```text
 //! <app data>/plugins/<plugin id>/manifest.json   the plugin's own metadata
@@ -21,7 +20,7 @@
 //! it never trusts a path that came out of a manifest. Scanning a directory
 //! full of hostile plugins is safe.
 
-#![allow(dead_code)] // shared by both shells; neither uses every accessor.
+#![allow(dead_code)] // part of the plugin engine; not every accessor is used.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -260,7 +259,7 @@ impl PluginStore {
     }
 
     /// Write a manifest and an entry point for a plugin with no bundled
-    /// source. The Tauri shell did this so that "install" produced something
+    /// source. The app did this so that "install" produced something
     /// inspectable rather than nothing at all.
     pub fn install_placeholder(
         &self,

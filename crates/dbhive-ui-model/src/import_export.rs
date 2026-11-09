@@ -2,7 +2,7 @@
 //! preview summaries, outcome classification, the target-column projection,
 //! and the wizard's tab, source and step enums.
 //!
-//! Lifted from the egui `screens::import_export`, which keeps the drawing,
+//! `screens::import_export`, which keeps the drawing,
 //! the jobs and the per-screen state. The import/export engine itself stays
 //! in `dbhive_core::service_import_export`.
 
@@ -18,7 +18,7 @@ pub const TABLE_PREVIEW_ROWS: usize = 100;
 // Pure logic: paths, labels, projections
 // ---------------------------------------------------------------------------
 
-/// Delimiters the React wizard offered, as (label, char).
+/// Delimiters the UI wizard offered, as (label, char).
 pub const DELIMITERS: [(&str, char); 4] = [
     ("Comma  ,", ','),
     ("Semicolon  ;", ';'),
@@ -34,7 +34,7 @@ pub fn delimiter_label(d: char) -> String {
         .unwrap_or_else(|| format!("'{}'", d))
 }
 
-/// A default file name, date-stamped the way the React save dialog was.
+/// A default file name, date-stamped the way the UI save dialog was.
 pub fn default_file_name(stem: &str, extension: &str, today: &str) -> String {
     let safe: String = stem
         .chars()
@@ -79,7 +79,7 @@ pub fn preview_summary(preview: &ImportPreview) -> String {
     )
 }
 
-/// Outcome banner for a finished dump import, colour-coded like the React
+/// Outcome banner for a finished dump import, colour-coded like the UI
 /// dialog: cancelled, partial, or clean.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
@@ -175,7 +175,7 @@ pub enum ExportSource {
     Table,
 }
 
-/// The import wizard's linear steps, same shape as the React wizard.
+/// The import wizard's linear steps, same shape as the UI wizard.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
     File,

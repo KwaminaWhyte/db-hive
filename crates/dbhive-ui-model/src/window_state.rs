@@ -1,9 +1,8 @@
 //! Per-window geometry, saved so each window reopens where it was.
 //!
-//! Every window has a label. The first window is `main` (the unsuffixed key,
-//! the same one the old Tauri shell used for its first window); windows
-//! opened later are `window-2`, `window-3` and so on, reusing a free number
-//! when an earlier window closed.
+//! Every window has a label: `main` for the first, then `window-2`,
+//! `window-3` and so on, reusing a free number when an earlier window
+//! closes.
 //!
 //! Sizes and positions are stored in logical pixels, not the physical ones
 //! Slint reports. A window dragged between a Retina screen and a normal one

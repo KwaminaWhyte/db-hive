@@ -1,18 +1,17 @@
 # UI guidelines for DB Hive
 
-Read this before any UI change, in any toolkit. It exists because the UI was rebuilt three times
-(Tauri+React, egui, Slint) chasing "looks nicer", and each time the real causes stayed. These rules
-come from studying three well-made apps (see section 9) and from rendering this app's own screens.
+Read this before any UI change. It exists because the UI was rebuilt several times chasing
+"looks nicer", and each time the real causes stayed. These rules come from studying three well-made
+apps (see section 9) and from rendering this app's own screens.
 
 ## 1. Do not switch toolkit
 
-- "Looks horrible" has never been a toolkit problem. The reference apps in section 9 are plain
-  egui (no custom renderer) and look finished. What they have is a design system, a screenshot
-  loop and a shared kit, none of which depend on the toolkit.
-- Slint is the chosen direction (`docs/slint-migration/plan.md`). Finish it. Do not propose egui,
-  GPUI, Tauri, Iced or anything else again. If you think a switch is needed, stop and ask the owner
-  with: a screenshot of the actual problem, why a kit or token change cannot fix it, and a measured
-  cost. A toolkit switch is the owner's decision, never an agent's.
+- "Looks horrible" has never been a toolkit problem. The reference apps in section 9 use plain
+  native renderers and look finished. What they have is a design system, a screenshot loop and a
+  shared kit, none of which depend on the toolkit.
+- Slint is the stack (`docs/slint-migration/plan.md`). If you think a switch is needed, stop and
+  ask the owner with: a screenshot of the actual problem, why a kit or token change cannot fix it,
+  and a measured cost. A toolkit switch is the owner's decision, never an agent's.
 - Fix "ugly" by fixing the kit and the tokens. One fix there restyles every screen.
 
 ## 2. Design tokens only
@@ -82,7 +81,7 @@ do not "fix" it from the snapshot). When in doubt run the real app: `cargo run -
   (`docs/slint-migration/plan.md` lists the two places this happened).
 - Buttons keep natural size (`horizontal-stretch: 0`) or they become slabs.
 - Paths and canvases must be sized to their bounding box.
-- Never hold app state across a draw, never block the UI thread (see `docs/rust-ui-migration/03-conventions.md`).
+- Never hold app state across a draw, never block the UI thread.
 - Logic lives in `dbhive-ui-model` and `dbhive-core`, never in `.slint` expressions beyond trivial
   display logic. That is what keeps screens testable without a window.
 
@@ -94,25 +93,20 @@ status strip, inspector). Copy the information architecture, not their assets. K
 screenshots in a gitignored `plan/refs/` folder, never in the repo. Target: a user of those tools
 finds every control where they expect it.
 
-## 8. Known defects (first things to fix)
+## 8. Known polish gaps
 
-From rendering the current Slint build (`app` and `workspace`), 2026-10-08:
-
-1. FIXED 2026-10-20: sidebar table rows are flat `ListRow`s from the kit (icon and label centred,
-   soft selected fill). The tables error state also lost its full-height red slab and gained a
-   Retry button.
-2. The workspace is a read-only preview (`SELECT * ... LIMIT 200`). Compared with the egui shell it
-   has no SQL editor screen, tabs, inspector, ER diagram or schema tools. Parity, not polish, is the
-   main reason it feels unfinished. Follow the phases in `docs/slint-migration/plan.md`.
-3. Literal colours in `sql_editor.slint` and `app.slint` (section 2).
-4. Connection list and workspace header have large dead areas. Fill with useful content (recent
+1. Literal colours remain in `sql_editor.slint` and `app.slint` (section 2); the token check counts
+   them, so burn them down when touching those files.
+2. Connection list and workspace header have large dead areas. Fill with useful content (recent
    queries, connection health), do not just centre a lone empty state in a 1280 pixel window.
-5. Menu text in snapshots: check in the real window before touching it (section 5).
+3. Menu text in snapshots: check in the real window before touching it (section 5).
+4. The native menu bar is not drawn in snapshots; verify menu changes by running the app and
+   capturing the window with `scripts/window-shot.sh`.
 
 ## 9. What the reference apps do
 
-Studied 2026-10-08: github.com/storytold/filmcraft, wordcraft, pdfcraft (clean-room Rust apps,
-egui 0.36). A fuller write-up is in `~/Desktop/craft-apps-learnings.md` on the owner's machine.
+Studied 2026-10-08: github.com/storytold/filmcraft, wordcraft, pdfcraft (clean-room Rust apps).
+A fuller write-up is in `~/Desktop/craft-apps-learnings.md` on the owner's machine.
 What transfers to a database client:
 
 - One `Tokens` struct holds every colour, radius, gap and height. Three themes come from it.
@@ -121,8 +115,8 @@ What transfers to a database client:
 - Every action is a command with an id, a label, a shortcut and an `enabled()` reason. Menus, the
   command palette and tests all dispatch by id. `command_palette.rs` in `dbhive-ui-model` is the start.
 - The UI is a client of a headless engine. Features are tested without a window.
-- They keep a "honest assessment" in the roadmap: feature checklist percent vs "ready for real work"
-  percent. Do the same in `docs/slint-migration/plan.md` instead of marking phases done by screen count.
+- They keep an honest assessment in the roadmap. Do the same in
+  `docs/slint-migration/plan.md`: say what was verified and what was not.
 - Screenshots are part of the work product. A UI task is not done without one that was looked at.
 
 ## 10. Definition of done for a UI change

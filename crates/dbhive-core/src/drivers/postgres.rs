@@ -473,7 +473,7 @@ impl DatabaseDriver for PostgresDriver {
             recycling_method: RecyclingMethod::Fast,
         };
 
-        // Build the connection manager, preserving the original TLS vs NoTls
+        // Build the connection manager, preserving the TLS vs NoTls
         // branching. The deadpool `Manager` is generic over the TLS connector,
         // so each branch produces a differently-typed `Pool::builder` chain;
         // both arms still yield a `deadpool_postgres::Pool`.
@@ -500,7 +500,7 @@ impl DatabaseDriver for PostgresDriver {
         };
 
         // Validate that we can actually establish a connection now, preserving
-        // the original behaviour where `connect()` failed fast on bad creds.
+        // so `connect()` fails fast on bad credentials.
         let _ = pool
             .get()
             .await

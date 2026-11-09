@@ -110,8 +110,8 @@ DB Hive is a professional database client designed to compete with tools like Be
 - tokio-postgres for PostgreSQL
 - mysql_async for MySQL / MariaDB
 - rusqlite for SQLite
-- tauri-plugin-store for persistence
-- tauri-plugin-opener for opening files and URLs
+- the app-plugin-store for persistence
+- the app-plugin-opener for opening files and URLs
 - serde for serialisation
 
 ## Getting Started
@@ -238,10 +238,8 @@ crates/dbhive-slint   the Slint app. Screens are built from ui/kit; a
                       controller per window drives them over one AppState.
 ```
 
-One process and one window server connection, rather than an app process
-plus WebView, GPU and networking helpers. Idle memory is 111-130 MB against
-roughly 400-650 MB for the previous Tauri build; see
-`docs/rust-ui-migration/00-baseline-measurements.md` for the measurements.
+One process and one window server connection, with no WebView, no GPU process
+and no networking helpers. Idle memory is 111-130 MB.
 
 The UI never blocks: database work is spawned on a shared Tokio runtime and
 the result is pushed back to the window that asked. Windows share the core
@@ -275,11 +273,10 @@ and its connection pool but keep their own screen, tabs and toasts. See
 3. Make your changes with tests where applicable
 4. Submit a pull request
 
-## Roadmap
+## Status
 
-See [Implementation Roadmap](docs/implementation-roadmap.md) for the full plan.
-
-**Current status**: active beta, `v0.21.0-beta`
+Active beta, `v0.21.0-beta`. Known limits and open work are in
+[docs/slint-migration/plan.md](docs/slint-migration/plan.md).
 
 ## License
 

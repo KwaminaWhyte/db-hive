@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 /// Application settings
 ///
 /// Central configuration for all user preferences and application behavior.
-/// Settings are persisted to disk using Tauri Store and loaded on application startup.
+/// Settings are persisted to disk as JSON and loaded on application startup.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {

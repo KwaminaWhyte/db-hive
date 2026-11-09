@@ -1,11 +1,11 @@
 //! The History / Snippets / Templates panel: view projections and form logic.
 //!
-//! `history.rs` holds the data model and the filters lifted from the egui
+//! `history.rs` holds the data model and the filters,
 //! screen. This module is what a panel needs on top of them and that is not
 //! drawing: turning stored records into display rows, building a record from a
 //! form, the parameter-run form with live validation, and the small decisions
 //! (can this history entry be re-run here, how does a snippet land in an
-//! editor) that were tangled into the egui screen. Plain Rust types only, so a
+//! editor). Plain Rust types only, so a
 //! shell maps them to its own widgets and tests need no window.
 
 use std::collections::{BTreeSet, HashMap};

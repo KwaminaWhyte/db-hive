@@ -1,16 +1,13 @@
 //! The plugin marketplace listing.
 //!
-//! There is no marketplace server. The Tauri shell's `get_marketplace_plugins`
-//! command returned a hard-coded catalogue of three entries, and this is that
-//! catalogue, moved somewhere both shells can read it and given the search,
-//! filter and sort behaviour that used to be split between Rust (category and
-//! search) and TypeScript (sort and the verified filter).
+//! There is no marketplace server: the catalogue is a hard-coded list of three
+//! entries, with search, filter and sort rules that are testable here.
 //!
 //! Keeping it here rather than in the UI means the ordering rules are
 //! testable, and means the day a real endpoint appears only [`catalog`] has to
 //! change.
 
-#![allow(dead_code)] // shared by both shells; neither uses every accessor.
+#![allow(dead_code)] // part of the plugin engine; not every accessor is used.
 
 use serde::{Deserialize, Serialize};
 
@@ -98,7 +95,7 @@ pub struct Filters {
     pub sort: SortOption,
 }
 
-/// Search, filter and sort in one pass, matching the web shell's behaviour:
+/// Search, filter and sort in one pass, matching the established behaviour:
 /// case-insensitive substring search over name, description and keywords;
 /// category equality; verified flag; then the chosen sort.
 pub fn filter_and_sort(plugins: &[MarketplacePlugin], filters: &Filters) -> Vec<MarketplacePlugin> {
@@ -168,7 +165,7 @@ pub fn format_size(bytes: u64) -> String {
     }
 }
 
-/// The catalogue. Static, exactly as the Tauri command returned it.
+/// The catalogue. Static: the same three entries, unchanged.
 pub fn catalog() -> Vec<MarketplacePlugin> {
     vec![
         MarketplacePlugin {

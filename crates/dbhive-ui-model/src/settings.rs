@@ -1,4 +1,4 @@
-//! Settings view logic, lifted from the egui `settings` screen. See lib.rs.
+//! Settings view logic. See lib.rs.
 //!
 //! The section list, the shortcut table (fields, groups, duplicate
 //! detection, validation, and turning a keystroke into the stored
@@ -258,7 +258,7 @@ pub enum Recorded {
     Invalid(String),
 }
 
-/// The modifier state of one keystroke, in the same shape egui reports it:
+/// The modifier state of one keystroke, in the same shape the app reports it:
 /// `command` is Ctrl off macOS and Cmd on macOS, set alongside the real key.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct KeyModifiers {
@@ -275,7 +275,7 @@ pub struct KeyModifiers {
 /// `is_mac` is a parameter rather than a `cfg!` so both spellings can be
 /// tested on either platform.
 pub fn combo_string(modifiers: KeyModifiers, key: &str, is_mac: bool) -> String {
-    // egui folds Ctrl into `command` off macOS and Cmd into it on macOS;
+    // the app folds Ctrl into `command` off macOS and Cmd into it on macOS;
     // untangle that first or every binding gains a phantom "Ctrl".
     let (ctrl, cmd) = if is_mac {
         (modifiers.ctrl, modifiers.mac_cmd || modifiers.command)
