@@ -106,6 +106,10 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                         c.set_workspace_result_message("3 rows affected · 4ms".into());
                     }
                     "workspace-query-blank" => {}
+                    // Stopped by the user: no error panel, a neutral state.
+                    "workspace-query-cancelled"
+                    | "workspace-query-cancelled-light"
+                    | "workspace-query-cancel-waiting" => {}
                     // Autocomplete: columns after SELECT, popup under the caret.
                     "workspace-query-complete" | "workspace-query-complete-light" => {
                         let sql = "SELECT c.na, count(*)\n  FROM customers c\n  JOIN orders o ON o.customer_id = c.id\n GROUP BY c.na";
@@ -158,6 +162,64 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                         c.set_workspace_has_result(true);
                         c.set_workspace_result_summary("6 rows · 12ms".into());
                     }
+                }
+                // The query-tools states: Stop's outcome, the grid selection's
+                // copy bar, the tab bar's menu and the wrapped editor.
+                match name {
+                    "workspace-query-cancelled" | "workspace-query-cancelled-light" => {
+                        let q = c.global::<QueryState>();
+                        q.set_cancelled(true);
+                        q.set_cancelled_summary("Cancelled after 2.31s".into());
+                        q.set_server_stops(true);
+                        c.set_workspace_rows_error(dbhive_ui_model::format::CANCELLED.into());
+                    }
+                    "workspace-query-cancel-waiting" => {
+                        let q = c.global::<QueryState>();
+                        q.set_cancelled(true);
+                        q.set_cancelled_summary("Cancelled after 84ms".into());
+                        q.set_server_stops(false);
+                        c.set_workspace_rows_error(dbhive_ui_model::format::CANCELLED.into());
+                    }
+                    "workspace-query-selection" | "workspace-query-selection-light" => {
+                        let q = c.global::<QueryState>();
+                        q.set_selected_row(1);
+                        q.set_selected_col(1);
+                        q.set_selection_label("Row 2 · name".into());
+                    }
+                    "workspace-query-wrap" => {
+                        let p = c.global::<EditorPrefs>();
+                        p.set_word_wrap(true);
+                        p.set_minimap(true);
+                        // A line longer than the editor is wide, so the text
+                        // really wraps. 98 columns is what the editor reports
+                        // at this window width (1200) with the minimap shown;
+                        // the colour layer must wrap at the same count.
+                        let sql = "-- wrap: the colour layer follows the text\nSELECT a_really_long_column_name_that_keeps_going, another_long_column_name_here, and_one_more, a_fourth_column_name FROM customers WHERE id = 1;\nSELECT 1;";
+                        c.set_workspace_editor_text(sql.into());
+                        c.set_workspace_editor_lines(
+                            dbhive_slint::sql_highlight::to_model_wrapped(&sql, dark, 98),
+                        );
+                    }
+                    "workspace-query-tab-menu" => {
+                        let item = |label: &str, enabled: bool, divider: bool| CtxItem {
+                            label: label.into(),
+                            icon: "x".into(),
+                            enabled,
+                            danger: false,
+                            divider,
+                        };
+                        let q = c.global::<QueryState>();
+                        q.set_menu_items(slint::ModelRc::new(slint::VecModel::from(vec![
+                            item("Close", true, false),
+                            item("Close Others", true, false),
+                            item("Close to the Right", false, false),
+                            item("Close All", true, true),
+                        ])));
+                        q.set_menu_x(420.0);
+                        q.set_menu_y(150.0);
+                        q.set_menu_visible(true);
+                    }
+                    _ => {}
                 }
                 if name == "workspace-query-confirm" {
                     c.set_confirm_title("Run this statement?".into());
