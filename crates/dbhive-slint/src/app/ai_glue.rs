@@ -196,6 +196,7 @@ impl Ctx {
 
     fn ai_load_settings(self: &Rc<Self>) {
         runtime::spawn(
+            self.ui_id,
             async move { service_ai::load_settings().map_err(|e| error_text(&e.to_string())) },
             |result| {
                 with_ctx(|ctx| {
@@ -213,6 +214,7 @@ impl Ctx {
 
     fn ai_persist(self: &Rc<Self>, settings: service_ai::AiSettings) {
         runtime::spawn(
+            self.ui_id,
             async move { service_ai::save_settings(&settings).map_err(|e| error_text(&e.to_string())) },
             |result| {
                 with_ctx(|ctx| {
@@ -245,6 +247,7 @@ impl Ctx {
         };
         self.ai_refresh();
         runtime::spawn(
+            self.ui_id,
             async move {
                 match service_ai::provider_status_with(store.as_ref(), &settings, provider).await {
                     Ok(status) => status,
@@ -286,6 +289,7 @@ impl Ctx {
             )
         };
         runtime::spawn(
+            self.ui_id,
             async move {
                 service_ai::list_models_with(store.as_ref(), &settings, provider)
                     .await
@@ -394,6 +398,7 @@ impl Ctx {
         };
         self.ai_refresh();
         runtime::spawn(
+            self.ui_id,
             async move {
                 store
                     .set(provider, &key)
@@ -411,6 +416,7 @@ impl Ctx {
         };
         self.ai_refresh();
         runtime::spawn(
+            self.ui_id,
             async move {
                 store
                     .delete(provider)
@@ -485,6 +491,7 @@ impl Ctx {
 
         let state = self.state.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 service_ai::schema_context(&state, &connection_id, &label, force)
                     .await
@@ -543,6 +550,7 @@ impl Ctx {
         let provider = d.provider;
         let kind = d.kind;
         runtime::spawn(
+            self.ui_id,
             async move {
                 service_ai::run_task_with(store.as_ref(), d.settings, d.provider, d.model, d.task)
                     .await

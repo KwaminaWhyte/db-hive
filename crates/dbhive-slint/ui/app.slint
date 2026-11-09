@@ -143,14 +143,25 @@ component Toast inherits Rectangle {
 }
 
 export component AppWindow inherits Window {
-    title: "DB Hive";
+    title: root.window-title;
     preferred-width: 1280px;
     preferred-height: 800px;
     min-width: 900px;
     min-height: 600px;
     background: Theme.background;
 
+    // Set by the controller: "DB Hive" for the first window, "DB Hive (2)"
+    // and so on for windows opened later.
+    in property <string> window-title: "DB Hive";
+
     in-out property <Screen> screen: Screen.connections;
+
+    // Workspace pane sizes (see ui-model `layout`); Rust clamps and saves.
+    in-out property <length> sidebar-width: 264px;
+    in-out property <length> editor-height: 220px;
+    callback sidebar-resize(length);
+    callback editor-resize(length);
+    callback layout-committed;
 
     // Connections.
     in property <[ConnectionItem]> connections;
@@ -164,6 +175,7 @@ export component AppWindow inherits Window {
     callback duplicate-connection(string);
     callback toggle-favorite(string);
     callback delete-connection(string);
+    callback open-connection-window(string);
     callback dismiss-connection-error;
 
     // Workspace.
@@ -364,10 +376,16 @@ export component AppWindow inherits Window {
                 enabled: root.screen == Screen.workspace;
                 activated => { root.run-command("close-tab"); }
             }
-            // New Window and Close Window belong here, after the tab items.
-            // They arrive with multi-window support; until then the controller
-            // owns one window's state and the palette shows New Window greyed
-            // with that reason.
+            MenuItem {
+                title: "New Window";
+                shortcut: ShellState.key-new-window;
+                activated => { ShellState.new-window-requested(); }
+            }
+            MenuItem {
+                title: "Close Window";
+                shortcut: ShellState.key-close-window;
+                activated => { ShellState.close-window-requested(); }
+            }
             MenuSeparator { }
             MenuItem {
                 title: "Settings…";
@@ -621,11 +639,17 @@ export component AppWindow inherits Window {
             duplicate(id) => { root.duplicate-connection(id); }
             toggle-favorite(id) => { root.toggle-favorite(id); }
             delete(id) => { root.delete-connection(id); }
+            open-window(id) => { root.open-connection-window(id); }
             dismiss-error => { root.dismiss-connection-error(); }
         }
 
         if root.screen == Screen.workspace: WorkspaceScreen {
             vertical-stretch: 1;
+            sidebar-width <=> root.sidebar-width;
+            editor-height <=> root.editor-height;
+            sidebar-resize(w) => { root.sidebar-resize(w); }
+            editor-resize(h) => { root.editor-resize(h); }
+            layout-committed => { root.layout-committed(); }
             connection-name: root.workspace-connection-name;
             location-label: root.workspace-location-label;
             tables: root.workspace-tables;

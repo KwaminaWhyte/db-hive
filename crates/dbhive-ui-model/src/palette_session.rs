@@ -186,13 +186,8 @@ pub fn support(id: CommandId) -> Support {
         | OpenCommandPalette | Disconnect | RunQuery | NewTab | CloseTab | ThemeLight
         | ThemeDark | ThemeToggle | GoImportExport | GoBackup | GoActivityMonitor
         | GoMigrations | GoVisualQueryBuilder | NewTable | GoErDiagram | GoSchemaDesigner
-        | GoPlugins | GoAiAssistant | GoHistory | WindowMinimize | WindowMaximizeToggle => {
-            Support::Live
-        }
-
-        // Multiple windows come with the multi-window work; until then the
-        // command is listed, greyed, with the reason.
-        NewWindow => Support::Unsupported("Multiple windows are not supported yet"),
+        | GoPlugins | GoAiAssistant | GoHistory | WindowMinimize | WindowMaximizeToggle
+        | NewWindow => Support::Live,
 
         // WindowClose would quit the app (one window), which Cmd+Q and the
         // window's own close button already do; the rest have no screen here.
@@ -921,14 +916,12 @@ mod tests {
     }
 
     #[test]
-    fn unbuilt_screens_are_hidden_and_new_window_is_unsupported_with_a_reason() {
+    fn unbuilt_screens_are_hidden_and_new_window_is_live_on_both_screens() {
         for id in [CommandId::ToggleSidebar, CommandId::WindowClose] {
             assert_eq!(status(id, &ws()), Status::Hidden, "{:?}", id);
         }
-        assert_eq!(
-            status(CommandId::NewWindow, &ws()),
-            Status::Unsupported("Multiple windows are not supported yet")
-        );
+        assert_eq!(status(CommandId::NewWindow, &ws()), Status::Enabled);
+        assert_eq!(status(CommandId::NewWindow, &conns()), Status::Enabled);
     }
 
     #[test]
@@ -1101,7 +1094,7 @@ mod tests {
                 Scope::Workspace,
                 &Keymap::default()
             ),
-            None
+            Some(CommandId::NewWindow)
         );
         assert_eq!(
             command_for_key(
@@ -1343,19 +1336,19 @@ mod tests {
     fn all_disabled_means_nothing_is_selected_and_enter_has_no_target() {
         let mut p = PaletteState::default();
         p.open();
-        p.set_query("new window");
-        let v = p.view(&ws(), false);
+        p.set_query("go to connections");
+        let v = p.view(&conns(), false);
         let row = v
             .rows
             .iter()
-            .find(|r| r.slug == "new-window")
+            .find(|r| r.slug == "go-connections")
             .expect("listed, greyed");
         assert!(!row.enabled);
-        assert_eq!(row.reason, "Multiple windows are not supported yet");
+        assert_eq!(row.reason, "Already on the connections screen");
         assert_eq!(v.selected_row, None);
-        assert_eq!(p.selected_id(&ws()), None);
-        p.move_selection(1, &ws());
-        assert_eq!(p.selected_id(&ws()), None);
+        assert_eq!(p.selected_id(&conns()), None);
+        p.move_selection(1, &conns());
+        assert_eq!(p.selected_id(&conns()), None);
     }
 
     #[test]
@@ -1483,8 +1476,9 @@ mod tests {
         }
         // Registered but not implemented here.
         assert!(!titles.contains(&"Toggle Sidebar"));
-        assert!(!titles.contains(&"New Window"));
         assert!(!titles.contains(&"Back"));
+        // Multi-window is implemented, so its shortcut is listed.
+        assert!(titles.contains(&"New Window"));
 
         // Every listed row's caps resolve back to a command that fires.
         for c in COMMANDS.iter().filter(|c| titles.contains(&c.title)) {
@@ -1700,10 +1694,7 @@ mod tests {
             ),
             Some(CommandId::GoHistory)
         );
-        // New Window stays refused until multi-window exists.
-        assert!(matches!(
-            support(CommandId::NewWindow),
-            Support::Unsupported(_)
-        ));
+        // New Window is live now that a second window can be opened.
+        assert_eq!(status(CommandId::NewWindow, &conns()), Status::Enabled);
     }
 }

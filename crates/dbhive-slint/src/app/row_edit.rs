@@ -641,6 +641,7 @@ impl Ctx {
         self.edit_changed(false);
 
         runtime::spawn(
+            self.ui_id,
             async move { d.execute_transaction(&sqls).await },
             move |result| {
                 with_ctx(|ctx| ctx.row_edit_finish(id, statements, result));

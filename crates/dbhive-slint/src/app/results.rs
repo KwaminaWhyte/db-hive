@@ -564,6 +564,7 @@ impl Ctx {
         };
         let written = path.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 // Rendering a large result is megabytes of string building;
                 // keep it off the async workers the drivers use.

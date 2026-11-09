@@ -48,6 +48,7 @@ impl Ctx {
         st.set_key_history(keys(CommandId::GoHistory, Scope::Workspace));
         st.set_key_new_tab(keys(CommandId::NewTab, Scope::Workspace));
         st.set_key_close_tab(keys(CommandId::CloseTab, Scope::Workspace));
+        st.set_key_new_window(keys(CommandId::NewWindow, Scope::Connections));
     }
 
     // -- Theme ------------------------------------------------------------------
@@ -166,6 +167,7 @@ impl Ctx {
         let ssh_password = self.editor_ssh_password();
         let state = self.state.clone();
         runtime::spawn(
+            self.ui_id,
             async move { save_profile(state, profile, id, password, ssh_password).await },
             move |result| {
                 with_ctx(|ctx| {

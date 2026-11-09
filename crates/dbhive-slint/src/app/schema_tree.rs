@@ -210,6 +210,7 @@ impl Ctx {
         };
         let name = schema.to_string();
         runtime::spawn(
+            self.ui_id,
             {
                 let name = name.clone();
                 async move { d.get_tables(&name).await.map_err(|e| e.to_string()) }
@@ -673,6 +674,7 @@ impl Ctx {
         }
         let (schema, table) = (schema.to_string(), table.to_string());
         runtime::spawn(
+            self.ui_id,
             {
                 let table = table.clone();
                 async move {
@@ -768,6 +770,7 @@ impl Ctx {
         let state = self.state.clone();
         let target = db.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 dbhive_core::service::switch_database(&state, &connection_id, &target)
                     .await
@@ -843,6 +846,7 @@ impl Ctx {
         self.tree_drop_refresh();
         let (schema, table) = (schema.to_string(), table.to_string());
         runtime::spawn(
+            self.ui_id,
             async move {
                 let mut found = service_schema::find_dependents(&*d, &scan, &schema, &table)
                     .await
@@ -974,6 +978,7 @@ impl Ctx {
         };
         let dropped = table.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 service_schema::drop_table(&*conn, &driver, &qualifier, &table, cascade)
                     .await
@@ -1099,6 +1104,7 @@ impl Ctx {
         let state = self.state.clone();
         let created = name.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 dbhive_core::service::create_database(&state, &connection_id, &name)
                     .await
@@ -1192,6 +1198,7 @@ impl Ctx {
         self.tree_routines_project();
         let state = self.state.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 service_procedures::list_procedures(&state, &connection_id, None)
                     .await
@@ -1281,6 +1288,7 @@ impl Ctx {
         let state = self.state.clone();
         let target = p.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 service_procedures::get_procedure_definition(
                     &state,

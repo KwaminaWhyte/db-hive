@@ -186,6 +186,7 @@ impl Ctx {
         self.refresh_connections();
         let lookup_id = id.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 tokio::task::spawn_blocking(move || secrets.has_password(&lookup_id))
                     .await
@@ -217,6 +218,7 @@ impl Ctx {
             let secrets = self.session.borrow().flow.secrets.clone();
             let id = id.to_string();
             runtime::spawn(
+                self.ui_id,
                 async move {
                     let _ = tokio::task::spawn_blocking(move || secrets.forget_password(&id)).await;
                 },
@@ -374,11 +376,15 @@ impl Ctx {
             v
         };
         self.refresh_connections();
-        runtime::spawn(async move { write_collapsed(snapshot) }, |saved| {
-            if let Err(e) = saved {
-                eprintln!("Warning: could not remember collapsed folders: {e}");
-            }
-        });
+        runtime::spawn(
+            self.ui_id,
+            async move { write_collapsed(snapshot) },
+            |saved| {
+                if let Err(e) = saved {
+                    eprintln!("Warning: could not remember collapsed folders: {e}");
+                }
+            },
+        );
     }
 
     // -- Connection editor extras ----------------------------------------------
@@ -407,6 +413,7 @@ impl Ctx {
         };
         let id = id.to_string();
         runtime::spawn(
+            self.ui_id,
             async move {
                 let lookup = id.clone();
                 let stored = tokio::task::spawn_blocking(move || secrets.has_password(&lookup))
@@ -466,7 +473,7 @@ impl Ctx {
             s.flow.picker.clone()
         };
         w.global::<FileBrowse>().set_busy(true);
-        runtime::spawn(picker.pick(request), move |chosen| {
+        runtime::spawn(self.ui_id, picker.pick(request), move |chosen| {
             with_ctx(|ctx| {
                 ctx.session.borrow_mut().flow.browsing = false;
                 if let Some(w) = ctx.window.upgrade() {
@@ -581,6 +588,7 @@ impl Ctx {
         let state = self.state.clone();
         let worker_id = id.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 // Closing a dead socket can itself fail; that is expected.
                 let _ = dbhive_core::service::disconnect(&state, &worker_id).await;
@@ -620,6 +628,7 @@ impl Ctx {
         self.refresh_connections();
         let state = self.state.clone();
         runtime::spawn(
+            self.ui_id,
             async move { dbhive_core::service::disconnect(&state, &lost.connection_id).await },
             |_| {},
         );

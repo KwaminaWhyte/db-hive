@@ -116,6 +116,7 @@ impl Ctx {
         let url = manifest_url();
         let current = env!("CARGO_PKG_VERSION").to_string();
         runtime::spawn(
+            self.ui_id,
             async move { check_at(&url, &current).await.map_err(|e| e.to_string()) },
             move |result| {
                 with_ctx(|ctx| {
@@ -176,7 +177,7 @@ pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
     }
     TIMER.with(|t| {
         t.start(TimerMode::Repeated, tick(), || {
-            with_ctx(|ctx| ctx.updates_tick());
+            super::for_each_ctx(|ctx| ctx.updates_tick());
         });
     });
 }

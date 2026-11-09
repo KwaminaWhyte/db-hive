@@ -201,12 +201,12 @@ async fn scenario(w: AppWindow, settings_raised: Rc<Cell<u32>>, finished: Rc<Cel
         !t.contains(&"New Tab".to_string()),
         "workspace commands do not belong on the connection list"
     );
-    // "Go to Connections" is listed but disabled, with its reason, and so is
-    // New Window (no multi-window).
+    // "Go to Connections" is listed but disabled, with its reason; New
+    // Window is live now.
     let go = all.iter().find(|r| r.id == "go-connections").unwrap();
     assert!(!go.enabled && go.reason == "Already on the connections screen");
     let nw = all.iter().find(|r| r.id == "new-window").unwrap();
-    assert!(!nw.enabled && !nw.reason.is_empty());
+    assert!(nw.enabled);
     // The first thing Enter would run is the first command that can run.
     assert_eq!(selected_title(&w), "Go to Activity Monitor");
 
@@ -334,8 +334,8 @@ async fn scenario(w: AppWindow, settings_raised: Rc<Cell<u32>>, finished: Rc<Cel
         );
     }
     assert!(
-        !help.contains(&"New Window".to_string()),
-        "a binding that does nothing must not be listed"
+        help.contains(&"New Window".to_string()),
+        "the live New Window binding belongs in the help"
     );
     assert!(!help.contains(&"Toggle Sidebar".to_string()));
     // Typing into its search box filters it (and the "?" inside is text).

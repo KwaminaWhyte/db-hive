@@ -238,6 +238,7 @@ impl Ctx {
 
         let state = self.state.clone();
         runtime::spawn(
+            self.ui_id,
             async move { svc::compute_schema_diff(&state, &source, &target, &schema).await },
             move |result| {
                 with_ctx(|ctx| {
@@ -370,6 +371,7 @@ impl Ctx {
         let state = self.state.clone();
         let target_id = target.clone();
         runtime::spawn(
+            self.ui_id,
             async move { svc::apply_migration(&state, &target_id, &statements, use_transaction).await },
             move |result| {
                 with_ctx(|ctx| {

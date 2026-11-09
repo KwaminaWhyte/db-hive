@@ -36,6 +36,7 @@ mod completion;
 mod designer;
 mod erd;
 mod inspector;
+mod layout;
 mod query_tools;
 mod results;
 mod row_edit;
@@ -48,6 +49,7 @@ pub(crate) use shell::report_worker_panic;
 mod tab_persist;
 mod table_dialog;
 mod updates;
+pub mod windows;
 
 use crate::connection_editor as editor_view;
 use crate::grid_model::{layout_columns, LazyRows};
@@ -205,9 +207,13 @@ struct Session {
     results: results::ResultsSession,
     query_tools: query_tools::QuerySession,
     flow: connect_flow::FlowSession,
+    layout: layout::LayoutSession,
 }
 
 struct Ctx {
+    /// Which window this controller drives. Async completions are routed
+    /// back by it (`runtime::spawn` binds it around `done`).
+    ui_id: u64,
     window: slint::Weak<AppWindow>,
     state: Arc<Mutex<AppState>>,
     session: RefCell<Session>,
@@ -290,6 +296,7 @@ impl Ctx {
         let state = self.state.clone();
         let worker_id = id.clone();
         runtime::spawn(
+            self.ui_id,
             async move { dbhive_core::service::connect(&state, worker_id, password, None).await },
             move |result| {
                 with_ctx(|ctx| {
@@ -323,6 +330,7 @@ impl Ctx {
         let state = self.state.clone();
         let worker_id = id.clone();
         runtime::spawn(
+            self.ui_id,
             async move { dbhive_core::service::disconnect(&state, &worker_id).await },
             move |result| {
                 with_ctx(|ctx| {
@@ -529,6 +537,7 @@ impl Ctx {
         let ssh_password = self.editor_ssh_password();
         let state = self.state.clone();
         runtime::spawn(
+            self.ui_id,
             async move { test_profile(state, profile, password, ssh_password).await },
             move |result| {
                 with_ctx(|ctx| {
@@ -578,6 +587,7 @@ impl Ctx {
         let ssh_password = self.editor_ssh_password();
         let state = self.state.clone();
         runtime::spawn(
+            self.ui_id,
             async move { save_profile(state, profile, id, password, ssh_password).await },
             move |result| {
                 with_ctx(|ctx| {
@@ -895,6 +905,7 @@ impl Ctx {
         let tree_generation = self.tree_generation();
 
         runtime::spawn(
+            self.ui_id,
             async move {
                 // The schema browser's overview: databases, and for Postgres
                 // the schemas of this one. A refresh keeps the schema the user
@@ -1225,6 +1236,7 @@ impl Ctx {
         // Persisting history never delays showing the result, and a failed
         // write is not worth interrupting the user for.
         runtime::spawn(
+            self.ui_id,
             async move { AppState::save_history_to_store(&snapshot) },
             |saved| {
                 if let Err(e) = saved {
@@ -1426,6 +1438,9 @@ impl Ctx {
             CommandId::GoBackup => self.open_backup_panel(),
             CommandId::GoAiAssistant => self.ai_open(),
             CommandId::GoHistory => self.open_history_panel(),
+            CommandId::NewWindow => {
+                windows::open(self.state.clone(), None);
+            }
             CommandId::WindowMinimize => self.window_minimize(),
             CommandId::WindowMaximizeToggle => self.window_toggle_maximized(),
             // `status` only returns Enabled for the commands above.
@@ -1571,16 +1586,71 @@ impl Ctx {
 }
 
 thread_local! {
-    /// The controller lives on the UI thread. Async completions reach it
-    /// through here, because `invoke_from_event_loop` needs a `Send` closure
-    /// and `Rc` is not.
-    static CTX: RefCell<Option<Rc<Ctx>>> = const { RefCell::new(None) };
+    /// Every open window's controller, on the UI thread. Async completions
+    /// reach one through here, because `invoke_from_event_loop` needs a
+    /// `Send` closure and `Rc` is not. Which one is decided by the id the
+    /// spawn captured (see [`BOUND`]), so two windows never cross wires.
+    static CTX: RefCell<Vec<Rc<Ctx>>> = const { RefCell::new(Vec::new()) };
+    /// The window a completion is running for, set for the length of `done`.
+    static BOUND: std::cell::Cell<Option<u64>> = const { std::cell::Cell::new(None) };
 }
 
 fn with_ctx(f: impl FnOnce(&Rc<Ctx>)) {
-    if let Some(ctx) = CTX.with(|c| c.borrow().clone()) {
+    let bound = BOUND.with(|b| b.get());
+    let found = CTX.with(|all| {
+        let all = all.borrow();
+        match bound {
+            Some(id) => all.iter().find(|c| c.ui_id == id).cloned(),
+            // A timer or menu action outside any completion: the first window
+            // is the one that owns app-wide work (update checks, crash toast).
+            None => all.first().cloned(),
+        }
+    });
+    if let Some(ctx) = found {
         f(&ctx);
     }
+}
+
+/// Run `f` with `with_ctx` resolving to the window with this id.
+pub(crate) fn with_ctx_bound(ui: u64, f: impl FnOnce()) {
+    let previous = BOUND.with(|b| b.replace(Some(ui)));
+    f();
+    BOUND.with(|b| b.set(previous));
+}
+
+/// Run `f` with the controller of one specific window.
+pub(crate) fn with_ctx_for(ui: u64, f: impl FnOnce(&Rc<Ctx>)) {
+    let found = CTX.with(|all| all.borrow().iter().find(|c| c.ui_id == ui).cloned());
+    if let Some(ctx) = found {
+        f(&ctx);
+    }
+}
+
+/// Run `f` once for every open window, in the order they opened.
+pub(crate) fn for_each_ctx(mut f: impl FnMut(&Rc<Ctx>)) {
+    let all: Vec<Rc<Ctx>> = CTX.with(|a| a.borrow().clone());
+    for ctx in &all {
+        f(ctx);
+    }
+}
+
+fn next_ui_id() -> u64 {
+    thread_local! {
+        static NEXT: std::cell::Cell<u64> = const { std::cell::Cell::new(1) };
+    }
+    NEXT.with(|n| {
+        let id = n.get();
+        n.set(id + 1);
+        id
+    })
+}
+
+fn register_ctx(ctx: &Rc<Ctx>) {
+    CTX.with(|a| a.borrow_mut().push(ctx.clone()));
+}
+
+fn unregister_ctx(ui: u64) {
+    CTX.with(|a| a.borrow_mut().retain(|c| c.ui_id != ui));
 }
 
 fn now_secs() -> i64 {
@@ -1591,28 +1661,59 @@ fn now_secs() -> i64 {
 }
 
 pub fn run() -> Result<(), slint::PlatformError> {
-    install_panic_hook();
-    let window = build()?;
-    let result = window.run();
-    CTX.with(|c| c.borrow_mut().take());
-    result
+    windows::run()
 }
 
-/// Build the window with every handler wired, without running it. `run`
-/// blocks on it; tests drive the returned window directly, with the same
-/// controller behind it.
+/// What a window is built with: its geometry-store label, its title, and the
+/// connection it should open once it is up (none = the connections screen).
+pub(crate) struct WindowOptions {
+    pub label: String,
+    pub title: String,
+    pub connection: Option<String>,
+}
+
+impl WindowOptions {
+    pub(crate) fn main() -> Self {
+        Self {
+            label: dbhive_ui_model::window_state::MAIN_LABEL.into(),
+            title: "DB Hive".into(),
+            connection: None,
+        }
+    }
+}
+
+/// Build the main window with every handler wired, without running it.
+/// Tests drive the returned window directly, with the same controller
+/// behind it. The app itself uses `windows::run`, which builds the first
+/// window the same way but adds geometry restore, the event loop and the
+/// other windows.
 pub fn build() -> Result<AppWindow, slint::PlatformError> {
-    let window = AppWindow::new()?;
     let state = Arc::new(Mutex::new(AppState::new()));
+    let load_error = dbhive_core::service::load_persisted(&state)
+        .err()
+        .map(|e| format!("Could not load saved data: {}", e));
+    let (window, _ctx) = build_window(state, WindowOptions::main(), load_error)?;
+    Ok(window)
+}
+
+/// Build one window and its controller on an already-loaded `state`.
+pub(crate) fn build_window(
+    state: Arc<Mutex<AppState>>,
+    options: WindowOptions,
+    load_error: Option<String>,
+) -> Result<(AppWindow, Rc<Ctx>), slint::PlatformError> {
+    let window = AppWindow::new()?;
+    window.set_window_title(options.title.clone().into());
 
     let ctx = Rc::new(Ctx {
+        ui_id: next_ui_id(),
         window: window.as_weak(),
         state: state.clone(),
         session: RefCell::new(Session::default()),
     });
 
-    if let Err(e) = dbhive_core::service::load_persisted(&state) {
-        ctx.session.borrow_mut().error = format!("Could not load saved data: {}", e);
+    if let Some(e) = load_error {
+        ctx.session.borrow_mut().error = e;
     }
 
     window.global::<Theme>().set_dark(true);
@@ -1629,6 +1730,12 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     {
         let ctx = ctx.clone();
         window.on_connect(move |id| ctx.connect(id.to_string()));
+    }
+    {
+        let state = state.clone();
+        window.on_open_connection_window(move |id| {
+            windows::open(state.clone(), Some(id.to_string()));
+        });
     }
     {
         let ctx = ctx.clone();
@@ -1880,6 +1987,8 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     results::wire(&window, &ctx);
     query_tools::wire(&window, &ctx);
     connect_flow::wire(&window, &ctx);
+    layout::wire(&window, &ctx);
+    windows::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {
@@ -1943,8 +2052,12 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     ctx.init_settings();
 
     ctx.refresh_connections();
-    CTX.with(|c| *c.borrow_mut() = Some(ctx));
+    register_ctx(&ctx);
     // Settings > General > Startup behavior (needs the controller in place).
-    with_ctx(|ctx| ctx.run_startup_behavior());
-    Ok(window)
+    // A window opened for a connection skips it: that window opens the
+    // connection it was asked for instead.
+    if options.connection.is_none() {
+        with_ctx_bound(ctx.ui_id, || with_ctx(|ctx| ctx.run_startup_behavior()));
+    }
+    Ok((window, ctx))
 }

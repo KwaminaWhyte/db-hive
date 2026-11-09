@@ -20,7 +20,7 @@ use dbhive_ui_model::saved_tabs::{self, SavedTab, SavedWorkspace};
 use dbhive_ui_model::workspace_tabs::Tabs;
 use slint::{Timer, TimerMode};
 
-use super::{with_ctx, Ctx};
+use super::Ctx;
 use crate::AppWindow;
 
 const STORE: &str = "workspace_tabs.json";
@@ -195,7 +195,7 @@ fn write(key: &str, tabs: &SavedWorkspace) -> bool {
 pub(super) fn wire(_window: &AppWindow, _ctx: &Rc<Ctx>) {
     TIMER.with(|t| {
         t.start(TimerMode::Repeated, SAVE_EVERY, || {
-            with_ctx(|ctx| ctx.tabs_save_if_changed());
+            super::for_each_ctx(|ctx| ctx.tabs_save_if_changed());
         });
     });
 }

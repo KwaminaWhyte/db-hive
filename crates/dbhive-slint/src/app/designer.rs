@@ -319,7 +319,7 @@ impl Ctx {
         self.session.borrow_mut().designer.applying = true;
         self.project_designer();
 
-        runtime::spawn(apply_plan(d, plan), move |results| {
+        runtime::spawn(self.ui_id, apply_plan(d, plan), move |results| {
             with_ctx(|ctx| ctx.designer_applied(results))
         });
     }

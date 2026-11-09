@@ -35,7 +35,7 @@ use dbhive_ui_model::activity_panel::{
 };
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
-use super::{with_ctx, Ctx, PendingAction};
+use super::{with_ctx, with_ctx_for, Ctx, PendingAction};
 use crate::{activity_view as view, runtime};
 use crate::{ActivityState, MonitorServerState, Screen, Tone};
 
@@ -480,11 +480,13 @@ impl Ctx {
 
     fn monitor_start_timer(self: &Rc<Self>) {
         // One tick a second is plenty for a 5 second minimum interval, and a
-        // tick that finds the gate shut costs nothing.
+        // tick that finds the gate shut costs nothing. The tick belongs to
+        // this window's monitor, so it names this window.
+        let ui = self.ui_id;
         self.session.borrow().monitor.timer.start(
             TimerMode::Repeated,
             Duration::from_secs(1),
-            || with_ctx(|ctx| ctx.monitor_tick()),
+            move || with_ctx_for(ui, |ctx| ctx.monitor_tick()),
         );
     }
 
@@ -545,11 +547,13 @@ impl Ctx {
 
         let (state, id, t) = (self.state.clone(), connection.clone(), ticket.clone());
         runtime::spawn(
+            self.ui_id,
             async move { mon::get_server_stats(&state, &id).await },
             move |result| with_ctx(|ctx| ctx.monitor_stats_done(&t, result)),
         );
         let (state, id) = (self.state.clone(), connection);
         runtime::spawn(
+            self.ui_id,
             async move { mon::get_active_queries(&state, &id).await },
             move |result| with_ctx(|ctx| ctx.monitor_processes_done(&ticket, result)),
         );
@@ -731,6 +735,7 @@ impl Ctx {
         let state = self.state.clone();
         let path = path.to_string_lossy().to_string();
         runtime::spawn(
+            self.ui_id,
             async move { mon::export_query_logs(&state, &query, format, path).await },
             |result| {
                 with_ctx(|ctx| {
@@ -810,6 +815,7 @@ impl Ctx {
         self.refresh_activity_panel();
         let state = self.state.clone();
         runtime::spawn(
+            self.ui_id,
             async move { mon::kill_query(&state, &connection, pid).await },
             move |result| {
                 with_ctx(|ctx| {

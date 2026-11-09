@@ -104,6 +104,7 @@ impl Ctx {
 
         let (schema_arg, table) = (t.schema_arg, t.table);
         runtime::spawn(
+            self.ui_id,
             async move {
                 let schema = d
                     .get_table_schema(&schema_arg, &table)
@@ -180,6 +181,7 @@ impl Ctx {
         let page_driver = d.clone();
         let lost_id = t.connection_id.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 let started = std::time::Instant::now();
                 let out = page_driver.execute_query(&data_sql).await;
@@ -206,6 +208,7 @@ impl Ctx {
 
         if let Some((count_sql, count_seq)) = count {
             runtime::spawn(
+                self.ui_id,
                 async move {
                     let r = d
                         .execute_query(&count_sql)

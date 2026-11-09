@@ -225,6 +225,7 @@ impl Ctx {
         self.project_erd();
 
         runtime::spawn(
+            self.ui_id,
             async move {
                 // The saved arrangement is a small file; reading it here keeps
                 // the UI thread out of it.
@@ -441,6 +442,7 @@ impl Ctx {
             )
         };
         runtime::spawn(
+            self.ui_id,
             async move {
                 let mut store = JsonStore::open(LAYOUT_STORE).map_err(|e| e.to_string())?;
                 if empty {
@@ -525,6 +527,7 @@ impl Ctx {
         st.set_export_message("".into());
         let shown = path.to_string_lossy().to_string();
         runtime::spawn(
+            self.ui_id,
             async move { std::fs::write(&path, svg).map_err(|e| e.to_string()) },
             move |written| {
                 with_ctx(|ctx| {

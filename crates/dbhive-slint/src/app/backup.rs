@@ -174,6 +174,7 @@ impl Ctx {
         };
         self.refresh_backup_panel();
         runtime::spawn(
+            self.ui_id,
             async move {
                 // The listing stats every file: a blocking thread, not a
                 // runtime worker.
@@ -265,6 +266,7 @@ impl Ctx {
         let id = source.profile.id.clone();
         let progress = forward_progress();
         runtime::spawn(
+            self.ui_id,
             async move { svc::create_backup(&state, &id, options, progress).await },
             |result| with_ctx(|ctx| ctx.backup_created(result)),
         );
@@ -363,6 +365,7 @@ impl Ctx {
         let id = source.profile.id.clone();
         let progress = forward_progress();
         runtime::spawn(
+            self.ui_id,
             async move { svc::restore_backup(&state, &id, options, progress).await },
             move |result| with_ctx(|ctx| ctx.backup_restored(file, result)),
         );

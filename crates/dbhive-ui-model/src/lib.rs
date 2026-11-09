@@ -32,6 +32,7 @@ pub mod history_panel;
 pub mod import_export;
 pub mod import_wizard;
 pub mod keymap;
+pub mod layout;
 pub mod migrations;
 pub mod migrations_panel;
 pub mod palette_session;

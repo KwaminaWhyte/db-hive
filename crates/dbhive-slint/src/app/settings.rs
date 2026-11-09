@@ -255,9 +255,11 @@ impl Ctx {
             st.editor.draft().clone()
         };
         self.refresh_settings();
-        crate::runtime::spawn(async move { core_settings::save(&to_write) }, |res| {
-            with_ctx(|ctx| ctx.settings_written(res, "Settings saved"))
-        });
+        crate::runtime::spawn(
+            self.ui_id,
+            async move { core_settings::save(&to_write) },
+            |res| with_ctx(|ctx| ctx.settings_written(res, "Settings saved")),
+        );
     }
 
     /// Reset everything to defaults and save them. The editor only changes
@@ -273,7 +275,7 @@ impl Ctx {
             s.settings.view.banner = None;
         }
         self.refresh_settings();
-        crate::runtime::spawn(async move { core_settings::reset() }, |res| {
+        crate::runtime::spawn(self.ui_id, async move { core_settings::reset() }, |res| {
             with_ctx(|ctx| ctx.settings_written(res, "Settings reset to defaults"))
         });
     }
@@ -310,7 +312,7 @@ impl Ctx {
     fn retry_settings(self: &Rc<Self>) {
         self.session.borrow_mut().settings.view.load = Load::Loading;
         self.refresh_settings();
-        crate::runtime::spawn(async move { core_settings::load() }, |res| {
+        crate::runtime::spawn(self.ui_id, async move { core_settings::load() }, |res| {
             with_ctx(|ctx| {
                 {
                     let mut s = ctx.session.borrow_mut();
@@ -366,13 +368,17 @@ impl Ctx {
         self.refresh_history_panel();
         // A settings file that failed to load is not overwritten from here.
         if can_persist {
-            crate::runtime::spawn(async move { core_settings::save(&to_write) }, |res| {
-                if let Err(e) = res {
-                    with_ctx(|ctx| {
-                        ctx.toast(format!("Could not save the theme: {}", e), Tone::Danger)
-                    });
-                }
-            });
+            crate::runtime::spawn(
+                self.ui_id,
+                async move { core_settings::save(&to_write) },
+                |res| {
+                    if let Err(e) = res {
+                        with_ctx(|ctx| {
+                            ctx.toast(format!("Could not save the theme: {}", e), Tone::Danger)
+                        });
+                    }
+                },
+            );
         }
     }
 
@@ -437,27 +443,31 @@ impl Ctx {
             .settings
             .editor
             .saved_with_draft_shortcuts();
-        crate::runtime::spawn(async move { core_settings::save(&to_write) }, |res| {
-            with_ctx(|ctx| {
-                match res {
-                    Ok(written) => {
-                        ctx.session
-                            .borrow_mut()
-                            .settings
-                            .editor
-                            .mark_shortcuts_saved(&written.shortcuts);
-                        ctx.rebuild_keymap();
+        crate::runtime::spawn(
+            self.ui_id,
+            async move { core_settings::save(&to_write) },
+            |res| {
+                with_ctx(|ctx| {
+                    match res {
+                        Ok(written) => {
+                            ctx.session
+                                .borrow_mut()
+                                .settings
+                                .editor
+                                .mark_shortcuts_saved(&written.shortcuts);
+                            ctx.rebuild_keymap();
+                        }
+                        Err(e) => {
+                            ctx.session.borrow_mut().settings.view.banner = Some(Banner {
+                                message: format!("Could not save the shortcut: {}", e),
+                                tone: Tone::Danger,
+                            })
+                        }
                     }
-                    Err(e) => {
-                        ctx.session.borrow_mut().settings.view.banner = Some(Banner {
-                            message: format!("Could not save the shortcut: {}", e),
-                            tone: Tone::Danger,
-                        })
-                    }
-                }
-                ctx.refresh_settings();
-            })
-        });
+                    ctx.refresh_settings();
+                })
+            },
+        );
     }
 
     fn shortcut_at(index: i32) -> Option<ShortcutField> {

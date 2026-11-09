@@ -110,6 +110,7 @@ impl Ctx {
         };
         self.session.borrow_mut().builder.keys_loading = true;
         runtime::spawn(
+            self.ui_id,
             async move { d.get_foreign_keys(&schema_arg).await.unwrap_or_default() },
             move |keys| {
                 with_ctx(|ctx| {
@@ -156,6 +157,7 @@ impl Ctx {
         let qualifier = sql_qualifier(&driver_kind, &schema_arg);
         let table = name.to_string();
         runtime::spawn(
+            self.ui_id,
             {
                 let table = table.clone();
                 async move {

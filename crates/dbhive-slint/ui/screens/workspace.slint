@@ -25,6 +25,14 @@ export component WorkspaceScreen inherits VerticalLayout {
     in property <string> connection-name;
     // e.g. "app · public", blank on a driver with no separate database.
     in property <string> location-label;
+    // Resizable panes: the schema sidebar's width and the editor's height.
+    // Rust clamps the drag and saves both when the pointer is released.
+    in-out property <length> sidebar-width: 264px;
+    in-out property <length> editor-height: 220px;
+    callback sidebar-resize(length);
+    callback editor-resize(length);
+    callback layout-committed;
+
     in property <[TableItem]> tables;
     // The table whose preview tab is active, for highlighting it in the list.
     in property <string> selected-table;
@@ -226,7 +234,34 @@ export component WorkspaceScreen inherits VerticalLayout {
         // The schema browser: databases, schemas and tables. Its state is
         // `TreeState`, so this screen passes it nothing.
         SchemaTreePanel {
-            width: 264px;
+            width: root.sidebar-width;
+        }
+
+        // The drag handle between the schema tree and the tabs. Dragging
+        // reports the pointer's window x; Rust clamps it.
+        sidebar-splitter := Rectangle {
+            width: 5px;
+            // The size at the moment of the press, and the pointer offset
+            // then, so a drag computes the new size from the movement.
+            property <length> start-size: root.sidebar-width;
+            property <length> start-x: 0px;
+            background: sidebar-drag.has-hover || sidebar-drag.pressed ? Theme.border : transparent;
+            animate background { duration: 90ms; }
+            sidebar-drag := TouchArea {
+                mouse-cursor: col-resize;
+                moved => {
+                    root.sidebar-resize(sidebar-splitter.start-size + (self.mouse-x - sidebar-splitter.start-x));
+                }
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down) {
+                        sidebar-splitter.start-size = root.sidebar-width;
+                        sidebar-splitter.start-x = self.mouse-x;
+                    }
+                    if (e.kind == PointerEventKind.up) {
+                        root.layout-committed();
+                    }
+                }
+            }
         }
 
         VerticalLayout {
@@ -264,7 +299,7 @@ export component WorkspaceScreen inherits VerticalLayout {
                 spacing: 10px;
 
                 if root.active-is-query: Rectangle {
-                    height: 220px;
+                    height: root.editor-height;
                     min-width: 0px;
                     FocusScope {
                         // Cmd+Enter on macOS, Ctrl+Enter elsewhere. Slint maps
@@ -366,6 +401,30 @@ export component WorkspaceScreen inherits VerticalLayout {
                         enabled: !root.running && root.editor-text != "";
                         accessible-label: "Clear the editor";
                         clicked => { QueryState.clear-editor(); }
+                    }
+                }
+
+                // The drag handle between the editor and the results.
+                if root.active-is-query: editor-splitter := Rectangle {
+                    height: 5px;
+                    property <length> start-size: root.editor-height;
+                    property <length> start-y: 0px;
+                    background: editor-drag.has-hover || editor-drag.pressed ? Theme.border : transparent;
+                    animate background { duration: 90ms; }
+                    editor-drag := TouchArea {
+                        mouse-cursor: row-resize;
+                        moved => {
+                            root.editor-resize(editor-splitter.start-size + (self.mouse-y - editor-splitter.start-y));
+                        }
+                        pointer-event(e) => {
+                            if (e.kind == PointerEventKind.down) {
+                                editor-splitter.start-size = root.editor-height;
+                                editor-splitter.start-y = self.mouse-y;
+                            }
+                            if (e.kind == PointerEventKind.up) {
+                                root.layout-committed();
+                            }
+                        }
                     }
                 }
 

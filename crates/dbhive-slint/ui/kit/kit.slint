@@ -52,8 +52,12 @@ export component Button inherits Rectangle {
         : root.variant == ButtonVariant.ghost
             ? (root.pressed ? Theme.pressed : root.hovered ? Theme.hover : transparent)
         : (root.pressed ? Theme.pressed : root.hovered ? Theme.hover : Theme.secondary);
-    border-width: root.variant == ButtonVariant.secondary || root.variant == ButtonVariant.danger ? 1px : 0;
-    border-color: root.variant == ButtonVariant.danger ? Theme.destructive.transparentize(0.6)
+    border-width: focusable.has-focus
+        ? 1px
+        : root.variant == ButtonVariant.secondary || root.variant == ButtonVariant.danger ? 1px : 0;
+    border-color: focusable.has-focus
+        ? (root.variant == ButtonVariant.primary ? Theme.primary-foreground : Theme.primary)
+        : root.variant == ButtonVariant.danger ? Theme.destructive.transparentize(0.6)
         : root.hovered ? Theme.border-strong : Theme.border;
     animate background { duration: 90ms; }
 
@@ -70,6 +74,20 @@ export component Button inherits Rectangle {
         mouse-cursor: pointer;
         clicked => { root.clicked(); }
     }
+
+    // Keyboard: Tab reaches every button, Enter or Space presses it, and a
+    // focused button shows a ring. Pointer use never shows the ring.
+    focusable := FocusScope {
+        key-pressed(e) => {
+            if (!root.enabled) {
+                return reject;
+            }
+            if (e.text == Key.Space || e.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
 
     HorizontalLayout {
         padding-left: root.text == "" ? 8px : 12px;
@@ -94,6 +112,7 @@ export component Button inherits Rectangle {
             font-weight: root.variant == ButtonVariant.primary ? 600 : 500;
             vertical-alignment: center;
         }
+    }
     }
 }
 

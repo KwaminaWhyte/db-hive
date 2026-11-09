@@ -68,6 +68,7 @@ component ConnectionRow inherits Rectangle {
     callback duplicate;
     callback toggle-favorite;
     callback delete;
+    callback open-window;
 
     height: 64px;
     border-radius: Theme.radius-card;
@@ -159,6 +160,7 @@ component ConnectionRow inherits Rectangle {
                 }
                 menu := ContextMenuArea {
                     Menu {
+                        MenuItem { title: "Open in New Window"; activated => { root.open-window(); } }
                         MenuItem { title: "Edit…"; activated => { root.edit(); } }
                         MenuItem { title: "Duplicate"; activated => { root.duplicate(); } }
                         MenuItem {
@@ -194,6 +196,7 @@ export component ConnectionsScreen inherits Rectangle {
     callback edit(string);
     callback duplicate(string);
     callback toggle-favorite(string);
+    callback open-window(string);
     callback delete(string);
     callback dismiss-error;
 
@@ -329,6 +332,7 @@ export component ConnectionsScreen inherits Rectangle {
                             duplicate => { root.duplicate(item.id); }
                             toggle-favorite => { root.toggle-favorite(item.id); }
                             delete => { root.delete(item.id); }
+                            open-window => { root.open-window(item.id); }
                         }
                     }
                 }

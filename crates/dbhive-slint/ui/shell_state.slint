@@ -15,6 +15,8 @@ export global ShellState {
     in property <keys> key-history: @keys(Control + Shift + H);
     in property <keys> key-new-tab: @keys(Control + T);
     in property <keys> key-close-tab: @keys(Control + W);
+    in property <keys> key-new-window: @keys(Control + Shift + N);
+    in property <keys> key-close-window: @keys(Control + Shift + W);
 
     // Which theme mode is saved: 0 light, 1 dark, 2 system. The Theme menu
     // labels the current one.
@@ -31,4 +33,8 @@ export global ShellState {
     callback theme-mode-picked(int);
     // "docs" or "github"; Rust owns the URLs.
     callback open-link(string);
+    // File > New Window and File > Close Window. The controller opens a
+    // second window, or closes this one.
+    callback new-window-requested;
+    callback close-window-requested;
 }

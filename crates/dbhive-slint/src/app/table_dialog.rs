@@ -230,6 +230,7 @@ impl Ctx {
         self.table_dialog_refresh(Change::Structure);
 
         runtime::spawn(
+            self.ui_id,
             {
                 let table = table.clone();
                 async move {
@@ -363,6 +364,7 @@ impl Ctx {
         for table in missing {
             let (d, schema_arg) = (d.clone(), schema_arg.clone());
             runtime::spawn(
+                self.ui_id,
                 {
                     let table = table.clone();
                     async move {
@@ -476,6 +478,7 @@ impl Ctx {
         self.table_dialog_refresh(Change::Structure);
 
         runtime::spawn(
+            self.ui_id,
             {
                 let statements = statements.clone();
                 async move {

@@ -255,6 +255,7 @@ impl Ctx {
         };
         self.refresh_plugins(Items::Rebuild);
         crate::runtime::spawn(
+            self.ui_id,
             async move {
                 manager
                     .initialize()
@@ -317,6 +318,7 @@ impl Ctx {
         let ticket = self.session.borrow().plugins.interface_ticket.begin();
         let task_id = id.clone();
         crate::runtime::spawn(
+            self.ui_id,
             async move { activate(&manager, &task_id).await },
             move |activation| {
                 with_ctx(|ctx| {
@@ -422,6 +424,7 @@ impl Ctx {
         let ticket = self.session.borrow().plugins.interface_ticket.begin();
         let task_id = id.clone();
         crate::runtime::spawn(
+            self.ui_id,
             async move {
                 let plugin = manager
                     .set_enabled(&task_id, enabling)
@@ -543,6 +546,7 @@ impl Ctx {
         let name = self.plugin_name(&id);
         let task_id = id.clone();
         crate::runtime::spawn(
+            self.ui_id,
             async move {
                 manager
                     .update_config(&task_id, config)
@@ -614,6 +618,7 @@ impl Ctx {
         self.refresh_plugins(Items::Rebuild);
         let task_id = id.clone();
         crate::runtime::spawn(
+            self.ui_id,
             async move {
                 // onUnload for the plugin's benefit; its failure does not stop
                 // the removal.
@@ -667,6 +672,7 @@ impl Ctx {
         let ticket = self.session.borrow().plugins.interface_ticket.begin();
         let task_id = id.clone();
         crate::runtime::spawn(
+            self.ui_id,
             async move {
                 let plugin = manager.install(&entry).await.map_err(|e| e.to_string())?;
                 // A freshly installed plugin is enabled: installing it is the
@@ -743,6 +749,7 @@ impl Ctx {
         let ticket = self.session.borrow().plugins.interface_ticket.begin();
         let task_id = id.clone();
         crate::runtime::spawn(
+            self.ui_id,
             async move {
                 manager
                     .dispatch_ui_event(&task_id, &current, &event)

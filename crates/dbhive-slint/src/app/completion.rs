@@ -223,6 +223,7 @@ impl Ctx {
         };
         let worker_table = table.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 d.get_table_schema(&schema_arg, &worker_table)
                     .await
@@ -292,6 +293,7 @@ impl Ctx {
         let name = schema.to_string();
         let worker = name.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 d.get_tables(&worker)
                     .await

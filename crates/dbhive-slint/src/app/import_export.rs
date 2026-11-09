@@ -235,6 +235,7 @@ impl Ctx {
         let schema = target.raw_schema.clone();
         let id = target.id.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 let schema = (!schema.is_empty()).then_some(schema);
                 svc::get_tables_for_import(&state, &id, schema.as_deref()).await
@@ -316,6 +317,7 @@ impl Ctx {
         };
         self.refresh_data_panel();
         runtime::spawn(
+            self.ui_id,
             async move {
                 // Parsing a large file is CPU and IO bound; keep it off the
                 // runtime threads the drivers use.
@@ -388,6 +390,7 @@ impl Ctx {
         let id = target.id.clone();
         let asked = table.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 let schema = (!schema.is_empty()).then_some(schema);
                 svc::get_table_columns_for_import(&state, &id, &asked, schema.as_deref()).await
@@ -490,6 +493,7 @@ impl Ctx {
         self.refresh_data_panel();
         let kind = target.driver.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 tokio::task::spawn_blocking(move || {
                     let source = match cached {
@@ -543,6 +547,7 @@ impl Ctx {
         let state = self.state.clone();
         let id = target.id.clone();
         runtime::spawn(
+            self.ui_id,
             async move { svc::run_import(&state, &id, source, options, cancel).await },
             |result| with_ctx(|ctx| ctx.import_done(result)),
         );
@@ -631,6 +636,7 @@ impl Ctx {
         let state = self.state.clone();
         let id = target.id.clone();
         runtime::spawn(
+            self.ui_id,
             async move { svc::import_from_sql(&state, &id, &path, options, cancel).await },
             |result| with_ctx(|ctx| ctx.sql_done(result)),
         );
@@ -752,6 +758,7 @@ impl Ctx {
         let schema = target.schema();
         let path = opts.path.clone();
         runtime::spawn(
+            self.ui_id,
             async move { svc::export_table_to_file(&state, &id, &schema, &table, opts).await },
             move |result| {
                 with_ctx(|ctx| {
@@ -827,6 +834,7 @@ impl Ctx {
         let id = target.id.clone();
         let shown = path.clone();
         runtime::spawn(
+            self.ui_id,
             async move { svc::export_to_sql(&state, &id, &path, opts).await },
             move |result| {
                 with_ctx(|ctx| {

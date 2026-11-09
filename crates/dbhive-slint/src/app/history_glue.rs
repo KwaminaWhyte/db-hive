@@ -316,7 +316,7 @@ impl Ctx {
             s.history.templates_load_error.clear();
         }
         self.refresh_history_panel();
-        runtime::spawn(async move { load_templates() }, |result| {
+        runtime::spawn(self.ui_id, async move { load_templates() }, |result| {
             with_ctx(|ctx| {
                 {
                     let mut s = ctx.session.borrow_mut();
@@ -451,6 +451,7 @@ impl Ctx {
         self.session.borrow_mut().history.history_error.clear();
         self.refresh_history_panel();
         runtime::spawn(
+            self.ui_id,
             async move { AppState::save_history_to_store(&snapshot).map_err(|e| e.to_string()) },
             |saved| {
                 with_ctx(|ctx| match saved {
@@ -470,6 +471,7 @@ impl Ctx {
     fn persist_snippets(self: &Rc<Self>) {
         let state = self.state.clone();
         runtime::spawn(
+            self.ui_id,
             async move {
                 let guard = state.lock().unwrap();
                 guard.save_snippets_to_store().map_err(|e| e.to_string())
@@ -700,15 +702,19 @@ impl Ctx {
 
     fn persist_templates(self: &Rc<Self>) {
         let snapshot = self.session.borrow().history.templates.clone();
-        runtime::spawn(async move { save_templates(&snapshot) }, |saved| {
-            with_ctx(|ctx| {
-                ctx.session.borrow_mut().history.templates_error = match saved {
-                    Ok(()) => String::new(),
-                    Err(e) => format!("Could not save templates: {e}"),
-                };
-                ctx.refresh_history_panel();
-            })
-        });
+        runtime::spawn(
+            self.ui_id,
+            async move { save_templates(&snapshot) },
+            |saved| {
+                with_ctx(|ctx| {
+                    ctx.session.borrow_mut().history.templates_error = match saved {
+                        Ok(()) => String::new(),
+                        Err(e) => format!("Could not save templates: {e}"),
+                    };
+                    ctx.refresh_history_panel();
+                })
+            },
+        );
     }
 
     fn find_template(&self, id: &str) -> Option<QueryTemplate> {
@@ -930,12 +936,16 @@ impl Ctx {
 
     fn template_export(self: &Rc<Self>) {
         let snapshot = self.session.borrow().history.templates.clone();
-        runtime::spawn(async move { export_templates_now(&snapshot) }, |result| {
-            with_ctx(|ctx| match result {
-                Ok(path) => ctx.toast(format!("Exported to {}", path.display()), Tone::Success),
-                Err(e) => ctx.toast(format!("Export failed: {e}"), Tone::Danger),
-            })
-        });
+        runtime::spawn(
+            self.ui_id,
+            async move { export_templates_now(&snapshot) },
+            |result| {
+                with_ctx(|ctx| match result {
+                    Ok(path) => ctx.toast(format!("Exported to {}", path.display()), Tone::Success),
+                    Err(e) => ctx.toast(format!("Export failed: {e}"), Tone::Danger),
+                })
+            },
+        );
     }
 
     fn template_import_open(&self) {
@@ -949,33 +959,37 @@ impl Ctx {
 
     fn template_import(self: &Rc<Self>, path: String) {
         let path = path.trim().to_string();
-        runtime::spawn(async move { import_templates_now(&path) }, |result| {
-            with_ctx(|ctx| match result {
-                Err(e) => {
-                    if let Some(w) = ctx.window.upgrade() {
-                        w.global::<HistoryState>().set_import_error(e.into());
+        runtime::spawn(
+            self.ui_id,
+            async move { import_templates_now(&path) },
+            |result| {
+                with_ctx(|ctx| match result {
+                    Err(e) => {
+                        if let Some(w) = ctx.window.upgrade() {
+                            w.global::<HistoryState>().set_import_error(e.into());
+                        }
                     }
-                }
-                Ok(incoming) => {
-                    let added = {
-                        let s = ctx.session.borrow();
-                        merge_imported(&s.history.templates, incoming)
-                    };
-                    let count = added.len();
-                    if count > 0 {
-                        ctx.session.borrow_mut().history.templates.extend(added);
-                        ctx.persist_templates();
+                    Ok(incoming) => {
+                        let added = {
+                            let s = ctx.session.borrow();
+                            merge_imported(&s.history.templates, incoming)
+                        };
+                        let count = added.len();
+                        if count > 0 {
+                            ctx.session.borrow_mut().history.templates.extend(added);
+                            ctx.persist_templates();
+                        }
+                        ctx.session.borrow_mut().history.tab = PanelTab::Templates;
+                        ctx.set_panel_mode(PanelMode::Lists);
+                        ctx.refresh_history_panel();
+                        ctx.toast(
+                            format!("Imported {}", count_label(count, "template", "templates")),
+                            Tone::Success,
+                        );
                     }
-                    ctx.session.borrow_mut().history.tab = PanelTab::Templates;
-                    ctx.set_panel_mode(PanelMode::Lists);
-                    ctx.refresh_history_panel();
-                    ctx.toast(
-                        format!("Imported {}", count_label(count, "template", "templates")),
-                        Tone::Success,
-                    );
-                }
-            })
-        });
+                })
+            },
+        );
     }
 
     // -- Confirmations ----------------------------------------------------------

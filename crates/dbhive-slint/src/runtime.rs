@@ -49,7 +49,11 @@ pub fn handle() -> &'static tokio::runtime::Handle {
 /// panic hook has logged it (sanitized), and the UI is told with a toast
 /// (`app::shell::report_worker_panic`). `done` does not run then; there is no
 /// value to give it.
-pub fn spawn<T, F, D>(work: F, done: D)
+///
+/// `ui` is the id of the window that asked for the work. Completions and
+/// panic reports are bound to it while they run, so `with_ctx` inside
+/// reaches that window when several are open.
+pub fn spawn<T, F, D>(ui: u64, work: F, done: D)
 where
     T: Send + 'static,
     F: Future<Output = T> + Send + 'static,
@@ -59,10 +63,14 @@ where
     handle().spawn(async move {
         match task.await {
             Ok(out) => {
-                let _ = slint::invoke_from_event_loop(move || done(out));
+                let _ = slint::invoke_from_event_loop(move || {
+                    crate::app::with_ctx_bound(ui, move || done(out))
+                });
             }
             Err(e) if e.is_panic() => {
-                let _ = slint::invoke_from_event_loop(crate::app::report_worker_panic);
+                let _ = slint::invoke_from_event_loop(move || {
+                    crate::app::with_ctx_bound(ui, crate::app::report_worker_panic)
+                });
             }
             // Cancelled: the runtime is shutting down with the app.
             Err(_) => {}
@@ -144,6 +152,7 @@ mod tests {
         static DONE: AtomicBool = AtomicBool::new(false);
         DONE.store(false, Ordering::SeqCst);
         spawn(
+            1,
             async {
                 panic!("intentional test panic");
             },
