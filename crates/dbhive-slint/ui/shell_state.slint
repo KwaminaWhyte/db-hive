@@ -1,0 +1,34 @@
+// Window-level state the menu bar reads and the intents it raises, kept in
+// a global so `app.slint` gains no properties for them. The controller is
+// `src/app/shell.rs`.
+
+import { Palette } from "std-widgets.slint";
+
+export global ShellState {
+    // Live menu shortcuts. Rust sets each from the keymap (the registry's
+    // chords with the user's rebinds), so a rebind in Settings moves the
+    // menu's shortcut too. The defaults are the registry's, for snapshots
+    // and the first frame.
+    in property <keys> key-new-connection: @keys(Control + N);
+    in property <keys> key-settings: @keys(Control + Comma);
+    in property <keys> key-palette: @keys(Control + K);
+    in property <keys> key-history: @keys(Control + Shift + H);
+    in property <keys> key-new-tab: @keys(Control + T);
+    in property <keys> key-close-tab: @keys(Control + W);
+
+    // Which theme mode is saved: 0 light, 1 dark, 2 system. The Theme menu
+    // labels the current one.
+    in property <int> theme-mode: 1;
+
+    // The OS light/dark preference, live. Bound to the style's palette,
+    // which the winit backend updates when the OS appearance changes; the
+    // controller re-resolves the "System" theme mode on every change.
+    out property <ColorScheme> os-color-scheme: Palette.color-scheme;
+    changed os-color-scheme => { self.os-color-scheme-changed(); }
+
+    callback os-color-scheme-changed;
+    // 0 light, 1 dark, 2 system.
+    callback theme-mode-picked(int);
+    // "docs" or "github"; Rust owns the URLs.
+    callback open-link(string);
+}

@@ -5,14 +5,16 @@
 //! events into the shell-neutral form the shortcut recorder takes. Neither
 //! touches a window, so both are unit tested.
 
+use dbhive_core::models::settings::StartupBehavior;
+use dbhive_core::models::ConnectionProfile;
 use dbhive_core::settings as core_settings;
 use dbhive_ui_model::settings::{
     key_label_for_name, startup_label, KeyModifiers, Section, ShortcutField,
 };
 use dbhive_ui_model::settings_editor::{
-    language_label, language_labels, startup_labels, theme_mode_labels, NumberField,
-    SettingsEditor, ACCENT_PRESETS,
+    startup_labels, theme_mode_labels, NumberField, SettingsEditor, ACCENT_PRESETS,
 };
+use dbhive_ui_model::shell::{default_connection_index, default_connection_options};
 use slint::platform::Key;
 use slint::{ModelRc, SharedString, VecModel};
 
@@ -99,10 +101,14 @@ pub fn data(ed: &SettingsEditor, view: &View) -> SettingsData {
         can_save: ed.can_save(),
         saving: view.saving,
 
-        language_options: strings(language_labels()),
-        language: language_label(&d.general.language).into(),
         startup_options: strings(startup_labels()),
         startup: startup_label(d.general.startup_behavior).into(),
+        // The picker's options need the saved connections; the controller
+        // fills them in (`with_default_connection`).
+        show_default_connection: d.general.startup_behavior
+            == StartupBehavior::OpenDefaultConnection,
+        default_connection_options: strings(vec!["None"]),
+        default_connection: "None".into(),
         auto_save_connections: d.general.auto_save_connections,
         auto_check_updates: d.general.auto_check_updates,
         update_interval: ed.number_text(NumberField::UpdateInterval).into(),
@@ -144,6 +150,19 @@ pub fn data(ed: &SettingsEditor, view: &View) -> SettingsData {
         recording: ed.recording().is_some(),
         shortcuts: ModelRc::new(VecModel::from(shortcuts)),
     }
+}
+
+/// Fill the "Default connection" picker from the saved connections.
+pub fn with_default_connection(
+    mut data: SettingsData,
+    ed: &SettingsEditor,
+    profiles: &[ConnectionProfile],
+) -> SettingsData {
+    let options = default_connection_options(profiles);
+    let index = default_connection_index(profiles, ed.draft().general.default_database.as_deref());
+    data.default_connection = options[index].as_str().into();
+    data.default_connection_options = strings(options.iter().map(String::as_str).collect());
+    data
 }
 
 /// Which shortcut a row index means, for tests and callers that want the field.
@@ -304,8 +323,8 @@ mod tests {
         let d = data(&ed, &view);
         assert_eq!(d.section, 0);
         assert!(!d.dirty && !d.can_save && !d.recording);
-        assert_eq!(d.language.as_str(), "English");
         assert_eq!(d.startup.as_str(), "Show Connection List");
+        assert!(!d.show_default_connection);
         assert_eq!(d.theme_mode.as_str(), "System");
         assert_eq!(d.update_interval.as_str(), "24");
         assert_eq!(slint::Model::row_count(&d.shortcuts), 10);
@@ -349,5 +368,29 @@ mod tests {
             assert_eq!(field_at(i), Some(row.field));
         }
         assert_eq!(field_at(99), None);
+    }
+
+    #[test]
+    fn the_default_connection_row_appears_for_open_default_and_names_the_pick() {
+        let mut settings = AppSettings::default();
+        settings.general.startup_behavior = StartupBehavior::OpenDefaultConnection;
+        settings.general.default_database = Some("b".into());
+        let ed = SettingsEditor::new(settings);
+        let d = data(&ed, &View::default());
+        assert!(d.show_default_connection);
+        let p = |id: &str, name: &str| {
+            ConnectionProfile::new(
+                id.into(),
+                name.into(),
+                dbhive_core::models::DbDriver::Sqlite,
+                String::new(),
+                0,
+                String::new(),
+            )
+        };
+        let (a, b) = (p("a", "Alpha"), p("b", "Beta"));
+        let d = with_default_connection(d, &ed, &[b, a]);
+        assert_eq!(d.default_connection.as_str(), "Beta");
+        assert_eq!(slint::Model::row_count(&d.default_connection_options), 3);
     }
 }

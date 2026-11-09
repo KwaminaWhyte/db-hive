@@ -415,6 +415,23 @@ async fn scenario(w: AppWindow, db: PathBuf, finished: Rc<Cell<bool>>) {
                 .starts_with("INSERT INTO \"orders\"")
     })
     .await;
+    // Typing letters moves the highlight: "d" reaches "Drop Table" (the only
+    // D entry after the first row), and Enter asks for the typed name.
+    right_click_row(&w, 3);
+    until("the menu", || t.get_menu_visible()).await;
+    let d: SharedString = Key::D.into();
+    w.window()
+        .dispatch_event(WindowEvent::KeyPressed { text: d.clone() });
+    w.window()
+        .dispatch_event(WindowEvent::KeyReleased { text: d });
+    press_key(&w, Key::Return);
+    until("type-ahead picked Drop Table", || {
+        !t.get_menu_visible() && t.get_drop_visible()
+    })
+    .await;
+    t.set_drop_visible(false);
+    t.invoke_menu_dismissed();
+
     // A click on an entry picks it. The menu opens at the pointer: 4px of
     // padding, then 30px entries, so Generate SELECT (the second) is centred
     // 4 + 30 + 15 below the row's click point.

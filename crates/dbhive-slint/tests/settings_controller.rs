@@ -156,7 +156,15 @@ fn settings_open_apply_live_save_rebind_guard_reset_and_close() {
             s.state == 0 && s.section == 0 && !s.dirty,
             "fresh dialog should be clean"
         );
-        check!(s.language == "English", "language was {:?}", s.language);
+        check!(
+            s.startup.as_str() == "Show Connection List",
+            "startup was {:?}",
+            s.startup
+        );
+        check!(
+            !s.show_default_connection,
+            "the default-connection row should only show for Open Default Connection"
+        );
         Step::Next
     }));
 

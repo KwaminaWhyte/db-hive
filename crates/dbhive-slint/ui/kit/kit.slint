@@ -3051,14 +3051,35 @@ export struct CtxItem {
     divider: bool,
 }
 
+// Type-to-select for CtxMenu. The matching rules live in Rust
+// (`dbhive_ui_model::typeahead`, wired in `src/app/shell.rs`); until the
+// shell sets these, `is-key` is false and menus simply ignore letters.
+export global CtxTypeahead {
+    // One printable character a menu should type ahead with.
+    pure callback is-key(string) -> bool;
+    // The entry to highlight for the prefix typed so far, or -1 to stay.
+    pure callback next(items: [CtxItem], current: int, typed: string) -> int;
+    // Milliseconds since the app started, so a menu can expire its prefix
+    // after a pause. Rust owns the clock; `animation-tick` does not advance
+    // while no animation runs.
+    pure callback now() -> int;
+}
+
 // The surface and entries of a right-click menu. The caller places it (an
 // overlay at the pointer) and decides what an entry does; this draws the
 // entries, tracks the keyboard highlight and reports a pick or Escape.
+// Typing letters moves the highlight to the entry that starts with them
+// (see CtxTypeahead); the typed prefix resets after a short pause.
 export component CtxMenu inherits Popover {
     in property <[CtxItem]> items;
     in-out property <int> highlighted: -1;
     callback chosen(int);
     callback dismissed;
+
+    // The type-ahead prefix and when its last key arrived, in milliseconds
+    // (see CtxTypeahead.now).
+    property <string> typed;
+    property <int> typed-at;
 
     function glyph(name: string) -> image {
         return name == "table" ? Icons.table
@@ -3096,6 +3117,18 @@ export component CtxMenu inherits Popover {
             if (e.text == Key.Return) {
                 if (root.highlighted >= 0 && root.items[root.highlighted].enabled) {
                     root.chosen(root.highlighted);
+                }
+                return accept;
+            }
+            if (!e.modifiers.control && !e.modifiers.meta && !e.modifiers.alt && CtxTypeahead.is-key(e.text)) {
+                if (CtxTypeahead.now() - root.typed-at > 900) {
+                    root.typed = "";
+                }
+                root.typed += e.text;
+                root.typed-at = CtxTypeahead.now();
+                let next = CtxTypeahead.next(root.items, root.highlighted, root.typed);
+                if (next >= 0) {
+                    root.highlighted = next;
                 }
                 return accept;
             }

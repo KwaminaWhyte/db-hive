@@ -40,6 +40,10 @@ mod results;
 mod row_edit;
 mod schema_tree;
 mod settings;
+// Menu shortcuts, theme menu, help links, startup, crash boundary.
+mod shell;
+pub use shell::install_panic_hook;
+pub(crate) use shell::report_worker_panic;
 mod tab_persist;
 mod table_dialog;
 mod updates;
@@ -531,6 +535,7 @@ impl Ctx {
             async move { test_profile(state, profile, password, ssh_password).await },
             move |result| {
                 with_ctx(|ctx| {
+                    let ok = result.is_ok();
                     let mut s = ctx.session.borrow_mut();
                     s.editor.testing = false;
                     match result {
@@ -545,6 +550,9 @@ impl Ctx {
                     }
                     drop(s);
                     ctx.refresh_editor();
+                    if ok {
+                        ctx.auto_save_after_test();
+                    }
                 })
             },
         );
@@ -1333,6 +1341,7 @@ impl Ctx {
             running: tab.is_some_and(|t| t.running),
             editor_empty: tab.is_none_or(|t| t.sql.trim().is_empty()),
             dialog_open,
+            keymap: s.settings.keymap.clone(),
         }
     }
 
@@ -1391,6 +1400,9 @@ impl Ctx {
             CommandId::GoImportExport => self.open_import_export(None),
             CommandId::GoBackup => self.open_backup_panel(),
             CommandId::GoAiAssistant => self.ai_open(),
+            CommandId::GoHistory => self.open_history_panel(),
+            CommandId::WindowMinimize => self.window_minimize(),
+            CommandId::WindowMaximizeToggle => self.window_toggle_maximized(),
             // `status` only returns Enabled for the commands above.
             _ => return Outcome::Refused("Not available yet"),
         }
@@ -1409,8 +1421,8 @@ impl Ctx {
         let Some(chord) = chord_from_input(text, ctrl, alt, shift, meta) else {
             return false;
         };
-        let screen = self.command_context().screen;
-        match command_for_key(chord, self.overlay(), screen) {
+        let ctx = self.command_context();
+        match command_for_key(chord, self.overlay(), ctx.screen, &ctx.keymap) {
             Some(id) => {
                 self.dispatch(id);
                 true
@@ -1500,8 +1512,13 @@ impl Ctx {
         let Some(w) = self.window.upgrade() else {
             return;
         };
+        let screen = if w.get_screen() == Screen::Workspace {
+            Scope::Workspace
+        } else {
+            Scope::Connections
+        };
         let s = self.session.borrow();
-        let rows = s.shortcuts.view(IS_MAC);
+        let rows = s.shortcuts.view(IS_MAC, &s.settings.keymap, screen);
         palette_view::apply_shortcuts(&w, s.shortcuts.is_open(), s.shortcuts.query(), &rows);
     }
 
@@ -1545,6 +1562,7 @@ fn now_secs() -> i64 {
 }
 
 pub fn run() -> Result<(), slint::PlatformError> {
+    install_panic_hook();
     let window = build()?;
     let result = window.run();
     CTX.with(|c| c.borrow_mut().take());
@@ -1888,11 +1906,14 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     palette_view::set_metrics(&window);
 
     settings::wire(&window, &ctx);
+    shell::wire(&window, &ctx);
     // After the load, so the saved theme, accent and editor font are applied
     // before the first frame.
     ctx.init_settings();
 
     ctx.refresh_connections();
     CTX.with(|c| *c.borrow_mut() = Some(ctx));
+    // Settings > General > Startup behavior (needs the controller in place).
+    with_ctx(|ctx| ctx.run_startup_behavior());
     Ok(window)
 }
