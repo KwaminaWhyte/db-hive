@@ -1,5 +1,5 @@
 import { ListView } from "std-widgets.slint";
-import { Theme, Icon, Icons, CheckBox } from "../kit/kit.slint";
+import { Theme, Icon, Icons, CheckBox, Tooltip } from "../kit/kit.slint";
 
 // Virtualised results grid.
 //
@@ -68,7 +68,19 @@ export component ResultsGrid inherits Rectangle {
     in property <bool> all-checked: false;
     callback row-toggled(int);
     callback all-toggled;
-    property <length> gutter: root.selectable ? 36px : 0px;
+
+    // Row numbers (1-based, plus `row-number-offset`) in a column pinned to
+    // the left edge, so they stay put while the cells scroll sideways.
+    in property <bool> row-numbers: false;
+    in property <int> row-number-offset: 0;
+    property <int> last-number: root.rows.length + root.row-number-offset;
+    property <length> number-width: !root.row-numbers ? 0px
+        : root.last-number >= 100000 ? 64px
+        : root.last-number >= 10000 ? 56px
+        : root.last-number >= 1000 ? 48px
+        : 40px;
+    property <length> check-width: root.selectable ? 36px : 0px;
+    property <length> gutter: root.number-width + root.check-width;
 
     callback row-clicked(int);
     callback cell-clicked(int, int);
@@ -80,13 +92,21 @@ export component ResultsGrid inherits Rectangle {
     // Exposed so tests and snapshots can scroll without a pointer.
     in-out property <length> scroll-y <=> list.viewport-y;
 
+    // The full value of the cell under the pointer when the grid cut it
+    // short. One tooltip for the grid; the hovered cell claims it by key.
+    property <string> tip-text;
+    property <bool> tip-armed: false;
+    property <int> tip-owner: -1;
+    property <length> tip-x;
+    property <length> tip-y;
+
     background: Theme.card;
     border-radius: Theme.radius-card;
     border-width: 1px;
     border-color: Theme.border;
     clip: true;
 
-    Flickable {
+    hflick := Flickable {
         content-width: max(self.width, root.total-width + root.gutter);
         content-height: self.height;
 
@@ -99,8 +119,8 @@ export component ResultsGrid inherits Rectangle {
                 height: root.header-height;
                 background: Theme.sidebar;
                 if root.selectable: Rectangle {
-                    x: 0px;
-                    width: root.gutter;
+                    x: root.number-width;
+                    width: root.check-width;
                     CheckBox {
                         x: 10px;
                         y: (parent.height - self.height) / 2;
@@ -137,6 +157,27 @@ export component ResultsGrid inherits Rectangle {
                         }
                     }
                 }
+                // The number column's corner, pinned like the numbers.
+                if root.row-numbers: Rectangle {
+                    x: -hflick.content-x;
+                    width: root.number-width;
+                    background: Theme.sidebar;
+                    Text {
+                        x: 0;
+                        width: parent.width - 10px;
+                        text: "#";
+                        color: Theme.dim-foreground;
+                        font-size: Theme.size-small;
+                        font-weight: 600;
+                        horizontal-alignment: right;
+                        vertical-alignment: center;
+                    }
+                    Rectangle {
+                        x: parent.width - 1px;
+                        width: 1px;
+                        background: Theme.border;
+                    }
+                }
                 Rectangle {
                     y: parent.height - 1px;
                     height: 1px;
@@ -155,8 +196,8 @@ export component ResultsGrid inherits Rectangle {
                         : row.checked ? Theme.primary-soft.transparentize(0.5)
                         : (mod(r, 2) == 0 ? transparent : Theme.hover.transparentize(0.5));
                     if root.selectable: Rectangle {
-                        x: 0px;
-                        width: root.gutter;
+                        x: root.number-width;
+                        width: root.check-width;
                         CheckBox {
                             x: 10px;
                             y: (parent.height - self.height) / 2;
@@ -165,9 +206,26 @@ export component ResultsGrid inherits Rectangle {
                             accessible-label: "Select row";
                         }
                     }
-                    for cell[c] in row.cells: TouchArea {
+                    for cell[c] in row.cells: cell-touch := TouchArea {
+                        property <bool> editing: r == root.editing-row && c == root.editing-col;
+                        // Hovered, and the text did not fit.
+                        property <bool> tip: self.has-hover && !self.editing && !cell.is-null
+                            && label.preferred-width > label.width;
+                        property <int> key: r * 4096 + c;
                         x: root.gutter + root.columns[c].x;
                         width: root.columns[c].width;
+                        changed tip => {
+                            if (self.tip) {
+                                root.tip-owner = self.key;
+                                root.tip-text = cell.text;
+                                root.tip-x = self.absolute-position.x - root.absolute-position.x + 8px;
+                                root.tip-y = self.absolute-position.y - root.absolute-position.y + self.height + 2px;
+                                root.tip-armed = true;
+                            } else if (root.tip-owner == self.key) {
+                                root.tip-armed = false;
+                                root.tip-owner = -1;
+                            }
+                        }
                         clicked => {
                             if (!root.controlled) {
                                 root.selected-row = r;
@@ -185,7 +243,8 @@ export component ResultsGrid inherits Rectangle {
                             border-width: r == root.selected-row && c == root.selected-col ? 1px : 0px;
                             border-color: Theme.primary;
                         }
-                        if !(r == root.editing-row && c == root.editing-col): Text {
+                        label := Text {
+                            visible: !cell-touch.editing;
                             x: 12px;
                             width: parent.width - 20px;
                             text: cell.is-null ? "NULL" : cell.text;
@@ -198,7 +257,7 @@ export component ResultsGrid inherits Rectangle {
                         // The cell being edited: a text box over it. Enter or
                         // leaving the box commits the text to the pending
                         // changes; Escape drops it.
-                        if r == root.editing-row && c == root.editing-col: edit-scope := FocusScope {
+                        if cell-touch.editing: edit-scope := FocusScope {
                             property <bool> finished: false;
                             capture-key-pressed(event) => {
                                 if (event.text == Key.Escape) {
@@ -241,8 +300,39 @@ export component ResultsGrid inherits Rectangle {
                             }
                         }
                     }
+                    // The row's number, pinned to the left edge over the
+                    // cells that scroll beneath it.
+                    if root.row-numbers: Rectangle {
+                        x: -hflick.content-x;
+                        width: root.number-width;
+                        background: r == root.selected-row ? Theme.primary-soft : Theme.sidebar;
+                        Text {
+                            x: 0;
+                            width: parent.width - 10px;
+                            text: r + 1 + root.row-number-offset;
+                            color: r == root.selected-row ? Theme.foreground : Theme.dim-foreground;
+                            font-size: Theme.size-small;
+                            horizontal-alignment: right;
+                            vertical-alignment: center;
+                        }
+                        Rectangle {
+                            x: parent.width - 1px;
+                            width: 1px;
+                            background: Theme.border;
+                        }
+                    }
                 }
             }
         }
+    }
+
+    Tooltip {
+        x: max(4px, min(root.tip-x, root.width - self.width - 4px));
+        // Below the cell, or above it when the grid ends first.
+        y: root.tip-y + self.height + 4px <= root.height
+            ? root.tip-y
+            : max(4px, root.tip-y - root.row-height - self.height - 4px);
+        text: root.tip-text;
+        armed: root.tip-armed;
     }
 }

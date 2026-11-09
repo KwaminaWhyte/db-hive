@@ -36,6 +36,7 @@ mod completion;
 mod designer;
 mod erd;
 mod inspector;
+mod query_tools;
 mod results;
 mod row_edit;
 mod schema_tree;
@@ -79,6 +80,10 @@ struct Workspace {
     database: Option<String>,
     schema: Option<String>,
     tables: Vec<TableInfo>,
+    /// Databases on the server and the schemas of the current one, as last
+    /// listed. SQL completion offers them and can load their tables.
+    databases: Vec<String>,
+    schemas: Vec<String>,
     loading_tables: bool,
     tables_error: String,
     tables_latest: runtime::Latest,
@@ -94,6 +99,8 @@ struct Workspace {
 enum PendingAction {
     /// Close a query tab that still has SQL in it.
     CloseTab(u64),
+    /// Close several tabs (the tab bar's menu), some holding unsaved work.
+    CloseTabs(Vec<u64>),
     /// Run a statement the destructive-query guard flagged.
     RunAnyway(u64),
     /// Clear history, or delete a snippet or template.
@@ -192,6 +199,7 @@ struct Session {
     tab_persist: tab_persist::TabPersist,
     updates: updates::UpdateSession,
     results: results::ResultsSession,
+    query_tools: query_tools::QuerySession,
 }
 
 struct Ctx {
@@ -657,6 +665,9 @@ impl Ctx {
         self.ai_refresh_for_editor();
         // View mode, JSON / Text lines, the structured error and Export.
         self.results_refresh();
+        // Stop / Clear, the cancelled state, the grid selection and the tab
+        // bar's menu.
+        self.query_tools_refresh();
         let Some(w) = self.window.upgrade() else {
             return;
         };
@@ -737,7 +748,13 @@ impl Ctx {
             w.set_workspace_editor_text(tab.sql.as_str().into());
         }
         let dark = w.global::<Theme>().get_dark();
-        w.set_workspace_editor_lines(sql_highlight::to_model_for(&tab.sql, dark));
+        // Wrapped to the column count the editor reported, so the colour
+        // layer's rows line up with the text's.
+        w.set_workspace_editor_lines(sql_highlight::to_model_wrapped(
+            &tab.sql,
+            dark,
+            s.query_tools.wrap_columns(),
+        ));
         w.set_workspace_running(tab.running);
         w.set_workspace_rows_error(tab.error.as_deref().unwrap_or("").into());
         w.set_workspace_result_title(
@@ -917,6 +934,8 @@ impl Ctx {
                     ws.loading_tables = false;
                     ws.database = Some(overview.database.clone());
                     ws.schema = Some(schema.clone());
+                    ws.databases = overview.databases.clone();
+                    ws.schemas = overview.schemas.clone();
                     let loaded = tables.is_ok();
                     let for_tree = match tables {
                         Ok(t) => {
@@ -997,8 +1016,7 @@ impl Ctx {
             )
         };
         if !ask {
-            self.session.borrow_mut().workspace.tabs.close(id);
-            self.refresh_workspace();
+            self.close_tabs_now(&[id]);
             return;
         }
         self.session.borrow_mut().pending_action = Some(PendingAction::CloseTab(id));
@@ -1093,7 +1111,10 @@ impl Ctx {
         let query_settings = self.app_settings().query;
         // Settings > Max rows: the grid keeps at most this many.
         let max_rows = query_settings.max_rows as usize;
-        runtime::spawn(
+        // Stop needs both the task to abandon and the log entry to close.
+        let run_driver = d.clone();
+        let stop_log_id = log_id.clone();
+        let abort = query_tools::spawn_abortable(
             async move {
                 let started = std::time::Instant::now();
                 // Settings > Query timeout. Dropping the future stops
@@ -1113,6 +1134,11 @@ impl Ctx {
             },
             move |(out, elapsed)| {
                 with_ctx(|ctx| {
+                    // Stopped: the cancel already closed the log entry and the
+                    // tab shows the cancelled state, not this late result.
+                    if !ctx.query_run_finished(id, seq) {
+                        return;
+                    }
                     let outcome = out.map_err(|e| e.to_string());
                     ctx.record_run(
                         &connection_id,
@@ -1133,6 +1159,7 @@ impl Ctx {
                 })
             },
         );
+        self.query_run_started(id, seq, abort, stop_log_id, run_driver);
     }
 
     /// Write a finished run to the activity log and to query history. Done
@@ -1214,10 +1241,8 @@ impl Ctx {
     fn confirm_accepted(self: &Rc<Self>) {
         let action = self.session.borrow_mut().pending_action.take();
         match action {
-            Some(PendingAction::CloseTab(id)) => {
-                self.session.borrow_mut().workspace.tabs.close(id);
-                self.refresh_workspace();
-            }
+            Some(PendingAction::CloseTab(id)) => self.close_tabs_now(&[id]),
+            Some(PendingAction::CloseTabs(ids)) => self.close_tabs_now(&ids),
             Some(PendingAction::RunAnyway(id)) => self.run_tab(id, false),
             Some(PendingAction::History(pending)) => self.history_confirmed(pending),
             Some(PendingAction::Backup(pending)) => self.backup_confirmed(pending),
@@ -1406,6 +1431,10 @@ impl Ctx {
         shift: bool,
         meta: bool,
     ) -> bool {
+        // Ctrl+Tab and Ctrl+Shift+Tab cycle tabs, wherever the focus is.
+        if self.tabs_key_chord(text, ctrl, shift, meta) {
+            return true;
+        }
         let Some(chord) = chord_from_input(text, ctrl, alt, shift, meta) else {
             return false;
         };
@@ -1831,6 +1860,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     plugins_glue::wire(&window, &ctx);
     ai_glue::wire(&window, &ctx);
     results::wire(&window, &ctx);
+    query_tools::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {

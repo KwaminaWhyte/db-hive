@@ -69,6 +69,12 @@ import { TreeState, TreeContextOverlay, TreeDropOverlay, TreeCreateDbOverlay, Tr
 export { TreeState, TreeStatus, TreeRoutine } from "screens/schema_tree.slint";
 export { TreeNode, TreeRowKind, CtxItem } from "kit/kit.slint";
 
+// Query tabs: Stop / Clear, the query grid's selection, the tab bar's menu,
+// and the editor's font, wrap and minimap settings.
+import { QueryState, TabContextOverlay } from "screens/query_tabs.slint";
+export { QueryState } from "screens/query_tabs.slint";
+export { EditorPrefs } from "components/sql_editor.slint";
+
 export enum Screen { connections, workspace }
 
 export struct ToastItem {
@@ -606,7 +612,8 @@ export component AppWindow inherits Window {
         || BuilderState.visible || TableDialogState.visible || ErdState.visible
         || DesignerState.visible || PluginsState.visible || ResultsState.export-visible
         || TreeState.menu-visible || TreeState.drop-visible
-        || TreeState.create-db-visible || TreeState.routines-visible;
+        || TreeState.create-db-visible || TreeState.routines-visible
+        || QueryState.menu-visible;
     init => { fs.focus(); }
     changed any-overlay => {
         if (!root.any-overlay) {
@@ -645,6 +652,8 @@ export component AppWindow inherits Window {
     if TreeState.drop-visible: TreeDropOverlay { }
     if TreeState.create-db-visible: TreeCreateDbOverlay { }
     if TreeState.routines-visible: TreeRoutinesOverlay { }
+    // The tab bar's right-click menu.
+    if QueryState.menu-visible: TabContextOverlay { }
 
     // The query builder and the table dialogs, on the same layer.
     if BuilderState.visible: BuilderOverlay { }

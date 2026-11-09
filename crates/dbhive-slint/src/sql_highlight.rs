@@ -337,31 +337,44 @@ pub fn to_model(sql: &str) -> slint::ModelRc<crate::HighlightLine> {
 
 /// Build the editor's colour layer for `sql` for the given theme.
 pub fn to_model_for(sql: &str, dark: bool) -> slint::ModelRc<crate::HighlightLine> {
+    to_model_wrapped(sql, dark, 0)
+}
+
+/// The editor's colour layer, wrapped at `wrap` columns (0: one row per
+/// line) exactly as `dbhive_ui_model::editor_prefs::wrap_lines` splits the
+/// text. Whitespace runs are left out: they draw nothing in the layer, and
+/// the minimap would show them as bars.
+pub fn to_model_wrapped(
+    sql: &str,
+    dark: bool,
+    wrap: usize,
+) -> slint::ModelRc<crate::HighlightLine> {
     use slint::{ModelRc, VecModel};
-    let lines: Vec<crate::HighlightLine> = highlight(sql)
+
+    let lines: Vec<Vec<(String, Kind)>> = highlight(sql)
         .into_iter()
-        .map(|runs| {
-            let mut col = 0i32;
-            let items: Vec<crate::HighlightRun> = runs
+        .map(|runs| runs.into_iter().map(|r| (r.text, r.kind)).collect())
+        .collect();
+    let rows: Vec<crate::HighlightLine> = dbhive_ui_model::editor_prefs::wrap_lines(&lines, wrap)
+        .into_iter()
+        .map(|row| {
+            let items: Vec<crate::HighlightRun> = row
+                .pieces
                 .into_iter()
-                .map(|r| {
-                    let run = crate::HighlightRun {
-                        col,
-                        color: colour_for(r.kind, dark).into(),
-                        text: r.text.as_str().into(),
-                    };
-                    // Columns count characters, not bytes: the layer is
-                    // positioned per glyph.
-                    col += r.text.chars().count() as i32;
-                    run
+                .filter(|(_, _, kind)| *kind != Kind::Whitespace)
+                .map(|(text, col, kind)| crate::HighlightRun {
+                    col: col as i32,
+                    color: colour_for(kind, dark),
+                    text: text.as_str().into(),
                 })
                 .collect();
             crate::HighlightLine {
                 runs: ModelRc::new(VecModel::from(items)),
+                number: row.number as i32,
             }
         })
         .collect();
-    ModelRc::new(VecModel::from(lines))
+    ModelRc::new(VecModel::from(rows))
 }
 
 #[cfg(test)]

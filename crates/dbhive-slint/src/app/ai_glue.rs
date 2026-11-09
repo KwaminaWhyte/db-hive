@@ -96,7 +96,14 @@ impl Ctx {
     fn ai_editor(&self) -> (String, Option<String>) {
         let s = self.session.borrow();
         match s.workspace.tabs.active().filter(|t| t.is_query()) {
-            Some(tab) => (tab.sql.clone(), tab.error.clone()),
+            // A query the user stopped holds the cancel sentinel, not a
+            // failure the assistant could fix.
+            Some(tab) => (
+                tab.sql.clone(),
+                tab.error
+                    .clone()
+                    .filter(|e| !dbhive_ui_model::format::is_cancelled(e)),
+            ),
             None => (String::new(), None),
         }
     }

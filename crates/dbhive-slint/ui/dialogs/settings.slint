@@ -362,7 +362,7 @@ export component SettingsDialog inherits Rectangle {
                                     }
                                     SettingRow {
                                         title: "Editor font family";
-                                        description: "Saved only. The editor always uses a monospace font.";
+                                        description: "The first family named. A missing or proportional font falls back to the platform's monospace one.";
                                         TextField {
                                             width: 250px;
                                             text: root.data.font-family;
@@ -379,7 +379,7 @@ export component SettingsDialog inherits Rectangle {
                                     }
                                     SettingRow {
                                         title: "Minimap";
-                                        description: "Saved only. The editor has no minimap yet.";
+                                        description: "A coloured overview of the whole statement at the editor's right edge.";
                                         Toggle {
                                             checked: root.data.minimap;
                                             toggled => { root.toggle-minimap(); }
@@ -387,7 +387,7 @@ export component SettingsDialog inherits Rectangle {
                                     }
                                     SettingRow {
                                         title: "Word wrap";
-                                        description: "Saved only. The editor does not wrap lines yet.";
+                                        description: "Wrap long lines at the editor's width.";
                                         last: true;
                                         Toggle {
                                             checked: root.data.word-wrap;

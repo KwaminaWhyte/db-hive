@@ -1,0 +1,68 @@
+import { Theme, CtxItem, CtxMenu } from "../kit/kit.slint";
+
+// Query tabs' extras: Stop and Clear for the editor, the query grid's cell
+// selection and copy actions, and the tab bar's right-click menu. Rust owns
+// every value (`app/query_tools.rs`); the workspace draws from here and
+// reports intents.
+export global QueryState {
+    // The active tab's last run was stopped by the user.
+    in property <bool> cancelled;
+    // "Cancelled after 2.31s".
+    in property <string> cancelled-summary;
+    // Whether the active connection's driver interrupts the statement itself
+    // (SQLite) or only stops waiting for it.
+    in property <bool> server-stops;
+    callback stop;
+    callback clear-editor;
+
+    // The query grid's selected cell, -1 for none, and "Row 3 · name".
+    in property <int> selected-row: -1;
+    in property <int> selected-col: -1;
+    in property <string> selection-label;
+    callback cell-clicked(int, int);
+    callback clear-selection;
+    callback copy-cell;
+    callback copy-row;
+    callback copy-column;
+
+    // The tab bar: its right-click menu, where it opens (window
+    // coordinates), and a tick that hands the keyboard back to the bar.
+    in-out property <bool> menu-visible;
+    in property <length> menu-x;
+    in property <length> menu-y;
+    in property <[CtxItem]> menu-items;
+    in property <int> bar-focus-tick;
+    callback tab-context(int, length, length);
+    callback tab-navigate(string);
+    callback menu-chosen(int);
+    callback menu-dismissed;
+}
+
+// The tab bar's right-click menu, over the whole window. A press outside it
+// closes it, as the schema browser's does.
+export component TabContextOverlay inherits Rectangle {
+    TouchArea {
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                QueryState.menu-visible = false;
+                QueryState.menu-dismissed();
+            }
+        }
+    }
+
+    CtxMenu {
+        x: max(8px, min(QueryState.menu-x - root.absolute-position.x, root.width - self.width - 8px));
+        y: max(8px, min(QueryState.menu-y - root.absolute-position.y, root.height - self.height - 8px));
+        items: QueryState.menu-items;
+        highlighted: 0;
+        accessible-label: "Tab actions";
+        chosen(i) => {
+            QueryState.menu-visible = false;
+            QueryState.menu-chosen(i);
+        }
+        dismissed => {
+            QueryState.menu-visible = false;
+            QueryState.menu-dismissed();
+        }
+    }
+}
