@@ -59,4 +59,5 @@ pub mod table_view;
 pub mod tokens;
 pub mod typeahead;
 pub mod update_state;
+pub mod window_state;
 pub mod workspace_tabs;
