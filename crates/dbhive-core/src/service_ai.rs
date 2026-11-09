@@ -1476,3 +1476,333 @@ mod tests {
         );
     }
 }
+/// The Claude (Anthropic Messages) and Ollama wire formats, run end to end
+/// through `run_task_with`, `provider_status_with` and `list_models_with`
+/// against a stub HTTP server on a local socket. Nothing here can reach a
+/// real provider: every base URL is the stub's address, and the key lives in
+/// a `MemoryKeyStore`.
+#[cfg(test)]
+mod wire_tests {
+    use super::*;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, TcpStream};
+    use std::sync::{Arc, Mutex};
+
+    const KEY: &str = "stub-anthropic-key-not-real";
+
+    #[derive(Debug, Clone, Default)]
+    struct Seen {
+        method: String,
+        path: String,
+        headers: Vec<(String, String)>,
+        body: String,
+    }
+
+    impl Seen {
+        fn header(&self, name: &str) -> Option<&str> {
+            self.headers
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                .map(|(_, v)| v.as_str())
+        }
+        fn json(&self) -> serde_json::Value {
+            serde_json::from_str(&self.body).unwrap_or(serde_json::Value::Null)
+        }
+    }
+
+    type Reply = fn(&Seen) -> (&'static str, String);
+
+    fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+        haystack.windows(needle.len()).position(|w| w == needle)
+    }
+
+    fn serve(mut stream: TcpStream, seen: Arc<Mutex<Vec<Seen>>>, reply: Reply) {
+        let mut buf = Vec::new();
+        let mut tmp = [0u8; 4096];
+        let end = loop {
+            let n = stream.read(&mut tmp).unwrap_or(0);
+            if n == 0 {
+                return;
+            }
+            buf.extend_from_slice(&tmp[..n]);
+            if let Some(p) = find(&buf, b"\r\n\r\n") {
+                break p + 4;
+            }
+        };
+        let head = String::from_utf8_lossy(&buf[..end]).to_string();
+        let mut lines = head.lines();
+        let mut first = lines.next().unwrap_or("").split_whitespace();
+        let method = first.next().unwrap_or("").to_string();
+        let path = first.next().unwrap_or("").to_string();
+        let headers: Vec<(String, String)> = lines
+            .filter_map(|l| l.split_once(':'))
+            .map(|(k, v)| (k.trim().to_string(), v.trim().to_string()))
+            .collect();
+        let length: usize = headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("content-length"))
+            .and_then(|(_, v)| v.parse().ok())
+            .unwrap_or(0);
+        while buf.len() < end + length {
+            let n = stream.read(&mut tmp).unwrap_or(0);
+            if n == 0 {
+                break;
+            }
+            buf.extend_from_slice(&tmp[..n]);
+        }
+        let body = String::from_utf8_lossy(&buf[end..(end + length).min(buf.len())]).to_string();
+        let request = Seen {
+            method,
+            path,
+            headers,
+            body,
+        };
+        let (status, body) = reply(&request);
+        seen.lock().unwrap().push(request);
+        let _ = write!(
+            stream,
+            "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        );
+    }
+
+    /// Start a stub answering with `reply`; returns its base URL and what it saw.
+    fn stub(reply: Reply) -> (String, Arc<Mutex<Vec<Seen>>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let s = seen.clone();
+        std::thread::spawn(move || {
+            for stream in listener.incoming().flatten() {
+                let s = s.clone();
+                std::thread::spawn(move || serve(stream, s, reply));
+            }
+        });
+        (base, seen)
+    }
+
+    fn claude_reply(req: &Seen) -> (&'static str, String) {
+        if req.header("x-api-key") != Some(KEY) {
+            return (
+                "401 Unauthorized",
+                r#"{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}"#
+                    .to_string(),
+            );
+        }
+        let model = req.json()["model"].as_str().unwrap_or("").to_string();
+        let reply = serde_json::json!({
+            "id": "msg_stub",
+            "type": "message",
+            "role": "assistant",
+            "model": model,
+            "content": [
+                { "type": "text", "text": "Count them like this:" },
+                { "type": "text", "text": "```sql\nSELECT count(*) FROM users;\n```" }
+            ],
+            "stop_reason": "end_turn",
+            "usage": { "input_tokens": 12, "output_tokens": 9 }
+        });
+        ("200 OK", reply.to_string())
+    }
+
+    fn ollama_reply(req: &Seen) -> (&'static str, String) {
+        match (req.method.as_str(), req.path.as_str()) {
+            ("GET", "/api/tags") => (
+                "200 OK",
+                serde_json::json!({ "models": [
+                    { "name": "llama3.2:latest", "modified_at": "2026-01-01T00:00:00Z", "size": 2_000_000_000u64,
+                      "details": { "family": "llama", "parameter_size": "3B" } },
+                    { "name": "llama3.2:latest", "modified_at": "2026-01-01T00:00:00Z", "size": 2_000_000_000u64 }
+                ]})
+                .to_string(),
+            ),
+            ("POST", "/api/chat") => (
+                "200 OK",
+                serde_json::json!({
+                    "model": req.json()["model"],
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "message": { "role": "assistant", "content": "```sql\nSELECT name FROM users;\n```" },
+                    "done": true,
+                    "prompt_eval_count": 30,
+                    "eval_count": 8
+                })
+                .to_string(),
+            ),
+            _ => ("404 Not Found", r#"{"error":"not found"}"#.to_string()),
+        }
+    }
+
+    fn settings_for(provider: AiProviderType, base: &str) -> AiSettings {
+        let mut s = AiSettings {
+            active_provider: provider,
+            ..AiSettings::default()
+        };
+        s.get_mut(provider).base_url = base.to_string();
+        s.get_mut(provider).timeout_secs = 10;
+        s
+    }
+
+    #[tokio::test]
+    async fn claude_chat_goes_out_in_the_messages_format_and_comes_back_as_text() {
+        let (base, seen) = stub(claude_reply);
+        let store = MemoryKeyStore::new();
+        store.set(AiProviderType::Anthropic, KEY).unwrap();
+        let settings = settings_for(AiProviderType::Anthropic, &base);
+
+        let history = vec![
+            ChatMessage::user("list users"),
+            ChatMessage::assistant("SELECT id FROM users;"),
+        ];
+        let messages = build_chat_messages(
+            "Database: shop\n\nTables:\n\npublic.users:\n  - id: integer\n",
+            &history,
+            "how many are there?",
+            20,
+        );
+        let answer = run_task_with(
+            &store,
+            settings,
+            AiProviderType::Anthropic,
+            Some("claude-stub-1".into()),
+            AiTask::Chat { messages },
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(answer.provider, AiProviderType::Anthropic);
+        assert_eq!(answer.model, "claude-stub-1");
+        assert!(answer.content.starts_with("Count them like this:"));
+        assert_eq!(
+            extract_sql(&answer.content).as_deref(),
+            Some("SELECT count(*) FROM users;")
+        );
+
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(seen.len(), 1);
+        let req = &seen[0];
+        assert_eq!(req.method, "POST");
+        assert_eq!(req.path, "/v1/messages");
+        assert_eq!(req.header("x-api-key"), Some(KEY));
+        assert_eq!(req.header("anthropic-version"), Some("2023-06-01"));
+        assert!(
+            req.header("authorization").is_none(),
+            "Claude takes no bearer token"
+        );
+        let body = req.json();
+        assert_eq!(body["model"], "claude-stub-1");
+        assert!(
+            body["max_tokens"].as_u64().unwrap_or(0) > 0,
+            "max_tokens is required"
+        );
+        // The system prompt is its own field, carrying the schema, and is not
+        // one of the messages.
+        let system = body["system"].as_str().unwrap();
+        assert!(system.contains("public.users"));
+        let roles: Vec<&str> = body["messages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|m| m["role"].as_str().unwrap())
+            .collect();
+        assert_eq!(roles, ["user", "assistant", "user"]);
+        assert_eq!(body["messages"][2]["content"], "how many are there?");
+    }
+
+    #[tokio::test]
+    async fn a_claude_refusal_reports_the_providers_own_message() {
+        let (base, _) = stub(claude_reply);
+        let store = MemoryKeyStore::new();
+        store.set(AiProviderType::Anthropic, "wrong-key").unwrap();
+        let err = run_task_with(
+            &store,
+            settings_for(AiProviderType::Anthropic, &base),
+            AiProviderType::Anthropic,
+            None,
+            AiTask::Explain {
+                sql: "SELECT 1".into(),
+            },
+        )
+        .await
+        .unwrap_err()
+        .to_string();
+        assert!(err.contains("invalid x-api-key"), "{err}");
+        assert!(
+            !err.contains("wrong-key"),
+            "the key must not appear in an error"
+        );
+    }
+
+    #[tokio::test]
+    async fn ollama_status_models_and_a_generate_request_use_its_own_api() {
+        let (base, seen) = stub(ollama_reply);
+        let store = MemoryKeyStore::new();
+        let settings = settings_for(AiProviderType::Ollama, &base);
+
+        let status = provider_status_with(&store, &settings, AiProviderType::Ollama)
+            .await
+            .unwrap();
+        assert!(status.available && status.configured, "{status:?}");
+
+        let models = list_models_with(&store, &settings, AiProviderType::Ollama)
+            .await
+            .unwrap();
+        assert_eq!(models.len(), 1, "the repeated tag is listed once");
+        assert_eq!(models[0].id, "llama3.2:latest");
+
+        let answer = run_task_with(
+            &store,
+            settings,
+            AiProviderType::Ollama,
+            Some("llama3.2:latest".into()),
+            AiTask::Generate {
+                prompt: "user names".into(),
+                schema_context: "Database: shop\n\nTables:\n\npublic.users:\n  - name: text\n"
+                    .into(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(answer.model, "llama3.2:latest");
+        assert_eq!(
+            extract_sql(&answer.content).as_deref(),
+            Some("SELECT name FROM users;")
+        );
+
+        let seen = seen.lock().unwrap().clone();
+        let chat = seen.iter().find(|r| r.path == "/api/chat").unwrap();
+        assert_eq!(chat.method, "POST");
+        assert!(
+            chat.header("authorization").is_none(),
+            "Ollama sends no key"
+        );
+        let body = chat.json();
+        assert_eq!(
+            body["stream"], false,
+            "the client reads one reply, not a stream"
+        );
+        assert_eq!(body["model"], "llama3.2:latest");
+        let messages = body["messages"].as_array().unwrap();
+        assert_eq!(messages[0]["role"], "system");
+        assert!(messages[0]["content"]
+            .as_str()
+            .unwrap()
+            .contains("public.users"));
+        let last = messages.last().unwrap();
+        assert_eq!(last["role"], "user");
+        assert!(last["content"].as_str().unwrap().contains("user names"));
+    }
+
+    #[tokio::test]
+    async fn ollama_not_running_is_unavailable_not_an_error() {
+        // A port nothing listens on.
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
+        drop(listener);
+        let settings = settings_for(AiProviderType::Ollama, &base);
+        let status =
+            provider_status_with(&MemoryKeyStore::new(), &settings, AiProviderType::Ollama)
+                .await
+                .unwrap();
+        assert!(!status.available && status.configured);
+    }
+}

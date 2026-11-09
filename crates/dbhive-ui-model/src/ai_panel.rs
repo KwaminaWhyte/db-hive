@@ -47,7 +47,8 @@ pub fn request_disclosure(kind: Kind, include_schema: bool) -> &'static str {
             "The query, the error text as the database reported it, and the schema context."
         }
         (Kind::Fix, false) => "The query and the error text as the database reported it.",
-        (Kind::Chat, _) => "Your message and the earlier turns.",
+        (Kind::Chat, true) => "Your message, the earlier turns and the schema context.",
+        (Kind::Chat, false) => "Your message and the earlier turns.",
     }
 }
 
@@ -259,6 +260,8 @@ pub struct Inputs<'a> {
     pub current_sql: &'a str,
     pub last_error: Option<&'a str>,
     pub prompt: &'a str,
+    /// The chat box: a free-form question about the database.
+    pub chat: &'a str,
 }
 
 #[derive(Debug, Clone)]
@@ -548,7 +551,10 @@ impl AiPanel {
     fn waiting_for_schema(&self, kind: Kind) -> bool {
         self.include_schema
             && self.context_load == Load::Loading
-            && matches!(kind, Kind::Generate | Kind::Optimize | Kind::Fix)
+            && matches!(
+                kind,
+                Kind::Generate | Kind::Optimize | Kind::Fix | Kind::Chat
+            )
     }
 
     // -- Requests -----------------------------------------------------------------------
@@ -571,7 +577,7 @@ impl AiPanel {
             has_prompt: !i.prompt.trim().is_empty(),
             has_sql: !i.current_sql.trim().is_empty(),
             has_error: i.last_error.is_some_and(|e| !e.trim().is_empty()),
-            has_question: false,
+            has_question: !i.chat.trim().is_empty(),
         }
     }
 
@@ -609,7 +615,7 @@ impl AiPanel {
             kind,
             RequestInputs {
                 prompt: i.prompt,
-                chat_input: "",
+                chat_input: i.chat,
                 current_sql: i.current_sql,
                 last_error: i.last_error,
                 schema_context: &schema,
@@ -774,13 +780,19 @@ impl AiPanel {
             _ => (false, String::new()),
         };
 
-        let disclosure = [Kind::Generate, Kind::Explain, Kind::Optimize, Kind::Fix]
-            .into_iter()
-            .map(|k| DisclosureLine {
-                label: k.label().to_string(),
-                text: request_disclosure(k, self.include_schema).to_string(),
-            })
-            .collect();
+        let disclosure = [
+            Kind::Generate,
+            Kind::Explain,
+            Kind::Optimize,
+            Kind::Fix,
+            Kind::Chat,
+        ]
+        .into_iter()
+        .map(|k| DisclosureLine {
+            label: k.label().to_string(),
+            text: request_disclosure(k, self.include_schema).to_string(),
+        })
+        .collect();
 
         let turns = self
             .turns
@@ -854,6 +866,7 @@ impl AiPanel {
             can_explain: self.can(Kind::Explain, i),
             can_optimize: self.can(Kind::Optimize, i),
             can_fix: self.can(Kind::Fix, i),
+            can_chat: self.can(Kind::Chat, i),
             has_sql: !i.current_sql.trim().is_empty(),
             sql_preview: clip_lines(i.current_sql.trim(), 2),
             has_error: i.last_error.is_some_and(|e| !e.trim().is_empty()),
@@ -937,6 +950,7 @@ pub struct AiView {
     pub can_explain: bool,
     pub can_optimize: bool,
     pub can_fix: bool,
+    pub can_chat: bool,
     pub has_sql: bool,
     pub sql_preview: String,
     pub has_error: bool,
@@ -994,6 +1008,16 @@ mod tests {
             current_sql: sql,
             last_error: error,
             prompt,
+            chat: "",
+        }
+    }
+
+    fn chat(question: &str) -> Inputs<'_> {
+        Inputs {
+            current_sql: "",
+            last_error: None,
+            prompt: "",
+            chat: question,
         }
     }
 
@@ -1692,5 +1716,90 @@ mod tests {
         assert_eq!(p.schema_to_send(), "");
         // The text stays visible so the user can see what they are holding back.
         assert_eq!(p.view(inputs("", None, "")).context_text, p.context_text());
+    }
+
+    // --- free-form chat --------------------------------------------------------
+
+    #[test]
+    fn chat_needs_a_question_and_a_usable_provider() {
+        let p = ready_panel();
+        assert!(!p.view(chat("   ")).can_chat);
+        assert!(p.view(chat("which table holds users?")).can_chat);
+        assert!(!AiPanel::default().view(chat("hello")).can_chat);
+        let mut empty = ready_panel();
+        assert!(empty.start(Kind::Chat, chat("  ")).is_none());
+        assert!(empty.turns().is_empty(), "a blank question records nothing");
+    }
+
+    #[test]
+    fn chat_sends_the_schema_the_earlier_turns_and_the_question() {
+        let mut p = ready_panel();
+        p.start(Kind::Generate, inputs("", None, "list users"))
+            .unwrap();
+        p.finish(
+            OPENAI,
+            Kind::Generate,
+            Ok(response("SELECT id FROM users;")),
+        );
+
+        let d = p
+            .start(Kind::Chat, chat("  and how many are there?  "))
+            .unwrap();
+        let AiTask::Chat { messages } = d.task else {
+            panic!("expected a chat task");
+        };
+        use dbhive_core::ai::ChatRole;
+        assert_eq!(messages[0].role, ChatRole::System);
+        assert!(
+            messages[0].content.contains("main.users"),
+            "the schema goes with chat"
+        );
+        assert_eq!(messages[1].content, "list users");
+        assert_eq!(messages[2].content, "SELECT id FROM users;");
+        let last = messages.last().unwrap();
+        assert_eq!(last.role, ChatRole::User);
+        assert_eq!(last.content, "and how many are there?");
+        assert_eq!(p.turns().last().unwrap().content, "and how many are there?");
+        assert_eq!(p.view(chat("")).busy_label, "Thinking");
+    }
+
+    #[test]
+    fn chat_without_the_schema_says_so_and_sends_none() {
+        let mut p = ready_panel();
+        assert!(request_disclosure(Kind::Chat, true).contains("schema context"));
+        p.set_include_schema(false);
+        let d = p.start(Kind::Chat, chat("hi")).unwrap();
+        let AiTask::Chat { messages } = d.task else {
+            panic!("expected a chat task");
+        };
+        assert!(!messages[0].content.contains("DATABASE SCHEMA"));
+        let v = p.view(chat(""));
+        assert!(v.disclosure.iter().any(|l| l.label == "Chat"));
+    }
+
+    #[test]
+    fn a_chat_answer_offers_its_statement_and_runs_nothing() {
+        let mut p = ready_panel();
+        p.start(Kind::Chat, chat("count users")).unwrap();
+        p.finish(
+            OPENAI,
+            Kind::Chat,
+            Ok(response(
+                "Like this:\n```sql\nSELECT count(*) FROM users;\n```",
+            )),
+        );
+        assert_eq!(p.turn_sql(1), Some("SELECT count(*) FROM users;"));
+        let v = p.view(chat(""));
+        assert_eq!(v.turns[1].heading, "Chat");
+        assert_eq!(v.turns[1].body, "Like this:");
+        assert!(v.turns[1].has_sql);
+    }
+
+    #[test]
+    fn chat_waits_for_a_schema_that_is_still_loading() {
+        let mut p = ready_panel();
+        p.begin_context(("conn".to_string(), "other".to_string()));
+        assert!(!p.view(chat("hi")).can_chat);
+        assert!(p.start(Kind::Chat, chat("hi")).is_none());
     }
 }

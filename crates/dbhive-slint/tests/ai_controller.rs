@@ -17,7 +17,9 @@
 //! Explain sends no schema; Optimize is appended and opened in a new tab; the
 //! schema can be switched off; a provider failure is a failed turn; switching
 //! to a closed Ollama is the guided "not running" state, and the choices
-//! persist; removing the key goes back to the first state.
+//! persist; a free-form chat question sends the schema and the earlier turns,
+//! offers its statement to the editor and runs nothing; removing the key goes
+//! back to the first state.
 
 use std::cell::{Cell, RefCell};
 use std::io::{Read, Write};
@@ -177,6 +179,8 @@ fn handle(mut stream: TcpStream, seen: Arc<Mutex<Vec<Seen>>>, fail_chat: Arc<Ato
             "```sql\nSELECT * FROM widgets WHERE nme = 'x';\n```"
         } else if system.contains("Explain SQL queries") {
             "This query reads every row of the widgets table."
+        } else if system.contains("Never claim to have run a query") {
+            "```sql\nSELECT count(*) FROM widgets;\n```"
         } else if system.contains("performance optimization") {
             "Bound the scan.\n```sql\nSELECT name FROM widgets ORDER BY id LIMIT 100;\n```\nThat reads at most 100 rows."
         } else {
@@ -408,8 +412,13 @@ fn configure_ask_apply_and_fix_against_a_stub_provider() {
                 if !s.get_context_summary().starts_with("1 table,") {
                     return bail(format!("context summary was {:?}", s.get_context_summary()));
                 }
-                if s.get_disclosure().row_count() != 4 {
-                    return bail("every action should say what it sends".into());
+                let disclosure: Vec<String> = s
+                    .get_disclosure()
+                    .iter()
+                    .map(|d| d.label.to_string())
+                    .collect();
+                if disclosure != ["Generate SQL", "Explain", "Optimize", "Fix Error", "Chat"] {
+                    return bail(format!("every action should say what it sends, got {disclosure:?}"));
                 }
 
                 // A bad base URL is refused and changes nothing.
@@ -657,6 +666,71 @@ fn configure_ask_apply_and_fix_against_a_stub_provider() {
             14 if s.get_empty_kind() == -1 && s.get_models().row_count() == 2 => {
                 if s.get_model_text().contains("Mini") || !s.get_model_text().starts_with("GPT-4o") {
                     return bail(format!("the remembered model should be back, got {:?}", s.get_model_text()));
+                }
+                // Step 9 turned the schema off; turn it back on, because a
+                // chat that carries it is what this step is about.
+                if s.get_include_schema() {
+                    return bail("the schema should still be off from step 9".into());
+                }
+                s.invoke_toggle_schema();
+                if !s.get_include_schema() {
+                    return bail("the schema toggle did not turn it back on".into());
+                }
+                // Free-form chat: the box enables Send, and sending empties it.
+                let question = "which table holds the widget count?";
+                s.set_chat(question.into());
+                s.invoke_chat_edited(question.into());
+                if !s.get_can_chat() {
+                    return bail("Send should be enabled with a question".into());
+                }
+                s.invoke_send_chat();
+                if !s.get_busy() || s.get_can_chat() {
+                    return bail("a chat in flight should disable Send".into());
+                }
+                if !s.get_chat().is_empty() {
+                    return bail("the question box should be empty once it is sent".into());
+                }
+                step2.set(16);
+            }
+            16 if s.get_turns().row_count() == 2 && !s.get_busy() => {
+                let turns = s.get_turns().iter().collect::<Vec<_>>();
+                if !turns[0].user || turns[1].user || turns[1].failed {
+                    return bail("the chat should read request then answer".into());
+                }
+                if turns[1].heading != "Chat" || !turns[1].has_sql
+                    || turns[1].sql != "SELECT count(*) FROM widgets;"
+                {
+                    return bail(format!("chat answer {:?} {:?}", turns[1].heading, turns[1].sql));
+                }
+                let Some(req) = stub2.last_chat("Never claim to have run a query") else {
+                    return bail("no chat request reached the stub".into());
+                };
+                let sent = system_prompt(&req.body);
+                if !sent.contains("main.widgets") || !sent.contains("Database: widgets.sqlite") {
+                    return bail("the chat request should carry the schema".into());
+                }
+                let v: serde_json::Value = serde_json::from_str(&req.body).unwrap();
+                let messages = v["messages"].as_array().unwrap();
+                if messages.len() != 2
+                    || messages[1]["content"] != "which table holds the widget count?"
+                {
+                    return bail(format!("chat messages were {messages:?}"));
+                }
+                if req.body.contains("sprocket") || req.body.contains(&dir_text) {
+                    return bail("row data or a local path reached the chat request".into());
+                }
+                // The statement goes to the editor only when asked, and is
+                // never run.
+                s.invoke_apply(1, 0);
+                if w.get_workspace_editor_text() != "SELECT count(*) FROM widgets;" {
+                    return bail(format!("editor after chat apply: {:?}", w.get_workspace_editor_text()));
+                }
+                if w.get_workspace_has_result() || w.get_workspace_running() {
+                    return bail("a chat answer ran itself".into());
+                }
+                s.invoke_clear();
+                if s.get_turns().row_count() != 0 {
+                    return bail("Clear should empty the chat too".into());
                 }
                 s.invoke_remove_key();
                 step2.set(15);

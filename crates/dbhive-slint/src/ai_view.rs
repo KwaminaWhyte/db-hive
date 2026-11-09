@@ -121,6 +121,7 @@ pub fn apply(w: &AppWindow, view: &AiView, extras: &Extras<'_>) {
     s.set_can_explain(view.can_explain);
     s.set_can_optimize(view.can_optimize);
     s.set_can_fix(view.can_fix);
+    s.set_can_chat(view.can_chat);
     s.set_has_sql(view.has_sql);
     s.set_sql_preview(view.sql_preview.as_str().into());
     s.set_has_error(view.has_error);

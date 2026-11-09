@@ -73,6 +73,9 @@ export global AiState {
     in property <bool> can-explain: false;
     in property <bool> can-optimize: false;
     in property <bool> can-fix: false;
+    // Free-form chat: the question box and whether it can be sent.
+    in-out property <string> chat;
+    in property <bool> can-chat: false;
     in property <bool> has-sql: false;
     in property <string> sql-preview;
     in property <bool> has-error: false;
@@ -109,6 +112,9 @@ export global AiState {
     callback explain;
     callback optimize;
     callback fix;
+    // The chat box changed, or was sent (Enter or the Send button).
+    callback chat-edited(string);
+    callback send-chat;
     callback toggle-schema;
     callback toggle-context;
     callback reload-context;
@@ -376,8 +382,28 @@ component AiControls inherits VerticalLayout {
             }
         }
     }
+    // Ask anything about the database. The answer joins the conversation
+    // below; a statement in it goes to the editor only when asked.
+    HorizontalLayout {
+        spacing: 6px;
+        TextField {
+            horizontal-stretch: 1;
+            has-icon: true;
+            icon: Icons.sparkles;
+            text <=> AiState.chat;
+            placeholder: "Ask about this database";
+            edited(t) => { AiState.chat-edited(t); }
+            accepted(t) => { AiState.send-chat(); }
+        }
+        Button {
+            text: "Send";
+            enabled: AiState.can-chat;
+            accessible-label: "Send the question to the assistant";
+            clicked => { AiState.send-chat(); }
+        }
+    }
     if AiState.turns.length == 0 && !AiState.busy: Text {
-        text: "Answers appear here. Nothing is run for you: a statement goes into the editor only when you choose.";
+        text: "Ask a question above, or use the buttons. Nothing is run for you: a statement goes into the editor only when you choose.";
         color: Theme.muted-foreground;
         font-size: Theme.size-small;
         wrap: word-wrap;
