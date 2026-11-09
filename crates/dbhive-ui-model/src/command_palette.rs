@@ -15,6 +15,11 @@
 //!
 //! Keys are [`KeyCode`], not a toolkit type; each shell converts at the point
 //! where it reads input.
+//!
+//! The chords here are defaults. Settings can rebind some of them; the merge
+//! is a [`Keymap`], and dispatch goes through it.
+
+use crate::keymap::Keymap;
 
 /// Every action reachable from the palette or a keyboard shortcut.
 ///
@@ -456,11 +461,16 @@ pub const COMMANDS: &[Command] = &[
         "Server stats and running processes",
         Group::Navigation,
     ),
-    cmd(
-        CommandId::GoHistory,
-        "Go to Query History",
-        "Previously executed queries",
-        Group::Navigation,
+    // The Slint shell's View menu has offered Cmd+Shift+H since it was
+    // built; the registry is where that binding belongs.
+    with_chord(
+        cmd(
+            CommandId::GoHistory,
+            "Go to Query History",
+            "Previously executed queries",
+            Group::Navigation,
+        ),
+        Chord::cmd_shift(KeyCode::H),
     ),
     scoped(
         cmd(
@@ -703,15 +713,14 @@ fn scope_active(scope: Scope, screen: Scope) -> bool {
     scope == Scope::Global || scope == screen
 }
 
-/// The command bound to `chord` on a screen, if any.
+/// The command bound to `chord` on a screen, if any, under `keymap`: the
+/// registry's chords with the user's saved rebinds applied (see
+/// [`crate::keymap`]). Pass `&Keymap::default()` for the registry alone.
 ///
 /// Chords are compared exactly here; the fuzzier `matches_logically` rules
 /// only apply when reading real input, and [`dispatch_order`] compensates.
-pub fn command_for_chord(chord: Chord, screen: Scope) -> Option<CommandId> {
-    COMMANDS
-        .iter()
-        .find(|c| c.chord == Some(chord) && scope_active(c.scope, screen))
-        .map(|c| c.id)
+pub fn command_for_chord(keymap: &Keymap, chord: Chord, screen: Scope) -> Option<CommandId> {
+    keymap.command_for_chord(chord, screen)
 }
 
 /// Chorded commands live on `screen`, most specific chord first.
@@ -1015,11 +1024,15 @@ mod tests {
     #[test]
     fn workspace_chords_are_dead_on_the_connection_list() {
         assert_eq!(
-            command_for_chord(Chord::cmd(Key::Enter), Scope::Workspace),
+            command_for_chord(&Keymap::default(), Chord::cmd(Key::Enter), Scope::Workspace),
             Some(CommandId::RunQuery)
         );
         assert_eq!(
-            command_for_chord(Chord::cmd(Key::Enter), Scope::Connections),
+            command_for_chord(
+                &Keymap::default(),
+                Chord::cmd(Key::Enter),
+                Scope::Connections
+            ),
             None
         );
     }
@@ -1027,11 +1040,43 @@ mod tests {
     #[test]
     fn escape_only_means_back_on_the_connection_list() {
         assert_eq!(
-            command_for_chord(Chord::bare(Key::Escape), Scope::Connections),
+            command_for_chord(
+                &Keymap::default(),
+                Chord::bare(Key::Escape),
+                Scope::Connections
+            ),
             Some(CommandId::ConnectionsBack)
         );
         assert_eq!(
-            command_for_chord(Chord::bare(Key::Escape), Scope::Workspace),
+            command_for_chord(
+                &Keymap::default(),
+                Chord::bare(Key::Escape),
+                Scope::Workspace
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn command_for_chord_follows_the_saved_rebinds() {
+        let mut s = dbhive_core::models::settings::ShortcutsSettings::default();
+        s.execute_query = "Ctrl+R".into();
+        s.show_shortcuts = "Ctrl+Shift+Y".into();
+        let map = Keymap::from_settings(&s);
+        assert_eq!(
+            command_for_chord(&map, Chord::cmd(Key::R), Scope::Workspace),
+            Some(CommandId::RunQuery)
+        );
+        assert_eq!(
+            command_for_chord(&map, Chord::cmd(Key::Enter), Scope::Workspace),
+            None
+        );
+        assert_eq!(
+            command_for_chord(&map, Chord::cmd_shift(Key::Y), Scope::Connections),
+            Some(CommandId::ShowShortcuts)
+        );
+        assert_eq!(
+            command_for_chord(&map, Chord::bare(Key::Questionmark), Scope::Connections),
             None
         );
     }
@@ -1040,11 +1085,11 @@ mod tests {
     fn global_chords_are_live_everywhere() {
         for screen in [Scope::Connections, Scope::Workspace] {
             assert_eq!(
-                command_for_chord(Chord::cmd(Key::K), screen),
+                command_for_chord(&Keymap::default(), Chord::cmd(Key::K), screen),
                 Some(CommandId::OpenCommandPalette)
             );
             assert_eq!(
-                command_for_chord(Chord::cmd(Key::Comma), screen),
+                command_for_chord(&Keymap::default(), Chord::cmd(Key::Comma), screen),
                 Some(CommandId::GoSettings)
             );
         }
