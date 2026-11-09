@@ -415,22 +415,24 @@ async fn scenario(w: AppWindow, db: PathBuf, finished: Rc<Cell<bool>>) {
                 .starts_with("INSERT INTO \"orders\"")
     })
     .await;
-    // Typing letters moves the highlight: "d" reaches "Drop Table" (the only
-    // D entry after the first row), and Enter asks for the typed name.
+    // Typing a letter moves the highlight: "e" reaches "Edit Table" (the only
+    // E entry), and Enter picks it. A pick that opened a dialog proves the
+    // highlight moved rather than staying on the first entry.
     right_click_row(&w, 3);
     until("the menu", || t.get_menu_visible()).await;
-    let d: SharedString = Key::D.into();
+    let e: SharedString = Key::E.into();
     w.window()
-        .dispatch_event(WindowEvent::KeyPressed { text: d.clone() });
+        .dispatch_event(WindowEvent::KeyPressed { text: e.clone() });
     w.window()
-        .dispatch_event(WindowEvent::KeyReleased { text: d });
+        .dispatch_event(WindowEvent::KeyReleased { text: e });
     press_key(&w, Key::Return);
-    until("type-ahead picked Drop Table", || {
-        !t.get_menu_visible() && t.get_drop_visible()
+    let dlg = w.global::<TableDialogState>();
+    until("type-ahead picked Edit Table", || {
+        !t.get_menu_visible() && dlg.get_visible() && dlg.get_title() == "Edit table"
     })
     .await;
-    t.set_drop_visible(false);
-    t.invoke_menu_dismissed();
+    dlg.invoke_close();
+    until("the edit dialog to close", || !dlg.get_visible()).await;
 
     // A click on an entry picks it. The menu opens at the pointer: 4px of
     // padding, then 30px entries, so Generate SELECT (the second) is centred

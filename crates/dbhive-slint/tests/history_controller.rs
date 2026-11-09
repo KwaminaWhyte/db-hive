@@ -393,8 +393,9 @@ fn run_a_query_find_it_in_history_and_rerun_it_into_a_new_tab() {
                 // The label and the type are editable. The type is written
                 // into the SQL placeholder; the label stays with the parameter.
                 h.invoke_form_param_label(1, "Minimum id".into());
-                h.invoke_form_param_type(0, 1); // name -> integer
-                if !h.get_form_sql().contains("{{name:integer}}")
+                // index 6 is "text": it keeps the value quoted below.
+                h.invoke_form_param_type(0, 6);
+                if !h.get_form_sql().contains("{{name:text}}")
                     || !h.get_form_sql().contains("{{min_id:integer}}")
                 {
                     return bail(format!(
@@ -403,7 +404,7 @@ fn run_a_query_find_it_in_history_and_rerun_it_into_a_new_tab() {
                     ));
                 }
                 let p0 = h.get_form_params().row_data(0).unwrap();
-                if p0.type_label != "integer" || p0.type_index != 1 {
+                if p0.type_label != "text" || p0.type_index != 6 {
                     return bail(format!("name type is now {}", p0.type_label));
                 }
                 h.invoke_form_param_default(1, "0".into());

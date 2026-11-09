@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use dbhive_slint::AppWindow;
 use slint::platform::{Key, WindowEvent};
-use slint::{ComponentHandle, SharedString, Timer, TimerMode};
+use slint::{ComponentHandle, Model, SharedString, Timer, TimerMode};
 
 async fn sleep(d: Duration) {
     let fired = Rc::new(Cell::new(false));
@@ -73,6 +73,22 @@ fn cmd(w: &AppWindow, ch: &str) {
         .dispatch_event(WindowEvent::KeyReleased { text: ctrl });
 }
 
+/// A chord with Control and Shift held.
+fn cmd_shift(w: &AppWindow, ch: &str) {
+    let ctrl: SharedString = Key::Control.into();
+    let shift: SharedString = Key::Shift.into();
+    w.window()
+        .dispatch_event(WindowEvent::KeyPressed { text: ctrl.clone() });
+    w.window().dispatch_event(WindowEvent::KeyPressed {
+        text: shift.clone(),
+    });
+    key(w, ch);
+    w.window()
+        .dispatch_event(WindowEvent::KeyReleased { text: shift });
+    w.window()
+        .dispatch_event(WindowEvent::KeyReleased { text: ctrl });
+}
+
 fn press(w: &AppWindow, k: Key) {
     key(w, k);
 }
@@ -100,7 +116,7 @@ async fn scenario(w: AppWindow, settings_raised: Rc<Cell<u32>>, finished: Rc<Cel
     );
 
     // Show Shortcuts moved to Cmd+Shift+Y; the help shows the new caps.
-    cmd(&w, "Y");
+    cmd_shift(&w, "Y");
     until("the rebind opened the shortcuts help", || {
         w.get_show_shortcuts()
     })
@@ -116,7 +132,16 @@ async fn scenario(w: AppWindow, settings_raised: Rc<Cell<u32>>, finished: Rc<Cel
             .iter()
             .map(|k| k.to_string())
             .collect::<Vec<_>>(),
-        vec!["Ctrl", "J"],
+        // The window formats chords for the build target, so on a Mac the
+        // modifier is the Command glyph and elsewhere "Ctrl".
+        vec![
+            if cfg!(target_os = "macos") {
+                dbhive_ui_model::command_palette::COMMAND_GLYPH
+            } else {
+                "Ctrl"
+            },
+            "J"
+        ],
         "the help still shows the old binding"
     );
     // The old help key does nothing now.
@@ -130,6 +155,8 @@ async fn scenario(w: AppWindow, settings_raised: Rc<Cell<u32>>, finished: Rc<Cel
     );
 
     finished.set(true);
+    // Leave the event loop, or `w.run()` never returns.
+    slint::quit_event_loop().unwrap();
 }
 
 #[test]
