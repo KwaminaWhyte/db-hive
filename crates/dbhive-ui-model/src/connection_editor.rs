@@ -344,6 +344,7 @@ pub struct Validation {
     pub ssh_port: Option<String>,
     pub ssh_username: Option<String>,
     pub ssh_private_key_path: Option<String>,
+    pub ssh_local_port: Option<String>,
 }
 
 impl Validation {
@@ -363,6 +364,7 @@ impl Validation {
             &self.ssh_port,
             &self.ssh_username,
             &self.ssh_private_key_path,
+            &self.ssh_local_port,
         ]
         .into_iter()
         .filter_map(|m| m.as_deref())
@@ -423,6 +425,12 @@ pub fn validate(form: &ConnectionForm) -> Validation {
             && form.ssh_private_key_path.trim().is_empty()
         {
             v.ssh_private_key_path = Some("Private key path is required".to_string());
+        }
+        // Blank or 0 means "pick a free port"; anything else must be a port.
+        let local = form.ssh_local_port.trim();
+        if !local.is_empty() && local.parse::<u16>().is_err() {
+            v.ssh_local_port =
+                Some("Local port must be 0 (automatic) or between 1 and 65535".to_string());
         }
     }
 
@@ -1061,6 +1069,24 @@ mod tests {
 
         form.ssh_private_key_path = "~/.ssh/id_ed25519".to_string();
         assert!(validate(&form).is_valid());
+    }
+
+    #[test]
+    fn ssh_local_port_is_blank_zero_or_a_port() {
+        let mut form = valid_pg_form();
+        form.ssh_enabled = true;
+        form.ssh_host = "bastion".to_string();
+        form.ssh_username = "ubuntu".to_string();
+        for ok in ["", " ", "0", "15432", "65535"] {
+            form.ssh_local_port = ok.to_string();
+            assert!(validate(&form).is_valid(), "{ok:?}");
+        }
+        for bad in ["-1", "65536", "abc"] {
+            form.ssh_local_port = bad.to_string();
+            assert!(validate(&form).ssh_local_port.is_some(), "{bad:?}");
+        }
+        form.ssh_local_port = "15432".to_string();
+        assert_eq!(build_ssh_config(&form).unwrap().local_port, 15432);
     }
 
     #[test]
