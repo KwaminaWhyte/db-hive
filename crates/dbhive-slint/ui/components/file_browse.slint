@@ -1,0 +1,27 @@
+// Native file and folder pickers behind every Browse button.
+//
+// A Browse button names what it is choosing; Rust (src/file_dialog.rs and
+// src/app/connect_flow.rs) opens the platform picker off the UI thread and,
+// when a path comes back, fills the field the button sits beside through that
+// field's own edited callback. The typed path field always stays usable.
+
+export enum BrowseTarget {
+    // Connection editor.
+    sqlite-file,
+    ssh-key,
+    // Import / export panel.
+    import-file,
+    sql-file,
+    export-file,
+    dump-file,
+    // Results > Export.
+    results-export,
+    // Backup > Create.
+    backup-dir,
+}
+
+export global FileBrowse {
+    // A picker is open; Browse buttons disable so a second one cannot stack.
+    in property <bool> busy;
+    callback browse(BrowseTarget);
+}

@@ -1,3 +1,4 @@
+import { FileBrowse, BrowseTarget } from "../components/file_browse.slint";
 import { Theme, Icons, Tone, ButtonVariant, Button, Segmented, Banner, Dropdown, EmptyState, ChartPlot, ResultViewLine, ResultViewText, ResultViewError, ExportDialog } from "../kit/kit.slint";
 
 // What the results area adds around the grid: a Table / JSON / Text switch,
@@ -259,6 +260,9 @@ export component ResultsExportOverlay inherits Rectangle {
                 done-message: ResultsState.export-done-message;
                 format-picked(i) => { ResultsState.export-format-picked(i); }
                 path-edited(t) => { ResultsState.export-path-edited(t); }
+                browsable: true;
+                browse-busy: FileBrowse.busy;
+                browse => { FileBrowse.browse(BrowseTarget.results-export); }
                 use-suggested => { ResultsState.export-suggest(); }
                 export => { ResultsState.export-run(); }
                 cancel => { ResultsState.export-close(); }

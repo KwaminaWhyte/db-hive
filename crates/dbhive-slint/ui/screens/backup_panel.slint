@@ -7,6 +7,7 @@
 // Rust decides what every row says (`dbhive_ui_model::backup_manager`); this
 // file lays it out.
 
+import { FileBrowse, BrowseTarget } from "../components/file_browse.slint";
 import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Toggle, Divider, Banner, EmptyState, Badge, DetailRow, ProgressBar, FormField, FactRow, Card } from "../kit/kit.slint";
 
@@ -304,12 +305,21 @@ component CreateView inherits VerticalLayout {
             FormField {
                 label: "Save in";
                 hint: "Leave blank to use the backup folder. An absolute path is required otherwise.";
-                TextField {
-                    text <=> BackupState.output-dir;
-                    placeholder: BackupState.directory;
-                    has-icon: true;
-                    icon: Icons.folder;
-                    edited(t) => { BackupState.output-dir-edited(t); }
+                HorizontalLayout {
+                    spacing: 8px;
+                    TextField {
+                        horizontal-stretch: 1;
+                        text <=> BackupState.output-dir;
+                        placeholder: BackupState.directory;
+                        has-icon: true;
+                        icon: Icons.folder;
+                        edited(t) => { BackupState.output-dir-edited(t); }
+                    }
+                    Button {
+                        text: "Browse…";
+                        enabled: !FileBrowse.busy;
+                        clicked => { FileBrowse.browse(BrowseTarget.backup-dir); }
+                    }
                 }
             }
 

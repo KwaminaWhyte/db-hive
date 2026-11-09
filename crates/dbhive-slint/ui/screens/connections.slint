@@ -9,7 +9,7 @@
 
 import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons, Tone, ButtonVariant, Icon, Button, Badge, TextField, BrandMark,
-    Divider, Banner, EmptyState } from "../kit/kit.slint";
+    Divider, Banner, EmptyState, CollapseHeader } from "../kit/kit.slint";
 import { PluginsState, PluginToolbarHost } from "plugins_panel.slint";
 
 export struct ConnectionItem {
@@ -25,6 +25,19 @@ export struct ConnectionItem {
     favorite: bool,
     connected: bool,
     connecting: bool,
+    // A folder header instead of a connection: `folder` is its collapse key,
+    // `name` its label, `count` the connections under it.
+    is-folder: bool,
+    folder: string,
+    count: int,
+    collapsed: bool,
+}
+
+// Folder grouping (dbhive_ui_model::connection_folders). Rust fills the
+// summary line; a header click raises `toggle-folder` with the folder's key.
+export global ConnectionsState {
+    in property <string> summary;
+    callback toggle-folder(string);
 }
 
 component DriverChip inherits Rectangle {
@@ -222,7 +235,8 @@ export component ConnectionsScreen inherits Rectangle {
                         font-weight: 700;
                     }
                     Text {
-                        text: root.total == 0 ? "No saved connections yet"
+                        text: ConnectionsState.summary != "" ? ConnectionsState.summary
+                            : root.total == 0 ? "No saved connections yet"
                             : root.total == 1 ? "1 connection"
                             : root.total + " connections";
                         color: Theme.muted-foreground;
@@ -299,14 +313,23 @@ export component ConnectionsScreen inherits Rectangle {
                 VerticalLayout {
                     spacing: 2px;
                     alignment: start;
-                    for item in root.items: ConnectionRow {
-                        item: item;
-                        connect => { root.connect(item.id); }
-                        disconnect => { root.disconnect(item.id); }
-                        edit => { root.edit(item.id); }
-                        duplicate => { root.duplicate(item.id); }
-                        toggle-favorite => { root.toggle-favorite(item.id); }
-                        delete => { root.delete(item.id); }
+                    for item in root.items: VerticalLayout {
+                        padding-top: item.is-folder ? 8px : 0px;
+                        if item.is-folder: CollapseHeader {
+                            title: item.name;
+                            count: item.count;
+                            open: !item.collapsed;
+                            clicked => { ConnectionsState.toggle-folder(item.folder); }
+                        }
+                        if !item.is-folder: ConnectionRow {
+                            item: item;
+                            connect => { root.connect(item.id); }
+                            disconnect => { root.disconnect(item.id); }
+                            edit => { root.edit(item.id); }
+                            duplicate => { root.duplicate(item.id); }
+                            toggle-favorite => { root.toggle-favorite(item.id); }
+                            delete => { root.delete(item.id); }
+                        }
                     }
                 }
             }

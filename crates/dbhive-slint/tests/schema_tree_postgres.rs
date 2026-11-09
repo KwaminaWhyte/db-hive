@@ -922,6 +922,12 @@ fn schemas_cross_schema_drop_database_switch_and_routines_on_a_real_postgres() {
         state.save_profiles_to_store().unwrap();
     }
 
+    // This server trusts local connections and needs no password; say one is
+    // stored so the shell connects instead of opening the password prompt.
+    let secrets = std::sync::Arc::new(dbhive_slint::app::MemorySecrets::default());
+    secrets.stored.lock().unwrap().insert("pg".to_string());
+    dbhive_slint::app::use_secret_store(secrets);
+
     let w = dbhive_slint::app::build().unwrap();
     w.show().unwrap();
 

@@ -6,6 +6,7 @@
 // `ImportExportOverlay`. Rust decides what every field says
 // (`dbhive_ui_model::import_wizard`, `data_forms`); this file lays it out.
 
+import { FileBrowse, BrowseTarget } from "../components/file_browse.slint";
 import { ScrollView } from "std-widgets.slint";
 import { Theme, Icons, Tone, ButtonVariant, Button, TextField, Dropdown, Toggle, Divider, Banner, EmptyState, UnderlineTabs, Badge, StepBar, ProgressBar, CodeBlock, FormField, FactRow, SectionLabel, Card } from "../kit/kit.slint";
 import { ResultsGrid, GridColumn, GridRow } from "../components/results_grid.slint";
@@ -221,15 +222,24 @@ component FileStep inherits VerticalLayout {
 
     FormField {
         label: "File";
-        hint: "CSV, TSV, TXT, XLSX or XLS. There is no file picker in this build: type or paste the full path.";
+        hint: "CSV, TSV, TXT, XLSX or XLS. Browse, or type or paste the full path.";
         error: ImportExportState.import-path-error;
-        TextField {
-            text <=> ImportExportState.import-path;
-            placeholder: "/Users/you/Downloads/data.csv";
-            has-icon: true;
-            icon: Icons.file-text;
-            edited(t) => { ImportExportState.import-path-edited(t); }
-            accepted(t) => { ImportExportState.import-read-preview(); }
+        HorizontalLayout {
+            spacing: 8px;
+            TextField {
+                horizontal-stretch: 1;
+                text <=> ImportExportState.import-path;
+                placeholder: "/Users/you/Downloads/data.csv";
+                has-icon: true;
+                icon: Icons.file-text;
+                edited(t) => { ImportExportState.import-path-edited(t); }
+                accepted(t) => { ImportExportState.import-read-preview(); }
+            }
+            Button {
+                text: "Browse…";
+                enabled: !FileBrowse.busy;
+                clicked => { FileBrowse.browse(BrowseTarget.import-file); }
+            }
         }
     }
 
@@ -799,16 +809,25 @@ component SqlFilePane inherits VerticalLayout {
 
             FormField {
                 label: "SQL file";
-                hint: "A dump from this app, mysqldump or pg_dump. Type or paste the full path.";
+                hint: "A dump from this app, mysqldump or pg_dump. Browse, or type or paste the full path.";
                 error: ImportExportState.sql-path-error;
-                TextField {
-                    text <=> ImportExportState.sql-path;
-                    placeholder: "/Users/you/Downloads/dump.sql";
-                    has-icon: true;
-                    icon: Icons.file-text;
-                    enabled: !ImportExportState.sql-running;
-                    edited(t) => { ImportExportState.sql-path-edited(t); }
-                    accepted(t) => { ImportExportState.sql-run(); }
+                HorizontalLayout {
+                    spacing: 8px;
+                    TextField {
+                        horizontal-stretch: 1;
+                        text <=> ImportExportState.sql-path;
+                        placeholder: "/Users/you/Downloads/dump.sql";
+                        has-icon: true;
+                        icon: Icons.file-text;
+                        enabled: !ImportExportState.sql-running;
+                        edited(t) => { ImportExportState.sql-path-edited(t); }
+                        accepted(t) => { ImportExportState.sql-run(); }
+                    }
+                    Button {
+                        text: "Browse…";
+                        enabled: !FileBrowse.busy && !ImportExportState.sql-running;
+                        clicked => { FileBrowse.browse(BrowseTarget.sql-file); }
+                    }
                 }
             }
 
@@ -1015,6 +1034,11 @@ component ExportPane inherits VerticalLayout {
                         enabled: !ImportExportState.export-running;
                         clicked => { ImportExportState.export-suggest(); }
                     }
+                    Button {
+                        text: "Browse…";
+                        enabled: !FileBrowse.busy && !ImportExportState.export-running;
+                        clicked => { FileBrowse.browse(BrowseTarget.export-file); }
+                    }
                 }
             }
 
@@ -1128,6 +1152,11 @@ component DumpPane inherits VerticalLayout {
                         variant: ButtonVariant.ghost;
                         enabled: !ImportExportState.dump-running;
                         clicked => { ImportExportState.dump-suggest(); }
+                    }
+                    Button {
+                        text: "Browse…";
+                        enabled: !FileBrowse.busy && !ImportExportState.dump-running;
+                        clicked => { FileBrowse.browse(BrowseTarget.dump-file); }
                     }
                 }
             }

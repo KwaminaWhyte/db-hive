@@ -1,0 +1,102 @@
+// Shown over the workspace when a query or a page load fails because the
+// connection itself died (closed socket, broken pipe, server gone), as
+// classified by dbhive_ui_model::connect_flow::is_connection_lost.
+//
+// The tabs stay as they were behind it. Reconnect opens a fresh connection
+// with the same saved profile and leaves the workspace in place; Go to
+// connections closes it and returns to the list.
+
+import { Theme, Icons, Icon, Button, ButtonVariant, CodeBlock, Tone, Popover } from "../kit/kit.slint";
+
+export global ConnectionLostState {
+    in property <bool> visible;
+    in property <string> title: "Connection lost";
+    in property <string> error;
+    in property <bool> reconnecting;
+    callback reconnect;
+    callback go-connections;
+}
+
+export component ConnectionLostOverlay inherits Rectangle {
+    background: Theme.scrim;
+
+    TouchArea { }
+
+    VerticalLayout {
+        alignment: center;
+        HorizontalLayout {
+            alignment: center;
+            Popover {
+                width: 460px;
+
+                VerticalLayout {
+                    padding: 20px;
+                    spacing: 12px;
+
+                    HorizontalLayout {
+                        spacing: 12px;
+                        VerticalLayout {
+                            alignment: center;
+                            Rectangle {
+                                width: 32px;
+                                height: 32px;
+                                border-radius: 16px;
+                                background: Theme.destructive-soft;
+                                Icon {
+                                    source: Icons.unplug;
+                                    tint: Theme.destructive;
+                                    width: 16px;
+                                    height: 16px;
+                                }
+                            }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: ConnectionLostState.title;
+                                color: Theme.foreground;
+                                font-size: Theme.size-subheading;
+                                font-weight: 700;
+                                overflow: elide;
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: "The database stopped answering. Your tabs are kept; reconnect to carry on where you left off.";
+                        color: Theme.muted-foreground;
+                        font-size: Theme.size-label;
+                        wrap: word-wrap;
+                    }
+
+                    CodeBlock {
+                        text: ConnectionLostState.error;
+                        tone: Tone.danger;
+                        max-lines: 5;
+                    }
+
+                    Rectangle { height: 4px; }
+
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: end;
+                        Button {
+                            text: "Go to connections";
+                            variant: ButtonVariant.secondary;
+                            enabled: !ConnectionLostState.reconnecting;
+                            clicked => { ConnectionLostState.go-connections(); }
+                        }
+                        Button {
+                            text: ConnectionLostState.reconnecting ? "Reconnecting…" : "Reconnect";
+                            variant: ButtonVariant.primary;
+                            has-icon: true;
+                            icon: Icons.refresh-cw;
+                            enabled: !ConnectionLostState.reconnecting;
+                            clicked => { ConnectionLostState.reconnect(); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

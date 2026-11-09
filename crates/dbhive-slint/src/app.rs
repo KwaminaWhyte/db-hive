@@ -50,15 +50,12 @@ mod table_dialog;
 mod updates;
 
 use crate::connection_editor as editor_view;
-use crate::connection_list::{self, EnvTone};
 use crate::grid_model::{layout_columns, LazyRows};
 use crate::palette_view;
 use crate::runtime;
 use crate::sql_highlight;
 use crate::workspace_model;
-use crate::{
-    AppWindow, ConnectionItem, GridRow, Screen, TabInfo, TableItem, Theme, ToastItem, Tone,
-};
+use crate::{AppWindow, GridRow, Screen, TabInfo, TableItem, Theme, ToastItem, Tone};
 
 // The History / Snippets / Templates panel's controller half.
 mod history_glue;
@@ -74,6 +71,9 @@ mod activity_glue;
 mod migrations_glue;
 // The Plugins panel's controller half.
 mod plugins_glue;
+// Password prompt, folders, Browse buttons, Connection Lost.
+mod connect_flow;
+pub use connect_flow::{use_secret_store, MemorySecrets, SecretStore};
 
 /// The connected workspace: which connection, which table, and its rows.
 #[derive(Default)]
@@ -204,6 +204,7 @@ struct Session {
     updates: updates::UpdateSession,
     results: results::ResultsSession,
     query_tools: query_tools::QuerySession,
+    flow: connect_flow::FlowSession,
 }
 
 struct Ctx {
@@ -225,32 +226,9 @@ impl Ctx {
             return;
         };
         let profiles = self.profiles();
+        // Grouped by folder: see connect_flow.rs.
+        let items = self.connection_items(&profiles);
         let s = self.session.borrow();
-
-        let items: Vec<ConnectionItem> = connection_list::visible(&profiles, &s.search)
-            .into_iter()
-            .map(|p| {
-                let (initials, (r, g, b)) = connection_list::driver_chip(&p.driver);
-                let (env_label, env_tone) = match connection_list::environment(p) {
-                    Some((l, EnvTone::Neutral)) => (l, Tone::Neutral),
-                    Some((l, EnvTone::Warning)) => (l, Tone::Warning),
-                    Some((l, EnvTone::Danger)) => (l, Tone::Danger),
-                    None => ("", Tone::Neutral),
-                };
-                ConnectionItem {
-                    id: p.id.as_str().into(),
-                    name: p.name.as_str().into(),
-                    host: connection_list::subtitle(p).into(),
-                    initials: initials.into(),
-                    tint: slint::Color::from_rgb_u8(r, g, b),
-                    env_label: env_label.into(),
-                    env_tone,
-                    favorite: p.is_favorite,
-                    connected: s.connected.contains(&p.id),
-                    connecting: s.connecting.as_deref() == Some(p.id.as_str()),
-                }
-            })
-            .collect();
 
         w.set_connection_total(profiles.len() as i32);
         w.set_connections(ModelRc::new(VecModel::from(items)));
@@ -294,6 +272,11 @@ impl Ctx {
     }
 
     fn connect(self: &Rc<Self>, id: String) {
+        // Asks for a password first when none is stored.
+        self.connect_begin(id);
+    }
+
+    fn connect_with_password(self: &Rc<Self>, id: String, password: String) {
         {
             let mut s = self.session.borrow_mut();
             if s.connecting.is_some() {
@@ -307,10 +290,11 @@ impl Ctx {
         let state = self.state.clone();
         let worker_id = id.clone();
         runtime::spawn(
-            async move { dbhive_core::service::connect(&state, worker_id, String::new(), None).await },
+            async move { dbhive_core::service::connect(&state, worker_id, password, None).await },
             move |result| {
                 with_ctx(|ctx| {
                     ctx.session.borrow_mut().connecting = None;
+                    ctx.connect_flow_finished(&id, result.is_ok());
                     match result {
                         Ok(conn_id) => {
                             ctx.session.borrow_mut().connected.insert(conn_id.clone());
@@ -379,6 +363,10 @@ impl Ctx {
         data.connection_string_error = ed.connection_string_error.as_str().into();
         data.ssh_password = ed.ssh_password.as_str().into();
         data.show_ssh_password_text = ed.show_ssh_password;
+        drop(s);
+        self.editor_extras(&mut data);
+        let s = self.session.borrow();
+        let ed = &s.editor;
         w.set_editor_is_new(ed.is_new);
         w.set_editor(data);
         let errors: Vec<slint::SharedString> = validate(&ed.form)
@@ -410,6 +398,7 @@ impl Ctx {
             form: form_from_profile(&profile),
             ..Editor::default()
         };
+        self.editor_check_stored(id);
         self.refresh_editor();
         if let Some(w) = self.window.upgrade() {
             w.set_show_connection_editor(true);
@@ -945,6 +934,10 @@ impl Ctx {
                     ws.databases = overview.databases.clone();
                     ws.schemas = overview.schemas.clone();
                     let loaded = tables.is_ok();
+                    let lost = tables
+                        .as_ref()
+                        .err()
+                        .map(|e| (ws.connection_id.clone(), e.to_string()));
                     let for_tree = match tables {
                         Ok(t) => {
                             ws.tables = t.clone();
@@ -956,6 +949,9 @@ impl Ctx {
                         }
                     };
                     drop(s);
+                    if let Some((id, error)) = lost {
+                        ctx.connection_lost_check(&id, &error);
+                    }
                     // A reloaded schema means column lists may have changed.
                     ctx.completion_reset();
                     ctx.refresh_workspace();
@@ -1157,6 +1153,9 @@ impl Ctx {
                         &outcome,
                         elapsed,
                     );
+                    if let Err(e) = &outcome {
+                        ctx.connection_lost_check(&connection_id, e);
+                    }
                     {
                         let mut s = ctx.session.borrow_mut();
                         s.workspace
@@ -1338,6 +1337,7 @@ impl Ctx {
             || self.builder_open_now()
             || self.table_dialog_open_now()
             || self.plugins_open_now()
+            || self.connect_flow_modal_open()
         {
             Overlay::Dialog
         } else {
@@ -1879,6 +1879,7 @@ pub fn build() -> Result<AppWindow, slint::PlatformError> {
     ai_glue::wire(&window, &ctx);
     results::wire(&window, &ctx);
     query_tools::wire(&window, &ctx);
+    connect_flow::wire(&window, &ctx);
 
     // -- Commands, palette and shortcuts help ---------------------------------
     {

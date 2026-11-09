@@ -318,6 +318,10 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
                 favorite: fav,
                 connected,
                 connecting: false,
+                is_folder: false,
+                folder: "".into(),
+                count: 0,
+                collapsed: false,
             };
             let items = vec![
                 item(
@@ -605,6 +609,7 @@ fn instantiate(name: &str) -> Box<dyn std::any::Any> {
         _ if name.starts_with("plugins") => plugins_window(name),
         _ if name.starts_with("ai-") => ai_window(name),
         _ if name.starts_with("results_") => results_window(name),
+        _ if name.starts_with("connflow-") => connflow_window(name),
         other => {
             eprintln!("unknown component {:?}", other);
             std::process::exit(2);
@@ -4286,5 +4291,181 @@ fn schema_window(name: &str) -> Box<dyn std::any::Any> {
     if name.contains("keyboard") || name.contains("walk") {
         schema_click(&c, 120.0, 58.0 + 44.0 + 6.0 * 30.0);
     }
+    Box::new(c)
+}
+
+// ---------------------------------------------------------------------------
+// Connection side (variant names start with `connflow-`): folders, password
+// prompt, connection lost, editor extras. Add `-light` for the light theme.
+//   connflow-folders, connflow-password, connflow-lost,
+//   connflow-lost-reconnecting, connflow-editor, connflow-editor-sqlite
+// ---------------------------------------------------------------------------
+
+fn connflow_window(name: &str) -> Box<dyn std::any::Any> {
+    let light = name.ends_with("-light");
+    let name = name.trim_end_matches("-light");
+    let c = AppWindow::new().expect("AppWindow");
+    if light {
+        c.global::<Theme>().set_dark(false);
+    }
+    c.set_app_version("0.21.0".into());
+
+    let conn = |id: &str, n: &str, host: &str, ini: &str, rgb: (u8, u8, u8), connected: bool| {
+        ConnectionItem {
+            id: id.into(),
+            name: n.into(),
+            host: host.into(),
+            initials: ini.into(),
+            tint: slint::Color::from_rgb_u8(rgb.0, rgb.1, rgb.2),
+            env_label: "".into(),
+            env_tone: Tone::Neutral,
+            favorite: false,
+            connected,
+            connecting: false,
+            is_folder: false,
+            folder: "".into(),
+            count: 0,
+            collapsed: false,
+        }
+    };
+    let folder = |label: &str, count: i32, collapsed: bool| ConnectionItem {
+        id: "".into(),
+        name: label.into(),
+        host: "".into(),
+        initials: "".into(),
+        tint: slint::Color::default(),
+        env_label: "".into(),
+        env_tone: Tone::Neutral,
+        favorite: false,
+        connected: false,
+        connecting: false,
+        is_folder: true,
+        folder: label.to_lowercase().into(),
+        count,
+        collapsed,
+    };
+    let mut prod = conn(
+        "1",
+        "Production Postgres",
+        "PostgreSQL • db.prod.internal:5432",
+        "PG",
+        (56, 118, 171),
+        true,
+    );
+    prod.env_label = "Production".into();
+    prod.env_tone = Tone::Danger;
+    prod.favorite = true;
+    let items = vec![
+        folder("Clients", 2, true),
+        folder("Work", 2, false),
+        prod,
+        conn(
+            "2",
+            "Reporting replica",
+            "PostgreSQL • replica.prod.internal:5432",
+            "PG",
+            (56, 118, 171),
+            false,
+        ),
+        folder("Unfiled", 2, false),
+        conn(
+            "3",
+            "Local MySQL",
+            "MySQL • localhost:3306",
+            "MY",
+            (0, 117, 143),
+            false,
+        ),
+        conn(
+            "4",
+            "Analytics SQLite",
+            "SQLite • /data/analytics.db",
+            "SL",
+            (0, 121, 168),
+            false,
+        ),
+    ];
+
+    match name {
+        "connflow-folders" | "connflow-password" => {
+            c.set_connection_total(6);
+            c.global::<ConnectionsState>()
+                .set_summary("6 connections in 2 folders".into());
+            c.set_connections(slint::ModelRc::new(slint::VecModel::from(items)));
+            if name == "connflow-password" {
+                let p = c.global::<PasswordPromptState>();
+                p.set_title("Password for Production Postgres".into());
+                p.set_message(
+                    "No password is saved for this connection. Enter the password for app.".into(),
+                );
+                p.set_password("secret".into());
+                p.set_remember(true);
+                p.set_visible(true);
+            }
+        }
+        "connflow-lost" | "connflow-lost-reconnecting" => {
+            c.set_screen(Screen::Workspace);
+            c.set_workspace_connection_name("Production Postgres".into());
+            c.set_workspace_location_label("app · public".into());
+            let tables: Vec<TableItem> = ["customers", "orders", "order_items"]
+                .iter()
+                .map(|n| TableItem {
+                    name: (*n).into(),
+                    row_count: "~1240".into(),
+                })
+                .collect();
+            c.set_workspace_tables(slint::ModelRc::new(slint::VecModel::from(tables)));
+            c.set_workspace_tabs(slint::ModelRc::new(slint::VecModel::from(vec![TabInfo {
+                title: "Query 1".into(),
+                query: true,
+                busy: false,
+            }])));
+            c.set_workspace_active_tab(0);
+            c.set_workspace_active_is_query(true);
+            c.set_workspace_editor_text("SELECT * FROM orders WHERE status = 'paid'".into());
+            let l = c.global::<ConnectionLostState>();
+            l.set_title("Connection to Production Postgres lost".into());
+            l.set_error("Query execution failed: error communicating with database: Connection reset by peer (os error 54). The server closed the connection unexpectedly; this probably means the server terminated abnormally before or while processing the request.".into());
+            l.set_reconnecting(name == "connflow-lost-reconnecting");
+            l.set_visible(true);
+        }
+        "connflow-editor" | "connflow-editor-sqlite" => {
+            use dbhive_core::models::connection::SshAuthMethod;
+            use dbhive_ui_model::connection_editor::{ConnectionForm, ALL_DRIVERS};
+            let sqlite = name == "connflow-editor-sqlite";
+            let mut form = ConnectionForm::new_for(if sqlite {
+                ALL_DRIVERS[2].clone()
+            } else {
+                ALL_DRIVERS[0].clone()
+            });
+            form.name = "Production Postgres".into();
+            form.folder = "Work".into();
+            if sqlite {
+                form.name = "Analytics".into();
+                form.database = "/Users/you/data/analytics.db".into();
+            } else {
+                form.username = "app".into();
+                form.ssh_enabled = true;
+                form.ssh_host = "bastion.example.com".into();
+                form.ssh_username = "deploy".into();
+                form.ssh_auth_method = SshAuthMethod::PrivateKey;
+                form.ssh_private_key_path = "~/.ssh/id_ed25519".into();
+                form.ssh_local_port = "15432".into();
+            }
+            let mut data = connection_editor::form_data(&form);
+            data.folder_options = slint::ModelRc::new(slint::VecModel::from(
+                connection_editor::folder_options(&["Clients".to_string(), "Work".to_string()], 6),
+            ));
+            data.password_stored = !sqlite;
+            c.set_editor_is_new(false);
+            c.set_editor(data);
+            c.set_show_connection_editor(true);
+        }
+        other => {
+            eprintln!("unknown connflow variant {:?}", other);
+            std::process::exit(2);
+        }
+    }
+    c.show().unwrap();
     Box::new(c)
 }

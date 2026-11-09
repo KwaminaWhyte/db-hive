@@ -16,6 +16,7 @@ pub mod connection_list;
 pub mod designer_view;
 pub mod diagram_model;
 pub mod erd_view;
+pub mod file_dialog;
 pub mod grid_model;
 pub mod history_view;
 pub mod import_export_view;

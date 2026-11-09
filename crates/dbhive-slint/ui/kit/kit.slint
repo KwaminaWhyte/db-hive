@@ -2113,6 +2113,10 @@ export component ExportDialog inherits Popover {
     callback export;
     callback cancel;
     callback reveal;
+    // A Browse button beside the path, for a native save picker.
+    in property <bool> browsable: false;
+    in property <bool> browse-busy: false;
+    callback browse;
 
     width: 540px;
 
@@ -2195,15 +2199,24 @@ export component ExportDialog inherits Popover {
             label: "Save to";
             hint: root.hint;
             error: root.path-error;
-            TextField {
-                text <=> root.path;
-                placeholder: "/Users/you/Downloads/results.csv";
-                has-trailing-icon: true;
-                trailing-icon: Icons.refresh-cw;
-                enabled: !root.running;
-                edited(t) => { root.path-edited(t); }
-                accepted(t) => { root.export(); }
-                trailing-clicked => { root.use-suggested(); }
+            HorizontalLayout {
+                spacing: 8px;
+                TextField {
+                    horizontal-stretch: 1;
+                    text <=> root.path;
+                    placeholder: "/Users/you/Downloads/results.csv";
+                    has-trailing-icon: true;
+                    trailing-icon: Icons.refresh-cw;
+                    enabled: !root.running;
+                    edited(t) => { root.path-edited(t); }
+                    accepted(t) => { root.export(); }
+                    trailing-clicked => { root.use-suggested(); }
+                }
+                if root.browsable: Button {
+                    text: "Browse…";
+                    enabled: !root.running && !root.browse-busy;
+                    clicked => { root.browse(); }
+                }
             }
         }
 
