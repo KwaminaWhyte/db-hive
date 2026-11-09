@@ -3,16 +3,65 @@
 // Carries `AboutSlint` per the Royalty-free 2.0 licence: a build using that
 // licence must credit Slint somewhere reachable from the UI, and this is
 // that place. See docs/slint-migration/plan.md.
+//
+// The body scrolls so the whole dialog fits a 1000x640 window; the header,
+// the Slint credit and Close stay put.
 
-import { AboutSlint } from "std-widgets.slint";
-import { Theme, Icons, Icon, Divider, ButtonVariant, Button } from "../kit/kit.slint";
+import { ScrollView, AboutSlint } from "std-widgets.slint";
+import { Theme, Icons, Icon, Divider, ButtonVariant, Button, SectionLabel } from "../kit/kit.slint";
 import { UpdateBridge } from "../components/update_banner.slint";
+
+component Fact inherits HorizontalLayout {
+    in property <string> name;
+    in property <string> detail;
+    spacing: 8px;
+    Text {
+        width: 112px;
+        text: root.name;
+        color: Theme.foreground;
+        font-size: Theme.size-small;
+        font-weight: 600;
+        vertical-alignment: top;
+    }
+    Text {
+        horizontal-stretch: 1;
+        text: root.detail;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-small;
+        wrap: word-wrap;
+    }
+}
+
+component Bullet inherits HorizontalLayout {
+    in property <string> text;
+    spacing: 8px;
+    VerticalLayout {
+        alignment: start;
+        padding-top: 4px;
+        Rectangle {
+            width: 5px;
+            height: 5px;
+            border-radius: 2.5px;
+            background: Theme.primary;
+        }
+    }
+    Text {
+        horizontal-stretch: 1;
+        text: root.text;
+        color: Theme.muted-foreground;
+        font-size: Theme.size-label;
+        wrap: word-wrap;
+    }
+}
 
 export component AboutDialog inherits Rectangle {
     in property <string> version;
+    // Set by the window so the dialog never falls off a short window.
+    in property <length> available-height: 640px;
     callback close;
 
-    width: 360px;
+    width: 460px;
+    height: min(700px, root.available-height);
     background: Theme.popover;
     border-radius: Theme.radius-window;
     border-width: 1px;
@@ -23,7 +72,7 @@ export component AboutDialog inherits Rectangle {
 
     VerticalLayout {
         padding: 20px;
-        spacing: 14px;
+        spacing: 10px;
 
         HorizontalLayout {
             spacing: 10px;
@@ -47,58 +96,104 @@ export component AboutDialog inherits Rectangle {
                     font-weight: 700;
                 }
                 Text {
-                    text: "Version " + root.version;
+                    text: "Version " + root.version + " (beta)";
                     color: Theme.muted-foreground;
                     font-size: Theme.size-small;
                 }
             }
             Rectangle { horizontal-stretch: 1; }
             TouchArea {
-                width: 16px;
+                width: 20px;
+                height: 20px;
                 mouse-cursor: pointer;
+                accessible-role: button;
+                accessible-label: "Close";
                 clicked => { root.close(); }
                 Icon { source: Icons.x; tint: Theme.dim-foreground; width: 13px; height: 13px; }
             }
         }
 
-        Text {
-            text: "A cross-platform database client for PostgreSQL, MySQL, SQLite, MongoDB, Redis, SQL Server and Turso.";
-            color: Theme.muted-foreground;
-            font-size: Theme.size-label;
-            wrap: word-wrap;
-        }
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                spacing: 10px;
+                padding-right: 12px;
 
-        Divider { }
+                Text {
+                    text: "A cross-platform database client: one native Rust window, no WebView. PostgreSQL, MySQL, SQLite, MongoDB, Redis, SQL Server and Turso.";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-label;
+                    wrap: word-wrap;
+                }
 
-        // Updates: the app checks and says; it does not install.
-        VerticalLayout {
-            spacing: 8px;
-            HorizontalLayout {
-                spacing: 8px;
-                Button {
-                    text: UpdateBridge.checking ? "Checking…" : "Check for updates";
-                    variant: ButtonVariant.secondary;
-                    enabled: !UpdateBridge.checking;
-                    clicked => { UpdateBridge.check(); }
+                Divider { }
+
+                SectionLabel { text: "What it does"; }
+                Bullet { text: "Connect to seven databases, with SSH tunnels and passwords in the OS keyring."; }
+                Bullet { text: "Write and run SQL in tabs, with autocomplete, history, snippets and templates."; }
+                Bullet { text: "Browse schemas, inspect and edit table data, and design tables visually."; }
+                Bullet { text: "Draw ER diagrams, build queries visually, import, export, back up and migrate."; }
+                Bullet { text: "Watch server activity, run sandboxed plugins, and ask the AI assistant for SQL."; }
+
+                Divider { }
+
+                SectionLabel { text: "Built with"; }
+                Fact {
+                    name: "Slint";
+                    detail: "the UI toolkit (1.18), under its Royalty-free 2.0 licence";
                 }
-                if UpdateBridge.has-update: Button {
-                    text: "View release";
-                    variant: ButtonVariant.primary;
-                    clicked => { UpdateBridge.open-release(); }
+                Fact {
+                    name: "Rust and Tokio";
+                    detail: "one binary; database work runs off the UI thread";
                 }
-            }
-            if UpdateBridge.about-status != "": Text {
-                text: UpdateBridge.about-status;
-                color: Theme.muted-foreground;
-                font-size: Theme.size-label;
-                wrap: word-wrap;
+                Fact {
+                    name: "Drivers";
+                    detail: "tokio-postgres, rusqlite, libsql, mongodb, redis and tiberius";
+                }
+                Fact {
+                    name: "Everything else";
+                    detail: "keyring for secrets, boa_engine for plugins, Lucide (ISC) for icons";
+                }
+
+                Divider { }
+
+                Text {
+                    text: "DB Hive is MIT licensed. Made by Kwamina Whyte and contributors.";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Button {
+                        text: UpdateBridge.checking ? "Checking…" : "Check for updates";
+                        variant: ButtonVariant.secondary;
+                        enabled: !UpdateBridge.checking;
+                        clicked => { UpdateBridge.check(); }
+                    }
+                    if UpdateBridge.has-update: Button {
+                        text: "View release";
+                        variant: ButtonVariant.primary;
+                        clicked => { UpdateBridge.open-release(); }
+                    }
+                }
+                if UpdateBridge.about-status != "": Text {
+                    text: UpdateBridge.about-status;
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                    wrap: word-wrap;
+                }
             }
         }
 
         Divider { }
 
         Rectangle {
-            height: 120px;
+            // The full AboutSlint artwork: logo, wordmark, version and link.
+            height: 104px;
+            clip: true;
             AboutSlint { }
         }
 

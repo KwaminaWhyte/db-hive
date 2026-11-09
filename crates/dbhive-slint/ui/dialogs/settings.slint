@@ -33,11 +33,14 @@ export struct SettingsData {
     dirty: bool,
     can-save: bool,
     saving: bool,
-    // General.
-    language-options: [string],
-    language: string,
+    // General. There is no Language row: the interface exists only in
+    // English, so a picker would only promise a translation that is not there.
     startup-options: [string],
     startup: string,
+    // The "Default connection" row, shown for "Open Default Connection".
+    show-default-connection: bool,
+    default-connection-options: [string],
+    default-connection: string,
     auto-save-connections: bool,
     auto-check-updates: bool,
     update-interval: string,
@@ -77,8 +80,8 @@ export component SettingsDialog inherits Rectangle {
     in property <length> available-height: 580px;
 
     callback section-selected(int);
-    callback language-selected(int);
     callback startup-selected(int);
+    callback default-connection-selected(int);
     callback toggle-auto-save-connections;
     callback toggle-auto-check-updates;
     callback update-interval-changed(string);
@@ -244,16 +247,6 @@ export component SettingsDialog inherits Rectangle {
                             if root.data.section == 0: Card {
                                 VerticalLayout {
                                     SettingRow {
-                                        title: "Language";
-                                        description: "Saved only. There is no translated interface yet.";
-                                        Dropdown {
-                                            width: 150px;
-                                            value: root.data.language;
-                                            options: root.data.language-options;
-                                            selected(i) => { root.language-selected(i); }
-                                        }
-                                    }
-                                    SettingRow {
                                         title: "Startup behavior";
                                         description: "What to show when the application starts";
                                         Dropdown {
@@ -263,9 +256,19 @@ export component SettingsDialog inherits Rectangle {
                                             selected(i) => { root.startup-selected(i); }
                                         }
                                     }
+                                    if root.data.show-default-connection: SettingRow {
+                                        title: "Default connection";
+                                        description: "Opened when DB Hive starts";
+                                        Dropdown {
+                                            width: 190px;
+                                            value: root.data.default-connection;
+                                            options: root.data.default-connection-options;
+                                            selected(i) => { root.default-connection-selected(i); }
+                                        }
+                                    }
                                     SettingRow {
                                         title: "Auto-save connections";
-                                        description: "Save connection profiles after testing";
+                                        description: "Save a new or edited connection as soon as Test connection succeeds";
                                         last: true;
                                         Toggle {
                                             checked: root.data.auto-save-connections;

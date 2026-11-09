@@ -17,6 +17,18 @@ members = [
 # Release profile lives at the workspace root: cargo ignores profiles set on
 # non-root workspace members.
 #
+# Dev builds were ~60-100 GB with full debuginfo. Line tables keep backtraces
+# readable; split-debuginfo off avoids a .dSYM copy per binary.
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "off"
+# Incremental sessions from concurrent builds grew target/debug to ~100 GB with
+# nothing pruning them. Full rebuilds are cheaper than that.
+incremental = false
+
+[profile.dev.package."*"]
+debug = false
+
 # opt-level stays at 3 rather than "s": this is a database client, so query
 # and result-decoding throughput matters more than a few MB of binary.
 # `panic` is left at "unwind" so a panic in a driver or a plugin call can be

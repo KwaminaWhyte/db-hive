@@ -8,15 +8,15 @@
 //! editor) that were tangled into the egui screen. Plain Rust types only, so a
 //! shell maps them to its own widgets and tests need no window.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use chrono::{DateTime, Utc};
 use dbhive_core::models::{QueryHistory, QuerySnippet};
 
 use crate::history::{
     filter_history, filter_snippets, filter_templates, first_line, format_execution_time,
-    format_relative, format_row_count, parse_tags, preview_sql, render_template, sync_parameters,
-    validate_parameter_value, validate_template_values, ParamType, QueryTemplate,
+    format_relative, format_row_count, parse_tags, preview_sql, render_template, substitute,
+    sync_parameters, validate_parameter_value, validate_template_values, ParamType, QueryTemplate,
     TemplateParameter,
 };
 
@@ -114,20 +114,7 @@ pub fn history_rows(entries: &[QueryHistory], now: DateTime<Utc>) -> Vec<RowView
 pub fn snippet_rows(snippets: &[QuerySnippet], search: &str, tag: Option<&str>) -> Vec<RowView> {
     let mut matched = filter_snippets(snippets, search, tag);
     matched.sort_by_key(|s| s.name.to_lowercase());
-    matched
-        .into_iter()
-        .map(|s| RowView {
-            id: s.id.clone(),
-            title: s.name.clone(),
-            subtitle: match s.description.as_deref().filter(|d| !d.trim().is_empty()) {
-                Some(d) => d.trim().to_string(),
-                None => first_line(&s.query, TITLE_CHARS),
-            },
-            note: String::new(),
-            status: None,
-            tags: s.tags.clone().unwrap_or_default(),
-        })
-        .collect()
+    matched.into_iter().map(snippet_row).collect()
 }
 
 /// "2 parameters", "no parameters".
@@ -239,6 +226,8 @@ pub struct SnippetDraft {
     pub query: String,
     /// Comma separated, as typed.
     pub tags: String,
+    /// Folder path as typed ("Reports / Monthly"); cleaned on save.
+    pub folder: String,
 }
 
 impl SnippetDraft {
@@ -248,6 +237,7 @@ impl SnippetDraft {
             description: s.description.clone().unwrap_or_default(),
             query: s.query.clone(),
             tags: s.tags.clone().unwrap_or_default().join(", "),
+            folder: s.folder.clone().unwrap_or_default(),
         }
     }
 }
@@ -280,15 +270,241 @@ pub fn build_snippet(
             // clearing a description or tags has to be set directly.
             s.description = non_empty(&draft.description);
             s.tags = tags;
+            s.folder = normalize_folder(&draft.folder);
             s.updated_at = Utc::now().to_rfc3339();
             Ok(s)
         }
-        None => Ok(QuerySnippet::new(
-            draft.name.trim().to_string(),
-            draft.query.trim().to_string(),
-            non_empty(&draft.description),
-            tags,
-        )),
+        None => {
+            let mut s = QuerySnippet::new(
+                draft.name.trim().to_string(),
+                draft.query.trim().to_string(),
+                non_empty(&draft.description),
+                tags,
+            );
+            s.folder = normalize_folder(&draft.folder);
+            Ok(s)
+        }
+    }
+}
+
+// ===========================================================================
+// Snippet folders
+// ===========================================================================
+
+/// Separator between folder levels in a stored path.
+pub const FOLDER_SEPARATOR: char = '/';
+
+/// Clean a typed folder path: trim each level, drop empty levels, join with
+/// `/`. "  Reports / /Monthly " becomes "Reports/Monthly"; blank means no
+/// folder.
+pub fn normalize_folder(input: &str) -> Option<String> {
+    let parts: Vec<&str> = input
+        .split(FOLDER_SEPARATOR)
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
+    (!parts.is_empty()).then(|| parts.join("/"))
+}
+
+/// `"a/b/c"` -> `["a", "a/b", "a/b/c"]`: a folder and every folder above it.
+fn with_ancestors(path: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut acc = String::new();
+    for part in path.split(FOLDER_SEPARATOR) {
+        if !acc.is_empty() {
+            acc.push(FOLDER_SEPARATOR);
+        }
+        acc.push_str(part);
+        out.push(acc.clone());
+    }
+    out
+}
+
+fn folder_of(s: &QuerySnippet) -> Option<String> {
+    s.folder.as_deref().and_then(normalize_folder)
+}
+
+fn by_lower(a: &str, b: &str) -> std::cmp::Ordering {
+    a.to_lowercase()
+        .cmp(&b.to_lowercase())
+        .then_with(|| a.cmp(b))
+}
+
+/// Every folder in use, parents included, in display order (a parent sorts
+/// before its children).
+pub fn snippet_folders(snippets: &[QuerySnippet]) -> Vec<String> {
+    let set: BTreeSet<String> = snippets
+        .iter()
+        .filter_map(folder_of)
+        .flat_map(|f| with_ancestors(&f))
+        .collect();
+    let mut v: Vec<String> = set.into_iter().collect();
+    v.sort_by(|a, b| {
+        let ka: Vec<String> = a.split('/').map(str::to_lowercase).collect();
+        let kb: Vec<String> = b.split('/').map(str::to_lowercase).collect();
+        ka.cmp(&kb).then_with(|| a.cmp(b))
+    });
+    v
+}
+
+/// The move-to-folder picker's choices: "No folder" first, then each folder
+/// indented by its depth so the nesting reads at a glance.
+pub fn folder_choice_labels(folders: &[String]) -> Vec<String> {
+    let mut v = vec!["No folder".to_string()];
+    for f in folders {
+        let depth = f.matches(FOLDER_SEPARATOR).count();
+        let name = f.rsplit(FOLDER_SEPARATOR).next().unwrap_or(f);
+        v.push(format!("{}{}", "    ".repeat(depth), name));
+    }
+    v
+}
+
+/// The folder a picker index means: `None` for "No folder" (index 0).
+pub fn folder_choice_at(folders: &[String], index: usize) -> Option<String> {
+    index.checked_sub(1).and_then(|i| folders.get(i).cloned())
+}
+
+/// The picker index of a snippet's current folder.
+pub fn folder_choice_index(folders: &[String], folder: Option<&str>) -> usize {
+    folder
+        .and_then(normalize_folder)
+        .and_then(|f| folders.iter().position(|x| *x == f))
+        .map_or(0, |i| i + 1)
+}
+
+/// A copy of `snippet` filed in `folder` (`None` or blank: the top level).
+pub fn move_snippet(snippet: &QuerySnippet, folder: Option<&str>) -> QuerySnippet {
+    let mut s = snippet.clone();
+    s.folder = folder.and_then(normalize_folder);
+    s.updated_at = Utc::now().to_rfc3339();
+    s
+}
+
+/// One row of the snippet list: a folder header or a snippet, with its depth
+/// for indentation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SnippetListRow {
+    Folder {
+        /// Full path, the id the shell sends back on a click.
+        path: String,
+        /// The last level, what the row shows.
+        name: String,
+        depth: usize,
+        /// Snippets in this folder and below that pass the filters.
+        count: usize,
+        expanded: bool,
+    },
+    Snippet {
+        row: RowView,
+        depth: usize,
+    },
+}
+
+/// The snippet list as a tree: folders first (sorted by name), then the
+/// snippets filed directly at that level (sorted by name), each folder's
+/// contents under it one level deeper.
+///
+/// `collapsed` holds folder paths the user closed. While a search or tag
+/// filter is active every folder with a match is shown open, so a match is
+/// never hidden inside a closed folder; folders with no match are left out.
+pub fn snippet_tree(
+    snippets: &[QuerySnippet],
+    search: &str,
+    tag: Option<&str>,
+    collapsed: &BTreeSet<String>,
+) -> Vec<SnippetListRow> {
+    let filtering = !search.trim().is_empty() || tag.is_some();
+    let matched: Vec<&QuerySnippet> = filter_snippets(snippets, search, tag);
+    let folders: Vec<String> = {
+        let set: BTreeSet<String> = matched
+            .iter()
+            .filter_map(|s| folder_of(s))
+            .flat_map(|f| with_ancestors(&f))
+            .collect();
+        set.into_iter().collect()
+    };
+
+    let mut rows = Vec::new();
+    emit_level(&matched, &folders, None, 0, filtering, collapsed, &mut rows);
+    rows
+}
+
+fn emit_level(
+    matched: &[&QuerySnippet],
+    folders: &[String],
+    parent: Option<&str>,
+    depth: usize,
+    filtering: bool,
+    collapsed: &BTreeSet<String>,
+    rows: &mut Vec<SnippetListRow>,
+) {
+    let is_child = |f: &str| match parent {
+        None => !f.contains(FOLDER_SEPARATOR),
+        Some(p) => {
+            f.len() > p.len() + 1
+                && f.starts_with(p)
+                && f.as_bytes()[p.len()] == FOLDER_SEPARATOR as u8
+                && !f[p.len() + 1..].contains(FOLDER_SEPARATOR)
+        }
+    };
+    let mut children: Vec<&String> = folders.iter().filter(|f| is_child(f)).collect();
+    children.sort_by(|a, b| by_lower(a, b));
+    for path in children {
+        let prefix = format!("{path}/");
+        let count = matched
+            .iter()
+            .filter(|s| folder_of(s).is_some_and(|f| f == *path || f.starts_with(&prefix)))
+            .count();
+        let expanded = filtering || !collapsed.contains(path);
+        rows.push(SnippetListRow::Folder {
+            path: path.clone(),
+            name: path
+                .rsplit(FOLDER_SEPARATOR)
+                .next()
+                .unwrap_or(path)
+                .to_string(),
+            depth,
+            count,
+            expanded,
+        });
+        if expanded {
+            emit_level(
+                matched,
+                folders,
+                Some(path),
+                depth + 1,
+                filtering,
+                collapsed,
+                rows,
+            );
+        }
+    }
+
+    let mut here: Vec<&QuerySnippet> = matched
+        .iter()
+        .copied()
+        .filter(|s| folder_of(s).as_deref() == parent)
+        .collect();
+    here.sort_by(|a, b| by_lower(&a.name, &b.name));
+    for s in here {
+        rows.push(SnippetListRow::Snippet {
+            row: snippet_row(s),
+            depth,
+        });
+    }
+}
+
+fn snippet_row(s: &QuerySnippet) -> RowView {
+    RowView {
+        id: s.id.clone(),
+        title: s.name.clone(),
+        subtitle: match s.description.as_deref().filter(|d| !d.trim().is_empty()) {
+            Some(d) => d.trim().to_string(),
+            None => first_line(&s.query, TITLE_CHARS),
+        },
+        note: String::new(),
+        status: None,
+        tags: s.tags.clone().unwrap_or_default(),
     }
 }
 
@@ -356,6 +572,39 @@ pub fn toggle_param_required(params: &mut [TemplateParameter], index: usize) {
     if let Some(p) = params.get_mut(index) {
         p.required = !p.required;
     }
+}
+
+/// Set the label the run form shows for a parameter. Kept as typed (it is
+/// display text); a blank label falls back to the name in the run form.
+pub fn set_param_label(params: &mut [TemplateParameter], index: usize, value: &str) {
+    if let Some(p) = params.get_mut(index) {
+        p.label = value.to_string();
+    }
+}
+
+/// Change a parameter's type by rewriting its placeholders in the SQL.
+///
+/// The type lives in the SQL (`{{days:integer}}`), which is what
+/// [`sync_parameters`] reads, so the SQL is the thing to change: every
+/// occurrence of the parameter gets the new type, and a String parameter is
+/// written bare (`{{name}}`), its default. Other placeholders are untouched.
+pub fn set_param_type_in_sql(sql: &str, name: &str, ty: ParamType) -> String {
+    substitute(sql, |p| {
+        (p.name == name).then(|| match ty {
+            ParamType::String => format!("{{{{{}}}}}", name),
+            other => format!("{{{{{}:{}}}}}", name, other.as_str()),
+        })
+    })
+}
+
+/// The type picker's labels, in [`ParamType::ALL`] order.
+pub fn param_type_labels() -> Vec<&'static str> {
+    ParamType::ALL.iter().map(|t| t.as_str()).collect()
+}
+
+/// The picker index of a type.
+pub fn param_type_index(ty: ParamType) -> usize {
+    ParamType::ALL.iter().position(|t| *t == ty).unwrap_or(0)
 }
 
 /// A copy of `source` with a name no other template has ("X copy", then
@@ -802,5 +1051,214 @@ mod tests {
             assert_eq!(PanelTab::from_index(t.index()), t);
         }
         assert_eq!(PanelTab::from_index(99), PanelTab::History);
+    }
+
+    // -- Template parameters -------------------------------------------------
+
+    #[test]
+    fn a_parameter_type_change_rewrites_every_occurrence_in_the_sql() {
+        let sql = "SELECT * FROM t WHERE a = {{days}} OR b > {{days:text}} AND c = {{other:date}}";
+        let out = set_param_type_in_sql(sql, "days", ParamType::Integer);
+        assert_eq!(
+            out,
+            "SELECT * FROM t WHERE a = {{days:integer}} OR b > {{days:integer}} AND c = {{other:date}}"
+        );
+        // Back to String writes the bare placeholder.
+        let back = set_param_type_in_sql(&out, "days", ParamType::String);
+        assert!(back.contains("a = {{days}} OR b > {{days}}"), "{back}");
+        // The parameter list follows, keeping what the user set.
+        let mut params = sync_parameters(sql, &[]);
+        set_param_label(&mut params, 0, "Day count");
+        let synced = sync_parameters(&out, &params);
+        assert_eq!(synced[0].param_type, ParamType::Integer);
+        assert_eq!(synced[0].label, "Day count");
+        assert_eq!(synced[1].param_type, ParamType::Date);
+    }
+
+    #[test]
+    fn a_label_edit_survives_into_the_saved_template_and_the_run_form() {
+        let sql = "SELECT {{user_id:integer}}";
+        let mut params = sync_parameters(sql, &[]);
+        assert_eq!(params[0].label, "User Id");
+        set_param_label(&mut params, 0, "Customer number");
+        set_param_label(&mut params, 7, "ignored");
+        let d = TemplateDraft {
+            name: "t".into(),
+            sql: sql.into(),
+            ..Default::default()
+        };
+        let t = build_template(&d, &params, None).unwrap();
+        assert_eq!(t.parameters[0].label, "Customer number");
+        let run = TemplateRun::new(&t);
+        assert_eq!(run.fields()[0].label, "Customer number");
+        // A blank label falls back to the name in the run form.
+        set_param_label(&mut params, 0, "");
+        let t = build_template(&d, &params, None).unwrap();
+        assert_eq!(TemplateRun::new(&t).fields()[0].label, "user_id");
+    }
+
+    #[test]
+    fn the_type_picker_covers_every_type_in_order() {
+        assert_eq!(param_type_labels().len(), ParamType::ALL.len());
+        for (i, t) in ParamType::ALL.iter().enumerate() {
+            assert_eq!(param_type_index(*t), i);
+            assert_eq!(param_type_labels()[i], t.as_str());
+        }
+    }
+
+    // -- Snippet folders -----------------------------------------------------
+
+    fn filed(name: &str, folder: Option<&str>) -> QuerySnippet {
+        let mut s = QuerySnippet::new(name.into(), format!("SELECT '{name}'"), None, None);
+        s.folder = folder.map(Into::into);
+        s
+    }
+
+    fn shape(rows: &[SnippetListRow]) -> Vec<String> {
+        rows.iter()
+            .map(|r| match r {
+                SnippetListRow::Folder {
+                    name,
+                    depth,
+                    count,
+                    expanded,
+                    ..
+                } => format!(
+                    "{}{}{} ({})",
+                    "  ".repeat(*depth),
+                    if *expanded { "v " } else { "> " },
+                    name,
+                    count
+                ),
+                SnippetListRow::Snippet { row, depth } => {
+                    format!("{}{}", "  ".repeat(*depth), row.title)
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn folder_paths_are_cleaned() {
+        assert_eq!(
+            normalize_folder("  Reports / /Monthly "),
+            Some("Reports/Monthly".into())
+        );
+        assert_eq!(normalize_folder("Ops"), Some("Ops".into()));
+        assert_eq!(normalize_folder(""), None);
+        assert_eq!(normalize_folder(" / / "), None);
+    }
+
+    #[test]
+    fn the_list_nests_folders_before_loose_snippets() {
+        let all = vec![
+            filed("loose", None),
+            filed("weekly", Some("Reports")),
+            filed("june", Some("Reports/Monthly")),
+            filed("Another", Some("reports/monthly ")),
+            filed("locks", Some("Ops")),
+        ];
+        let rows = snippet_tree(&all, "", None, &BTreeSet::new());
+        assert_eq!(
+            shape(&rows),
+            vec![
+                "v Ops (1)",
+                "  locks",
+                "v Reports (2)",
+                "  v Monthly (1)",
+                "    june",
+                "  weekly",
+                "v reports (1)",
+                "  v monthly (1)",
+                "    Another",
+                "loose",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_collapsed_folder_hides_its_contents_but_keeps_its_count() {
+        let all = vec![
+            filed("weekly", Some("Reports")),
+            filed("june", Some("Reports/Monthly")),
+            filed("loose", None),
+        ];
+        let closed: BTreeSet<String> = ["Reports".to_string()].into();
+        assert_eq!(
+            shape(&snippet_tree(&all, "", None, &closed)),
+            vec!["> Reports (2)", "loose"]
+        );
+        let closed: BTreeSet<String> = ["Reports/Monthly".to_string()].into();
+        assert_eq!(
+            shape(&snippet_tree(&all, "", None, &closed)),
+            vec!["v Reports (2)", "  > Monthly (1)", "  weekly", "loose"]
+        );
+    }
+
+    #[test]
+    fn a_search_opens_the_folders_with_matches_and_drops_the_rest() {
+        let all = vec![
+            filed("weekly", Some("Reports")),
+            filed("june", Some("Reports/Monthly")),
+            filed("locks", Some("Ops")),
+        ];
+        let closed: BTreeSet<String> =
+            ["Reports".to_string(), "Reports/Monthly".to_string()].into();
+        assert_eq!(
+            shape(&snippet_tree(&all, "june", None, &closed)),
+            vec!["v Reports (1)", "  v Monthly (1)", "    june"]
+        );
+        assert!(snippet_tree(&all, "nothing", None, &closed).is_empty());
+    }
+
+    #[test]
+    fn folder_choices_list_every_level_and_round_trip() {
+        let all = vec![
+            filed("a", Some("Reports/Monthly")),
+            filed("b", Some("Ops")),
+            filed("c", None),
+        ];
+        let folders = snippet_folders(&all);
+        assert_eq!(folders, vec!["Ops", "Reports", "Reports/Monthly"]);
+        assert_eq!(
+            folder_choice_labels(&folders),
+            vec!["No folder", "Ops", "Reports", "    Monthly"]
+        );
+        assert_eq!(folder_choice_index(&folders, None), 0);
+        assert_eq!(folder_choice_index(&folders, Some("Reports/Monthly")), 3);
+        assert_eq!(folder_choice_index(&folders, Some("Gone")), 0);
+        assert_eq!(folder_choice_at(&folders, 0), None);
+        assert_eq!(folder_choice_at(&folders, 1).as_deref(), Some("Ops"));
+        assert_eq!(folder_choice_at(&folders, 9), None);
+    }
+
+    #[test]
+    fn moving_a_snippet_files_it_and_keeps_its_identity() {
+        let s = filed("a", Some("Ops"));
+        let moved = move_snippet(&s, Some(" Reports / Q1 "));
+        assert_eq!(moved.id, s.id);
+        assert_eq!(moved.folder.as_deref(), Some("Reports/Q1"));
+        assert_eq!(move_snippet(&s, None).folder, None);
+        assert_eq!(move_snippet(&s, Some("  ")).folder, None);
+    }
+
+    #[test]
+    fn the_snippet_form_carries_the_folder() {
+        let s = filed("a", Some("Reports/Monthly"));
+        let mut d = SnippetDraft::from_snippet(&s);
+        assert_eq!(d.folder, "Reports/Monthly");
+        d.folder = "Archive/ 2024".into();
+        let saved = build_snippet(&d, Some(&s)).unwrap();
+        assert_eq!(saved.folder.as_deref(), Some("Archive/2024"));
+        let fresh = build_snippet(
+            &SnippetDraft {
+                name: "n".into(),
+                query: "SELECT 1".into(),
+                folder: "Inbox".into(),
+                ..Default::default()
+            },
+            None,
+        )
+        .unwrap();
+        assert_eq!(fresh.folder.as_deref(), Some("Inbox"));
     }
 }

@@ -6,10 +6,12 @@
 // row says (`dbhive_ui_model::history_panel`); this file lays it out.
 
 import { ScrollView } from "std-widgets.slint";
-import { Theme, Icons, Icon, Tone, ButtonVariant, Button, TextField, Dropdown, Toggle, Divider, Banner, EmptyState, DetailRow, UnderlineTabs, FilterChip, SectionLabel, Badge } from "../kit/kit.slint";
+import { Theme, Icons, Icon, Tone, ButtonVariant, Button, TextField, Dropdown, Toggle, Divider, Banner, EmptyState, DetailRow, ListRow, UnderlineTabs, FilterChip, SectionLabel, Badge } from "../kit/kit.slint";
 import { SqlEditor, HighlightLine } from "../components/sql_editor.slint";
 
 // One row of any list. `ok` only matters when `has-status` is set.
+// `kind` is 0 for a record and 1 for a snippet-list folder header; `depth`
+// indents a row by its folder level.
 export struct PanelRow {
     id: string,
     title: string,
@@ -18,6 +20,9 @@ export struct PanelRow {
     tags: [string],
     has-status: bool,
     ok: bool,
+    kind: int,
+    depth: int,
+    expanded: bool,
 }
 
 // One input of the template run form.
@@ -32,17 +37,20 @@ export struct RunParam {
     initial: string,
 }
 
-// One parameter row of the template editor. Names and types come from the
-// placeholders in the SQL; only these two settings are edited here.
+// One parameter row of the template editor. The name and the default type
+// come from the placeholder in the SQL; the label, type, required flag and
+// default value are edited here. A type change rewrites the placeholder.
 export struct FormParam {
     name: string,
+    label: string,
     type-label: string,
+    type-index: int,
     required: bool,
     default-value: string,
 }
 
 // What the panel is showing besides its three lists.
-export enum PanelMode { lists, snippet-form, template-form, template-run, template-import }
+export enum PanelMode { lists, snippet-form, snippet-move, template-form, template-run, template-import }
 
 export global HistoryState {
     in-out property <bool> visible: false;
@@ -85,9 +93,17 @@ export global HistoryState {
     in-out property <string> form-description;
     in-out property <string> form-category;
     in-out property <string> form-tags;
+    in-out property <string> form-folder;
     in-out property <string> form-sql;
     in property <[HighlightLine]> form-lines;
     in property <[FormParam]> form-params;
+    in property <[string]> param-type-options: ["string", "integer", "decimal", "boolean", "date", "datetime", "text"];
+
+    // Move-to-folder form.
+    in property <string> move-title;
+    in property <[string]> move-options;
+    in-out property <int> move-choice: 0;
+    in-out property <string> move-new-folder;
 
     // Template run form.
     in property <string> run-title;
@@ -119,6 +135,10 @@ export global HistoryState {
     callback snippet-new;
     callback snippet-edit(string);
     callback snippet-delete(string);
+    callback snippet-folder-toggled(string);
+    callback snippet-move-open(string);
+    callback move-choice-picked(int);
+    callback move-confirm;
 
     callback template-search-edited(string);
     callback template-category-picked(int);
@@ -136,6 +156,8 @@ export global HistoryState {
     callback form-sql-edited(string);
     callback form-param-required(int);
     callback form-param-default(int, string);
+    callback form-param-label(int, string);
+    callback form-param-type(int, int);
 
     callback run-edited(int, string);
     callback run-open;
@@ -383,32 +405,54 @@ component SnippetsPane inherits VerticalLayout {
             alignment: start;
             spacing: 2px;
             padding-right: 14px;
-            for row in HistoryState.snippets: DetailRow {
-                title: row.title;
-                subtitle: row.subtitle;
-                tags: row.tags;
-                clicked => { }
-                double-clicked => { HistoryState.snippet-insert(row.id); }
-                Button {
-                    text: "Insert";
+            for row in HistoryState.snippets: HorizontalLayout {
+                // A folder header and the snippets inside it are indented by
+                // their level; the arrow says whether the folder is open.
+                padding-left: row.depth * 16px;
+                spacing: 0px;
+                if row.kind == 1: ListRow {
+                    horizontal-stretch: 1;
+                    text: row.title;
+                    detail: row.subtitle + (row.subtitle == "1" ? " snippet" : " snippets");
                     has-icon: true;
-                    icon: Icons.plus;
-                    accessible-label: "Insert into the active query tab";
-                    clicked => { HistoryState.snippet-insert(row.id); }
+                    icon: row.expanded ? Icons.chevron-down : Icons.chevron-right;
+                    clicked => { HistoryState.snippet-folder-toggled(row.id); }
                 }
-                Button {
-                    has-icon: true;
-                    icon: Icons.pencil;
-                    variant: ButtonVariant.ghost;
-                    accessible-label: "Edit snippet";
-                    clicked => { HistoryState.snippet-edit(row.id); }
-                }
-                Button {
-                    has-icon: true;
-                    icon: Icons.trash-2;
-                    variant: ButtonVariant.ghost;
-                    accessible-label: "Delete snippet";
-                    clicked => { HistoryState.snippet-delete(row.id); }
+                if row.kind == 0: DetailRow {
+                    horizontal-stretch: 1;
+                    title: row.title;
+                    subtitle: row.subtitle;
+                    tags: row.tags;
+                    clicked => { }
+                    double-clicked => { HistoryState.snippet-insert(row.id); }
+                    Button {
+                        text: "Insert";
+                        has-icon: true;
+                        icon: Icons.plus;
+                        accessible-label: "Insert into the active query tab";
+                        clicked => { HistoryState.snippet-insert(row.id); }
+                    }
+                    Button {
+                        has-icon: true;
+                        icon: Icons.folder;
+                        variant: ButtonVariant.ghost;
+                        accessible-label: "Move to folder";
+                        clicked => { HistoryState.snippet-move-open(row.id); }
+                    }
+                    Button {
+                        has-icon: true;
+                        icon: Icons.pencil;
+                        variant: ButtonVariant.ghost;
+                        accessible-label: "Edit snippet";
+                        clicked => { HistoryState.snippet-edit(row.id); }
+                    }
+                    Button {
+                        has-icon: true;
+                        icon: Icons.trash-2;
+                        variant: ButtonVariant.ghost;
+                        accessible-label: "Delete snippet";
+                        clicked => { HistoryState.snippet-delete(row.id); }
+                    }
                 }
             }
         }
@@ -585,6 +629,13 @@ component SnippetForm inherits VerticalLayout {
                 text <=> HistoryState.form-tags;
                 placeholder: "Comma separated, e.g. reports, weekly";
             }
+            SectionLabel { text: "Folder"; }
+            TextField {
+                text <=> HistoryState.form-folder;
+                placeholder: "No folder. Use / for a subfolder, e.g. Reports/Monthly";
+                has-icon: true;
+                icon: Icons.folder;
+            }
             SectionLabel { text: "SQL"; }
             Rectangle {
                 height: 200px;
@@ -662,36 +713,76 @@ component TemplateForm inherits VerticalLayout {
                 font-size: Theme.size-small;
                 wrap: word-wrap;
             }
+            if HistoryState.form-params.length > 0: HorizontalLayout {
+                spacing: 10px;
+                padding-right: 14px;
+                Text {
+                    width: 110px;
+                    text: "Placeholder";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: "Label";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+                Text {
+                    width: 96px;
+                    text: "Type";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+                Text {
+                    width: 72px;
+                    text: "Required";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+                Text {
+                    width: 180px;
+                    text: "Default value";
+                    color: Theme.muted-foreground;
+                    font-size: Theme.size-small;
+                }
+            }
             for p[i] in HistoryState.form-params: HorizontalLayout {
                 height: 36px;
                 spacing: 10px;
                 Text {
-                    width: 130px;
-                    text: p.name;
+                    width: 110px;
+                    text: "{{" + p.name + "}}";
                     color: Theme.foreground;
                     font-size: Theme.size-mono;
                     font-family: "Menlo";
                     vertical-alignment: center;
                     overflow: elide;
                 }
-                VerticalLayout {
-                    alignment: center;
-                    width: 74px;
-                    Badge { text: p.type-label; }
+                TextField {
+                    horizontal-stretch: 1;
+                    text: p.label;
+                    placeholder: p.name;
+                    edited(t) => { HistoryState.form-param-label(i, t); }
+                }
+                Dropdown {
+                    width: 96px;
+                    value: p.type-label;
+                    options: HistoryState.param-type-options;
+                    selected(t) => { HistoryState.form-param-type(i, t); }
                 }
                 VerticalLayout {
                     alignment: center;
-                    width: 110px;
+                    width: 72px;
                     Toggle {
-                        text: "Required";
                         checked: p.required;
                         toggled => { HistoryState.form-param-required(i); }
                     }
                 }
                 TextField {
-                    horizontal-stretch: 1;
+                    width: 180px;
                     text: p.default-value;
-                    placeholder: "Default value";
+                    placeholder: "Optional";
                     edited(t) => { HistoryState.form-param-default(i, t); }
                 }
             }
@@ -709,6 +800,44 @@ component TemplateForm inherits VerticalLayout {
             text: HistoryState.form-is-new ? "Save template" : "Save changes";
             variant: ButtonVariant.primary;
             clicked => { HistoryState.form-save(); }
+        }
+    }
+}
+
+// Move a snippet to another folder: an existing one or a new path typed here.
+component SnippetMoveForm inherits VerticalLayout {
+    spacing: 10px;
+
+    Text {
+        text: HistoryState.move-title;
+        color: Theme.foreground;
+        font-size: Theme.size-label;
+        wrap: word-wrap;
+    }
+    SectionLabel { text: "Folder"; }
+    Dropdown {
+        width: 260px;
+        value: HistoryState.move-options[HistoryState.move-choice];
+        options: HistoryState.move-options;
+        selected(i) => { HistoryState.move-choice-picked(i); }
+    }
+    SectionLabel { text: "Or a new folder"; }
+    TextField {
+        text <=> HistoryState.move-new-folder;
+        placeholder: "Reports/Monthly (type here to create it)";
+        has-icon: true;
+        icon: Icons.folder;
+    }
+    Rectangle { vertical-stretch: 1; }
+    Divider { }
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: end;
+        Button { text: "Cancel"; clicked => { HistoryState.form-cancel(); } }
+        Button {
+            text: "Move";
+            variant: ButtonVariant.primary;
+            clicked => { HistoryState.move-confirm(); }
         }
     }
 }
@@ -831,6 +960,7 @@ export component HistoryPanel inherits Rectangle {
                             ? (HistoryState.form-is-new ? "New snippet" : "Edit snippet")
                         : HistoryState.mode == PanelMode.template-form
                             ? (HistoryState.form-is-new ? "New template" : "Edit template")
+                        : HistoryState.mode == PanelMode.snippet-move ? "Move snippet"
                         : HistoryState.mode == PanelMode.template-run ? HistoryState.run-title
                         : HistoryState.mode == PanelMode.template-import ? "Import templates"
                         : "History and snippets";
@@ -860,6 +990,7 @@ export component HistoryPanel inherits Rectangle {
         if HistoryState.mode == PanelMode.lists && HistoryState.tab == 1: SnippetsPane { vertical-stretch: 1; }
         if HistoryState.mode == PanelMode.lists && HistoryState.tab == 2: TemplatesPane { vertical-stretch: 1; }
         if HistoryState.mode == PanelMode.snippet-form: SnippetForm { vertical-stretch: 1; }
+        if HistoryState.mode == PanelMode.snippet-move: SnippetMoveForm { vertical-stretch: 1; }
         if HistoryState.mode == PanelMode.template-form: TemplateForm { vertical-stretch: 1; }
         if HistoryState.mode == PanelMode.template-run: TemplateRunForm { vertical-stretch: 1; }
         if HistoryState.mode == PanelMode.template-import: TemplateImportForm { vertical-stretch: 1; }

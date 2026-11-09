@@ -32,16 +32,20 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "==> building release binary"
+# target/ can live outside the repo (.cargo/config.toml build.target-dir),
+# so ask cargo where it put things instead of assuming $ROOT/target.
+TARGET_DIR=$(cargo metadata --format-version 1 --no-deps --manifest-path "$ROOT/Cargo.toml" \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_directory"])')
 if [[ -n "$TARGET" ]]; then
   cargo build --release -p dbhive-app --target "$TARGET" --manifest-path "$ROOT/Cargo.toml"
-  BIN="$ROOT/target/$TARGET/release/dbhive"
+  BIN="$TARGET_DIR/$TARGET/release/dbhive"
 else
   cargo build --release -p dbhive-app --manifest-path "$ROOT/Cargo.toml"
-  BIN="$ROOT/target/release/dbhive"
+  BIN="$TARGET_DIR/release/dbhive"
 fi
 [[ -x "$BIN" ]] || { echo "binary not found at $BIN" >&2; exit 1; }
 
-APP="$ROOT/target/release/bundle/$APP_NAME.app"
+APP="$TARGET_DIR/release/bundle/$APP_NAME.app"
 echo "==> assembling $APP"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"

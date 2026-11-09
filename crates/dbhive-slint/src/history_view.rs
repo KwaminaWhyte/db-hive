@@ -5,7 +5,7 @@
 //! models without a controller behind them.
 
 use dbhive_ui_model::history::{ParamType, TemplateParameter};
-use dbhive_ui_model::history_panel::{RowView, RunField};
+use dbhive_ui_model::history_panel::{param_type_index, RowView, RunField, SnippetListRow};
 use slint::{ModelRc, SharedString, VecModel};
 
 use crate::{FormParam, PanelRow, RunParam};
@@ -19,12 +19,50 @@ pub fn to_row(r: RowView) -> PanelRow {
         tags: strings_model(&r.tags),
         has_status: r.status.is_some(),
         ok: r.status.unwrap_or(true),
+        kind: 0,
+        depth: 0,
+        expanded: false,
     }
 }
 
 pub fn rows_model(rows: Vec<RowView>) -> ModelRc<PanelRow> {
     ModelRc::new(VecModel::from(
         rows.into_iter().map(to_row).collect::<Vec<_>>(),
+    ))
+}
+
+/// The snippet tab's tree: folder headers (kind 1; `subtitle` carries the
+/// number of snippets in it and below) and snippets (kind 0), already
+/// ordered, each with its depth for indentation.
+pub fn snippet_rows_model(rows: Vec<SnippetListRow>) -> ModelRc<PanelRow> {
+    ModelRc::new(VecModel::from(
+        rows.into_iter()
+            .map(|r| match r {
+                SnippetListRow::Folder {
+                    path,
+                    name,
+                    depth,
+                    count,
+                    expanded,
+                } => PanelRow {
+                    id: path.into(),
+                    title: name.into(),
+                    subtitle: count.to_string().into(),
+                    note: "".into(),
+                    tags: ModelRc::new(VecModel::from(Vec::<SharedString>::new())),
+                    has_status: false,
+                    ok: true,
+                    kind: 1,
+                    depth: depth as i32,
+                    expanded,
+                },
+                SnippetListRow::Snippet { row, depth } => {
+                    let mut r = to_row(row);
+                    r.depth = depth as i32;
+                    r
+                }
+            })
+            .collect::<Vec<_>>(),
     ))
 }
 
@@ -76,7 +114,14 @@ pub fn form_params(params: &[TemplateParameter]) -> ModelRc<FormParam> {
             .iter()
             .map(|d| FormParam {
                 name: d.name.as_str().into(),
+                // A blank label shows the placeholder name it falls back to.
+                label: if d.label.is_empty() {
+                    d.name.as_str().into()
+                } else {
+                    d.label.as_str().into()
+                },
                 type_label: d.param_type.as_str().into(),
+                type_index: param_type_index(d.param_type) as i32,
                 required: d.required,
                 default_value: d.default_value.clone().unwrap_or_default().into(),
             })

@@ -20,6 +20,9 @@ use std::future::Future;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, OnceLock};
 
+#[cfg(test)]
+use std::sync::atomic::AtomicBool;
+
 /// The process-wide Tokio runtime.
 ///
 /// Shared by every window, like `AppState`, so two windows on one connection
@@ -40,15 +43,30 @@ pub fn handle() -> &'static tokio::runtime::Handle {
 ///
 /// If the event loop has already exited (the app is closing), the result is
 /// dropped: there is no UI left to show it in.
+///
+/// `work` runs as its own task and is awaited through its join handle, so a
+/// panic inside it is caught here instead of silently killing the task: the
+/// panic hook has logged it (sanitized), and the UI is told with a toast
+/// (`app::shell::report_worker_panic`). `done` does not run then; there is no
+/// value to give it.
 pub fn spawn<T, F, D>(work: F, done: D)
 where
     T: Send + 'static,
     F: Future<Output = T> + Send + 'static,
     D: FnOnce(T) + Send + 'static,
 {
+    let task = handle().spawn(work);
     handle().spawn(async move {
-        let out = work.await;
-        let _ = slint::invoke_from_event_loop(move || done(out));
+        match task.await {
+            Ok(out) => {
+                let _ = slint::invoke_from_event_loop(move || done(out));
+            }
+            Err(e) if e.is_panic() => {
+                let _ = slint::invoke_from_event_loop(crate::app::report_worker_panic);
+            }
+            // Cancelled: the runtime is shutting down with the app.
+            Err(_) => {}
+        }
     });
 }
 
@@ -116,5 +134,22 @@ mod tests {
         let ticket = latest.begin();
         let handle = std::thread::spawn(move || ticket.is_current());
         assert!(handle.join().unwrap());
+    }
+
+    #[test]
+    fn a_panicking_task_does_not_run_its_completion() {
+        // The panic is caught inside `spawn`; without a Slint event loop the
+        // toast cannot be delivered here, but the point is that the process
+        // survives and `done` is not called with a value that never existed.
+        static DONE: AtomicBool = AtomicBool::new(false);
+        DONE.store(false, Ordering::SeqCst);
+        spawn(
+            async {
+                panic!("intentional test panic");
+            },
+            |_: ()| DONE.store(true, Ordering::SeqCst),
+        );
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(!DONE.load(Ordering::SeqCst));
     }
 }

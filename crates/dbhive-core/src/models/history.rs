@@ -148,6 +148,13 @@ pub struct QuerySnippet {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
 
+    /// Folder path, segments joined with `/` ("Reports/Monthly"). `None`
+    /// files the snippet at the top level. Optional and skipped when empty,
+    /// so snippets written before folders existed load unchanged and a file
+    /// with no folders is byte-for-byte what it was.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+
     /// ISO 8601 timestamp of creation
     pub created_at: String,
 
@@ -181,6 +188,7 @@ impl QuerySnippet {
             description,
             query,
             tags,
+            folder: None,
             created_at: now.clone(),
             updated_at: now,
         }
@@ -296,5 +304,22 @@ mod tests {
         assert_eq!(snippet.description, Some("New description".to_string()));
         assert_eq!(snippet.created_at, original_created);
         assert_ne!(snippet.updated_at, original_created);
+    }
+
+    #[test]
+    fn snippet_folder_is_optional_on_disk() {
+        // A snippet saved before folders existed loads with no folder.
+        let old = r#"{"id":"1","name":"n","query":"SELECT 1","createdAt":"t","updatedAt":"t"}"#;
+        let s: QuerySnippet = serde_json::from_str(old).unwrap();
+        assert_eq!(s.folder, None);
+        // And one with no folder writes no key, so old files stay as they were.
+        let json = serde_json::to_string(&s).unwrap();
+        assert!(!json.contains("folder"), "{json}");
+
+        let mut s = s;
+        s.folder = Some("Reports/Monthly".into());
+        let json = serde_json::to_string(&s).unwrap();
+        let back: QuerySnippet = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.folder.as_deref(), Some("Reports/Monthly"));
     }
 }

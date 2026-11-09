@@ -17,6 +17,11 @@ import { PaletteDialog, PaletteItem } from "dialogs/command_palette.slint";
 import { ShortcutsDialog, ShortcutItem } from "dialogs/shortcuts.slint";
 import { SettingsDialog, SettingsData, ShortcutRowData } from "dialogs/settings.slint";
 import { Palette } from "std-widgets.slint";
+// Menu shortcuts, theme mode and help links (controller: src/app/shell.rs).
+import { ShellState } from "shell_state.slint";
+export { ShellState }
+// Context-menu type-ahead, implemented in Rust (src/app/shell.rs).
+export { CtxTypeahead } from "kit/kit.slint";
 
 export { Theme, Icons, Tone, ConnectionItem, ConnectionFormData, TableItem, GridColumn, GridRow, TabInfo, CompletionItem }
 export { PaletteItem, ShortcutItem }
@@ -252,7 +257,7 @@ export component AppWindow inherits Window {
     in-out property <bool> show-settings: false;
     in property <SettingsData> settings;
     callback settings-section-selected(int);
-    callback settings-language-selected(int);
+    callback settings-default-connection-selected(int);
     callback settings-startup-selected(int);
     callback settings-toggle-auto-save-connections;
     callback settings-toggle-auto-check-updates;
@@ -326,21 +331,40 @@ export component AppWindow inherits Window {
     callback editor-save;
     callback editor-cancel;
 
+    // Menus. Every entry runs a palette command by slug where one exists, so
+    // menu, palette and keyboard share one dispatch and one enabled rule.
+    // Shortcuts come from `ShellState` (the live keymap); Rust sets them with
+    // `slint::Keys::from_parts`, so a rebind in Settings moves the menu's
+    // shortcut too. Bare keys such as "?" are never given to a menu: a native
+    // menu would take that character from every text field.
     MenuBar {
         Menu {
             title: "File";
             MenuItem {
                 title: "New Connection…";
-                shortcut: @keys(Control + N);
+                shortcut: ShellState.key-new-connection;
                 activated => { root.new-connection(); }
             }
-            // No "New Window" item: the controller owns one window's state
-            // and a second window would share it. The command stays in the
-            // palette, greyed, with that reason.
+            MenuItem {
+                title: "New Query Tab";
+                shortcut: ShellState.key-new-tab;
+                enabled: root.screen == Screen.workspace;
+                activated => { root.run-command("new-tab"); }
+            }
+            MenuItem {
+                title: "Close Tab";
+                shortcut: ShellState.key-close-tab;
+                enabled: root.screen == Screen.workspace;
+                activated => { root.run-command("close-tab"); }
+            }
+            // New Window and Close Window belong here, after the tab items.
+            // They arrive with multi-window support; until then the controller
+            // owns one window's state and the palette shows New Window greyed
+            // with that reason.
             MenuSeparator { }
             MenuItem {
                 title: "Settings…";
-                shortcut: @keys(Control + Comma);
+                shortcut: ShellState.key-settings;
                 activated => { root.open-settings(); }
             }
         }
@@ -352,13 +376,14 @@ export component AppWindow inherits Window {
             }
             MenuItem {
                 title: "Command Palette";
-                shortcut: @keys(Control + K);
+                shortcut: ShellState.key-palette;
                 activated => { root.open-palette(); }
             }
             MenuItem {
                 title: "History and Snippets";
-                shortcut: @keys(Control + Shift + H);
-                activated => { HistoryState.open-requested(); }
+                shortcut: ShellState.key-history;
+                enabled: root.screen == Screen.workspace;
+                activated => { root.run-command("go-history"); }
             }
             MenuItem {
                 title: "AI Assistant";
@@ -385,14 +410,36 @@ export component AppWindow inherits Window {
                 title: "Plugins…";
                 activated => { root.run-command("go-plugins"); }
             }
-            MenuItem {
-                title: "Visual Query Builder";
-                activated => { root.run-command("go-visual-query-builder"); }
+            MenuSeparator { }
+            Menu {
+                title: "Theme";
+                MenuItem {
+                    title: ShellState.theme-mode == 0 ? "Light (current)" : "Light";
+                    activated => { ShellState.theme-mode-picked(0); }
+                }
+                MenuItem {
+                    title: ShellState.theme-mode == 1 ? "Dark (current)" : "Dark";
+                    activated => { ShellState.theme-mode-picked(1); }
+                }
+                MenuItem {
+                    title: ShellState.theme-mode == 2 ? "System (current)" : "System";
+                    activated => { ShellState.theme-mode-picked(2); }
+                }
             }
+        }
+        Menu {
+            title: "Schema";
             MenuItem {
                 title: "New Table…";
+                enabled: root.screen == Screen.workspace;
                 activated => { root.run-command("new-table"); }
             }
+            MenuItem {
+                title: "Refresh Metadata";
+                enabled: root.screen == Screen.workspace;
+                activated => { root.run-command("refresh-metadata"); }
+            }
+            MenuSeparator { }
             MenuItem {
                 title: "ER Diagram";
                 enabled: root.screen == Screen.workspace;
@@ -403,14 +450,34 @@ export component AppWindow inherits Window {
                 enabled: root.screen == Screen.workspace;
                 activated => { root.run-command("go-schema-designer"); }
             }
-            MenuSeparator { }
             MenuItem {
-                title: Theme.dark ? "Light Theme" : "Dark Theme";
-                activated => { root.toggle-theme(); }
+                title: "Query Builder";
+                enabled: root.screen == Screen.workspace;
+                activated => { root.run-command("go-visual-query-builder"); }
+            }
+        }
+        Menu {
+            title: "Window";
+            MenuItem {
+                title: "Minimize";
+                activated => { root.run-command("window-minimize"); }
+            }
+            MenuItem {
+                title: "Zoom";
+                activated => { root.run-command("window-maximize-toggle"); }
             }
         }
         Menu {
             title: "Help";
+            MenuItem {
+                title: "Documentation";
+                activated => { ShellState.open-link("docs"); }
+            }
+            MenuItem {
+                title: "DB Hive on GitHub";
+                activated => { ShellState.open-link("github"); }
+            }
+            MenuSeparator { }
             MenuItem {
                 title: "Keyboard Shortcuts";
                 activated => { root.run-command("show-shortcuts"); }
@@ -695,6 +762,7 @@ export component AppWindow inherits Window {
                 alignment: center;
                 AboutDialog {
                     version: root.app-version;
+                    available-height: root.height - 48px;
                     close => { root.show-about = false; }
                 }
             }
@@ -708,7 +776,7 @@ export component AppWindow inherits Window {
                     available-height: root.height - 48px;
                     data: root.settings;
                     section-selected(i) => { root.settings-section-selected(i); }
-                    language-selected(i) => { root.settings-language-selected(i); }
+                    default-connection-selected(i) => { root.settings-default-connection-selected(i); }
                     startup-selected(i) => { root.settings-startup-selected(i); }
                     toggle-auto-save-connections => { root.settings-toggle-auto-save-connections(); }
                     toggle-auto-check-updates => { root.settings-toggle-auto-check-updates(); }

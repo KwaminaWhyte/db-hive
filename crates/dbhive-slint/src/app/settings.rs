@@ -9,12 +9,17 @@
 //! Three things happen live, before Save, because a colour you cannot see is
 //! a colour you cannot judge: theme mode, accent colour, and the SQL editor's
 //! font size and line numbers. Everything else waits for Save.
+//!
+//! The saved shortcuts are also turned into the live [`Keymap`] here, every
+//! time they change, so dispatch, the help, the palette and the menus follow
+//! a rebind at once.
 
 use std::rc::Rc;
 
-use dbhive_core::models::settings::AppSettings;
+use dbhive_core::models::settings::{AppSettings, ThemeMode};
 use dbhive_core::models::DbError;
 use dbhive_core::settings as core_settings;
+use dbhive_ui_model::keymap::{binding_problem, Keymap};
 use dbhive_ui_model::settings::{theme_mode_for, ResolvedMode, ShortcutField};
 use dbhive_ui_model::settings_editor::{
     shortcut_fields, NumberField, RecordOutcome, SettingsEditor,
@@ -29,8 +34,12 @@ use crate::{AppWindow, Theme, Tone};
 pub(super) struct SettingsState {
     pub editor: SettingsEditor,
     pub view: View,
-    /// The OS light/dark preference, read once when the window opens.
+    /// The OS light/dark preference. Read when the window opens and again
+    /// whenever the OS reports a change (`ShellState.os-color-scheme`), so
+    /// the "System" theme mode follows the OS live.
     pub system_dark: Option<bool>,
+    /// The live key bindings, built from the *saved* shortcuts.
+    pub keymap: Keymap,
 }
 
 impl Default for SettingsState {
@@ -39,11 +48,12 @@ impl Default for SettingsState {
             editor: SettingsEditor::new(AppSettings::default()),
             view: View::default(),
             system_dark: None,
+            keymap: Keymap::default(),
         }
     }
 }
 
-fn read_system_dark(w: &AppWindow) -> Option<bool> {
+pub(super) fn read_system_dark(w: &AppWindow) -> Option<bool> {
     // `Palette` is the style's own colour-scheme global; the format avoids
     // naming the generated enum.
     let scheme = format!("{:?}", w.global::<crate::Palette>().get_color_scheme());
@@ -76,8 +86,39 @@ impl Ctx {
                 Err(e) => s.settings.view.load = Load::Failed(e.to_string()),
             }
         }
+        self.rebuild_keymap();
         self.apply_appearance();
         self.refresh_settings();
+    }
+
+    /// Rebuild the live keymap from the saved shortcuts and push it to the
+    /// menus. Called whenever the saved shortcuts may have changed.
+    pub(super) fn rebuild_keymap(&self) {
+        {
+            let mut s = self.session.borrow_mut();
+            let map = Keymap::from_settings(&s.settings.editor.saved().shortcuts);
+            s.settings.keymap = map;
+        }
+        self.apply_menu_keys();
+        self.refresh_shortcuts();
+    }
+
+    /// The OS switched between light and dark. Only the "System" theme mode
+    /// changes what is on screen; the others ignore it.
+    pub(super) fn system_scheme_changed(&self) {
+        let Some(w) = self.window.upgrade() else {
+            return;
+        };
+        let now = read_system_dark(&w);
+        {
+            let mut s = self.session.borrow_mut();
+            if s.settings.system_dark == now {
+                return;
+            }
+            s.settings.system_dark = now;
+        }
+        self.apply_appearance();
+        self.refresh_history_panel();
     }
 
     /// Project the editor into the dialog.
@@ -85,9 +126,11 @@ impl Ctx {
         let Some(w) = self.window.upgrade() else {
             return;
         };
+        let profiles = self.profiles();
         let data = {
             let s = self.session.borrow();
-            settings_view::data(&s.settings.editor, &s.settings.view)
+            let d = settings_view::data(&s.settings.editor, &s.settings.view);
+            settings_view::with_default_connection(d, &s.settings.editor, &profiles)
         };
         w.set_settings(data);
     }
@@ -114,6 +157,7 @@ impl Ctx {
         theme.set_editor_line_numbers(a.editor_line_numbers);
         // Font family, word wrap and minimap come from the same draft.
         self.editor_prefs_apply();
+        self.show_theme_mode();
         // Syntax colours are chosen per theme in Rust.
         self.refresh_workspace();
     }
@@ -244,6 +288,7 @@ impl Ctx {
                     s.settings.view.load = Load::Ready;
                     s.settings.view.banner = None;
                 }
+                self.rebuild_keymap();
                 self.apply_appearance();
                 self.refresh_settings();
                 self.toast(ok_message, Tone::Success);
@@ -277,6 +322,7 @@ impl Ctx {
                         Err(e) => s.settings.view.load = Load::Failed(e.to_string()),
                     }
                 }
+                ctx.rebuild_keymap();
                 ctx.apply_appearance();
                 ctx.refresh_settings();
             })
@@ -297,11 +343,17 @@ impl Ctx {
     /// palette's theme commands, the View menu and the title-bar button all
     /// come through here, so they cannot disagree about what gets saved.
     pub(super) fn set_theme_dark(self: &Rc<Self>, dark: bool) {
-        let mode = theme_mode_for(if dark {
+        self.set_theme_mode(theme_mode_for(if dark {
             ResolvedMode::Dark
         } else {
             ResolvedMode::Light
-        });
+        }));
+    }
+
+    /// Save `mode` (Light, Dark or System) as the theme mode and show it.
+    /// The View > Theme menu comes here directly; System then follows the
+    /// OS through [`Self::system_scheme_changed`].
+    pub(super) fn set_theme_mode(self: &Rc<Self>, mode: ThemeMode) {
         let (to_write, can_persist) = {
             let mut s = self.session.borrow_mut();
             let can_persist = s.settings.view.load == Load::Ready;
@@ -337,12 +389,13 @@ impl Ctx {
         let is_mac = cfg!(target_os = "macos");
         let key = settings_view::key_label(text);
         let mods = settings_view::key_modifiers(control, alt, shift, meta, is_mac);
-        let outcome = {
+        let (field, outcome) = {
             let mut s = self.session.borrow_mut();
             if s.settings.view.saving {
                 return;
             }
-            s.settings.editor.record(mods, &key, is_mac)
+            let field = s.settings.editor.recording();
+            (field, s.settings.editor.record(mods, &key, is_mac))
         };
         match outcome {
             RecordOutcome::Idle | RecordOutcome::Waiting => {}
@@ -351,8 +404,15 @@ impl Ctx {
                 self.session.borrow_mut().settings.view.banner = None;
                 self.persist_shortcuts();
             }
-            RecordOutcome::Bound { warning, .. } => {
-                self.session.borrow_mut().settings.view.banner = warning.map(|message| Banner {
+            RecordOutcome::Bound { combo, warning } => {
+                // A binding the keymap cannot dispatch is still saved (it is
+                // what the person pressed), but they are told it will not fire.
+                let problem = field.and_then(|f| binding_problem(f, &combo));
+                let message = match (warning, problem) {
+                    (Some(w), Some(p)) => Some(format!("{w} {p}")),
+                    (w, p) => w.or(p),
+                };
+                self.session.borrow_mut().settings.view.banner = message.map(|message| Banner {
                     message,
                     tone: Tone::Warning,
                 });
@@ -380,12 +440,14 @@ impl Ctx {
         crate::runtime::spawn(async move { core_settings::save(&to_write) }, |res| {
             with_ctx(|ctx| {
                 match res {
-                    Ok(written) => ctx
-                        .session
-                        .borrow_mut()
-                        .settings
-                        .editor
-                        .mark_shortcuts_saved(&written.shortcuts),
+                    Ok(written) => {
+                        ctx.session
+                            .borrow_mut()
+                            .settings
+                            .editor
+                            .mark_shortcuts_saved(&written.shortcuts);
+                        ctx.rebuild_keymap();
+                    }
                     Err(e) => {
                         ctx.session.borrow_mut().settings.view.banner = Some(Banner {
                             message: format!("Could not save the shortcut: {}", e),
@@ -456,10 +518,16 @@ pub(super) fn wire(window: &AppWindow, ctx: &Rc<Ctx>) {
 
     edit_cb!(window, ctx, on_settings_section_selected, |e, i| e
         .select_section_index(i.max(0) as usize));
-    edit_cb!(window, ctx, on_settings_language_selected, |e, i| e
-        .set_language_index(i.max(0) as usize));
     edit_cb!(window, ctx, on_settings_startup_selected, |e, i| e
         .set_startup_index(i.max(0) as usize));
+    {
+        let ctx = ctx.clone();
+        window.on_settings_default_connection_selected(move |i| {
+            let profiles = ctx.profiles();
+            let id = dbhive_ui_model::shell::default_connection_at(&profiles, i.max(0) as usize);
+            ctx.edit_settings(|e| e.edit(|s| s.general.default_database = id));
+        });
+    }
     edit_cb!(window, ctx, on_settings_toggle_auto_save_connections, |e| e
         .edit(|s| {
             s.general.auto_save_connections = !s.general.auto_save_connections

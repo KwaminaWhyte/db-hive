@@ -17,3 +17,6 @@ logs
 
 # Tooling scratch
 /.playwright-mcp
+
+# Parallel agent worktrees live here and must never be committed.
+.claude/worktrees/

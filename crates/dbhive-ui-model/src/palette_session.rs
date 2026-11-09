@@ -20,9 +20,10 @@
 //! No toolkit types. The shell converts keys in and rows out.
 
 use crate::command_palette::{
-    command, command_for_chord, help_groups, palette_groups, score, Chord, CommandId, Group,
-    KeyCode, Scope, COMMAND_GLYPH,
+    command, command_for_chord, palette_groups, score, Chord, CommandId, Group, KeyCode, Scope,
+    COMMANDS, COMMAND_GLYPH, GROUP_ORDER,
 };
+use crate::keymap::Keymap;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Ids as text
@@ -132,6 +133,9 @@ pub struct CommandContext {
     /// A dialog (connection editor, confirmation, About) is open. Nothing
     /// runs from a menu or a key under it.
     pub dialog_open: bool,
+    /// The live bindings: registry chords plus the saved rebinds. The
+    /// palette's key caps come from here.
+    pub keymap: Keymap,
 }
 
 impl CommandContext {
@@ -146,6 +150,7 @@ impl CommandContext {
             running: false,
             editor_empty: true,
             dialog_open: false,
+            keymap: Keymap::default(),
         }
     }
 
@@ -181,12 +186,18 @@ pub fn support(id: CommandId) -> Support {
         | OpenCommandPalette | Disconnect | RunQuery | NewTab | CloseTab | ThemeLight
         | ThemeDark | ThemeToggle | GoImportExport | GoBackup | GoActivityMonitor
         | GoMigrations | GoVisualQueryBuilder | NewTable | GoErDiagram | GoSchemaDesigner
-        | GoPlugins | GoAiAssistant => Support::Live,
+        | GoPlugins | GoAiAssistant | GoHistory | WindowMinimize | WindowMaximizeToggle => {
+            Support::Live
+        }
 
+        // Multiple windows come with the multi-window work; until then the
+        // command is listed, greyed, with the reason.
         NewWindow => Support::Unsupported("Multiple windows are not supported yet"),
 
-        GoQueryEditor | GoTableInspector | GoHistory | ToggleSidebar | Connect
-        | ConnectionsBack | WindowMinimize | WindowMaximizeToggle | WindowClose => Support::Hidden,
+        // WindowClose would quit the app (one window), which Cmd+Q and the
+        // window's own close button already do; the rest have no screen here.
+        GoQueryEditor | GoTableInspector | ToggleSidebar | Connect | ConnectionsBack
+        | WindowClose => Support::Hidden,
     }
 }
 
@@ -240,6 +251,11 @@ pub fn status(id: CommandId, ctx: &CommandContext) -> Status {
     match id {
         CommandId::GoConnections if ctx.screen == Scope::Connections => {
             Status::Disabled("Already on the connections screen")
+        }
+        // The registry lists History as global (the egui shell had a
+        // history screen of its own); here it is a panel over a workspace.
+        CommandId::GoHistory if ctx.screen != Scope::Workspace => {
+            Status::Disabled("Open a connection first")
         }
         CommandId::RefreshMetadata if ctx.tables_loading => {
             Status::Disabled("Tables are already loading")
@@ -335,13 +351,20 @@ pub enum Overlay {
 /// sidebar toggle exists, and the help does not list it either). Under the
 /// palette only its own toggle key does anything; under any other dialog
 /// nothing does, so `Cmd+N` cannot open a second editor over the first.
-pub fn command_for_key(chord: Chord, overlay: Overlay, screen: Scope) -> Option<CommandId> {
+///
+/// `keymap` carries the user's rebinds, so a binding changed in Settings is
+/// the one that fires.
+pub fn command_for_key(
+    chord: Chord,
+    overlay: Overlay,
+    screen: Scope,
+    keymap: &Keymap,
+) -> Option<CommandId> {
     match overlay {
-        Overlay::None => {
-            command_for_chord(chord, screen).filter(|id| matches!(support(*id), Support::Live))
-        }
+        Overlay::None => command_for_chord(keymap, chord, screen)
+            .filter(|id| matches!(support(*id), Support::Live)),
         Overlay::Palette => (Some(CommandId::OpenCommandPalette)
-            == command_for_chord(chord, screen))
+            == command_for_chord(keymap, chord, screen))
         .then_some(CommandId::OpenCommandPalette),
         Overlay::Shortcuts | Overlay::Dialog => None,
     }
@@ -375,6 +398,12 @@ pub fn chord_parts(chord: Chord, mac: bool) -> Vec<String> {
     }
     parts.push(key);
     parts
+}
+
+/// The chord that runs `id` on `screen` now: its keymap chord, unless a
+/// rebind of another command took that chord over.
+pub fn live_chord(keymap: &Keymap, id: CommandId, screen: Scope) -> Option<Chord> {
+    keymap.chord(id).filter(|_| !keymap.is_shadowed(id, screen))
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -615,7 +644,9 @@ impl PaletteState {
                     title: cmd.title.to_string(),
                     slug: id.slug(),
                     description: cmd.description,
-                    keys: cmd.chord.map(|c| chord_parts(c, mac)).unwrap_or_default(),
+                    keys: live_chord(&ctx.keymap, id, ctx.screen)
+                        .map(|c| chord_parts(c, mac))
+                        .unwrap_or_default(),
                     enabled: st.is_enabled(),
                     reason: st.reason(),
                     selected,
@@ -670,15 +701,25 @@ impl ShortcutsState {
         self.query = query.to_string();
     }
 
-    /// Every binding this shell actually listens for, grouped, filtered by
-    /// the search text. Derived from the same registry [`command_for_key`]
-    /// reads, minus commands the shell does not implement.
-    pub fn view(&self, mac: bool) -> Vec<ShortcutRow> {
+    /// Every binding this shell actually listens for on `screen`, grouped,
+    /// filtered by the search text. Derived from the same [`Keymap`]
+    /// [`command_for_key`] reads (so a rebind shows its new keys), minus
+    /// commands the shell does not implement and defaults a rebind has taken
+    /// over.
+    pub fn view(&self, mac: bool, keymap: &Keymap, screen: Scope) -> Vec<ShortcutRow> {
+        let needle = self.query.trim().to_lowercase();
         let mut rows = Vec::new();
-        for (group, items) in help_groups(&self.query) {
-            let items: Vec<_> = items
-                .into_iter()
-                .filter(|c| matches!(support(c.id), Support::Live))
+        for group in GROUP_ORDER {
+            let items: Vec<(&'static crate::command_palette::Command, Chord)> = COMMANDS
+                .iter()
+                .filter(|c| c.group == group && matches!(support(c.id), Support::Live))
+                .filter_map(|c| live_chord(keymap, c.id, screen).map(|chord| (c, chord)))
+                .filter(|(c, chord)| {
+                    needle.is_empty()
+                        || c.title.to_lowercase().contains(&needle)
+                        || c.description.to_lowercase().contains(&needle)
+                        || chord.display().to_lowercase().contains(&needle)
+                })
                 .collect();
             if items.is_empty() {
                 continue;
@@ -689,12 +730,12 @@ impl ShortcutsState {
                 description: "",
                 keys: Vec::new(),
             });
-            for c in items {
+            for (c, chord) in items {
                 rows.push(ShortcutRow {
                     header: false,
                     title: c.title.to_string(),
                     description: c.description,
-                    keys: chord_parts(c.chord.expect("help lists chorded commands"), mac),
+                    keys: chord_parts(chord, mac),
                 });
             }
         }
@@ -1012,36 +1053,53 @@ mod tests {
     fn keys_run_live_commands_for_the_screen_and_nothing_else() {
         let k = Chord::cmd(KeyCode::K);
         assert_eq!(
-            command_for_key(k, Overlay::None, Scope::Connections),
+            command_for_key(k, Overlay::None, Scope::Connections, &Keymap::default()),
             Some(CommandId::OpenCommandPalette)
         );
         assert_eq!(
             command_for_key(
                 Chord::bare(KeyCode::Questionmark),
                 Overlay::None,
-                Scope::Workspace
+                Scope::Workspace,
+                &Keymap::default()
             ),
             Some(CommandId::ShowShortcuts)
         );
         // Workspace chords are dead on the connection list.
         assert_eq!(
-            command_for_key(Chord::cmd(KeyCode::T), Overlay::None, Scope::Connections),
+            command_for_key(
+                Chord::cmd(KeyCode::T),
+                Overlay::None,
+                Scope::Connections,
+                &Keymap::default()
+            ),
             None
         );
         assert_eq!(
-            command_for_key(Chord::cmd(KeyCode::T), Overlay::None, Scope::Workspace),
+            command_for_key(
+                Chord::cmd(KeyCode::T),
+                Overlay::None,
+                Scope::Workspace,
+                &Keymap::default()
+            ),
             Some(CommandId::NewTab)
         );
         // Bound in the registry, not implemented here: no effect.
         assert_eq!(
-            command_for_key(Chord::cmd(KeyCode::B), Overlay::None, Scope::Workspace),
+            command_for_key(
+                Chord::cmd(KeyCode::B),
+                Overlay::None,
+                Scope::Workspace,
+                &Keymap::default()
+            ),
             None
         );
         assert_eq!(
             command_for_key(
                 Chord::cmd_shift(KeyCode::N),
                 Overlay::None,
-                Scope::Workspace
+                Scope::Workspace,
+                &Keymap::default()
             ),
             None
         );
@@ -1049,7 +1107,8 @@ mod tests {
             command_for_key(
                 Chord::bare(KeyCode::Escape),
                 Overlay::None,
-                Scope::Connections
+                Scope::Connections,
+                &Keymap::default()
             ),
             None
         );
@@ -1059,17 +1118,22 @@ mod tests {
     fn under_a_dialog_only_the_palette_toggle_works_and_only_under_the_palette() {
         let k = Chord::cmd(KeyCode::K);
         assert_eq!(
-            command_for_key(k, Overlay::Palette, Scope::Workspace),
+            command_for_key(k, Overlay::Palette, Scope::Workspace, &Keymap::default()),
             Some(CommandId::OpenCommandPalette)
         );
         assert_eq!(
-            command_for_key(Chord::cmd(KeyCode::N), Overlay::Palette, Scope::Workspace),
+            command_for_key(
+                Chord::cmd(KeyCode::N),
+                Overlay::Palette,
+                Scope::Workspace,
+                &Keymap::default()
+            ),
             None
         );
         for o in [Overlay::Shortcuts, Overlay::Dialog] {
             for c in COMMANDS.iter().filter_map(|c| c.chord) {
                 assert_eq!(
-                    command_for_key(c, o, Scope::Workspace),
+                    command_for_key(c, o, Scope::Workspace, &Keymap::default()),
                     None,
                     "{:?} {:?}",
                     o,
@@ -1105,7 +1169,7 @@ mod tests {
             .filter(|r| r.header)
             .map(|r| r.title.as_str())
             .collect();
-        assert_eq!(headers, vec!["Navigation", "Actions", "Theme"]);
+        assert_eq!(headers, vec!["Navigation", "Actions", "Theme", "Window"]);
         let t = titles(&v);
         assert!(t.contains(&"New Connection".to_string()));
         assert!(t.contains(&"Open Settings".to_string()));
@@ -1133,7 +1197,8 @@ mod tests {
                 "Actions",
                 "Connections",
                 "Query Workspace",
-                "Theme"
+                "Theme",
+                "Window"
             ]
         );
     }
@@ -1399,7 +1464,7 @@ mod tests {
     fn help_lists_only_bindings_that_fire() {
         let mut s = ShortcutsState::default();
         s.open();
-        let rows = s.view(false);
+        let rows = s.view(false, &Keymap::default(), Scope::Workspace);
         let titles: Vec<&str> = rows
             .iter()
             .filter(|r| !r.header)
@@ -1436,7 +1501,7 @@ mod tests {
 
     #[test]
     fn help_has_a_header_before_each_group_and_caps_on_every_row() {
-        let rows = ShortcutsState::default().view(false);
+        let rows = ShortcutsState::default().view(false, &Keymap::default(), Scope::Workspace);
         assert!(rows[0].header);
         for (i, r) in rows.iter().enumerate() {
             if r.header {
@@ -1456,7 +1521,7 @@ mod tests {
     fn help_search_filters_and_can_come_up_empty() {
         let mut s = ShortcutsState::default();
         s.set_query("tab");
-        let rows = s.view(false);
+        let rows = s.view(false, &Keymap::default(), Scope::Workspace);
         let t: Vec<&str> = rows
             .iter()
             .filter(|r| !r.header)
@@ -1466,14 +1531,16 @@ mod tests {
         assert!(!t.contains(&"Open Settings"));
 
         s.set_query("zzzz");
-        assert!(s.view(false).is_empty());
+        assert!(s
+            .view(false, &Keymap::default(), Scope::Workspace)
+            .is_empty());
     }
 
     #[test]
     fn help_follows_the_platform_spelling() {
         let s = ShortcutsState::default();
-        let mac = s.view(true);
-        let other = s.view(false);
+        let mac = s.view(true, &Keymap::default(), Scope::Workspace);
+        let other = s.view(false, &Keymap::default(), Scope::Workspace);
         let find = |rows: &[ShortcutRow]| {
             rows.iter()
                 .find(|r| r.title == "New Tab")
@@ -1503,5 +1570,140 @@ mod tests {
         s.open();
         assert_eq!(s.query(), "");
         assert!(s.is_open());
+    }
+
+    // ── rebinding ────────────────────────────────────────────────────────
+
+    fn rebound(f: impl FnOnce(&mut dbhive_core::models::settings::ShortcutsSettings)) -> Keymap {
+        let mut s = dbhive_core::models::settings::ShortcutsSettings::default();
+        f(&mut s);
+        Keymap::from_settings(&s)
+    }
+
+    #[test]
+    fn a_rebound_key_dispatches_and_the_old_one_does_not() {
+        let map = rebound(|s| s.new_tab = "Ctrl+J".into());
+        assert_eq!(
+            command_for_key(
+                Chord::cmd(KeyCode::J),
+                Overlay::None,
+                Scope::Workspace,
+                &map
+            ),
+            Some(CommandId::NewTab)
+        );
+        assert_eq!(
+            command_for_key(
+                Chord::cmd(KeyCode::T),
+                Overlay::None,
+                Scope::Workspace,
+                &map
+            ),
+            None
+        );
+        // The real key event, end to end.
+        let chord = chord_from_input("j", true, false, false, false).unwrap();
+        assert_eq!(
+            command_for_key(chord, Overlay::None, Scope::Workspace, &map),
+            Some(CommandId::NewTab)
+        );
+    }
+
+    #[test]
+    fn rebinding_the_palette_key_moves_its_toggle_under_the_palette_too() {
+        // Settings rebound onto Cmd+K takes the key from the palette, on
+        // every screen and under the palette as well.
+        let map = rebound(|s| s.open_settings = "Ctrl+K".into());
+        assert_eq!(
+            command_for_key(
+                Chord::cmd(KeyCode::K),
+                Overlay::None,
+                Scope::Connections,
+                &map
+            ),
+            Some(CommandId::GoSettings)
+        );
+        assert_eq!(
+            command_for_key(
+                Chord::cmd(KeyCode::K),
+                Overlay::Palette,
+                Scope::Connections,
+                &map
+            ),
+            None,
+            "Cmd+K now means Settings, so it no longer closes the palette"
+        );
+    }
+
+    #[test]
+    fn help_and_palette_show_the_live_binding() {
+        let map = rebound(|s| s.new_tab = "Ctrl+Shift+Y".into());
+        let rows = ShortcutsState::default().view(false, &map, Scope::Workspace);
+        let new_tab = rows.iter().find(|r| r.title == "New Tab").unwrap();
+        assert_eq!(new_tab.keys, vec!["Ctrl", "Shift", "Y"]);
+
+        let mut ctx = ws();
+        ctx.keymap = map;
+        let v = PaletteState::default().view(&ctx, false);
+        let row = v.rows.iter().find(|r| r.slug == "new-tab").unwrap();
+        assert_eq!(row.keys, vec!["Ctrl", "Shift", "Y"]);
+    }
+
+    #[test]
+    fn an_unbound_command_leaves_the_help_and_loses_its_caps() {
+        let map = rebound(|s| s.close_tab = String::new());
+        let rows = ShortcutsState::default().view(false, &map, Scope::Workspace);
+        assert!(!rows.iter().any(|r| r.title == "Close Tab"));
+        let mut ctx = ws();
+        ctx.keymap = map;
+        let v = PaletteState::default().view(&ctx, false);
+        let row = v.rows.iter().find(|r| r.slug == "close-tab").unwrap();
+        assert!(row.keys.is_empty(), "still runnable from the palette");
+    }
+
+    #[test]
+    fn a_default_taken_over_by_a_rebind_is_not_advertised() {
+        let map = rebound(|s| s.new_tab = "Ctrl+K".into());
+        let rows = ShortcutsState::default().view(false, &map, Scope::Workspace);
+        assert!(!rows.iter().any(|r| r.title == "Command Palette"));
+        let new_tab = rows.iter().find(|r| r.title == "New Tab").unwrap();
+        assert_eq!(new_tab.keys, vec!["Ctrl", "K"]);
+        // On the connection list New Tab is not live and Cmd+K is the
+        // palette again.
+        let rows = ShortcutsState::default().view(false, &map, Scope::Connections);
+        assert!(rows.iter().any(|r| r.title == "Command Palette"));
+    }
+
+    // ── history and window commands ──────────────────────────────────────
+
+    #[test]
+    fn history_and_window_commands_are_live() {
+        for id in [
+            CommandId::GoHistory,
+            CommandId::WindowMinimize,
+            CommandId::WindowMaximizeToggle,
+        ] {
+            assert_eq!(support(id), Support::Live, "{:?}", id);
+        }
+        assert_eq!(status(CommandId::GoHistory, &ws()), Status::Enabled);
+        assert_eq!(
+            status(CommandId::GoHistory, &conns()).reason(),
+            "Open a connection first"
+        );
+        assert!(status(CommandId::WindowMinimize, &conns()).is_enabled());
+        assert_eq!(
+            command_for_key(
+                Chord::cmd_shift(KeyCode::H),
+                Overlay::None,
+                Scope::Workspace,
+                &Keymap::default()
+            ),
+            Some(CommandId::GoHistory)
+        );
+        // New Window stays refused until multi-window exists.
+        assert!(matches!(
+            support(CommandId::NewWindow),
+            Support::Unsupported(_)
+        ));
     }
 }
