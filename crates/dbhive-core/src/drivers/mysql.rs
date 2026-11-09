@@ -207,8 +207,15 @@ impl DatabaseDriver for MysqlDriver {
         }])
     }
 
-    async fn get_tables(&self, _schema: &str) -> Result<Vec<TableInfo>, DbError> {
+    async fn get_tables(&self, schema: &str) -> Result<Vec<TableInfo>, DbError> {
         let mut conn = self.get_conn().await?;
+        // The argument is the database: MySQL qualifies a table as
+        // `database.table`, and an empty one means the connection's own.
+        let database = if schema.is_empty() {
+            self.current_database.as_str()
+        } else {
+            schema
+        };
 
         // Use parameterized query to prevent SQL injection
         let query = r#"
@@ -219,14 +226,14 @@ impl DatabaseDriver for MysqlDriver {
         "#;
 
         let rows: Vec<(String, String, Option<u64>, Option<String>)> = conn
-            .exec(query, (&self.current_database,))
+            .exec(query, (database,))
             .await
             .map_err(Self::map_mysql_error)?;
 
         Ok(rows
             .into_iter()
             .map(|(name, table_type, row_count, _comment)| TableInfo {
-                schema: self.current_database.clone(),
+                schema: database.to_string(),
                 name,
                 table_type,
                 row_count,
@@ -242,10 +249,16 @@ impl DatabaseDriver for MysqlDriver {
 
     async fn get_table_schema(
         &self,
-        _schema: &str,
+        schema: &str,
         table_name: &str,
     ) -> Result<TableSchema, DbError> {
         let mut conn = self.get_conn().await?;
+        // Like `get_tables`: the argument is the table's database.
+        let database = if schema.is_empty() {
+            self.current_database.as_str()
+        } else {
+            schema
+        };
 
         // Get column information using parameterized query
         let column_query = r#"
@@ -262,7 +275,7 @@ impl DatabaseDriver for MysqlDriver {
         "#;
 
         let column_rows: Vec<(String, String, String, Option<String>, String, String)> = conn
-            .exec(column_query, (&self.current_database, table_name))
+            .exec(column_query, (database, table_name))
             .await
             .map_err(Self::map_mysql_error)?;
 
@@ -296,7 +309,7 @@ impl DatabaseDriver for MysqlDriver {
         "#;
 
         let index_rows: Vec<(String, i64, String)> = conn
-            .exec(index_query, (&self.current_database, table_name))
+            .exec(index_query, (database, table_name))
             .await
             .map_err(Self::map_mysql_error)?;
 
@@ -329,7 +342,7 @@ impl DatabaseDriver for MysqlDriver {
         Ok(TableSchema {
             table: TableInfo {
                 name: table_name.to_string(),
-                schema: self.current_database.clone(),
+                schema: database.to_string(),
                 row_count: None,
                 table_type: "TABLE".to_string(),
             },
